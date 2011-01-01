@@ -1,0 +1,34 @@
+Erlang DNS Server
+=================
+... or something that slightly resembles the beginnings of such a thing.
+
+Dug this up on an old backup CD.
+
+A few years back I stared on a small journey to learn erlang. To me it seemed 
+that a DNS server would be a good place to start since the DNS protocol is 
+simple, well documented, and erlang is great at dealing with high levels of
+concurrency and binary data protocols.
+
+Unfortunately, I never finished it. The current state of the service is to
+simply reply to all queries with a canned response.
+
+A good next step would to simply be a passive DNS server. Then perhaps add
+caching. After that, add the ability to define zones that pass their queries
+to different DNS servers. Add recursion. Then add a local database.
+
+Erlang is a neat language and I think it's the ideal choice for these kinds
+of services. One day I hope to get back to it.
+
+Building
+========
+erl -make
+
+Ruinning
+========
+erl -pa ./ebin -s server
+
+Querying
+========
+dig -p8053 @127.0.0.1 +qr www.isc.org any
+dig -p8053 @127.0.0.1 -x 127.0.0.1
+dig -p8053 @127.0.0.1 isc.org ns +noqr
