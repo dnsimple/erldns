@@ -4,7 +4,9 @@
 type_to_atom(Type) ->
   case Type of
     1 -> a;
+    2 -> ns;
     5 -> cname;
+
     _ -> Type
   end.
 

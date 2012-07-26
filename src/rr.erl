@@ -1,6 +1,6 @@
 -module(rr).
 -include("include/nsrecs.hrl").
--export([pack_message/1, string_to_domain_name/1]).
+-export([pack_message/1]).
 
 %% Pack the header into its wire format
 pack_header(Header) ->
@@ -56,20 +56,29 @@ pack_records(Records) ->
 
 rdata_to_binary(Type, Rdata) ->
   case records:type_to_atom(Type) of
-    a ->
-      {ok, IPv4Tuple} = inet_parse:address(Rdata),
-      IPv4Address = ip_to_binary(IPv4Tuple),
-      {IPv4Address, byte_size(IPv4Address)};
-    cname ->
-      Value = string_to_domain_name(Rdata),
-      {Value, byte_size(Value)};
-    _ ->
+    a     -> ipv4_rdata(Rdata);
+    cname -> domain_rdata(Rdata);
+    ns    -> domain_rdata(Rdata);
+    _     ->
       Value = list_to_binary(Rdata),
       {Value, byte_size(Value)}
   end.
 
+%% Convert an IPv4 address to its binary representation
 ip_to_binary({A,B,C,D}) -> <<A,B,C,D>>.
 
+%% Convert record data that is a domain to {binary-representation,length} pair.
+domain_rdata(Rdata) ->
+  Value = string_to_domain_name(Rdata),
+  {Value, byte_size(Value)}.
+
+%% Convert record data that is an IPv4 address to {binary-representation,length} pair.
+ipv4_rdata(Rdata) ->
+  {ok, IPv4Tuple} = inet_parse:address(Rdata),
+  IPv4Address = ip_to_binary(IPv4Tuple),
+  {IPv4Address, byte_size(IPv4Address)}.
+
+%% Convert a string to its binary representation.
 string_to_domain_name(String) ->
   NullLength = 0,
   list_to_binary(
