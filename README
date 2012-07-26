@@ -1,6 +1,6 @@
 Erlang DNS Server
 =================
-Server DNS authoritative responses...with Erlang.
+Serve DNS authoritative responses...with Erlang.
 
 Building
 ========
