@@ -21,6 +21,7 @@ pack_header(Header) ->
   ],
   <<Id:16, Qr:1, Opcode:4, Aa:1, Tc:1, Rd:1, Ra:1, Z:3, Rcode:4, Qdcount:16, Ancount:16, Nscount:16, Arcount:16>>.
 
+%% Pack a question into its wire format.
 pack_question(Question) ->
   list_to_binary(lists:map(
     fun(Q) ->
@@ -54,6 +55,7 @@ pack_records(Records) ->
     end,
     Records)).
 
+%% Convert a record data for the given record type to its {binary-representation,length} pair.
 rdata_to_binary(Type, Rdata) ->
   case records:type_to_atom(Type) of
     a     -> ipv4_rdata(Rdata);
@@ -63,6 +65,7 @@ rdata_to_binary(Type, Rdata) ->
     mx    -> mx_rdata(Rdata);
     soa   -> soa_rdata(Rdata);
     txt   -> txt_rdata(Rdata);
+    spf   -> txt_rdata(Rdata);
     srv   -> srv_rdata(Rdata);
     naptr -> naptr_rdata(Rdata);
     ptr   -> domain_rdata(Rdata);
@@ -79,7 +82,7 @@ domain_rdata(Rdata) ->
   Value = string_to_domain_name(Rdata),
   {Value, byte_size(Value)}.
 
-%% Convert record data for NAPTR records to {binary-representation,length} pair.
+%% Convert record data for NAPTR records to {binary-representation,length} pair. RFC 2915
 naptr_rdata(Rdata) ->
   [OrderStr, PreferenceStr, FlagsStr, ServicesStr, RegexpStr, ReplacementStr] = string:tokens(Rdata, " "),
   {Order, _} = string:to_integer(OrderStr),
@@ -91,7 +94,7 @@ naptr_rdata(Rdata) ->
   Value = <<Order:16, Preference:16, Flags/binary, Services/binary, Regexp/binary, Replacement/binary>>,
   {Value, byte_size(Value)}.
 
-%% Convert record data for SRV records to {binary-representation,length} pair.
+%% Convert record data for SRV records to {binary-representation,length} pair. RFC 2782.
 srv_rdata(Rdata) ->
   [PriorityStr, WeightStr, PortStr, TargetStr] = string:tokens(Rdata, " "),
   {Priority, _} = string:to_integer(PriorityStr),
@@ -154,7 +157,7 @@ ipv4_rdata(Rdata) ->
   IPv4Address = ip_to_binary(IPv4Tuple),
   {IPv4Address, byte_size(IPv4Address)}.
 
-%% Convert record data that is an IPv6 address string to {binary-representation,length} pair.
+%% Convert record data that is an IPv6 address string to {binary-representation,length} pair. RFC 3596.
 ipv6_rdata(Rdata) ->
   {ok, IPv6Tuple} = inet_parse:address(Rdata),
   io:format("IPv6 tuple: ~p~n", [IPv6Tuple]),

@@ -13,6 +13,7 @@ type_to_atom(Type) ->
     33    -> srv;
     35    -> naptr;
     12    -> ptr;
+    99    -> spf;
 
     _     -> Type
   end.
