@@ -84,12 +84,7 @@ txt_rdata(Rdata) ->
   Value = <<TxtLen:8, Txt/binary>>,
   {Value, byte_size(Value)}.
 
-%% Convert record data that is an IPv4 address to {binary-representation,length} pair.
-ipv4_rdata(Rdata) ->
-  {ok, IPv4Tuple} = inet_parse:address(Rdata),
-  IPv4Address = ip_to_binary(IPv4Tuple),
-  {IPv4Address, byte_size(IPv4Address)}.
-
+%% Convert record data for MX records to {binary-representation,length} pair.
 mx_rdata(Rdata) ->
   [PriorityStr, HostnameStr] = string:tokens(Rdata, " "),
   {Priority, _} = string:to_integer(PriorityStr),
@@ -97,6 +92,7 @@ mx_rdata(Rdata) ->
   Value = <<Priority:16, Hostname/binary>>,
   {Value, byte_size(Value)}.
 
+%% Convert SOA record data to {binary-representation,length} pair.
 soa_rdata(Rdata) ->
   [MnameStr, RnameStr, SerialStr, RefreshStr, RetryStr, ExpireStr, MinimumStr] = string:tokens(Rdata, " "),
   Mname = string_to_domain_name(MnameStr),
@@ -108,6 +104,12 @@ soa_rdata(Rdata) ->
   {Minimum, _} = string:to_integer(MinimumStr),
   Value = <<Mname/binary, Rname/binary, Serial:32, Refresh:32, Retry:32, Expire:32, Minimum:32>>,
   {Value, byte_size(Value)}.
+
+%% Convert record data that is an IPv4 address to {binary-representation,length} pair.
+ipv4_rdata(Rdata) ->
+  {ok, IPv4Tuple} = inet_parse:address(Rdata),
+  IPv4Address = ip_to_binary(IPv4Tuple),
+  {IPv4Address, byte_size(IPv4Address)}.
 
 %% Convert a string to its binary representation.
 string_to_domain_name(String) ->
