@@ -15,6 +15,7 @@ answer(Questions) ->
             mx      -> fake_mx_records(Qname);
             txt     -> fake_txt_records(Qname);
             srv     -> fake_srv_records(Qname);
+            naptr   -> fake_naptr_records(Qname);
             _       -> []
           end
       end,
@@ -102,6 +103,13 @@ fake_txt_records(Qname) ->
       class = 1,
       ttl = 3600,
       rdata = "Just another text record"
+    },
+    #rr {
+      rname = Qname,
+      type = 16,
+      class = 1,
+      ttl = 3600,
+      rdata = "\"Multiple text strings\" \"in a single resource record\""
     }
   ].
 
@@ -113,5 +121,16 @@ fake_srv_records(Qname) ->
       class = 1,
       ttl = 3600,
       rdata = "1 0 9 server.example.com"
+    }
+  ].
+
+fake_naptr_records(Qname) ->
+  [
+    #rr {
+      rname = Qname,
+      type = 35,
+      class = 1,
+      ttl = 3600,
+      rdata = "100 100 \"s\" \"http+I2R\" \"\" _http._tcp.foo.com"
     }
   ].

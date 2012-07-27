@@ -11,6 +11,7 @@ type_to_atom(Type) ->
     16    -> txt;
     15    -> mx;
     33    -> srv;
+    35    -> naptr;
 
     _     -> Type
   end.
