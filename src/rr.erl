@@ -57,17 +57,17 @@ pack_records(Records) ->
 rdata_to_binary(Type, Rdata) ->
   case records:type_to_atom(Type) of
     a     -> ipv4_rdata(Rdata);
+    aaaa  -> ipv6_rdata(Rdata);
     cname -> domain_rdata(Rdata);
     ns    -> domain_rdata(Rdata);
     mx    -> mx_rdata(Rdata);
     soa   -> soa_rdata(Rdata);
     txt   -> txt_rdata(Rdata);
+    srv   -> srv_rdata(Rdata);
     _     -> catchall_rdata(Rdata)
   end.
 
-%% Convert an IPv4 address to its binary representation
-ip_to_binary({A,B,C,D}) -> <<A,B,C,D>>.
-
+%% Default catchall
 catchall_rdata(Rdata) ->
   Value = list_to_binary(Rdata),
   {Value, byte_size(Value)}.
@@ -75,6 +75,15 @@ catchall_rdata(Rdata) ->
 %% Convert record data that is a domain to {binary-representation,length} pair.
 domain_rdata(Rdata) ->
   Value = string_to_domain_name(Rdata),
+  {Value, byte_size(Value)}.
+
+srv_rdata(Rdata) ->
+  [PriorityStr, WeightStr, PortStr, TargetStr] = string:tokens(Rdata, " "),
+  {Priority, _} = string:to_integer(PriorityStr),
+  {Weight, _} = string:to_integer(WeightStr),
+  {Port, _} = string:to_integer(PortStr),
+  Target = string_to_domain_name(TargetStr),
+  Value = <<Priority:16, Weight:16, Port:16, Target/binary>>,
   {Value, byte_size(Value)}.
 
 %% Convert record data for TXT records.
@@ -105,11 +114,25 @@ soa_rdata(Rdata) ->
   Value = <<Mname/binary, Rname/binary, Serial:32, Refresh:32, Retry:32, Expire:32, Minimum:32>>,
   {Value, byte_size(Value)}.
 
-%% Convert record data that is an IPv4 address to {binary-representation,length} pair.
+%% Convert record data that is an IPv4 address string to {binary-representation,length} pair.
 ipv4_rdata(Rdata) ->
   {ok, IPv4Tuple} = inet_parse:address(Rdata),
   IPv4Address = ip_to_binary(IPv4Tuple),
   {IPv4Address, byte_size(IPv4Address)}.
+
+%% Convert record data that is an IPv6 address string to {binary-representation,length} pair.
+ipv6_rdata(Rdata) ->
+  {ok, IPv6Tuple} = inet_parse:address(Rdata),
+  io:format("IPv6 tuple: ~p~n", [IPv6Tuple]),
+  IPv6Address = ipv6_to_binary(IPv6Tuple),
+  io:format("IPv6 wire: ~p~n", [IPv6Address]),
+  {IPv6Address, byte_size(IPv6Address)}.
+
+%% Convert an IPv6 address to its binary representation
+ipv6_to_binary({A,B,C,D,E,F,G,H}) -> <<A,B,C,D,E,F,G,H>>.
+
+%% Convert an IPv4 address to its binary representation
+ip_to_binary({A,B,C,D}) -> <<A,B,C,D>>.
 
 %% Convert a string to its binary representation.
 string_to_domain_name(String) ->

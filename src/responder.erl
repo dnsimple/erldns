@@ -9,10 +9,12 @@ answer(Questions) ->
           case records:type_to_atom(Q#question.qtype) of
             soa     -> fake_soa_record(Qname);
             a       -> fake_a_records(Qname);
+            aaaa    -> fake_aaaa_records(Qname); % broken
             cname   -> fake_cname_records(Qname);
             ns      -> fake_ns_records(Qname);
             mx      -> fake_mx_records(Qname);
             txt     -> fake_txt_records(Qname);
+            srv     -> fake_srv_records(Qname);
             _       -> []
           end
       end,
@@ -35,6 +37,16 @@ fake_a_records(Qname) ->
       class = 1,
       ttl = 3600,
       rdata = "1.2.3.4"
+    }
+  ].
+
+fake_aaaa_records(Qname) ->
+  [#rr {
+      rname = Qname,
+      type = 28,
+      class = 1,
+      ttl = 3600,
+      rdata = "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
     }
   ].
 
@@ -90,5 +102,16 @@ fake_txt_records(Qname) ->
       class = 1,
       ttl = 3600,
       rdata = "Just another text record"
+    }
+  ].
+
+fake_srv_records(Qname) ->
+  [
+    #rr {
+      rname = string:concat("_foo._tcp", Qname),
+      type = 33,
+      class = 1,
+      ttl = 3600,
+      rdata = "1 0 9 server.example.com"
     }
   ].

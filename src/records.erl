@@ -5,10 +5,12 @@ type_to_atom(Type) ->
   case Type of
     6     -> soa;
     1     -> a;
+    28    -> aaaa;
     5     -> cname;
     2     -> ns;
     16    -> txt;
     15    -> mx;
+    33    -> srv;
 
     _     -> Type
   end.
