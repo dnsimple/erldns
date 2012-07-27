@@ -65,6 +65,7 @@ rdata_to_binary(Type, Rdata) ->
     txt   -> txt_rdata(Rdata);
     srv   -> srv_rdata(Rdata);
     naptr -> naptr_rdata(Rdata);
+    ptr   -> domain_rdata(Rdata);
     _     -> catchall_rdata(Rdata)
   end.
 

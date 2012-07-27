@@ -16,6 +16,7 @@ answer(Questions) ->
             txt     -> fake_txt_records(Qname);
             srv     -> fake_srv_records(Qname);
             naptr   -> fake_naptr_records(Qname);
+            ptr     -> fake_ptr_records(Qname);
             _       -> []
           end
       end,
@@ -132,5 +133,16 @@ fake_naptr_records(Qname) ->
       class = 1,
       ttl = 3600,
       rdata = "100 100 \"s\" \"http+I2R\" \"\" _http._tcp.foo.com"
+    }
+  ].
+
+fake_ptr_records(Qname) ->
+  [
+    #rr {
+      rname = Qname,
+      type = 12,
+      class = 1,
+      ttl = 3600,
+      rdata = "foo.example.com"
     }
   ].
