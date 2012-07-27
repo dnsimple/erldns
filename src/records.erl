@@ -3,11 +3,14 @@
 
 type_to_atom(Type) ->
   case Type of
-    1 -> a;
-    2 -> ns;
-    5 -> cname;
+    6     -> soa;
+    1     -> a;
+    5     -> cname;
+    2     -> ns;
+    16    -> txt;
+    15    -> mx;
 
-    _ -> Type
+    _     -> Type
   end.
 
 class_to_string(Value) ->

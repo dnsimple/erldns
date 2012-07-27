@@ -59,17 +59,29 @@ rdata_to_binary(Type, Rdata) ->
     a     -> ipv4_rdata(Rdata);
     cname -> domain_rdata(Rdata);
     ns    -> domain_rdata(Rdata);
-    _     ->
-      Value = list_to_binary(Rdata),
-      {Value, byte_size(Value)}
+    mx    -> mx_rdata(Rdata);
+    soa   -> soa_rdata(Rdata);
+    txt   -> txt_rdata(Rdata);
+    _     -> catchall_rdata(Rdata)
   end.
 
 %% Convert an IPv4 address to its binary representation
 ip_to_binary({A,B,C,D}) -> <<A,B,C,D>>.
 
+catchall_rdata(Rdata) ->
+  Value = list_to_binary(Rdata),
+  {Value, byte_size(Value)}.
+
 %% Convert record data that is a domain to {binary-representation,length} pair.
 domain_rdata(Rdata) ->
   Value = string_to_domain_name(Rdata),
+  {Value, byte_size(Value)}.
+
+%% Convert record data for TXT records.
+txt_rdata(Rdata) ->
+  TxtLen = string:len(Rdata),
+  Txt = list_to_binary(Rdata),
+  Value = <<TxtLen:8, Txt/binary>>,
   {Value, byte_size(Value)}.
 
 %% Convert record data that is an IPv4 address to {binary-representation,length} pair.
@@ -77,6 +89,25 @@ ipv4_rdata(Rdata) ->
   {ok, IPv4Tuple} = inet_parse:address(Rdata),
   IPv4Address = ip_to_binary(IPv4Tuple),
   {IPv4Address, byte_size(IPv4Address)}.
+
+mx_rdata(Rdata) ->
+  [PriorityStr, HostnameStr] = string:tokens(Rdata, " "),
+  {Priority, _} = string:to_integer(PriorityStr),
+  Hostname = string_to_domain_name(HostnameStr),
+  Value = <<Priority:16, Hostname/binary>>,
+  {Value, byte_size(Value)}.
+
+soa_rdata(Rdata) ->
+  [MnameStr, RnameStr, SerialStr, RefreshStr, RetryStr, ExpireStr, MinimumStr] = string:tokens(Rdata, " "),
+  Mname = string_to_domain_name(MnameStr),
+  Rname = string_to_domain_name(RnameStr),
+  {Serial, _} = string:to_integer(SerialStr),
+  {Refresh, _} = string:to_integer(RefreshStr),
+  {Retry, _} = string:to_integer(RetryStr),
+  {Expire, _} = string:to_integer(ExpireStr),
+  {Minimum, _} = string:to_integer(MinimumStr),
+  Value = <<Mname/binary, Rname/binary, Serial:32, Refresh:32, Retry:32, Expire:32, Minimum:32>>,
+  {Value, byte_size(Value)}.
 
 %% Convert a string to its binary representation.
 string_to_domain_name(String) ->
