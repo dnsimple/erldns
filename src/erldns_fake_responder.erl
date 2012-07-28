@@ -27,8 +27,8 @@ answer(Questions) ->
 
             % DNSSEC RRs
             dnskey  -> fake_dnskey_records(Qname);
-            %ds      -> fake_ds_records(Qname);
-            rrsig   -> fake_rrsig_records(Qname); %broken
+            ds      -> fake_ds_records(Qname); % broken
+            rrsig   -> fake_rrsig_records(Qname);
             %nsec    -> fake_nsec_records(Qname);
 
             _       -> []
@@ -224,6 +224,17 @@ fake_dnskey_records(Qname) ->
       class = 1,
       ttl = 3600,
       rdata = "256 3 5 AQPSKmynfzW4kyBv015MUG2DeIQ3Cbl+BBZH4b/0PY1kxkmvHjcZc8nokfzj31GajIQKY+5CptLr3buXA10hWqTkF7H6RfoRqXQeogmMHfpftf6zMv1LyBUgia7za6ZEzOJBOztyvhjL742iU/TpPSEDhm2SNKLijfUppn1UaNvv4w=="
+    }
+  ].
+
+fake_ds_records(Qname) ->
+  [
+    #rr {
+      rname = Qname,
+      type = 43,
+      class = 1,
+      ttl = 3600,
+      rdata = "60485 5 1 2BB183AF5F22588179A53B0A98631FAD1A292118"
     }
   ].
 

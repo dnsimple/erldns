@@ -76,7 +76,7 @@ rdata_to_binary(Type, Rdata) ->
 
     % DNSSEC RR data
     dnskey  -> dnskey_rdata(Rdata);
-    %ds      -> ds_rdata(Rdata);
+    ds      -> ds_rdata(Rdata);
     rrsig   -> rrsig_rdata(Rdata);
     %nsec    -> nsec_rdata(Rdata);
 
@@ -93,6 +93,7 @@ domain_rdata(Rdata) ->
   Value = string_to_domain_name(Rdata),
   {Value, byte_size(Value)}.
 
+%% Convert RRSIG record datsa to {BinaryValue,Length} pair. RFC 4034.
 rrsig_rdata(Rdata) ->
   [TypeCoveredStr, AlgorithmStr, LabelsStr, OriginalTTLStr, SignatureExpirationStr, SignatureInceptionStr, KeyTagStr, SignersNameStr, SignatureStr] = string:tokens(Rdata, " "),
   StrParts = [TypeCoveredStr, AlgorithmStr, LabelsStr, OriginalTTLStr, SignatureExpirationStr, SignatureInceptionStr, KeyTagStr, SignersNameStr, SignatureStr],
@@ -116,13 +117,19 @@ rrsig_rdata(Rdata) ->
   Parts = [TypeCovered, Algorithm, Labels, OriginalTTL, SignatureExpiration, SignatureInception, KeyTag, SignersName, Signature],
   io:format("RRSIG parts: ~p~n", [Parts]),
 
-  Value = <<TypeCovered:16, Algorithm:8, Labels:8, OriginalTTL:32, SignatureExpiration:32, SignatureInception:32, KeyTag:32, SignersName/binary, Signature/binary>>,
+  Value = <<TypeCovered:16, Algorithm:8, Labels:8, OriginalTTL:32, SignatureExpiration:32, SignatureInception:32, KeyTag:16, SignersName/binary, Signature/binary>>,
   io:format("Value: ~p~n", [Value]),
   {Value, byte_size(Value)}.
 
-%ds_rdata(Rdata) ->
-  %Value = list_to_binary([]),
-%  {Value, byte_size(Value)}.
+%% Convert DS record data to {BinaryValue,Length} pair. RFC 4034.
+ds_rdata(Rdata) ->
+  [KeyTagStr, AlgorithmStr, DigestTypeStr, DigestStr] = string:tokens(Rdata, " "),
+  {KeyTag, _} = string:to_integer(KeyTagStr),
+  {Algorithm, _} = string:to_integer(AlgorithmStr),
+  {DigestType, _} = string:to_integer(DigestTypeStr),
+  Digest = list_to_binary(DigestStr),
+  Value = <<KeyTag:16, Algorithm:8, DigestType:8, Digest/binary>>,
+  {Value, byte_size(Value)}.
 
 %% Convert DNSKEY record data to {BinaryValue,Length} pair. RFC 4034
 dnskey_rdata(Rdata) ->
@@ -259,9 +266,10 @@ ip_to_binary({A,B,C,D}) -> <<A,B,C,D>>.
 strip_quotes(String) ->
   string:strip(String, both, $").
 
+%% Convert a datetime string in the format YYYYMMDDHHMMSS to time in seconds since Epoch
 ymdhms_to_epoch(DateString) ->
   {ok,[Year, Month, Day, Hour, Min, Sec],_} = io_lib:fread("~4d~2d~2d~2d~2d~2d", DateString),
-  calendar:datetime_to_gregorian_seconds({{Year,Month,Day},{Hour,Min,Sec}}).
+  calendar:datetime_to_gregorian_seconds({{Year,Month,Day},{Hour,Min,Sec}})-719528*24*3600.
 
 %% Convert a string to a wire format character_string as defined in RFC 1035
 character_string(String) ->
