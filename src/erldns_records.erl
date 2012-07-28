@@ -1,5 +1,5 @@
 -module(erldns_records).
--export([type_to_atom/1, type_to_string/1, class_to_string/1]).
+-export([type_to_atom/1, type_to_string/1, string_to_type/1, class_to_string/1]).
 
 type_to_atom(Type) ->
   case Type of
@@ -16,6 +16,16 @@ type_to_atom(Type) ->
     99    -> spf;
     44    -> sshfp;
     17    -> rp;
+    13    -> hinfo;
+    18    -> afsdb;
+
+    255   -> any;
+
+    % DNSSEC RRs
+    48    -> dnskey;
+    43    -> ds;
+    46    -> rrsig;
+    47    -> nsec;
 
     _     -> Type
   end.
@@ -27,6 +37,47 @@ class_to_string(Value) ->
     3       -> "CH";
     4       -> "HS";
     _       -> Value
+  end.
+
+string_to_type(Value) ->
+  case Value of
+    "A"           -> 1;
+    "AAAA"        -> 28;
+    "AFSDB"       -> 18;
+    "APL"         -> 42;
+    "CERT"        -> 37;
+    "CNAME"       -> 5;
+    "DHCID"       -> 49;
+    "DLV"         -> 32769;
+    "DNAME"       -> 39;
+    "DNSKEY"      -> 48;
+    "DS"          -> 43;
+    "HIP"         -> 55;
+    "IPSECKEY"    -> 45;
+    "KEY"         -> 25;
+    "KX"          -> 36;
+    "LOC"         -> 29;
+    "MX"          -> 15;
+    "NAPTR"       -> 35;
+    "NS"          -> 2;
+    "NSEC"        -> 47;
+    "NSEC3"       -> 50;
+    "NSEC3PARAM"  -> 51;
+    "PTR"         -> 12;
+    "RRSIG"       -> 46;
+    "RP"          -> 17;
+    "SIG"         -> 24;
+    "SOA"         -> 6;
+    "SPF"         -> 99;
+    "SRV"         -> 33;
+    "SSHFP"       -> 44;
+    "TA"          -> 32768;
+    "TKEY"        -> 249;
+    "TLSA"        -> 52;
+    "TSIG"        -> 250;
+    "TXT"         -> 16;
+
+    _             -> Value
   end.
 
 type_to_string(Value) ->
@@ -42,6 +93,7 @@ type_to_string(Value) ->
     39      -> "DNAME";
     48      -> "DNSKEY";
     43      -> "DS";
+    13      -> "HINFO";
     55      -> "HIP";
     45      -> "IPSECKEY";
     25      -> "KEY";
@@ -86,7 +138,6 @@ type_to_string(Value) ->
     10      -> "NULL";
     38      -> "A6";
     30      -> "NXT";
-    13      -> "HINFO";
     19      -> "X25";
     20      -> "ISDN";
     21      -> "RT";

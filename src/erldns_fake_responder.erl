@@ -20,6 +20,17 @@ answer(Questions) ->
             spf     -> fake_spf_records(Qname);
             sshfp   -> fake_sshfp_records(Qname);
             rp      -> fake_rp_records(Qname);
+            hinfo   -> fake_hinfo_records(Qname);
+            afsdb   -> fake_afsdb_records(Qname);
+
+            any     -> lists:flatten([fake_soa_record(Qname), fake_a_records(Qname), fake_mx_records(Qname)]);
+
+            % DNSSEC RRs
+            dnskey  -> fake_dnskey_records(Qname);
+            %ds      -> fake_ds_records(Qname);
+            rrsig   -> fake_rrsig_records(Qname); %broken
+            %nsec    -> fake_nsec_records(Qname);
+
             _       -> []
           end
       end,
@@ -182,3 +193,47 @@ fake_rp_records(Qname) ->
       rdata = "joe.example.com joe-txt.example.com"
     }
   ].
+
+fake_hinfo_records(Qname) ->
+  [
+    #rr {
+      rname = Qname,
+      type = 13,
+      class = 1,
+      ttl = 3600,
+      rdata = "i386 linux"
+    }
+  ].
+
+fake_afsdb_records(Qname) ->
+  [
+    #rr {
+      rname = Qname,
+      type = 18,
+      class = 1,
+      ttl = 3600,
+      rdata = "1 bigbird.example.com"
+    }
+  ].
+
+fake_dnskey_records(Qname) ->
+  [
+    #rr {
+      rname = Qname,
+      type = 48,
+      class = 1,
+      ttl = 3600,
+      rdata = "256 3 5 AQPSKmynfzW4kyBv015MUG2DeIQ3Cbl+BBZH4b/0PY1kxkmvHjcZc8nokfzj31GajIQKY+5CptLr3buXA10hWqTkF7H6RfoRqXQeogmMHfpftf6zMv1LyBUgia7za6ZEzOJBOztyvhjL742iU/TpPSEDhm2SNKLijfUppn1UaNvv4w=="
+    }
+  ].
+
+fake_rrsig_records(Qname) ->
+  [
+    #rr {
+      rname = Qname,
+      type = 46,
+      class = 1,
+      ttl = 3600,
+      rdata = "A 5 3 3600 20030322173103 20030220173103 2642 example.com oJB1W6WNGv+ldvQ3WDG0MQkg5IEhjRip8WTrPYGv07h108dUKGMeDPKijVCHX3DDKdfb+v6oB9wfuh3DTJXUAfI/M0zmO/zz8bW0Rznl8O3tGNazPwQKkRN20XPXV6nwwfoXmJQbsLNrLfkGJ5D6fwFm8nN+6pBzeDQfsS3Ap3o="
+    }
+  ].                              

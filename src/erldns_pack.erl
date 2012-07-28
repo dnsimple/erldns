@@ -71,6 +71,15 @@ rdata_to_binary(Type, Rdata) ->
     ptr   -> domain_rdata(Rdata);
     sshfp -> sshfp_rdata(Rdata);
     rp    -> rp_rdata(Rdata);
+    hinfo -> hinfo_rdata(Rdata);
+    afsdb -> afsdb_rdata(Rdata);
+
+    % DNSSEC RR data
+    dnskey  -> dnskey_rdata(Rdata);
+    %ds      -> ds_rdata(Rdata);
+    rrsig   -> rrsig_rdata(Rdata);
+    %nsec    -> nsec_rdata(Rdata);
+
     _     -> catchall_rdata(Rdata)
   end.
 
@@ -79,11 +88,69 @@ catchall_rdata(Rdata) ->
   Value = list_to_binary(Rdata),
   {Value, byte_size(Value)}.
 
-%% Convert record data that is a domain to {binary-representation,length} pair.
+%% Convert a string that is a domain name to {BinaryValue,Length} pair.
 domain_rdata(Rdata) ->
   Value = string_to_domain_name(Rdata),
   {Value, byte_size(Value)}.
 
+rrsig_rdata(Rdata) ->
+  [TypeCoveredStr, AlgorithmStr, LabelsStr, OriginalTTLStr, SignatureExpirationStr, SignatureInceptionStr, KeyTagStr, SignersNameStr, SignatureStr] = string:tokens(Rdata, " "),
+  StrParts = [TypeCoveredStr, AlgorithmStr, LabelsStr, OriginalTTLStr, SignatureExpirationStr, SignatureInceptionStr, KeyTagStr, SignersNameStr, SignatureStr],
+  io:format("RRSIG string parts: ~p~n", [StrParts]),
+  TypeCovered = erldns_records:string_to_type(TypeCoveredStr),
+  {Algorithm, _} = string:to_integer(AlgorithmStr),
+  {Labels, _} = string:to_integer(LabelsStr),
+  {OriginalTTL, _} = string:to_integer(OriginalTTLStr),
+  {SignatureExpiration, _} = case string:len(SignatureExpirationStr) of
+    14 -> {ymdhms_to_epoch(SignatureExpirationStr), []};
+    _  -> string:to_integer(SignatureExpirationStr)
+  end,
+  {SignatureInception, _} = case string:len(SignatureInceptionStr) of
+    14 -> {ymdhms_to_epoch(SignatureInceptionStr), []};
+    _  -> string:to_integer(SignatureInceptionStr)
+  end,
+  {KeyTag, _} = string:to_integer(KeyTagStr),
+  SignersName = string_to_domain_name(SignersNameStr),
+  Signature = list_to_binary(SignatureStr),
+
+  Parts = [TypeCovered, Algorithm, Labels, OriginalTTL, SignatureExpiration, SignatureInception, KeyTag, SignersName, Signature],
+  io:format("RRSIG parts: ~p~n", [Parts]),
+
+  Value = <<TypeCovered:16, Algorithm:8, Labels:8, OriginalTTL:32, SignatureExpiration:32, SignatureInception:32, KeyTag:32, SignersName/binary, Signature/binary>>,
+  io:format("Value: ~p~n", [Value]),
+  {Value, byte_size(Value)}.
+
+%ds_rdata(Rdata) ->
+  %Value = list_to_binary([]),
+%  {Value, byte_size(Value)}.
+
+%% Convert DNSKEY record data to {BinaryValue,Length} pair. RFC 4034
+dnskey_rdata(Rdata) ->
+  [FlagsStr, ProtocolStr, AlgorithmStr, PublicKeyStr] = string:tokens(Rdata, " "),
+  {Flags, _} = string:to_integer(FlagsStr),
+  {Protocol, _} = string:to_integer(ProtocolStr),
+  {Algorithm, _} = string:to_integer(AlgorithmStr),
+  PublicKey = list_to_binary(PublicKeyStr),
+  Value = <<Flags:16, Protocol:8, Algorithm:8, PublicKey/binary>>,
+  {Value, byte_size(Value)}.
+
+%% Convert AFSDB record data to {BinaryValue,Length} pair. RFC 1183.
+afsdb_rdata(Rdata) ->
+  [SubtypeStr, HostnameStr] = string:tokens(Rdata, " "),
+  {Subtype, _} = string:to_integer(SubtypeStr),
+  Hostname = string_to_domain_name(HostnameStr),
+  Value = <<Subtype:16, Hostname/binary>>,
+  {Value, byte_size(Value)}.
+
+%% Convert HINFO record data to {BinaryValue,Length} pair. RFC 1035.
+hinfo_rdata(Rdata) ->
+  [CpuStr, OsStr] = string:tokens(Rdata, " "),
+  Cpu = character_string(CpuStr),
+  Os = character_string(OsStr),
+  Value = <<Cpu/binary, Os/binary>>,
+  {Value, byte_size(Value)}.
+
+%% Convert RP record data to {BinaryValue,Length} pair. RFC 1183.
 rp_rdata(Rdata) ->
   [MailboxStr, TxtRecordNameStr] = string:tokens(Rdata, " "),
   Mailbox = string_to_domain_name(MailboxStr),
@@ -91,7 +158,7 @@ rp_rdata(Rdata) ->
   Value = <<Mailbox/binary, TxtRecordName/binary>>,
   {Value, byte_size(Value)}.
 
-%% Convert record data for SSHFP records to {binary-representation,length} pair. RFC 4255
+%% Convert SSHFP record data to {BinaryValue,Length} pair. RFC 4255.
 sshfp_rdata(Rdata) ->
   [AlgorithmStr, FpTypeStr, FingerprintStr] = string:tokens(Rdata, " "),
   {Algorithm, _} = string:to_integer(AlgorithmStr),
@@ -100,7 +167,7 @@ sshfp_rdata(Rdata) ->
   Value = <<Algorithm:8, FpType:8, Fingerprint/binary>>,
   {Value, byte_size(Value)}.
 
-%% Convert record data for NAPTR records to {binary-representation,length} pair. RFC 2915
+%% Convert record data for NAPTR records to {BinaryValue,Length} pair. RFC 2915.
 naptr_rdata(Rdata) ->
   [OrderStr, PreferenceStr, FlagsStr, ServicesStr, RegexpStr, ReplacementStr] = string:tokens(Rdata, " "),
   {Order, _} = string:to_integer(OrderStr),
@@ -112,7 +179,7 @@ naptr_rdata(Rdata) ->
   Value = <<Order:16, Preference:16, Flags/binary, Services/binary, Regexp/binary, Replacement/binary>>,
   {Value, byte_size(Value)}.
 
-%% Convert record data for SRV records to {binary-representation,length} pair. RFC 2782.
+%% Convert record data for SRV records to {BinaryValue,Length} pair. RFC 2782.
 srv_rdata(Rdata) ->
   [PriorityStr, WeightStr, PortStr, TargetStr] = string:tokens(Rdata, " "),
   {Priority, _} = string:to_integer(PriorityStr),
@@ -124,7 +191,7 @@ srv_rdata(Rdata) ->
 
 %% Convert record data for TXT records. This function handles both TXT entries with
 %% a single text value as well as those with multiple quoted strings in a single TXT
-%% entry
+%% entry. RFC 1035.
 txt_rdata(Rdata) ->
   QuoteIndex = string:chr(Rdata, $"),
   case QuoteIndex of
@@ -132,7 +199,7 @@ txt_rdata(Rdata) ->
     _ -> multi_txt_rdata(Rdata)
   end.
 
-%% Convert TXT rdata with quoted strings into the {binary-representation,length} pair.
+%% Convert TXT rdata with quoted strings into the {BinaryValue,Length} pair.
 multi_txt_rdata(Rdata) ->
   Strings = re:split(Rdata, " \"|\" ", [{return, list}]),
   Value = list_to_binary(lists:map(
@@ -142,12 +209,12 @@ multi_txt_rdata(Rdata) ->
     Strings)),
   {Value, byte_size(Value)}.
 
-%% Convert TXT rdata with a single value into the {binary-representation,length} pair.
+%% Convert TXT rdata with a single value into the {BinaryValue,Length} pair.
 single_txt_rdata(Rdata) ->
   Value = character_string(Rdata),
   {Value, byte_size(Value)}.
 
-%% Convert record data for MX records to {binary-representation,length} pair.
+%% Convert record data for MX records to {binary-representation,length} pair. RFC 1035.
 mx_rdata(Rdata) ->
   [PriorityStr, HostnameStr] = string:tokens(Rdata, " "),
   {Priority, _} = string:to_integer(PriorityStr),
@@ -155,7 +222,7 @@ mx_rdata(Rdata) ->
   Value = <<Priority:16, Hostname/binary>>,
   {Value, byte_size(Value)}.
 
-%% Convert SOA record data to {binary-representation,length} pair.
+%% Convert SOA record data to {binary-representation,length} pair. RFC 1035.
 soa_rdata(Rdata) ->
   [MnameStr, RnameStr, SerialStr, RefreshStr, RetryStr, ExpireStr, MinimumStr] = string:tokens(Rdata, " "),
   Mname = string_to_domain_name(MnameStr),
@@ -168,7 +235,7 @@ soa_rdata(Rdata) ->
   Value = <<Mname/binary, Rname/binary, Serial:32, Refresh:32, Retry:32, Expire:32, Minimum:32>>,
   {Value, byte_size(Value)}.
 
-%% Convert record data that is an IPv4 address string to {binary-representation,length} pair.
+%% Convert record data that is an IPv4 address string to {binary-representation,length} pair. RFC 1035.
 ipv4_rdata(Rdata) ->
   {ok, IPv4Tuple} = inet_parse:address(Rdata),
   IPv4Address = ip_to_binary(IPv4Tuple),
@@ -191,6 +258,10 @@ ip_to_binary({A,B,C,D}) -> <<A,B,C,D>>.
 %% Remove quotes at the ends of strings
 strip_quotes(String) ->
   string:strip(String, both, $").
+
+ymdhms_to_epoch(DateString) ->
+  {ok,[Year, Month, Day, Hour, Min, Sec],_} = io_lib:fread("~4d~2d~2d~2d~2d~2d", DateString),
+  calendar:datetime_to_gregorian_seconds({{Year,Month,Day},{Hour,Min,Sec}}).
 
 %% Convert a string to a wire format character_string as defined in RFC 1035
 character_string(String) ->
