@@ -64,9 +64,15 @@ handle_dns_query(Socket, Host, Port, Bin) ->
   BinReply = rr:pack_message(Response),
   gen_udp:send(Socket, Host, Port, BinReply).
 
+responders() ->
+  [fun fake_responder:answer/1, fun mysql_responder:answer/1].
+
 %% Build the response message based on the request message.
 build_response(Request) ->
-  Answer = responder:answer(Request#message.question),
+  Answer = lists:flatten(lists:map(
+      fun(F) ->
+          F(Request#message.question)
+      end, responders())),
   #message{
     header = build_response_header(Request#message.header, Answer),
     question = Request#message.question,

@@ -1,4 +1,4 @@
--module(responder).
+-module(fake_responder).
 -include("include/nsrecs.hrl").
 -export([answer/1]).
 
