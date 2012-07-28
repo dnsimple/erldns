@@ -65,10 +65,11 @@ rdata_to_binary(Type, Rdata) ->
     mx    -> mx_rdata(Rdata);
     soa   -> soa_rdata(Rdata);
     txt   -> txt_rdata(Rdata);
-    spf   -> txt_rdata(Rdata);
+    spf   -> txt_rdata(Rdata); % RFC 4408
     srv   -> srv_rdata(Rdata);
     naptr -> naptr_rdata(Rdata);
     ptr   -> domain_rdata(Rdata);
+    sshfp -> sshfp_rdata(Rdata);
     _     -> catchall_rdata(Rdata)
   end.
 
@@ -80,6 +81,15 @@ catchall_rdata(Rdata) ->
 %% Convert record data that is a domain to {binary-representation,length} pair.
 domain_rdata(Rdata) ->
   Value = string_to_domain_name(Rdata),
+  {Value, byte_size(Value)}.
+
+%% Convert record data for SSHFP records to {binary-representation,length} pair. RFC 4255
+sshfp_rdata(Rdata) ->
+  [AlgorithmStr, FpTypeStr, FingerprintStr] = string:tokens(Rdata, " "),
+  {Algorithm, _} = string:to_integer(AlgorithmStr),
+  {FpType, _} = string:to_integer(FpTypeStr),
+  Fingerprint = character_string(FingerprintStr),
+  Value = <<Algorithm:8, FpType:8, Fingerprint/binary>>,
   {Value, byte_size(Value)}.
 
 %% Convert record data for NAPTR records to {binary-representation,length} pair. RFC 2915

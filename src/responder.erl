@@ -18,6 +18,7 @@ answer(Questions) ->
             naptr   -> fake_naptr_records(Qname);
             ptr     -> fake_ptr_records(Qname);
             spf     -> fake_spf_records(Qname);
+            sshfp   -> fake_sshfp_records(Qname);
             _       -> []
           end
       end,
@@ -156,5 +157,16 @@ fake_spf_records(Qname) ->
       class = 1,
       ttl = 3600,
       rdata = "v=spf1 +mx a:colo.example.com/28 -all"
+    }
+  ].
+
+fake_sshfp_records(Qname) ->
+  [
+    #rr {
+      rname = Qname,
+      type = 44,
+      class = 1,
+      ttl = 3600,
+      rdata = "2 1 123456789abcdef67890123456789abcdef67890"
     }
   ].
