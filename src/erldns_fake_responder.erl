@@ -19,6 +19,7 @@ answer(Questions) ->
             ptr     -> fake_ptr_records(Qname);
             spf     -> fake_spf_records(Qname);
             sshfp   -> fake_sshfp_records(Qname);
+            rp      -> fake_rp_records(Qname);
             _       -> []
           end
       end,
@@ -168,5 +169,16 @@ fake_sshfp_records(Qname) ->
       class = 1,
       ttl = 3600,
       rdata = "2 1 123456789abcdef67890123456789abcdef67890"
+    }
+  ].
+
+fake_rp_records(Qname) ->
+  [
+    #rr {
+      rname = Qname,
+      type = 17,
+      class = 1,
+      ttl = 3600,
+      rdata = "joe.example.com joe-txt.example.com"
     }
   ].

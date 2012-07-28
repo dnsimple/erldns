@@ -70,6 +70,7 @@ rdata_to_binary(Type, Rdata) ->
     naptr -> naptr_rdata(Rdata);
     ptr   -> domain_rdata(Rdata);
     sshfp -> sshfp_rdata(Rdata);
+    rp    -> rp_rdata(Rdata);
     _     -> catchall_rdata(Rdata)
   end.
 
@@ -81,6 +82,13 @@ catchall_rdata(Rdata) ->
 %% Convert record data that is a domain to {binary-representation,length} pair.
 domain_rdata(Rdata) ->
   Value = string_to_domain_name(Rdata),
+  {Value, byte_size(Value)}.
+
+rp_rdata(Rdata) ->
+  [MailboxStr, TxtRecordNameStr] = string:tokens(Rdata, " "),
+  Mailbox = string_to_domain_name(MailboxStr),
+  TxtRecordName = string_to_domain_name(TxtRecordNameStr),
+  Value = <<Mailbox/binary, TxtRecordName/binary>>,
   {Value, byte_size(Value)}.
 
 %% Convert record data for SSHFP records to {binary-representation,length} pair. RFC 4255
