@@ -1,0 +1,12 @@
+{application, erldns,
+ [{description, "Erlang Authoritative DNS Server"},
+  {vsn, "0.0.1"},
+  {modules, [erldns,
+             erldns_server,
+             erldns_unpack,
+             erldns_pack,
+             erldns_records]},
+  {registered, []},
+  {mod, { erldns, []}},
+  {applications, [kernel, stdlib, mysql]}]}.
+

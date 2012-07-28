@@ -1,4 +1,4 @@
--module(fake_responder).
+-module(erldns_fake_responder).
 -include("include/nsrecs.hrl").
 -export([answer/1]).
 
@@ -6,7 +6,7 @@ answer(Questions) ->
   lists:flatten(lists:map(
       fun(Q) ->
           Qname = Q#question.qname,
-          case records:type_to_atom(Q#question.qtype) of
+          case erldns_records:type_to_atom(Q#question.qtype) of
             soa     -> fake_soa_record(Qname);
             a       -> fake_a_records(Qname);
             aaaa    -> fake_aaaa_records(Qname); % broken

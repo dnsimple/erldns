@@ -1,4 +1,4 @@
--module(unpack).
+-module(erldns_unpack).
 -include("include/nsrecs.hrl").
 -export([unpack/1]).
 

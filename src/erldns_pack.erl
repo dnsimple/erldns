@@ -1,4 +1,4 @@
--module(rr).
+-module(erldns_pack).
 -include("include/nsrecs.hrl").
 -export([pack_message/1]).
 
@@ -57,7 +57,7 @@ pack_records(Records) ->
 
 %% Convert a record data for the given record type to its {binary-representation,length} pair.
 rdata_to_binary(Type, Rdata) ->
-  case records:type_to_atom(Type) of
+  case erldns_records:type_to_atom(Type) of
     a     -> ipv4_rdata(Rdata);
     aaaa  -> ipv6_rdata(Rdata);
     cname -> domain_rdata(Rdata);
@@ -119,7 +119,6 @@ srv_rdata(Rdata) ->
 %% entry
 txt_rdata(Rdata) ->
   QuoteIndex = string:chr(Rdata, $"),
-  io:format("Quote index: ~p~n", [QuoteIndex]),
   case QuoteIndex of
     0 -> single_txt_rdata(Rdata);
     _ -> multi_txt_rdata(Rdata)

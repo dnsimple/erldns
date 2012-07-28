@@ -1,4 +1,4 @@
--module(records).
+-module(erldns_records).
 -export([type_to_atom/1, type_to_string/1, class_to_string/1]).
 
 type_to_atom(Type) ->
@@ -15,6 +15,7 @@ type_to_atom(Type) ->
     12    -> ptr;
     99    -> spf;
     44    -> sshfp;
+    17    -> rp;
 
     _     -> Type
   end.

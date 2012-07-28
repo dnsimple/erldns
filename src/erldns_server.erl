@@ -1,8 +1,22 @@
--module(server).
+-module(erldns_server).
+
 -include("include/nsrecs.hrl").
+
+% API
 -export([start/0, start/1]).
 
+% Gen server hooks
+-export([init/1,
+	 handle_call/3,
+	 handle_cast/2,
+	 handle_info/2,
+	 terminate/2,
+	 code_change/3
+       ]).
+
 -define(PORT, 8053).
+
+-record(state, {}).
 
 %% Start the UDP and TCP servers
 start() ->
@@ -10,6 +24,22 @@ start() ->
 start(Port) ->
   spawn(fun() -> udp_server(Port) end),
   spawn(fun() -> tcp_server(Port) end).
+
+%% gen_server hooks
+%% This is a work-in-progress
+init([]) ->
+  {ok, #state{}}.
+handle_call(_Request, _From, State) ->
+  {noreply, State}.
+handle_cast(_Message, State) ->
+  {noreply, State}.
+handle_info(_Message, State) ->
+  {noreply, State}.
+terminate(_Reason, _State) ->
+  ok.
+code_change(_PreviousVersion, State, _Extra) ->
+  {ok, State}.
+
 
 %% Start a UDP server.
 udp_server(Port) ->
@@ -47,9 +77,9 @@ udp_loop(Socket) ->
 handle_dns_query(Socket, Packet) ->
   <<Len:16, Bin/binary>> = Packet,
   io:format("TCP Message received, len: ~p~n", [Len]),
-  Request = inspect(unpack:unpack(Bin)),
+  Request = inspect(erldns_unpack:unpack(Bin)),
   Response = build_response(Request),
-  BinReply = rr:pack_message(Response),
+  BinReply = erldns_pack:pack_message(Response),
   BinLength = byte_size(BinReply),
   TcpBinReply = <<BinLength:16, BinReply/binary>>,
   gen_tcp:send(Socket, TcpBinReply),
@@ -58,14 +88,15 @@ handle_dns_query(Socket, Packet) ->
 %% Handle DNS query that comes in over UDP
 handle_dns_query(Socket, Host, Port, Bin) ->
   io:format("Message from from ~p~n", [Host]),
-  Request = inspect(unpack:unpack(Bin)),
+  Request = inspect(erldns_unpack:unpack(Bin)),
   Response = build_response(Request),
   inspect(Response),
-  BinReply = rr:pack_message(Response),
+  BinReply = erldns_pack:pack_message(Response),
   gen_udp:send(Socket, Host, Port, BinReply).
 
 responders() ->
-  [fun fake_responder:answer/1, fun mysql_responder:answer/1].
+  [fun erldns_fake_responder:answer/1].
+  %[fun erldns_mysql_responder:answer/1].
 
 %% Build the response message based on the request message.
 build_response(Request) ->
