@@ -111,9 +111,7 @@ answer_questions([Q|Rest], Response) ->
 %% an updated copy of the Response.
 answer_question(Q, Response) ->
   [Name, Type] = [Q#dns_query.name, Q#dns_query.type],
-  io:format("Name: ~p, Type: ~p~n", [Name,  dns:type_name(Type)]),
-  Data = #dns_rrdata_a{ip = {4,5,6,7}},
-  Record = #dns_rr{name = Name, type = Type, data = Data},
-  NewResponse = Response#dns_message{anc = 1, aa = true, answers = [Record]},
+  Answers = erldns_fake_responder:answer(Name, dns:type_name(Type)),
+  NewResponse = Response#dns_message{anc = length(Answers), aa = true, answers = Answers},
   io:format("New response: ~p~n", [NewResponse]),
   NewResponse.

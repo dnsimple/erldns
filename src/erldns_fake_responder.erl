@@ -1,250 +1,238 @@
 -module(erldns_fake_responder).
--include("include/nsrecs.hrl").
--export([answer/1]).
+-include("deps/dns/include/dns_terms.hrl").
+-include("deps/dns/include/dns_records.hrl").
+-export([answer/2]).
 
-answer(Questions) ->
-  lists:flatten(lists:map(
-      fun(Q) ->
-          Qname = Q#question.qname,
-          case erldns_records:type_to_atom(Q#question.qtype) of
-            soa     -> fake_soa_record(Qname);
-            a       -> fake_a_records(Qname);
-            aaaa    -> fake_aaaa_records(Qname); % broken
-            cname   -> fake_cname_records(Qname);
-            ns      -> fake_ns_records(Qname);
-            mx      -> fake_mx_records(Qname);
-            txt     -> fake_txt_records(Qname);
-            srv     -> fake_srv_records(Qname);
-            naptr   -> fake_naptr_records(Qname);
-            ptr     -> fake_ptr_records(Qname);
-            spf     -> fake_spf_records(Qname);
-            sshfp   -> fake_sshfp_records(Qname);
-            rp      -> fake_rp_records(Qname);
-            hinfo   -> fake_hinfo_records(Qname);
-            afsdb   -> fake_afsdb_records(Qname);
+answer(Qname, Qtype) ->
+  case Qtype of
+    <<"SOA">>     -> fake_soa_record(Qname);
+    <<"A">>       -> fake_a_records(Qname);
+    <<"AAAA">>    -> fake_aaaa_records(Qname);
+    <<"CNAME">>   -> fake_cname_records(Qname);
+    <<"NS">>      -> fake_ns_records(Qname);
+    <<"MX">>      -> fake_mx_records(Qname);
+    <<"TXT">>     -> fake_txt_records(Qname);
+    <<"SRV">>     -> fake_srv_records(Qname);
+    <<"NAPTR">>   -> fake_naptr_records(Qname);
+    <<"PTR">>     -> fake_ptr_records(Qname);
+    <<"SPF">>     -> fake_spf_records(Qname);
+    <<"SSHFP">>   -> fake_sshfp_records(Qname);
+    <<"RP">>      -> fake_rp_records(Qname);
+    <<"HINFO">>   -> fake_hinfo_records(Qname);
+    <<"AFSDB">>   -> fake_afsdb_records(Qname);
 
-            any     -> lists:flatten([fake_soa_record(Qname), fake_a_records(Qname), fake_mx_records(Qname)]);
+    <<"ANY">>     -> lists:flatten([fake_soa_record(Qname), fake_a_records(Qname), fake_mx_records(Qname)]);
 
-            % DNSSEC RRs
-            dnskey  -> fake_dnskey_records(Qname);
-            ds      -> fake_ds_records(Qname); % broken
-            rrsig   -> fake_rrsig_records(Qname);
-            %nsec    -> fake_nsec_records(Qname);
+    %% DNSSEC RRs
+    <<"DNSKEY">>  -> fake_dnskey_records(Qname);
+    <<"DS">>      -> fake_ds_records(Qname); % Broken (certainly my fault)
+    <<"RRSIG">>   -> fake_rrsig_records(Qname);
+    <<"NSEC">>    -> fake_nsec_records(Qname);
 
-            _       -> []
-          end
-      end,
-      Questions)).
+    _       -> []
+  end. 
 
 fake_soa_record(Qname) ->
-  [#rr {
-      rname = Qname,
+  [#dns_rr {
+      name = Qname,
       type = 6,
-      class = 1,
       ttl = 3600,
-      rdata = "ns1.example.com root.example.com 2011072801 10800 3600 86400 300"
+      data = #dns_rrdata_soa{mname = "ns1.example.com", rname = "root.example.com", serial = 2011072801, refresh = 10800, retry = 3600, expire = 86400, minimum = 300}
+      %data = "ns1.example.com root.example.com 2011072801 10800 3600 86400 300"
     }
   ].
 
 fake_a_records(Qname) ->
-  [#rr {
-      rname = Qname,
+  [#dns_rr {
+      name = Qname,
       type = 1,
-      class = 1,
       ttl = 3600,
-      rdata = "1.2.3.4"
+      data = #dns_rrdata_a{ip = {1,2,3,4}}
     }
   ].
 
 fake_aaaa_records(Qname) ->
-  [#rr {
-      rname = Qname,
+  [#dns_rr {
+      name = Qname,
       type = 28,
-      class = 1,
       ttl = 3600,
-      rdata = "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+      data = #dns_rrdata_aaaa{ip = {1,2,3,4,5,6,7,8}}
+      %data = "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
     }
   ].
 
 fake_cname_records(Qname) ->
-  [#rr {
-      rname = Qname,
+  [#dns_rr {
+      name = Qname,
       type = 5,
-      class = 1,
       ttl = 3600,
-      rdata = "example.com"
-    }
-  ].
-
-fake_mx_records(Qname) ->
-  [#rr {
-      rname = Qname,
-      type = 15,
-      class = 1,
-      ttl = 3600,
-      rdata = "1 mx1.example.com"
-    },
-    #rr {
-      rname = Qname,
-      type = 15,
-      class = 1,
-      ttl = 3600,
-      rdata = "2 mx2.example.com"
+      data = #dns_rrdata_cname{dname = "dest.example.com"}
     }
   ].
 
 fake_ns_records(Qname) ->
-  [#rr {
-      rname = Qname,
+  [#dns_rr {
+      name = Qname,
       type = 2,
-      class = 1,
       ttl = 3600,
-      rdata = "ns1.example.com"
+      data = #dns_rrdata_ns{dname = "ns1.example.com"}
     },
-    #rr {
-      rname = Qname,
+    #dns_rr {
+      name = Qname,
       type = 2,
-      class = 1,
       ttl = 3600,
-      rdata = "ns2.example.com"
+      data = #dns_rrdata_ns{dname = "ns2.example.com"}
+    }
+  ].
+
+fake_mx_records(Qname) ->
+  [#dns_rr {
+      name = Qname,
+      type = 15,
+      ttl = 3600,
+      data = #dns_rrdata_mx{exchange = "mx1.example.com", preference = 1}
+    },
+    #dns_rr {
+      name = Qname,
+      type = 15,
+      ttl = 3600,
+      data = #dns_rrdata_mx{exchange = "mx2.example.com", preference = 2}
     }
   ].
 
 fake_txt_records(Qname) ->
   [
-    #rr {
-      rname = Qname,
+    #dns_rr {
+      name = Qname,
       type = 16,
-      class = 1,
       ttl = 3600,
-      rdata = "Just another text record"
+      data = #dns_rrdata_txt{txt = "Just another text record"}
     },
-    #rr {
-      rname = Qname,
+    #dns_rr {
+      name = Qname,
       type = 16,
-      class = 1,
       ttl = 3600,
-      rdata = "\"Multiple text strings\" \"in a single resource record\""
+      data = #dns_rrdata_txt{txt = ["Multiple text strings", "in a single resource record"]}
     }
   ].
 
 fake_srv_records(Qname) ->
+  Prefix = <<"_foo._tcp.">>,
   [
-    #rr {
-      rname = string:concat("_foo._tcp", Qname),
+    #dns_rr {
+      name = <<Prefix/bitstring, Qname/bitstring>>,
       type = 33,
-      class = 1,
       ttl = 3600,
-      rdata = "1 0 9 server.example.com"
+      data = #dns_rrdata_srv{priority = 1, weight = 0, port = 9, target = "server.example.com"}
     }
   ].
 
 fake_naptr_records(Qname) ->
   [
-    #rr {
-      rname = Qname,
+    #dns_rr {
+      name = Qname,
       type = 35,
-      class = 1,
       ttl = 3600,
-      rdata = "100 100 \"s\" \"http+I2R\" \"\" _http._tcp.foo.com"
+      data = #dns_rrdata_naptr{order = 100, preference = 100, flags = <<"s">>, services = <<"http+I2R">>, regexp = <<"">>, replacement = <<"_http._tcp.foo.com">>}
     }
   ].
 
 fake_ptr_records(Qname) ->
   [
-    #rr {
-      rname = Qname,
+    #dns_rr {
+      name = Qname,
       type = 12,
-      class = 1,
       ttl = 3600,
-      rdata = "foo.example.com"
+      data = #dns_rrdata_ptr{dname = "foo.example.com"}
     }
   ].
 
 fake_spf_records(Qname) ->
   [
-    #rr {
-      rname = Qname,
+    #dns_rr {
+      name = Qname,
       type = 99,
-      class = 1,
       ttl = 3600,
-      rdata = "v=spf1 +mx a:colo.example.com/28 -all"
+      data = #dns_rrdata_spf{spf = "v=spf1 +mx a:colo.example.com/28 -all"}
     }
   ].
 
 fake_sshfp_records(Qname) ->
   [
-    #rr {
-      rname = Qname,
+    #dns_rr {
+      name = Qname,
       type = 44,
-      class = 1,
       ttl = 3600,
-      rdata = "2 1 123456789abcdef67890123456789abcdef67890"
+      data = #dns_rrdata_sshfp{alg = 2, fp_type = 1, fp = <<"123456789abcdef67890123456789abcdef67890">>}
     }
   ].
 
 fake_rp_records(Qname) ->
   [
-    #rr {
-      rname = Qname,
+    #dns_rr {
+      name = Qname,
       type = 17,
-      class = 1,
       ttl = 3600,
-      rdata = "joe.example.com joe-txt.example.com"
+      data = #dns_rrdata_rp{mbox = "joe.example.com", txt = "joe-txt.example.com"}
     }
   ].
 
 fake_hinfo_records(Qname) ->
   [
-    #rr {
-      rname = Qname,
+    #dns_rr {
+      name = Qname,
       type = 13,
-      class = 1,
       ttl = 3600,
-      rdata = "i386 linux"
+      data = #dns_rrdata_hinfo{cpu = "i386", os = "linux"}
     }
   ].
 
 fake_afsdb_records(Qname) ->
   [
-    #rr {
-      rname = Qname,
+    #dns_rr {
+      name = Qname,
       type = 18,
-      class = 1,
       ttl = 3600,
-      rdata = "1 bigbird.example.com"
+      data = #dns_rrdata_afsdb{subtype = 1, hostname = "bigbird.example.com"}
     }
   ].
 
 fake_dnskey_records(Qname) ->
   [
-    #rr {
-      rname = Qname,
+    dnssec:add_keytag_to_dnskey(#dns_rr {
+      name = Qname,
       type = 48,
-      class = 1,
       ttl = 3600,
-      rdata = "256 3 5 AQPSKmynfzW4kyBv015MUG2DeIQ3Cbl+BBZH4b/0PY1kxkmvHjcZc8nokfzj31GajIQKY+5CptLr3buXA10hWqTkF7H6RfoRqXQeogmMHfpftf6zMv1LyBUgia7za6ZEzOJBOztyvhjL742iU/TpPSEDhm2SNKLijfUppn1UaNvv4w=="
-    }
+      data = #dns_rrdata_dnskey{flags = 256, protocol = 3, alg = 5, public_key = <<"AQPSKmynfzW4kyBv015MUG2DeIQ3Cbl+BBZH4b/0PY1kxkmvHjcZc8nokfzj31GajIQKY+5CptLr3buXA10hWqTkF7H6RfoRqXQeogmMHfpftf6zMv1LyBUgia7za6ZEzOJBOztyvhjL742iU/TpPSEDhm2SNKLijfUppn1UaNvv4w==">>}
+    })
   ].
 
 fake_ds_records(Qname) ->
   [
-    #rr {
-      rname = Qname,
+    #dns_rr {
+      name = Qname,
       type = 43,
-      class = 1,
       ttl = 3600,
-      rdata = "60485 5 1 2BB183AF5F22588179A53B0A98631FAD1A292118"
+      data = #dns_rrdata_ds{keytag = 8401, alg = 5, digest_type = 1, digest = <<"5248DB0EAE4E829924F19D33B005FBC8C4606058">>}
     }
   ].
 
 fake_rrsig_records(Qname) ->
   [
-    #rr {
-      rname = Qname,
+    #dns_rr {
+      name = Qname,
       type = 46,
-      class = 1,
       ttl = 3600,
-      rdata = "A 5 3 3600 20030322173103 20030220173103 2642 example.com oJB1W6WNGv+ldvQ3WDG0MQkg5IEhjRip8WTrPYGv07h108dUKGMeDPKijVCHX3DDKdfb+v6oB9wfuh3DTJXUAfI/M0zmO/zz8bW0Rznl8O3tGNazPwQKkRN20XPXV6nwwfoXmJQbsLNrLfkGJ5D6fwFm8nN+6pBzeDQfsS3Ap3o="
+      data = #dns_rrdata_rrsig{type_covered = 1, alg = 5, labels = 3, original_ttl = 3600, expiration = 20030322173103, inception = 20030220173103, key_tag = 2642, signers_name = "example.com", signature = <<"oJB1W6WNGv+ldvQ3WDG0MQkg5IEhjRip8WTrPYGv07h108dUKGMeDPKijVCHX3DDKdfb+v6oB9wfuh3DTJXUAfI/M0zmO/zz8bW0Rznl8O3tGNazPwQKkRN20XPXV6nwwfoXmJQbsLNrLfkGJ5D6fwFm8nN+6pBzeDQfsS3Ap3o=">>}
     }
-  ].                              
+  ].
+
+fake_nsec_records(Qname) ->
+  [
+    #dns_rr {
+      name = Qname,
+      type = ?DNS_TYPE_NSEC_NUMBER,
+      ttl = 3600,
+      data = #dns_rrdata_nsec{next_dname = "example.com", types = [?DNS_TYPE_A_NUMBER]}
+    }
+  ].
