@@ -21,16 +21,21 @@ answer(Qname, Qtype) ->
     <<"HINFO">>   -> fake_hinfo_records(Qname);
     <<"AFSDB">>   -> fake_afsdb_records(Qname);
 
-    <<"ANY">>     -> lists:flatten([fake_soa_record(Qname), fake_a_records(Qname), fake_mx_records(Qname)]);
+    <<"ANY">>     -> fake_records(Qname);
 
     %% DNSSEC RRs
     <<"DNSKEY">>  -> fake_dnskey_records(Qname);
     <<"DS">>      -> fake_ds_records(Qname); % Broken (certainly my fault)
     <<"RRSIG">>   -> fake_rrsig_records(Qname);
-    <<"NSEC">>    -> fake_nsec_records(Qname);
+    %<<"RRSIG">>   -> fake_generated_rrsig_records(fake_a_records(Qname), Qname, KeyTag, Alg, Key)
+    <<"NSEC">>    -> fake_generated_nsec_records(fake_records(Qname));
 
-    _       -> []
-  end. 
+    %% Nothing found
+    _ -> []
+  end.
+
+fake_records(Qname) ->
+  lists:flatten([fake_soa_record(Qname), fake_a_records(Qname), fake_mx_records(Qname)]).
 
 fake_soa_record(Qname) ->
   [#dns_rr {
@@ -227,12 +232,18 @@ fake_rrsig_records(Qname) ->
     }
   ].
 
-fake_nsec_records(Qname) ->
-  [
-    #dns_rr {
-      name = Qname,
-      type = ?DNS_TYPE_NSEC_NUMBER,
-      ttl = 3600,
-      data = #dns_rrdata_nsec{next_dname = "example.com", types = [?DNS_TYPE_A_NUMBER]}
-    }
-  ].
+%fake_generated_rrsig_records(RSet, SignerName, KeyTag, Alg, Key) ->
+  %dnssec:sign_rrset(RSet, SignerName, KeyTag, Alg, Key).
+
+%fake_nsec_records(Qname) ->
+  %[
+    %#dns_rr {
+      %name = Qname,
+      %type = ?DNS_TYPE_NSEC_NUMBER,
+      %ttl = 3600,
+      %data = #dns_rrdata_nsec{next_dname = "example.com", types = [?DNS_TYPE_A_NUMBER]}
+    %}
+  %].
+
+fake_generated_nsec_records(RSet) ->
+  dnssec:gen_nsec(RSet).
