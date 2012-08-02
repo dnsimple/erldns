@@ -1,0 +1,17 @@
+[{mysql,[
+    {pools, [
+        {dns_pool, [
+            {size, 10},
+            {max_overflow, 20},
+            {host, "localhost"},
+            {port, 3306},
+            {database, "dbname"},
+            {user, "dbuser"},
+            {password, "dbpassword"},
+            {encoding, utf8}]
+        }
+      ]
+    }
+  ]
+}].
+
