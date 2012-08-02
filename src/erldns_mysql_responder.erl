@@ -34,6 +34,8 @@ parse_content(Content, _, ?DNS_TYPE_NS_BSTR) ->
   #dns_rrdata_ns{dname=Content};
 parse_content(Content, _, ?DNS_TYPE_CNAME_BSTR) ->
   #dns_rrdata_cname{dname=Content};
+parse_content(Content, _, ?DNS_TYPE_PTR_BSTR) ->
+  #dns_rrdata_ptr{dname=Content};
 
 parse_content(Content, _, ?DNS_TYPE_A_BSTR) ->
   {ok, Address} = inet_parse:address(binary_to_list(Content)),
