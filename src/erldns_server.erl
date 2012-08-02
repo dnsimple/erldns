@@ -1,6 +1,6 @@
 -module(erldns_server).
 
--include("include/nsrecs.hrl").
+-include("deps/dns/include/dns_records.hrl").
 
 % API
 -export([start/0, start/1]).
@@ -77,9 +77,10 @@ udp_loop(Socket) ->
 handle_dns_query(Socket, Packet) ->
   <<Len:16, Bin/binary>> = Packet,
   io:format("TCP Message received, len: ~p~n", [Len]),
-  Request = inspect(erldns_unpack:unpack(Bin)),
-  Response = build_response(Request),
-  BinReply = erldns_pack:pack_message(Response),
+  DecodedMessage = dns:decode_message(Bin),
+  NewResponse = answer_questions(DecodedMessage#dns_message.questions, DecodedMessage),
+  %Response = build_response(Request),
+  BinReply = dns:encode_message(NewResponse),
   BinLength = byte_size(BinReply),
   TcpBinReply = <<BinLength:16, BinReply/binary>>,
   gen_tcp:send(Socket, TcpBinReply),
@@ -88,73 +89,31 @@ handle_dns_query(Socket, Packet) ->
 %% Handle DNS query that comes in over UDP
 handle_dns_query(Socket, Host, Port, Bin) ->
   io:format("Message from from ~p~n", [Host]),
-  Request = inspect(erldns_unpack:unpack(Bin)),
-  Response = build_response(Request),
-  inspect(Response),
-  BinReply = erldns_pack:pack_message(Response),
+
+  DecodedMessage = dns:decode_message(Bin),
+  io:format("Decoded message ~p~n", [DecodedMessage]),
+  NewResponse = answer_questions(DecodedMessage#dns_message.questions, DecodedMessage),
+  BinReply = dns:encode_message(NewResponse),
+
+  %Response = build_response(Request),
   gen_udp:send(Socket, Host, Port, BinReply).
 
-responders() ->
-  [fun erldns_fake_responder:answer/1].
-  %[fun erldns_mysql_responder:answer/1].
+%% Answer the questions and return an updated copy of the given
+%% Response.
+answer_questions([], Response) ->
+  Response;
+answer_questions([Q|Rest], Response) ->
+  io:format("Question: ~p~n", [Q]),
+  NewResponse = answer_question(Q, Response),
+  answer_questions(Rest, NewResponse).
 
-%% Build the response message based on the request message.
-build_response(Request) ->
-  Answer = lists:flatten(lists:map(
-      fun(F) ->
-          F(Request#message.question)
-      end, responders())),
-  #message{
-    header = build_response_header(Request#message.header, Answer),
-    question = Request#message.question,
-    answer = Answer,
-    authority = [],
-    additional = []
-  }.
-
-%% Build the response header.
-build_response_header(RequestHeader, Answer) ->
-  #header{
-    id      = RequestHeader#header.id,
-    qr      = 1,
-    opcode  = RequestHeader#header.opcode,
-    aa      = 1,
-    tc      = 0,
-    rd      = RequestHeader#header.rd,
-    ra      = 0,
-    z       = 0,
-    rcode   = 0,
-    qdcount = RequestHeader#header.qdcount,
-    ancount = length(Answer),
-    nscount = 0,
-    arcount = 0
-  }.
-
-%% Utility function for inspecting a DNS message.
-inspect(Message) ->
-  io:format("-- header --~n~p~n", [Message#message.header]),
-  io:format("-- questions --~n"),
-  lists:foreach(
-    fun(Q) ->
-        io:format(" -> ~p~n", [Q])
-    end,
-    Message#message.question),
-  io:format("-- answers --~n"),
-  lists:foreach(
-    fun(A) ->
-        io:format(" -> ~p~n", [A])
-    end,
-    Message#message.answer),
-  io:format("-- authority --~n"),
-  lists:foreach(
-    fun(A) ->
-        io:format(" -> ~p~n", [A])
-    end,
-    Message#message.authority),
-  io:format("-- additional --~n"),
-  lists:foreach(
-    fun(A) ->
-        io:format(" -> ~p~n", [A])
-    end,
-    Message#message.additional),
-  Message.
+%% Add answers for a specific request to the given Response and return
+%% an updated copy of the Response.
+answer_question(Q, Response) ->
+  [Name, Type] = [Q#dns_query.name, Q#dns_query.type],
+  io:format("Name: ~p, Type: ~p~n", [Name,  dns:type_name(Type)]),
+  Data = #dns_rrdata_a{ip = {4,5,6,7}},
+  Record = #dns_rr{name = Name, type = Type, data = Data},
+  NewResponse = Response#dns_message{anc = 1, aa = true, answers = [Record]},
+  io:format("New response: ~p~n", [NewResponse]),
+  NewResponse.
