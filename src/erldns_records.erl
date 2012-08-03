@@ -1,160 +1,76 @@
 -module(erldns_records).
--export([type_to_atom/1, type_to_string/1, string_to_type/1, class_to_string/1]).
+-include("deps/dns/include/dns.hrl").
+-export([name_type/1]).
 
-type_to_atom(Type) ->
-  case Type of
-    6     -> soa;
-    1     -> a;
-    28    -> aaaa;
-    5     -> cname;
-    2     -> ns;
-    16    -> txt;
-    15    -> mx;
-    33    -> srv;
-    35    -> naptr;
-    12    -> ptr;
-    99    -> spf;
-    44    -> sshfp;
-    17    -> rp;
-    13    -> hinfo;
-    18    -> afsdb;
-
-    255   -> any;
-
-    % DNSSEC RRs
-    48    -> dnskey;
-    43    -> ds;
-    46    -> rrsig;
-    47    -> nsec;
-
-    _     -> Type
-  end.
-
-class_to_string(Value) ->
-  case Value of
-    1       -> "IN";
-    2       -> "CS";
-    3       -> "CH";
-    4       -> "HS";
-    _       -> Value
-  end.
-
-string_to_type(Value) ->
-  case Value of
-    "A"           -> 1;
-    "AAAA"        -> 28;
-    "AFSDB"       -> 18;
-    "APL"         -> 42;
-    "CERT"        -> 37;
-    "CNAME"       -> 5;
-    "DHCID"       -> 49;
-    "DLV"         -> 32769;
-    "DNAME"       -> 39;
-    "DNSKEY"      -> 48;
-    "DS"          -> 43;
-    "HIP"         -> 55;
-    "IPSECKEY"    -> 45;
-    "KEY"         -> 25;
-    "KX"          -> 36;
-    "LOC"         -> 29;
-    "MX"          -> 15;
-    "NAPTR"       -> 35;
-    "NS"          -> 2;
-    "NSEC"        -> 47;
-    "NSEC3"       -> 50;
-    "NSEC3PARAM"  -> 51;
-    "PTR"         -> 12;
-    "RRSIG"       -> 46;
-    "RP"          -> 17;
-    "SIG"         -> 24;
-    "SOA"         -> 6;
-    "SPF"         -> 99;
-    "SRV"         -> 33;
-    "SSHFP"       -> 44;
-    "TA"          -> 32768;
-    "TKEY"        -> 249;
-    "TLSA"        -> 52;
-    "TSIG"        -> 250;
-    "TXT"         -> 16;
-
-    _             -> Value
-  end.
-
-type_to_string(Value) ->
-  case Value of
-    1       -> "A";
-    28      -> "AAAA";
-    18      -> "AFSDB";
-    42      -> "APL";
-    37      -> "CERT";
-    5       -> "CNAME";
-    49      -> "DHCID";
-    32769   -> "DLV";
-    39      -> "DNAME";
-    48      -> "DNSKEY";
-    43      -> "DS";
-    13      -> "HINFO";
-    55      -> "HIP";
-    45      -> "IPSECKEY";
-    25      -> "KEY";
-    36      -> "KX";
-    29      -> "LOC";
-    15      -> "MX";
-    35      -> "NAPTR";
-    2       -> "NS";
-    47      -> "NSEC";
-    50      -> "NSEC3";
-    51      -> "NSEC3PARAM";
-    12      -> "PTR";
-    46      -> "RRSIG";
-    17      -> "RP";
-    24      -> "SIG";
-    6       -> "SOA";
-    99      -> "SPF";
-    33      -> "SRV";
-    44      -> "SSHFP";
-    32768   -> "TA";
-    249     -> "TKEY";
-    52      -> "TLSA";
-    250     -> "TSIG";
-    16      -> "TXT";
-
-    %% AXFR and pseudo records
-    255     -> "*";
-    252     -> "AXFR";
-    251     -> "IXFR";
-    41      -> "OPT";
-
-    %% Obsolete
-    3       -> "MD";
-    4       -> "MF";
-    254     -> "MAILA";
-    7       -> "MB";
-    8       -> "MG";
-    9       -> "MR";
-    14      -> "MINFO";
-    253     -> "MAILB";
-    11      -> "WKS";
-    10      -> "NULL";
-    38      -> "A6";
-    30      -> "NXT";
-    19      -> "X25";
-    20      -> "ISDN";
-    21      -> "RT";
-    22      -> "NSAP";
-    23      -> "NSAP-PTR";
-    26      -> "PX";
-    31      -> "EID";
-    32      -> "NIMLOC";
-    34      -> "ATMA";
-    40      -> "SINK";
-    27      -> "GPOS";
-    100     -> "UINFO";
-    101     -> "UID";
-    102     -> "GID";
-    103     -> "UNSPEC";
-
-    %% Catchall for anything else
-    _       -> Value 
-  end.
-
+%% @doc Returns the type value given a binary string.
+-spec name_type(binary()) -> dns:type() | 'undefined'.
+name_type(Type) when is_binary(Type) ->
+    case Type of
+	?DNS_TYPE_A_BSTR -> ?DNS_TYPE_A_NUMBER;
+	?DNS_TYPE_NS_BSTR -> ?DNS_TYPE_NS_NUMBER;
+	?DNS_TYPE_MD_BSTR -> ?DNS_TYPE_MD_NUMBER;
+	?DNS_TYPE_MF_BSTR -> ?DNS_TYPE_MF_NUMBER;
+        ?DNS_TYPE_CNAME_BSTR -> ?DNS_TYPE_CNAME_NUMBER;
+	?DNS_TYPE_SOA_BSTR -> ?DNS_TYPE_SOA_NUMBER;
+        ?DNS_TYPE_MB_BSTR -> ?DNS_TYPE_MB_NUMBER;
+        ?DNS_TYPE_MG_BSTR -> ?DNS_TYPE_MG_NUMBER;
+        ?DNS_TYPE_MR_BSTR -> ?DNS_TYPE_MR_NUMBER;
+        ?DNS_TYPE_NULL_BSTR -> ?DNS_TYPE_NULL_NUMBER;
+        ?DNS_TYPE_WKS_BSTR -> ?DNS_TYPE_WKS_NUMBER;
+        ?DNS_TYPE_PTR_BSTR -> ?DNS_TYPE_PTR_NUMBER;
+        ?DNS_TYPE_HINFO_BSTR -> ?DNS_TYPE_HINFO_NUMBER;
+        ?DNS_TYPE_MINFO_BSTR -> ?DNS_TYPE_MINFO_NUMBER;
+        ?DNS_TYPE_MX_BSTR -> ?DNS_TYPE_MX_NUMBER;
+        ?DNS_TYPE_TXT_BSTR -> ?DNS_TYPE_TXT_NUMBER;
+        ?DNS_TYPE_RP_BSTR -> ?DNS_TYPE_RP_NUMBER;
+        ?DNS_TYPE_AFSDB_BSTR -> ?DNS_TYPE_AFSDB_NUMBER;
+        ?DNS_TYPE_X25_BSTR -> ?DNS_TYPE_X25_NUMBER;
+        ?DNS_TYPE_ISDN_BSTR -> ?DNS_TYPE_ISDN_NUMBER;
+        ?DNS_TYPE_RT_BSTR -> ?DNS_TYPE_RT_NUMBER;
+        ?DNS_TYPE_NSAP_BSTR -> ?DNS_TYPE_NSAP_NUMBER;
+        ?DNS_TYPE_SIG_BSTR -> ?DNS_TYPE_SIG_NUMBER;
+        ?DNS_TYPE_KEY_BSTR -> ?DNS_TYPE_KEY_NUMBER;
+        ?DNS_TYPE_PX_BSTR -> ?DNS_TYPE_PX_NUMBER;
+        ?DNS_TYPE_GPOS_BSTR -> ?DNS_TYPE_GPOS_NUMBER;
+        ?DNS_TYPE_AAAA_BSTR -> ?DNS_TYPE_AAAA_NUMBER;
+        ?DNS_TYPE_LOC_BSTR -> ?DNS_TYPE_LOC_NUMBER;
+        ?DNS_TYPE_NXT_BSTR -> ?DNS_TYPE_NXT_NUMBER;
+        ?DNS_TYPE_EID_BSTR -> ?DNS_TYPE_EID_NUMBER;
+        ?DNS_TYPE_NIMLOC_BSTR -> ?DNS_TYPE_NIMLOC_NUMBER;
+        ?DNS_TYPE_SRV_BSTR -> ?DNS_TYPE_SRV_NUMBER;
+        ?DNS_TYPE_ATMA_BSTR -> ?DNS_TYPE_ATMA_NUMBER;
+        ?DNS_TYPE_NAPTR_BSTR -> ?DNS_TYPE_NAPTR_NUMBER;
+        ?DNS_TYPE_KX_BSTR -> ?DNS_TYPE_KX_NUMBER;
+        ?DNS_TYPE_CERT_BSTR -> ?DNS_TYPE_CERT_NUMBER;
+        ?DNS_TYPE_DNAME_BSTR -> ?DNS_TYPE_DNAME_NUMBER;
+        ?DNS_TYPE_SINK_BSTR -> ?DNS_TYPE_SINK_NUMBER;
+        ?DNS_TYPE_OPT_BSTR -> ?DNS_TYPE_OPT_NUMBER;
+        ?DNS_TYPE_APL_BSTR -> ?DNS_TYPE_APL_NUMBER;
+        ?DNS_TYPE_DS_BSTR -> ?DNS_TYPE_DS_NUMBER;
+        ?DNS_TYPE_SSHFP_BSTR -> ?DNS_TYPE_SSHFP_NUMBER;
+        ?DNS_TYPE_IPSECKEY_BSTR -> ?DNS_TYPE_IPSECKEY_NUMBER;
+        ?DNS_TYPE_RRSIG_BSTR -> ?DNS_TYPE_RRSIG_NUMBER;
+        ?DNS_TYPE_NSEC_BSTR -> ?DNS_TYPE_NSEC_NUMBER;
+        ?DNS_TYPE_DNSKEY_BSTR -> ?DNS_TYPE_DNSKEY_NUMBER;
+        ?DNS_TYPE_NSEC3_BSTR -> ?DNS_TYPE_NSEC3_NUMBER;
+        ?DNS_TYPE_NSEC3PARAM_BSTR -> ?DNS_TYPE_NSEC3PARAM_NUMBER;
+        ?DNS_TYPE_DHCID_BSTR -> ?DNS_TYPE_DHCID_NUMBER;
+        ?DNS_TYPE_HIP_BSTR -> ?DNS_TYPE_HIP_NUMBER;
+        ?DNS_TYPE_NINFO_BSTR -> ?DNS_TYPE_NINFO_NUMBER;
+        ?DNS_TYPE_RKEY_BSTR -> ?DNS_TYPE_RKEY_NUMBER;
+        ?DNS_TYPE_TALINK_BSTR -> ?DNS_TYPE_TALINK_NUMBER;
+        ?DNS_TYPE_SPF_BSTR -> ?DNS_TYPE_SPF_NUMBER;
+        ?DNS_TYPE_UINFO_BSTR -> ?DNS_TYPE_UINFO_NUMBER;
+        ?DNS_TYPE_UID_BSTR -> ?DNS_TYPE_UID_NUMBER;
+        ?DNS_TYPE_GID_BSTR -> ?DNS_TYPE_GID_NUMBER;
+        ?DNS_TYPE_UNSPEC_BSTR -> ?DNS_TYPE_UNSPEC_NUMBER;
+        ?DNS_TYPE_TKEY_BSTR -> ?DNS_TYPE_TKEY_NUMBER;
+        ?DNS_TYPE_TSIG_BSTR -> ?DNS_TYPE_TSIG_NUMBER;
+        ?DNS_TYPE_IXFR_BSTR -> ?DNS_TYPE_IXFR_NUMBER;
+        ?DNS_TYPE_AXFR_BSTR -> ?DNS_TYPE_AXFR_NUMBER;
+        ?DNS_TYPE_MAILB_BSTR -> ?DNS_TYPE_MAILB_NUMBER;
+        ?DNS_TYPE_MAILA_BSTR -> ?DNS_TYPE_MAILA_NUMBER;
+        ?DNS_TYPE_ANY_BSTR -> ?DNS_TYPE_ANY_NUMBER;
+        ?DNS_TYPE_DLV_BSTR -> ?DNS_TYPE_DLV_NUMBER;
+	_ -> undefined
+    end.
