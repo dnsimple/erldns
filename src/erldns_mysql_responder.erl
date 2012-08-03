@@ -60,6 +60,18 @@ parse_content(Content, _, ?DNS_TYPE_NAPTR_BSTR) ->
   [OrderStr, PreferenceStr, FlagsStr, ServicesStr, RegexpStr, ReplacementStr] = string:tokens(binary_to_list(Content), " "),
   #dns_rrdata_naptr{order=to_i(OrderStr), preference=to_i(PreferenceStr), flags=list_to_binary(string:strip(FlagsStr, both, $")), services=list_to_binary(string:strip(ServicesStr, both, $")), regexp=list_to_binary(string:strip(RegexpStr, both, $")), replacement=list_to_binary(ReplacementStr)};
 
+parse_content(Content, _, ?DNS_TYPE_SSHFP_BSTR) ->
+  [AlgStr, FpTypeStr, FpStr] = string:tokens(binary_to_list(Content), " "),
+  #dns_rrdata_sshfp{alg=to_i(AlgStr), fp_type=to_i(FpTypeStr), fp=list_to_binary(FpStr)};
+
+parse_content(Content, _, ?DNS_TYPE_RP_BSTR) ->
+  [Mbox, Txt] = string:tokens(binary_to_list(Content), " "),
+  #dns_rrdata_rp{mbox=Mbox, txt=Txt};
+
+parse_content(Content, _, ?DNS_TYPE_HINFO_BSTR) ->
+  [Cpu, Os] = string:tokens(binary_to_list(Content), " "),
+  #dns_rrdata_hinfo{cpu=Cpu, os=Os};
+
 parse_content(Content, _Priority, _Type) ->
   Content.
 
