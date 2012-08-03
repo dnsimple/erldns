@@ -16,8 +16,6 @@
 
 -define(PORT, 8053).
 
--record(state, {}).
-
 %% Start the UDP and TCP servers
 start() ->
   start(?PORT).
@@ -29,8 +27,8 @@ start(Port) ->
 
 %% gen_server hooks
 %% This is a work-in-progress
-init([]) ->
-  {ok, #state{}}.
+init(State) ->
+  {ok, State}.
 handle_call(_Request, _From, State) ->
   {noreply, State}.
 handle_cast(_Message, State) ->
@@ -109,7 +107,17 @@ answer_questions([Q|Rest], Response) ->
 %% an updated copy of the Response.
 answer_question(Q, Response) ->
   [Name, Type] = [Q#dns_query.name, Q#dns_query.type],
-  Answers = erldns_mysql_responder:answer(Name, dns:type_name(Type)),
+
+  % TODO: load this from a config
+  ResponderModules = [erldns_mysql_responder],
+  Responders = lists:map(fun(M) -> fun M:answer/2 end, ResponderModules),
+
+  Answers = lists:flatten(
+    lists:map(
+      fun(F) ->
+          F(Name, dns:type_name(Type))
+      end, Responders)),
+
   NewResponse = Response#dns_message{anc = length(Answers), aa = true, answers = Answers},
   io:format("Response: ~p~n", [NewResponse]),
   NewResponse.

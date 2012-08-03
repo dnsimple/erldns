@@ -6,16 +6,19 @@
 -export([answer/2]).
 
 answer(Qname, Qtype) ->
-  lists:map(
+  lists:flatten(lists:map(
     fun(Row) ->
       [_, _Id, Name, TypeStr, Content, TTL, Priority, _ChangeDate] = Row,
-      #dns_rr{name=Name, type=erldns_records:name_type(TypeStr), data=parse_content(Content, Priority, TypeStr), ttl=TTL}
+      case parse_content(Content, Priority, TypeStr) of
+        unsupported -> [];
+        Data -> #dns_rr{name=Name, type=erldns_records:name_type(TypeStr), data=Data, ttl=TTL}
+      end
     end, lookup(Qname, Qtype)
-  ).
+  )).
 
 lookup(Qname, Qtype) ->
   {data, Data} = case Qtype of
-    <<"ANY">> ->
+    ?DNS_TYPE_ANY_BSTR ->
       mysql:prepare(select_records, <<"select * from records where name = ?">>),
       mysql:execute(dns_pool, select_records, [Qname]);
     _ ->
@@ -76,8 +79,8 @@ parse_content(Content, _, ?DNS_TYPE_AFSDB_BSTR) ->
   [SubtypeStr, Hostname] = string:tokens(binary_to_list(Content), " "),
   #dns_rrdata_afsdb{subtype = to_i(SubtypeStr), hostname = Hostname};
 
-parse_content(Content, _Priority, _Type) ->
-  Content.
+parse_content(_Content, _Priority, _Type) ->
+  unsupported.
 
 
 %% Utility method for converting a string to an integer.
