@@ -1,7 +1,7 @@
 -module(erldns_mysql_responder).
 
--include("deps/dns/include/dns.hrl").
--include("deps/mysql/include/mysql.hrl").
+-include("dns.hrl").
+-include("mysql.hrl").
 
 -export([answer/2]).
 

@@ -1,6 +1,5 @@
 -module(erldns_fake_responder).
--include("deps/dns/include/dns_terms.hrl").
--include("deps/dns/include/dns_records.hrl").
+-include("dns.hrl").
 -export([answer/2]).
 
 answer(Qname, Qtype) ->

@@ -1,6 +1,6 @@
 -module(erldns_server).
 
--include("deps/dns/include/dns_records.hrl").
+-include("dns_records.hrl").
 
 % API
 -export([start/0, start/1]).

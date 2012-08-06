@@ -1,5 +1,5 @@
 -module(erldns_records).
--include("deps/dns/include/dns.hrl").
+-include("dns.hrl").
 -export([name_type/1]).
 
 %% @doc Returns the type value given a binary string.
