@@ -121,8 +121,11 @@ answer_questions([Q|Rest], Response) ->
 answer_question(Q, Response) ->
   [Name, Type] = [Q#dns_query.name, Q#dns_query.type],
 
-  % TODO: load this from a config
-  ResponderModules = [erldns_mysql_responder],
+  ResponderModules = case application:get_env(erldns, responders) of
+    {ok, RM} -> RM;
+    _ -> [erldns_mysql_responder]
+  end,
+
   Responders = lists:map(fun(M) -> fun M:answer/2 end, ResponderModules),
 
   Answers = lists:flatten(
