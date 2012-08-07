@@ -17,7 +17,7 @@ Or two:
 
 Right now just launch the erldns_server directly.
 
-    erl -pa ./ebin ./deps/mysql/ebin ./deps/poolboy/ebin ./deps/dns/ebin -s erldns_server
+    erl -config erldns.config -pa ./ebin ./deps/mysql/ebin ./deps/poolboy/ebin ./deps/dns/ebin -s erldns
 
 I'm working on an OTP version.
 

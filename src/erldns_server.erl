@@ -2,7 +2,10 @@
 
 -include("dns_records.hrl").
 
+-behavior(gen_server).
+
 % API
+-export([start_link/0]).
 -export([start/0, start/1]).
 
 % Gen server hooks
@@ -14,6 +17,7 @@
 	 code_change/3
        ]).
 
+-define(SERVER, ?MODULE).
 -define(PORT, 8053).
 
 %% Start the UDP and TCP servers
@@ -25,17 +29,26 @@ start(Port) ->
   spawn(fun() -> udp_server(Port) end),
   spawn(fun() -> tcp_server(Port) end).
 
+start_link() ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
 %% gen_server hooks
 %% This is a work-in-progress
 init(State) ->
+  io:format("~p:init(~p)~n", [?MODULE, State]),
+  start(),
   {ok, State}.
-handle_call(_Request, _From, State) ->
+handle_call(Request, From, State) ->
+  io:format("~p:handle_call(~p, ~p, ~p)~n", [?MODULE, Request, From, State]),
+  {ok, State}.
+handle_cast(Message, State) ->
+  io:format("~p:handle_cast(~p, ~p)~n", [?MODULE, Message, State]),
   {noreply, State}.
-handle_cast(_Message, State) ->
+handle_info(Message, State) ->
+  io:format("~p:handle_info(~p, ~p)~n", [?MODULE, Message, State]),
   {noreply, State}.
-handle_info(_Message, State) ->
-  {noreply, State}.
-terminate(_Reason, _State) ->
+terminate(Reason, State) ->
+  io:format("~p:terminate(~p, ~p)~n", [?MODULE, Reason, State]),
   ok.
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
