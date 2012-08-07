@@ -13,13 +13,19 @@ Or two:
     ./rebar get-deps
     ./rebar compile
 
+## Database
+
+Currently the MySQL responder uses the PowerDNS schema. See "http://doc.powerdns.com/generic-mypgsql-backends.html#idp8855424":http://doc.powerdns.com/generic-mypgsql-backends.html#idp8855424
+
 ## Running
 
-Right now just launch the erldns_server directly.
+Launch directly:
 
     erl -config erldns.config -pa ./ebin ./deps/mysql/ebin ./deps/poolboy/ebin ./deps/dns/ebin -s erldns
 
-I'm working on an OTP version.
+Or use Foreman:
+
+    foreman start
 
 ## Querying
 
