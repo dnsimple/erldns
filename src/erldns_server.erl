@@ -56,12 +56,14 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 %% Start a UDP server.
 udp_server(Port) ->
+  random:seed(erlang:now()),
   {ok, Socket} = gen_udp:open(Port, [binary]),
   io:format("UDP server opened socket: ~p~n", [Socket]),
   udp_loop(Socket).
 
 %% Start a TCP server.
 tcp_server(Port) ->
+  random:seed(erlang:now()),
   {ok, LSocket} = gen_tcp:listen(Port, [binary, {packet, 0}, {active, true}]),
   tcp_loop(LSocket).
 
