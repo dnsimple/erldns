@@ -29,7 +29,7 @@ lookup(Qname, Qtype) ->
       mysql:prepare(select_records_of_type, <<"select * from records where name = ? and type = ?">>),
       mysql:execute(dns_pool, select_records_of_type, [Qname, Qtype])
   end,
-  io:format("~p:lookup found rows", [?MODULE]),
+  io:format("~p:lookup found rows~n", [?MODULE]),
   Data#mysql_result.rows.
 
 parse_content(Content, _, ?DNS_TYPE_SOA_BSTR) ->
