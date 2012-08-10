@@ -20,6 +20,8 @@
 -define(SERVER, ?MODULE).
 -define(PORT, 8053).
 
+-record(state, {}).
+
 %% Start the UDP and TCP servers
 start() ->
   start(?PORT).
@@ -34,10 +36,10 @@ start_link() ->
 
 %% gen_server hooks
 %% This is a work-in-progress
-init(State) ->
-  io:format("~p:init(~p)~n", [?MODULE, State]),
+init(Args) ->
+  io:format("~p:init(~p)~n", [?MODULE, Args]),
   start(),
-  {ok, State}.
+  {ok, #state{}}.
 handle_call(Request, From, State) ->
   io:format("~p:handle_call(~p, ~p, ~p)~n", [?MODULE, Request, From, State]),
   {ok, State}.
