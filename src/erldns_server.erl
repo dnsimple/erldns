@@ -36,21 +36,17 @@ start_link() ->
 
 %% gen_server hooks
 %% This is a work-in-progress
-init(Args) ->
-  io:format("~p:init(~p)~n", [?MODULE, Args]),
-  start(),
+init(_Args) ->
+  {ok, Port} = application:get_env(erldns, port),
+  start(Port),
   {ok, #state{}}.
-handle_call(Request, From, State) ->
-  io:format("~p:handle_call(~p, ~p, ~p)~n", [?MODULE, Request, From, State]),
+handle_call(_Request, _From, State) ->
   {ok, State}.
-handle_cast(Message, State) ->
-  io:format("~p:handle_cast(~p, ~p)~n", [?MODULE, Message, State]),
+handle_cast(_Message, State) ->
   {noreply, State}.
-handle_info(Message, State) ->
-  io:format("~p:handle_info(~p, ~p)~n", [?MODULE, Message, State]),
+handle_info(_Message, State) ->
   {noreply, State}.
-terminate(Reason, State) ->
-  io:format("~p:terminate(~p, ~p)~n", [?MODULE, Reason, State]),
+terminate(_Reason, _State) ->
   ok.
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.

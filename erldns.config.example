@@ -11,7 +11,11 @@
             {encoding, utf8}]
         }
       ]
-    }
-  ]
-}].
+    }]
+  },
+  {erldns,[
+    {port, 53},
+    {responders, [erldns_mysql_responder]}
+  ]}
+].
 
