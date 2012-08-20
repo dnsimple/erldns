@@ -26,8 +26,6 @@
 start() ->
   start(?PORT).
 start(Port) ->
-  application:start(mysql),
-
   spawn(fun() -> udp_server(Port) end),
   spawn(fun() -> tcp_server(Port) end).
 
@@ -56,7 +54,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 udp_server(Port) ->
   random:seed(erlang:now()),
   {ok, Socket} = gen_udp:open(Port, [binary]),
-  io:format("UDP server opened socket: ~p~n", [Socket]),
+  lager:info("UDP server opened socket: ~p~n", [Socket]),
   udp_loop(Socket).
 
 %% Start a TCP server.
@@ -68,7 +66,7 @@ tcp_server(Port) ->
 %% Loop for accepting TCP requests
 tcp_loop(LSocket) ->
   {ok, Socket} = gen_tcp:accept(LSocket),
-  io:format("TCP server opened socket: ~p~n", [Socket]),
+  lager:info("TCP server opened socket: ~p~n", [Socket]),
   receive
     {tcp, Socket, Bin} ->
       io:format("Received TCP Request~n"),
@@ -78,10 +76,10 @@ tcp_loop(LSocket) ->
 
 %% Loop for accepting UDP requests
 udp_loop(Socket) ->
-  io:format("Awaiting Request~n"),
+  lager:info("Awaiting Request~n"),
   receive
     {udp, Socket, Host, Port, Bin} ->
-      io:format("Received UDP Request~n"),
+      lager:info("Received UDP Request~n"),
       spawn(fun() -> handle_dns_query(Socket, Host, Port, Bin) end),
       udp_loop(Socket)
   end.
@@ -89,7 +87,7 @@ udp_loop(Socket) ->
 %% Handle DNS query that comes in over TCP
 handle_dns_query(Socket, Packet) ->
   <<Len:16, Bin/binary>> = Packet,
-  io:format("TCP Message received, len: ~p~n", [Len]),
+  lafer:info("TCP Message received, len: ~p~n", [Len]),
   DecodedMessage = dns:decode_message(Bin),
   NewResponse = answer_questions(DecodedMessage#dns_message.questions, DecodedMessage),
   BinReply = dns:encode_message(NewResponse),
@@ -100,9 +98,9 @@ handle_dns_query(Socket, Packet) ->
 
 %% Handle DNS query that comes in over UDP
 handle_dns_query(Socket, Host, Port, Bin) ->
-  io:format("Message from from ~p~n", [Host]),
+  lager:info("Message from from ~p~n", [Host]),
   DecodedMessage = dns:decode_message(Bin),
-  io:format("Decoded message ~p~n", [DecodedMessage]),
+  lager:info("Decoded message ~p~n", [DecodedMessage]),
   NewResponse = answer_questions(DecodedMessage#dns_message.questions, DecodedMessage),
   BinReply = dns:encode_message(NewResponse),
   gen_udp:send(Socket, Host, Port, BinReply).
@@ -112,7 +110,7 @@ handle_dns_query(Socket, Host, Port, Bin) ->
 answer_questions([], Response) ->
   Response;
 answer_questions([Q|Rest], Response) ->
-  io:format("Question: ~p~n", [Q]),
+  lager:info("Question: ~p~n", [Q]),
   NewResponse = answer_question(Q, Response),
   answer_questions(Rest, NewResponse).
 
@@ -135,5 +133,5 @@ answer_question(Q, Response) ->
       end, Responders)),
 
   NewResponse = Response#dns_message{anc = length(Answers), aa = true, answers = Answers},
-  io:format("Response: ~p~n", [NewResponse]),
+  lager:info("Response: ~p~n", [NewResponse]),
   NewResponse.

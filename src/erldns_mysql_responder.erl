@@ -6,7 +6,7 @@
 -export([answer/2]).
 
 answer(Qname, Qtype) ->
-  io:format("~p:answer(~p, ~p)~n", [?MODULE, Qname, Qtype]),
+  lager:debug("~p:answer(~p, ~p)~n", [?MODULE, Qname, Qtype]),
   lists:flatten(lists:map(
     fun(Row) ->
       [_, _Id, Name, TypeStr, Content, TTL, Priority, _ChangeDate] = Row,
@@ -18,18 +18,16 @@ answer(Qname, Qtype) ->
   )).
 
 lookup(Qname, Qtype) ->
-  io:format("~p:lookup(~p, ~p)~n", [?MODULE, Qname, Qtype]),
+  lager:debug("~p:lookup(~p, ~p)~n", [?MODULE, Qname, Qtype]),
   {data, Data} = case Qtype of
     ?DNS_TYPE_ANY_BSTR ->
-      io:format("preparing statement~n"),
       mysql:prepare(select_records, <<"select * from records where name = ?">>),
-      io:format("executing prepared statement~n"),
       mysql:execute(dns_pool, select_records, [Qname]);
     _ ->
       mysql:prepare(select_records_of_type, <<"select * from records where name = ? and type = ?">>),
       mysql:execute(dns_pool, select_records_of_type, [Qname, Qtype])
   end,
-  io:format("~p:lookup found rows~n", [?MODULE]),
+  lager:debug("~p:lookup found rows~n", [?MODULE]),
   Data#mysql_result.rows.
 
 parse_content(Content, _, ?DNS_TYPE_SOA_BSTR) ->
