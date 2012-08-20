@@ -16,7 +16,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {ttl}).
 
 %% Public API
 start_link() ->
@@ -28,9 +28,11 @@ put(Question, Answer) ->
   gen_server:call(?SERVER, {set_packet, [Question, Answer]}).
 
 %% Gen server hooks
-init(_Args) ->
+init([]) ->
+  init([20]);
+init([TTL]) ->
   ets:new(packet_cache, [set, named_table]),
-  {ok, #state{}}.
+  {ok, #state{ttl = TTL}}.
 handle_call({get_packet, Question}, _From, State) ->
   case ets:lookup(packet_cache, Question) of
     [{Question, {Answer, ExpiresAt}}] -> 
@@ -47,7 +49,7 @@ handle_call({get_packet, Question}, _From, State) ->
   end;
 handle_call({set_packet, [Question, Answer]}, _From, State) ->
   {_,T,_} = erlang:now(),
-  ets:insert(packet_cache, {Question, {Answer, T + 60}}),
+  ets:insert(packet_cache, {Question, {Answer, T + State#state.ttl}}),
   {reply, ok, State}.
 handle_cast(_Message, State) ->
   {noreply, State}.

@@ -1,6 +1,6 @@
 {application,erldns,
              [{description,"Erlang Authoritative DNS Server"},
-              {vsn,"63d849e"},
+              {vsn,"49ba860"},
               {modules,[erldns,erldns_app,erldns_fake_responder,
                         erldns_mysql_responder,erldns_packet_cache,
                         erldns_records,erldns_server,erldns_sup]},
