@@ -29,11 +29,11 @@ start(Port) ->
   spawn(fun() -> udp_server(Port) end),
   spawn(fun() -> tcp_server(Port) end).
 
+%% Public API
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %% gen_server hooks
-%% This is a work-in-progress
 init(_Args) ->
   {ok, Port} = application:get_env(erldns, port),
   start(Port),
@@ -89,7 +89,7 @@ handle_dns_query(Socket, Packet) ->
   <<Len:16, Bin/binary>> = Packet,
   lafer:info("TCP Message received, len: ~p~n", [Len]),
   DecodedMessage = dns:decode_message(Bin),
-  NewResponse = answer_questions(DecodedMessage#dns_message.questions, DecodedMessage),
+  NewResponse = handle_dns_query_with_packet_cache(DecodedMessage),
   BinReply = dns:encode_message(NewResponse),
   BinLength = byte_size(BinReply),
   TcpBinReply = <<BinLength:16, BinReply/binary>>,
@@ -101,9 +101,23 @@ handle_dns_query(Socket, Host, Port, Bin) ->
   lager:info("Message from from ~p~n", [Host]),
   DecodedMessage = dns:decode_message(Bin),
   lager:info("Decoded message ~p~n", [DecodedMessage]),
-  NewResponse = answer_questions(DecodedMessage#dns_message.questions, DecodedMessage),
+  NewResponse = handle_dns_query_with_packet_cache(DecodedMessage),
   BinReply = dns:encode_message(NewResponse),
   gen_udp:send(Socket, Host, Port, BinReply).
+
+%%
+handle_dns_query_with_packet_cache(DecodedMessage) ->
+  Questions = DecodedMessage#dns_message.questions,
+  case erldns_packet_cache:get(Questions) of
+    {ok, Answers} -> 
+      lager:info("Packet cache hit"),
+      build_response(Answers, DecodedMessage);
+    {error, _} -> 
+      lager:info("Packet cache miss"),
+      Response = answer_questions(Questions, DecodedMessage),
+      erldns_packet_cache:put(Questions, Response#dns_message.answers),
+      Response
+  end.
 
 %% Answer the questions and return an updated copy of the given
 %% Response.
@@ -132,6 +146,10 @@ answer_question(Q, Response) ->
           F(Name, dns:type_name(Type))
       end, Responders)),
 
+  build_response(Answers, Response).
+
+%% Populate a response with the given answers
+build_response(Answers, Response) ->
   NewResponse = Response#dns_message{anc = length(Answers), aa = true, answers = Answers},
   lager:info("Response: ~p~n", [NewResponse]),
   NewResponse.

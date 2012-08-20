@@ -15,6 +15,8 @@ start_link() ->
 init(_Args) ->
   Procs = [
     {erldns_server, {erldns_server, start_link, []},
-      permanent, 5000, worker, [erldns_server]}
+      permanent, 5000, worker, [erldns_server]},
+    {erldns_packet_cache, {erldns_packet_cache, start_link, []},
+      permanent, 5000, worker, [erldns_packet_cache]}
   ],
   {ok, {{one_for_one, 5, 10}, Procs}}.

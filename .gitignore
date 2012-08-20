@@ -1,3 +1,5 @@
 *.beam
 deps
 erldns.config
+log/*
+*.dump
