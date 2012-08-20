@@ -1,5 +1,7 @@
 *.beam
-deps
-erldns.config
-log/*
 *.dump
+erldns.config
+log/
+ebin/
+deps/*
+rel/erl-dns
