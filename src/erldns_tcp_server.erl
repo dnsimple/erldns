@@ -16,7 +16,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {port=53}).
 
 %% Public API
 start_link() ->
@@ -26,7 +26,7 @@ start_link() ->
 init(_Args) ->
   {ok, Port} = application:get_env(erldns, port),
   spawn(fun() -> start(Port) end),
-  {ok, #state{}}.
+  {ok, #state{port=Port}}.
 handle_call(_Request, _From, State) ->
   {ok, State}.
 handle_cast(_Message, State) ->
@@ -57,15 +57,15 @@ loop(LSocket) ->
   lager:info("TCP server opened socket: ~p~n", [Socket]),
   receive
     {tcp, Socket, Bin} ->
-      io:format("Received TCP Request~n"),
+      lager:debug("Received TCP Request~n"),
       spawn(fun() -> handle_dns_query(Socket, Bin) end),
       loop(LSocket)
   end.
 
 %% Handle DNS query that comes in over TCP
 handle_dns_query(Socket, Packet) ->
-  <<Len:16, Bin/binary>> = Packet,
-  lager:info("TCP Message received, len: ~p~n", [Len]),
+  %% TODO: measure 
+  <<_Len:16, Bin/binary>> = Packet,
   DecodedMessage = dns:decode_message(Bin),
   NewResponse = erldns_handler:handle(DecodedMessage),
   BinReply = dns:encode_message(NewResponse),

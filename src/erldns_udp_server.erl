@@ -19,7 +19,7 @@
 -define(SERVER, ?MODULE).
 -define(MAX_PACKET_SIZE, 512).
 
--record(state, {}).
+-record(state, {port=53}).
 
 %% Public API
 start_link() ->
@@ -29,7 +29,7 @@ start_link() ->
 init(_Args) ->
   {ok, Port} = application:get_env(erldns, port),
   spawn(fun() -> start(Port) end),
-  {ok, #state{}}.
+  {ok, #state{port = Port}}.
 handle_call(_Request, _From, State) ->
   {ok, State}.
 handle_cast(_Message, State) ->
@@ -66,19 +66,17 @@ loop(Socket) ->
 
 %% Handle DNS query that comes in over UDP
 handle_dns_query(Socket, Host, Port, Bin) ->
-  lager:info("Message from from ~p~n", [Host]),
+  %% TODO: measure
   DecodedMessage = dns:decode_message(Bin),
   lager:info("Decoded message ~p~n", [DecodedMessage]),
-  NewResponse = handle_additional_processing(erldns_handler:handle(DecodedMessage)),
-  BinReply = dns:encode_message(NewResponse),
-  BinLength = byte_size(BinReply),
-  lager:info("Response packet size: ~p", [BinLength]),
-  OptionallyTruncatedBinReply = case BinLength > max_payload_size(NewResponse) of
-    true -> dns:encode_message(truncate(NewResponse));
-    false -> BinReply
-  end,
-  gen_udp:send(Socket, Host, Port, OptionallyTruncatedBinReply).
+  Response = erldns_handler:handle(DecodedMessage),
+  EncodedMessage = dns:encode_message(Response),
+  BinLength = byte_size(EncodedMessage),
+  gen_udp:send(Socket, Host, Port, 
+    optionally_truncate(Response, EncodedMessage, BinLength)).
 
+%% Determine the max payload size by looking for additional
+%% options passed by the client.
 max_payload_size(Message) ->
   case Message#dns_message.additional of
     [Opt|_] ->
@@ -89,19 +87,17 @@ max_payload_size(Message) ->
     _ -> ?MAX_PACKET_SIZE
   end.
 
+%% Truncate the message and encode if necessary.
+optionally_truncate(Message, EncodedMessage, BinLength) ->
+  case BinLength > max_payload_size(Message) of
+    true -> dns:encode_message(truncate(Message));
+    false -> EncodedMessage
+  end.
+
 %% Truncate the message for UDP packet limitations (at least that
 %% is what it may eventually do. Right now it simply sets the
 %% tc bit to indicate the message was truncated.
 truncate(Message) ->
+  lager:info("Message was truncated: ~p", [Message]),
   %Response = erldns_handler:build_response(Message#dns_message.answers, Message),
   Message#dns_message{tc = true}.
-
-%% Handle EDNS processing (includes DNSSEC?)
-handle_additional_processing(Message) ->
-  handle_opts(Message, Message#dns_message.additional).
-
-handle_opts(Message, []) ->
-  Message;
-handle_opts(Message, [Opt|Rest]) ->
-  lager:info("Opt: ~p", [Opt]),
-  handle_opts(Message, Rest).
