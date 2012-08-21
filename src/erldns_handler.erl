@@ -3,7 +3,7 @@
 -include("dns_records.hrl").
 
 % Protected API
--export([handle/1]).
+-export([handle/1, build_response/2]).
 
 %% Handle the decoded message
 handle(DecodedMessage) ->
@@ -33,23 +33,24 @@ answer_questions([Q|Rest], Response) ->
 answer_question(Q, Response) ->
   [Name, Type] = [Q#dns_query.name, Q#dns_query.type],
 
-  ResponderModules = case application:get_env(erldns, responders) of
-    {ok, RM} -> RM;
-    _ -> [erldns_mysql_responder]
-  end,
-
-  Responders = lists:map(fun(M) -> fun M:answer/2 end, ResponderModules),
-
+  %% Query each of the responders that is registered
+  %% to build the full answer set.
   Answers = lists:flatten(
     lists:map(
       fun(F) ->
           F(Name, dns:type_name(Type))
-      end, Responders)),
+      end, responders())),
 
   build_response(Answers, Response).
 
 %% Populate a response with the given answers
 build_response(Answers, Response) ->
-  NewResponse = Response#dns_message{anc = length(Answers), qr=true, aa = true, answers = Answers},
+  NewResponse = Response#dns_message{anc = length(Answers), qr = true, aa = true, answers = Answers},
   lager:info("Response: ~p~n", [NewResponse]),
   NewResponse.
+
+responders() -> lists:map(fun(M) -> fun M:answer/2 end, get_responder_modules()).
+
+get_responder_modules() -> get_responder_modules(application:get_env(erldns, responders)).
+get_responder_modules({ok, RM}) -> RM;
+get_responder_modules(_) -> [erldns_mysql_responder].
