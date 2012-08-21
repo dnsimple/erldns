@@ -1,5 +1,7 @@
 -module(erldns_udp_server).
 
+-include("dns_records.hrl").
+
 -behavior(gen_server).
 
 % API
@@ -15,6 +17,7 @@
   ]).
 
 -define(SERVER, ?MODULE).
+-define(MAX_PACKET_SIZE, 512).
 
 -record(state, {}).
 
@@ -66,6 +69,39 @@ handle_dns_query(Socket, Host, Port, Bin) ->
   lager:info("Message from from ~p~n", [Host]),
   DecodedMessage = dns:decode_message(Bin),
   lager:info("Decoded message ~p~n", [DecodedMessage]),
-  NewResponse = erldns_handler:handle(DecodedMessage),
+  NewResponse = handle_additional_processing(erldns_handler:handle(DecodedMessage)),
   BinReply = dns:encode_message(NewResponse),
-  gen_udp:send(Socket, Host, Port, BinReply).
+  BinLength = byte_size(BinReply),
+  lager:info("Response packet size: ~p", [BinLength]),
+  OptionallyTruncatedBinReply = case BinLength > max_payload_size(NewResponse) of
+    true -> dns:encode_message(truncate(NewResponse));
+    false -> BinReply
+  end,
+  gen_udp:send(Socket, Host, Port, OptionallyTruncatedBinReply).
+
+max_payload_size(Message) ->
+  case Message#dns_message.additional of
+    [Opt|_] ->
+      case Opt#dns_optrr.udp_payload_size of
+        [] -> ?MAX_PACKET_SIZE;
+        _ -> Opt#dns_optrr.udp_payload_size
+      end;
+    _ -> ?MAX_PACKET_SIZE
+  end.
+
+%% Truncate the message for UDP packet limitations (at least that
+%% is what it may eventually do. Right now it simply sets the
+%% tc bit to indicate the message was truncated.
+truncate(Message) ->
+  %Response = erldns_handler:build_response(Message#dns_message.answers, Message),
+  Message#dns_message{tc = true}.
+
+%% Handle EDNS processing (includes DNSSEC?)
+handle_additional_processing(Message) ->
+  handle_opts(Message, Message#dns_message.additional).
+
+handle_opts(Message, []) ->
+  Message;
+handle_opts(Message, [Opt|Rest]) ->
+  lager:info("Opt: ~p", [Opt]),
+  handle_opts(Message, Rest).
