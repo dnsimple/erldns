@@ -3,11 +3,13 @@
   {vsn, git},
   {modules, [erldns,
              erldns_app,
-             erldns_server,
+             erldns_handler,
+             erldns_udp_server,
+             erldns_tcp_server,
              erldns_unpack,
              erldns_pack,
              erldns_records]},
-  {registered, [erldns_server]},
+  {registered, [erldns_udp_server, erldns_tcp_server]},
   {mod, { erldns_app, []}},
   {applications, [kernel, stdlib]}]}.
 

@@ -9,14 +9,17 @@
 
 -define(SUPERVISOR, ?MODULE).
 
+%% Helper macro for declaring children of supervisor
+-define(CHILD(I, Type, Args), {I, {I, start_link, Args}, permanent, 5000, Type, [I]}).
+
+%% Public API
 start_link() ->
   supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
 init(_Args) ->
   Procs = [
-    {erldns_server, {erldns_server, start_link, []},
-      permanent, 5000, worker, [erldns_server]},
-    {erldns_packet_cache, {erldns_packet_cache, start_link, []},
-      permanent, 5000, worker, [erldns_packet_cache]}
+    ?CHILD(erldns_packet_cache, worker, []),
+    ?CHILD(erldns_udp_server, worker, []),
+    ?CHILD(erldns_tcp_server, worker, [])
   ],
   {ok, {{one_for_one, 5, 10}, Procs}}.
