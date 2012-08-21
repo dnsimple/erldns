@@ -30,6 +30,8 @@ lookup(Qname, Qtype) ->
   lager:debug("~p:lookup found rows~n", [?MODULE]),
   Data#mysql_result.rows.
 
+%% All of these functions are used to parse the content field
+%% stored in MySQL into a correct dns_rrdata in-memory record.
 parse_content(Content, _, ?DNS_TYPE_SOA_BSTR) ->
   [MnameStr, RnameStr, SerialStr, RefreshStr, RetryStr, ExpireStr, MinimumStr] = string:tokens(binary_to_list(Content), " "),
   [Mname, Rname, Serial, Refresh, Retry, Expire, Minimum] =
@@ -82,7 +84,8 @@ parse_content(Content, _, ?DNS_TYPE_AFSDB_BSTR) ->
   [SubtypeStr, Hostname] = string:tokens(binary_to_list(Content), " "),
   #dns_rrdata_afsdb{subtype = to_i(SubtypeStr), hostname = Hostname};
 
-parse_content(_Content, _Priority, _Type) ->
+parse_content(_, _, Type) ->
+  lager:warning("Unsupported record type: ~p", [Type]),
   unsupported.
 
 
