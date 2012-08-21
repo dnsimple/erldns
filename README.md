@@ -43,3 +43,12 @@ Here are some queries to try:
 
     dig -p8053 @127.0.0.1 -x 127.0.0.1 ptr
 
+## Custom Responders
+
+Responders follow a simple API of answer/2. The arguments passed in are Qname and Qtype. To implement your own responder:
+
+* Implement the answer/2 function and export it.
+* Add your module name to the responders list in erldns.config.
+
+The erldns_mysql_responder and the erldns_fake_responder (found in priv) are demonstrations of how to write a responder.
+

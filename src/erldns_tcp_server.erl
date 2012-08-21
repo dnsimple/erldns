@@ -39,6 +39,7 @@ code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
 %% Internal API
+%% Start the TCP server.
 start(Port) ->
   random:seed(erlang:now()),
   case gen_tcp:listen(Port, [binary, {packet, 0}, {active, true}]) of

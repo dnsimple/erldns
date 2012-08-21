@@ -28,8 +28,8 @@ answer_questions([Q|Rest], Response) ->
   NewResponse = answer_question(Q, Response),
   answer_questions(Rest, NewResponse).
 
-%% Add answers for a specific request to the given Response and return
-%% an updated copy of the Response.
+%% Add answers for a specific request to the given 
+%% Response and return an updated copy of the Response.
 answer_question(Q, Response) ->
   [Name, Type] = [Q#dns_query.name, Q#dns_query.type],
 
