@@ -21,7 +21,7 @@ Currently the MySQL responder uses the PowerDNS schema. See "http://doc.powerdns
 
 Launch directly:
 
-    erl -config erldns.config -pa ./ebin ./deps/lager/ebin ./deps/mysql/ebin ./deps/poolboy/ebin ./deps/dns/ebin -s erldns
+    erl -config erldns.config -pa ebin -pa deps/**/ebin -s erldns
 
 Or use Foreman:
 
