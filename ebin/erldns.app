@@ -1,6 +1,6 @@
 {application,erldns,
              [{description,"Erlang Authoritative DNS Server"},
-              {vsn,"ccd9327"},
+              {vsn,"a313c59"},
               {modules,[erldns,erldns_app,erldns_handler,
                         erldns_mysql_responder,erldns_packet_cache,
                         erldns_records,erldns_sup,erldns_tcp_server,

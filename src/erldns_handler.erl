@@ -13,6 +13,7 @@ handle(DecodedMessage) ->
       build_response(Answers, DecodedMessage);
     {error, _} -> 
       lager:info("Packet cache miss"), %% TODO: measure
+      %% TODO: ask all responders if we are authoritative?
       Response = answer_questions(Questions, DecodedMessage),
       erldns_packet_cache:put(Questions, Response#dns_message.answers),
       Response
