@@ -52,15 +52,9 @@ answer_questions([Q|Rest], Response) ->
 %% Response and return an updated copy of the Response.
 answer_question(Q, Response) ->
   [Name, Type] = [Q#dns_query.name, Q#dns_query.type],
-
   %% Query each of the responders that is registered
   %% to build the full answer set.
-  Answers = lists:flatten(
-    lists:map(
-      fun(F) ->
-          F(Name, dns:type_name(Type))
-      end, responders())),
-
+  Answers = lists:flatten([F(Name, dns:type_name(Type)) || F <- responders()]),
   build_response(Answers, Response).
 
 %% Populate a response with the given answers
