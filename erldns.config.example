@@ -16,6 +16,11 @@
   {erldns,[
     {port, 53},
     {responders, [erldns_mysql_responder]}
+  ]},
+  {lager, [
+    {handlers, [
+      {lager_console_backend, info}
+    ]}
   ]}
 ].
 
