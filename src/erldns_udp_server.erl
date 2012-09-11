@@ -28,7 +28,9 @@ start_link() ->
 %% gen_server hooks
 init(_Args) ->
   {ok, Port} = application:get_env(erldns, port),
-  spawn(fun() -> start(Port) end),
+  random:seed(erlang:now()),
+  spawn(fun() -> start(Port, inet) end),
+  spawn(fun() -> start(Port, inet6) end),
   {ok, #state{port = Port}}.
 handle_call(_Request, _From, State) ->
   {ok, State}.
@@ -43,11 +45,10 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 %% Internal functions
 %% Start a UDP server.
-start(Port) ->
-  random:seed(erlang:now()),
-  case gen_udp:open(Port, [binary]) of
+start(Port, InetFamily) ->
+  case gen_udp:open(Port, [binary, InetFamily]) of
     {ok, Socket} -> 
-      lager:info("UDP server opened socket: ~p~n", [Socket]),
+      lager:info("UDP server (~p) opened socket: ~p~n", [InetFamily, Socket]),
       loop(Socket);
     {error, eacces} ->
       lager:error("Failed to open UDP socket. Need to run as sudo?"),
