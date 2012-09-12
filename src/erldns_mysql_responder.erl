@@ -33,9 +33,9 @@ resolve_cnames(Records) ->
   [resolve_cname(Record) || Record <- Records].
 
 resolve_cname(Record) ->
-  lager:debug("~p:resolve_cname(~p)~n", [?MODULE, Record]),
   case Record#dns_rr.type of
     ?DNS_TYPE_CNAME_NUMBER ->
+      lager:debug("~p:resolve_cname(~p)~n", [?MODULE, Record]),
       [Qname, Qtype] = [Record#dns_rr.data#dns_rrdata_cname.dname, ?DNS_TYPE_A_BSTR],
       lookup(Qname, Qtype) ++ [Record];
     _ ->
