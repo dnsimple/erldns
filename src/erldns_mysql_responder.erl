@@ -10,7 +10,7 @@ answer(Qname, Qtype) ->
   Records = lists:flatten(lookup(Qname, Qtype)),
   case Qtype of
     ?DNS_TYPE_CNAME_BSTR -> Records;
-    _ -> resolve_cnames(Records)
+    _ -> [resolve_cname(Record) || Record <- Records]
   end.
 
 lookup(Qname, Qtype) ->
@@ -28,9 +28,6 @@ lookup(Qname, Qtype) ->
   end,
   lager:debug("~p:lookup found rows~n", [?MODULE]),
   lists:map(fun row_to_record/1, Data#mysql_result.rows).
-
-resolve_cnames(Records) ->
-  lists:map(fun resolve_cname/1, Records).
 
 resolve_cname(Record) ->
   case Record#dns_rr.type of
