@@ -7,7 +7,7 @@
 
 answer(Qname, Qtype) ->
   lager:debug("~p:answer(~p, ~p)~n", [?MODULE, Qname, Qtype]),
-  Records = lists:flatten(lists:map(fun row_to_record/1, lookup(Qname, Qtype))),
+  Records = lists:flatten(lookup(Qname, Qtype)),
   case Qtype of
     ?DNS_TYPE_CNAME_BSTR -> Records;
     _ -> resolve_cnames(Records)
@@ -27,7 +27,7 @@ lookup(Qname, Qtype) ->
       mysql:execute(dns_pool, select_records_of_type, [Qname, Qtype])
   end,
   lager:debug("~p:lookup found rows~n", [?MODULE]),
-  Data#mysql_result.rows.
+  lists:map(fun row_to_record/1, Data#mysql_result.rows).
 
 resolve_cnames(Records) ->
   [resolve_cname(Record) || Record <- Records].
@@ -37,11 +37,10 @@ resolve_cname(Record) ->
   case Record#dns_rr.type of
     ?DNS_TYPE_CNAME_NUMBER ->
       [Qname, Qtype] = [Record#dns_rr.data#dns_rrdata_cname.dname, ?DNS_TYPE_A_BSTR],
-      lists:map(fun row_to_record/1, lookup(Qname, Qtype)) ++ [Record];
+      lookup(Qname, Qtype) ++ [Record];
     _ ->
       Record
   end.
-
 
 row_to_record(Row) ->
   [_, _Id, Name, TypeStr, Content, TTL, Priority, _ChangeDate] = Row,
