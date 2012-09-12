@@ -30,7 +30,7 @@ lookup(Qname, Qtype) ->
   lists:map(fun row_to_record/1, Data#mysql_result.rows).
 
 resolve_cnames(Records) ->
-  [resolve_cname(Record) || Record <- Records].
+  lists:map(fun resolve_cname/1, Records).
 
 resolve_cname(Record) ->
   case Record#dns_rr.type of
