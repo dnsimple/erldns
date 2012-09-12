@@ -13,6 +13,7 @@ answer(Qname, Qtype) ->
     _ -> [resolve_cname(Record) || Record <- Records]
   end.
 
+%% Lookup a specific name and type and convert it into a list of DNS records.
 lookup(Qname, Qtype) ->
   lager:debug("~p:lookup(~p, ~p)~n", [?MODULE, Qname, Qtype]),
   {data, Data} = case Qtype of
@@ -29,6 +30,7 @@ lookup(Qname, Qtype) ->
   lager:debug("~p:lookup found rows~n", [?MODULE]),
   lists:map(fun row_to_record/1, Data#mysql_result.rows).
 
+%% Resolve CNAME records down to their local A records if possible.
 resolve_cname(Record) ->
   case Record#dns_rr.type of
     ?DNS_TYPE_CNAME_NUMBER ->
@@ -39,6 +41,7 @@ resolve_cname(Record) ->
       Record
   end.
 
+%% Take a MySQL row and turn it into a DNS resource record.
 row_to_record(Row) ->
   [_, _Id, Name, TypeStr, Content, TTL, Priority, _ChangeDate] = Row,
   case parse_content(Content, Priority, TypeStr) of
