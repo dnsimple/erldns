@@ -24,20 +24,7 @@ handle(DecodedMessage) ->
 %% Handle EDNS processing (includes DNSSEC?)
 %% This is all experimental and doesn't do anything useful yet
 handle_additional_processing(Message) ->
-  handle_opts(Message, Message#dns_message.additional).
-
-handle_opts(Message, []) ->
-  Message;
-handle_opts(Message, [Opt|Rest]) ->
-  NewMessage = case Opt#dns_optrr.dnssec of
-    true -> handle_dnssec(Message);
-    false -> Message
-  end,
-  handle_opts(NewMessage, Rest).
-
-handle_dnssec(Message) ->
-  lager:info("Client wants DNSSEC"),
-  Message.
+  erldns_edns:handle(Message).
 
 %% Answer the questions and return an updated copy of the given
 %% Response.
