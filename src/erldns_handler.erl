@@ -7,7 +7,7 @@
 %% Handle the decoded message
 handle(DecodedMessage) ->
   Questions = DecodedMessage#dns_message.questions,
-  BaseMessage = case erldns_packet_cache:get(Questions) of
+  Message = case erldns_packet_cache:get(Questions) of
     {ok, Answers} -> 
       lager:info("Packet cache hit"), %% TODO: measure
       build_response(Answers, DecodedMessage);
@@ -18,12 +18,7 @@ handle(DecodedMessage) ->
       erldns_packet_cache:put(Questions, Response#dns_message.answers),
       Response
   end,
-  %% if there are no answers, check for an SOA. If no SOA then we are not authoritative
-  handle_additional_processing(BaseMessage).
-
-%% Handle EDNS processing (includes DNSSEC?)
-%% This is all experimental and doesn't do anything useful yet
-handle_additional_processing(Message) ->
+  %% TODO: if there are no answers, check for an SOA. If no SOA then we are not authoritative
   erldns_edns:handle(Message).
 
 %% Answer the questions and return an updated copy of the given
