@@ -45,17 +45,10 @@ answer_questions([], Response) ->
   Response;
 answer_questions([Q|Rest], Response) ->
   lager:info("Question: ~p~n", [Q]),
-  NewResponse = answer_question(Q, Response),
-  answer_questions(Rest, NewResponse).
+  answer_questions(Rest, build_response(answer_question(Q#dns_query.name, Q#dns_query.type), Response)).
 
-%% Add answers for a specific request to the given 
-%% Response and return an updated copy of the Response.
-answer_question(Q, Response) ->
-  [Name, Type] = [Q#dns_query.name, Q#dns_query.type],
-  %% Query each of the responders that is registered
-  %% to build the full answer set.
-  Answers = lists:flatten([F(Name, dns:type_name(Type)) || F <- responders()]),
-  build_response(Answers, Response).
+%% Retreive all answers to the specific question.
+answer_question(Qname, Qtype) -> lists:flatten([F(Qname, dns:type_name(Qtype)) || F <- responders()]).
 
 %% Populate a response with the given answers
 build_response(Answers, Response) ->
