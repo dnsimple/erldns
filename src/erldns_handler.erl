@@ -27,7 +27,8 @@ answer_questions([], Response) ->
   Response;
 answer_questions([Q|Rest], Response) ->
   lager:info("Question: ~p~n", [Q]),
-  answer_questions(Rest, build_response(answer_question(Q#dns_query.name, Q#dns_query.type), Response)).
+  [Qname, Qtype] = [Q#dns_query.name, Q#dns_query.type],
+  answer_questions(Rest, build_response(lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype))), Response)).
 
 %% Retreive all answers to the specific question.
 answer_question(Qname, Qtype) -> lists:flatten([F(Qname, dns:type_name(Qtype)) || F <- responders()]).
@@ -47,3 +48,36 @@ responders() -> lists:map(fun(M) -> fun M:answer/2 end, get_responder_modules())
 get_responder_modules() -> get_responder_modules(application:get_env(erldns, responders)).
 get_responder_modules({ok, RM}) -> RM;
 get_responder_modules(_) -> [erldns_mysql_responder].
+
+%% According to RFC 1034:
+%%
+%% "CNAME RRs cause special action in DNS software.
+%% When a name server fails to find a desired RR
+%% in the resource set associated with the domain name,
+%% it checks to see if the resource set consists
+%% of a CNAME record with a matching class.  If so, the
+%% name server includes the CNAME record in the
+%% response and restarts the query at the domain name
+%% specified in the data field of the CNAME record.
+%% The one exception to this rule is that queries which
+%% match the CNAME type are not restarted."
+resolve_cnames(Qtype, Records) ->
+  case Qtype of
+    ?DNS_TYPE_CNAME_NUMBER -> Records;
+    ?DNS_TYPE_ANY_NUMBER -> Records;
+    _ -> [resolve_cname(Qtype, Record) || Record <- Records]
+  end.
+
+%% Restart the query.
+resolve_cname(OriginalQtype, Record) ->
+  case Record#dns_rr.type of
+    ?DNS_TYPE_CNAME_NUMBER ->
+      lager:info("~p:resolve_cname(~p)~n", [?MODULE, Record]),
+      Qname = Record#dns_rr.data#dns_rrdata_cname.dname,
+      lager:info("~p:restarting query for CNAME ~p (original Qtype: ~p)~n", [?MODULE, Qname, OriginalQtype]),
+      NewRecords = answer_question(Qname, OriginalQtype) ++ [Record],
+      lager:info("~p:new records after CNAME restart: ~p~n", [?MODULE, NewRecords]),
+      NewRecords;
+    _ ->
+      Record
+  end.

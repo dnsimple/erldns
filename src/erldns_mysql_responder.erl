@@ -7,19 +7,7 @@
 
 answer(Qname, Qtype) ->
   lager:debug("~p:answer(~p, ~p)~n", [?MODULE, Qname, Qtype]),
-  Records = lists:flatten(lookup(Qname, Qtype)),
-
-  %% According to RFC 1034:
-  %%
-  %% "CNAME RRs cause special action in DNS software.  When a name server fails to find a desired RR 
-  %% in the resource set associated with the domain name, it checks to see if the resource set consists 
-  %% of a CNAME record with a matching class.  If so, the name server includes the CNAME record in the 
-  %% response and restarts the query at the domain name specified in the data field of the CNAME record.  
-  %% The one exception to this rule is that queries which match the CNAME type are not restarted."
-  case Qtype of
-    ?DNS_TYPE_CNAME_BSTR -> Records;
-    _ -> [resolve_cname(Record) || Record <- Records]
-  end.
+  lists:flatten(lookup(Qname, Qtype)).
 
 %% Lookup a specific name and type and convert it into a list of DNS records.
 lookup(Qname, Qtype) ->
@@ -28,26 +16,13 @@ lookup(Qname, Qtype) ->
     ?DNS_TYPE_ANY_BSTR ->
       mysql:prepare(select_records, <<"select * from records where name = ?">>),
       mysql:execute(dns_pool, select_records, [Qname]);
-    ?DNS_TYPE_A_BSTR ->
-      mysql:prepare(select_records_of_a_type, <<"select * from records where name = ? and (type = ? or type = ?)">>),
-      mysql:execute(dns_pool, select_records_of_a_type, [Qname, Qtype, <<"CNAME">>]);
     _ ->
-      mysql:prepare(select_records_of_type, <<"select * from records where name = ? and type = ?">>),
-      mysql:execute(dns_pool, select_records_of_type, [Qname, Qtype])
+      mysql:prepare(select_records_of_type, <<"select * from records where name = ? and (type = ? or type = ?)">>),
+      mysql:execute(dns_pool, select_records_of_type, [Qname, Qtype, <<"CNAME">>])
   end,
   lager:debug("~p:lookup found rows~n", [?MODULE]),
   lists:map(fun row_to_record/1, Data#mysql_result.rows).
 
-%% Resolve CNAME records down to their local A records if possible.
-resolve_cname(Record) ->
-  case Record#dns_rr.type of
-    ?DNS_TYPE_CNAME_NUMBER ->
-      lager:debug("~p:resolve_cname(~p)~n", [?MODULE, Record]),
-      [Qname, Qtype] = [Record#dns_rr.data#dns_rrdata_cname.dname, ?DNS_TYPE_A_BSTR],
-      lookup(Qname, Qtype) ++ [Record];
-    _ ->
-      Record
-  end.
 
 %% Take a MySQL row and turn it into a DNS resource record.
 row_to_record(Row) ->
