@@ -57,10 +57,10 @@ start(Port, InetFamily) ->
 
 %% Loop for accepting UDP requests
 loop(Socket) ->
-  lager:info("Awaiting Request~n"),
+  lager:debug("Awaiting Request~n"),
   receive
     {udp, Socket, Host, Port, Bin} ->
-      lager:info("Received UDP Request~n"),
+      lager:debug("Received UDP Request~n"),
       spawn(fun() -> handle_dns_query(Socket, Host, Port, Bin) end),
       loop(Socket)
   end.
@@ -69,7 +69,7 @@ loop(Socket) ->
 handle_dns_query(Socket, Host, Port, Bin) ->
   %% TODO: measure
   DecodedMessage = dns:decode_message(Bin),
-  lager:info("Decoded message ~p~n", [DecodedMessage]),
+  lager:debug("Decoded message ~p~n", [DecodedMessage]),
   Response = erldns_handler:handle(DecodedMessage),
   EncodedMessage = dns:encode_message(Response),
   BinLength = byte_size(EncodedMessage),
@@ -99,6 +99,6 @@ optionally_truncate(Message, EncodedMessage, BinLength) ->
 %% is what it may eventually do. Right now it simply sets the
 %% tc bit to indicate the message was truncated.
 truncate(Message) ->
-  lager:info("Message was truncated: ~p", [Message]),
+  lager:debug("Message was truncated: ~p", [Message]),
   %Response = erldns_handler:build_response(Message#dns_message.answers, Message),
   Message#dns_message{tc = true}.

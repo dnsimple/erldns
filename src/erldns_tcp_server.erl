@@ -56,7 +56,7 @@ start(Port, InetFamily) ->
 %% Loop for accepting TCP requests
 loop(LSocket) ->
   {ok, Socket} = gen_tcp:accept(LSocket),
-  lager:info("TCP server opened socket: ~p~n", [Socket]),
+  lager:debug("TCP server opened socket: ~p~n", [Socket]),
   receive
     {tcp, Socket, Bin} ->
       lager:debug("Received TCP Request~n"),
