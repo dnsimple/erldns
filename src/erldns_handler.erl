@@ -7,6 +7,7 @@
 %% Handle the decoded message
 handle(DecodedMessage) ->
   Questions = DecodedMessage#dns_message.questions,
+  lager:info("Questions: ~p~n", [Questions]),
   Message = case erldns_packet_cache:get(Questions) of
     {ok, Answers} -> 
       lager:debug("Packet cache hit"), %% TODO: measure
@@ -26,7 +27,6 @@ handle(DecodedMessage) ->
 answer_questions([], Response) ->
   Response;
 answer_questions([Q|Rest], Response) ->
-  lager:info("Question: ~p~n", [Q]),
   [Qname, Qtype] = [Q#dns_query.name, Q#dns_query.type],
   answer_questions(Rest, build_response(lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype))), Response)).
 
@@ -72,12 +72,9 @@ resolve_cnames(Qtype, Records) ->
 resolve_cname(OriginalQtype, Record) ->
   case Record#dns_rr.type of
     ?DNS_TYPE_CNAME_NUMBER ->
-      lager:info("~p:resolve_cname(~p)~n", [?MODULE, Record]),
+      lager:debug("~p:resolve_cname(~p)~n", [?MODULE, Record]),
       Qname = Record#dns_rr.data#dns_rrdata_cname.dname,
-      lager:info("~p:restarting query for CNAME ~p (original Qtype: ~p)~n", [?MODULE, Qname, OriginalQtype]),
-      NewRecords = answer_question(Qname, OriginalQtype) ++ [Record],
-      lager:info("~p:new records after CNAME restart: ~p~n", [?MODULE, NewRecords]),
-      NewRecords;
+      answer_question(Qname, OriginalQtype) ++ [Record];
     _ ->
       Record
   end.
