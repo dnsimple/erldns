@@ -5,6 +5,8 @@
 -export([handle/1, build_response/2]).
 
 %% Handle the decoded message
+handle({trailing_garbage, DecodedMessage, _}) ->
+  handle(DecodedMessage);
 handle(DecodedMessage) ->
   lager:info("Decoded message: ~p~n", [DecodedMessage]),
   Questions = DecodedMessage#dns_message.questions,
