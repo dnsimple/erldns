@@ -8,7 +8,7 @@
 handle(DecodedMessage) ->
   lager:info("Decoded message: ~p~n", [DecodedMessage]),
   Questions = DecodedMessage#dns_message.questions,
-  lager:debug("Questions: ~p~n", [Questions]),
+  lager:info("Questions: ~p~n", [Questions]),
   Message = case erldns_packet_cache:get(Questions) of
     {ok, Answers} -> 
       lager:debug("Packet cache hit"), %% TODO: measure
