@@ -46,6 +46,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 %% Internal functions
 %% Start a UDP server.
 start(Port, InetFamily) ->
+  lager:info("Starting UDP server for ~p on port ~p~n", [InetFamily, Port]),
   case gen_udp:open(Port, [binary, InetFamily]) of
     {ok, Socket} -> 
       lager:info("UDP server (~p) opened socket: ~p~n", [InetFamily, Socket]),

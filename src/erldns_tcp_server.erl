@@ -43,6 +43,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 %% Internal API
 %% Start the TCP server.
 start(Port, InetFamily) ->
+  lager:info("Starting TCP server for ~p on port ~p~n", [InetFamily, Port]),
   Options = [binary, InetFamily, {packet, 0}, {active, true}],
   case gen_tcp:listen(Port, Options) of
     {ok, LSocket} ->
