@@ -22,4 +22,5 @@ init(_Args) ->
     ?CHILD(erldns_udp_server, worker, []),
     ?CHILD(erldns_tcp_server, worker, [])
   ],
-  {ok, {{one_for_one, 5, 10}, Procs}}.
+  %% More than 20 failures in 10 seconds
+  {ok, {{one_for_one, 20, 10}, Procs}}.
