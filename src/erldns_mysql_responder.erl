@@ -29,7 +29,7 @@ row_to_record(Row) ->
   [_, _Id, Name, TypeStr, Content, TTL, Priority, _ChangeDate] = Row,
   case parse_content(Content, Priority, TypeStr) of
     unsupported -> [];
-    Data -> #dns_rr{name=Name, type=erldns_records:name_type(TypeStr), data=Data, ttl=TTL}
+    Data -> #dns_rr{name=Name, type=erldns_records:name_type(TypeStr), data=Data, ttl=default_ttl(TTL)}
   end.
 
 %% All of these functions are used to parse the content field
@@ -94,6 +94,13 @@ parse_content(_, _, Type) ->
 %% Utility method for converting a string to an integer.
 to_i(Str) ->
   {Int, _} = string:to_integer(Str), Int.
+
+%% Return the TTL value or 3600 if it is undefined.
+default_ttl(TTL) ->
+  case TTL of
+    undefined -> 3600;
+    Value -> Value
+  end.
 
 %% Return the Priority value or 0 if it is undefined.
 default_priority(Priority) ->
