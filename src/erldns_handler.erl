@@ -8,7 +8,7 @@
 handle({trailing_garbage, DecodedMessage, _}) ->
   handle(DecodedMessage);
 handle(DecodedMessage) ->
-  lager:info("Decoded message: ~p~n", [DecodedMessage]),
+  lager:debug("Decoded message: ~p~n", [DecodedMessage]),
   Questions = DecodedMessage#dns_message.questions,
   lager:info("Questions: ~p~n", [Questions]),
   Message = case erldns_packet_cache:get(Questions) of
