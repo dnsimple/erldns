@@ -70,8 +70,8 @@ handle_dns_query(Socket, Packet) ->
   %% TODO: measure 
   <<_Len:16, Bin/binary>> = Packet,
   DecodedMessage = dns:decode_message(Bin),
-  NewResponse = erldns_handler:handle(DecodedMessage),
-  BinReply = dns:encode_message(NewResponse),
+  Response = erldns_handler:handle(DecodedMessage),
+  BinReply = erldns_encoder:encode_message(Response),
   BinLength = byte_size(BinReply),
   TcpBinReply = <<BinLength:16, BinReply/binary>>,
   gen_tcp:send(Socket, TcpBinReply),

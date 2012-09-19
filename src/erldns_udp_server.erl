@@ -72,7 +72,7 @@ handle_dns_query(Socket, Host, Port, Bin) ->
   DecodedMessage = dns:decode_message(Bin),
   lager:debug("Decoded message ~p~n", [DecodedMessage]),
   Response = erldns_handler:handle(DecodedMessage),
-  EncodedMessage = dns:encode_message(Response),
+  EncodedMessage = erldns_encoder:encode_message(Response),
   BinLength = byte_size(EncodedMessage),
   gen_udp:send(Socket, Host, Port, 
     optionally_truncate(Response, EncodedMessage, BinLength)),

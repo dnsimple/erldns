@@ -3,6 +3,7 @@
   {vsn, git},
   {modules, [erldns,
              erldns_app,
+             erldns_encoder,
              erldns_handler,
              erldns_edns,
              erldns_dnssec,
