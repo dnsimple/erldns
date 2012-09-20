@@ -60,6 +60,7 @@ loop(LSocket) ->
   lager:debug("TCP server opened socket: ~p~n", [Socket]),
   receive
     {tcp, Socket, Bin} ->
+      %% TODO: need the host IP for zone transfers
       lager:debug("Received TCP Request~n"),
       spawn(fun() -> handle_dns_query(Socket, Bin) end),
       loop(LSocket)
@@ -67,10 +68,11 @@ loop(LSocket) ->
 
 %% Handle DNS query that comes in over TCP
 handle_dns_query(Socket, Packet) ->
+  lager:debug("handle_dns_query(~p)", [Socket]),
   %% TODO: measure 
   <<_Len:16, Bin/binary>> = Packet,
   DecodedMessage = dns:decode_message(Bin),
-  Response = erldns_handler:handle(DecodedMessage),
+  Response = erldns_handler:handle(DecodedMessage, undefined),
   BinReply = erldns_encoder:encode_message(Response),
   BinLength = byte_size(BinReply),
   TcpBinReply = <<BinLength:16, BinReply/binary>>,

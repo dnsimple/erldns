@@ -3,11 +3,26 @@
 -include("dns.hrl").
 -include("mysql.hrl").
 
--export([answer/2]).
+-define(AXFR_ENABLED, false).
+
+-export([answer/2, check_soa/1]).
+
+check_soa(Qname) ->
+  lookup_soa(Qname).
 
 answer(Qname, Qtype) ->
   lager:debug("~p:answer(~p, ~p)~n", [?MODULE, Qname, Qtype]),
-  lists:flatten(lookup(Qname, Qtype)).
+  case Qtype of
+    ?DNS_TYPE_AXFR_BSTR ->
+      case ?AXFR_ENABLED of
+        true -> lists:flatten(lookup(Qname, Qtype)) ++ [lookup_soa(Qname)];
+        _ ->
+          lager:debug("AXFR not enabled."),
+          []
+      end;
+    _ ->
+      lists:flatten(lookup(Qname, Qtype))
+  end.
 
 %% Lookup a specific name and type and convert it into a list of DNS records.
 lookup(Qname, Qtype) ->
@@ -16,13 +31,25 @@ lookup(Qname, Qtype) ->
     ?DNS_TYPE_ANY_BSTR ->
       mysql:prepare(select_records, <<"select * from records where name = ?">>),
       mysql:execute(dns_pool, select_records, [Qname]);
+    ?DNS_TYPE_AXFR_BSTR ->
+      mysql:prepare(select_axfr, <<"select records.* from domains join records on domains.id = records.domain_id where domains.name = ?">>),
+      mysql:execute(dns_pool, select_axfr, [Qname]);
     _ ->
       mysql:prepare(select_records_of_type, <<"select * from records where name = ? and (type = ? or type = ?)">>),
       mysql:execute(dns_pool, select_records_of_type, [Qname, Qtype, <<"CNAME">>])
   end,
-  lager:debug("~p:lookup found rows~n", [?MODULE]),
   lists:map(fun row_to_record/1, Data#mysql_result.rows).
 
+%% Lookup the SOA record for a given name.
+lookup_soa(Qname) ->
+  lager:debug("~p:lookup_soa(~p)~n", [?MODULE, Qname]),
+  mysql:prepare(select_soa, <<"select records.* from domains join records on domains.id = records.domain_id where domains.id = (select records.domain_id from records where name = ? limit 1) and records.type = ? limit 1">>),
+  {data, Data} = mysql:execute(dns_pool, select_soa, [Qname, <<"SOA">>]),
+  case  Data#mysql_result.rows of
+    [] -> [];
+    [SoaRecord] -> row_to_record(SoaRecord);
+    [SoaRecord|_] -> row_to_record(SoaRecord)
+  end.
 
 %% Take a MySQL row and turn it into a DNS resource record.
 row_to_record(Row) ->

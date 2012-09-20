@@ -2,13 +2,13 @@
 
 -include("dns_records.hrl").
 
--export([handle/1, build_response/2]).
+-export([handle/2, build_response/2]).
 
 %% Handle the decoded message
-handle({trailing_garbage, DecodedMessage, _}) ->
-  handle(DecodedMessage);
-handle(DecodedMessage) ->
-  lager:debug("Decoded message: ~p~n", [DecodedMessage]),
+handle({trailing_garbage, DecodedMessage, _}, Host) ->
+  handle(DecodedMessage, Host);
+handle(DecodedMessage, Host) ->
+  lager:debug("From host ~p received decoded message: ~p~n", [Host, DecodedMessage]),
   Questions = DecodedMessage#dns_message.questions,
   lager:info("Questions: ~p~n", [Questions]),
   Message = case erldns_packet_cache:get(Questions) of
@@ -17,13 +17,29 @@ handle(DecodedMessage) ->
       build_response(Answers, DecodedMessage);
     {error, _} -> 
       lager:debug("Packet cache miss"), %% TODO: measure
-      %% TODO: ask all responders if we are authoritative?
-      Response = answer_questions(Questions, DecodedMessage),
-      erldns_packet_cache:put(Questions, Response#dns_message.answers),
-      Response
+      case check_soa(Questions) of
+        true ->
+          Response = answer_questions(Questions, DecodedMessage),
+          erldns_packet_cache:put(Questions, Response#dns_message.answers),
+          Response;
+        _ ->
+          %% TODO: should this response be packet cached?
+          nxdomain_response(DecodedMessage)
+      end
   end,
-  %% TODO: if there are no answers, check for an SOA. If no SOA then we are not authoritative
   erldns_edns:handle(Message).
+
+%% Check to see if we are authoritative for the domain.
+check_soa(Questions) ->
+  case check_soas(Questions) of
+    [] -> false;
+    _ -> true
+  end.
+
+%% Check all of the questions against all of the responders.
+%% TODO: optimize to return first match
+check_soas(Questions) ->
+  lists:flatten(lists:map(fun(Q) -> [F([Q#dns_query.name]) || F <- soa_functions()] end, Questions)).
 
 %% Answer the questions and return an updated copy of the given
 %% Response.
@@ -34,7 +50,11 @@ answer_questions([Q|Rest], Response) ->
   answer_questions(Rest, build_response(lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype))), Response)).
 
 %% Retreive all answers to the specific question.
-answer_question(Qname, Qtype) -> lists:flatten([F(Qname, dns:type_name(Qtype)) || F <- responders()]).
+answer_question(Qname, Qtype) -> lists:flatten([F(Qname, dns:type_name(Qtype)) || F <- answer_functions()]).
+
+% Return an NXDOMAIN response since we are not authoritative.
+nxdomain_response(Message) ->
+  Message#dns_message{anc = 0, qr = true, aa = false, rc = ?DNS_RCODE_NXDOMAIN, answers = []}.
 
 %% Populate a response with the given answers
 build_response(Answers, Response) ->
@@ -42,9 +62,14 @@ build_response(Answers, Response) ->
   lager:debug("Response: ~p~n", [NewResponse]),
   NewResponse.
 
-%% Build a list of responder functions that will be used to 
-%% Lookup answers.
-responders() -> lists:map(fun(M) -> fun M:answer/2 end, get_responder_modules()).
+%% Build a list of answer functions based on the registered responders.
+answer_functions() ->
+  lists:map(fun(M) -> fun M:answer/2 end, get_responder_modules()).
+
+%% Build a list of functions for looking up SOA records based on the
+%% registered responders.
+soa_functions() ->
+  lists:map(fun(M) -> fun M:check_soa/1 end, get_responder_modules()).
 
 %% Find the responder module names from the app environment. Default 
 %% to just the erldns_mysql_responder.
@@ -67,6 +92,7 @@ get_responder_modules(_) -> [erldns_mysql_responder].
 resolve_cnames(Qtype, Records) ->
   case Qtype of
     ?DNS_TYPE_CNAME_NUMBER -> Records;
+    ?DNS_TYPE_AXFR_NUMBER -> Records;
     ?DNS_TYPE_ANY_NUMBER -> Records;
     _ -> [resolve_cname(Qtype, Record) || Record <- Records]
   end.

@@ -61,17 +61,17 @@ loop(Socket) ->
   lager:debug("Awaiting Request~n"),
   receive
     {udp, Socket, Host, Port, Bin} ->
-      lager:debug("Received UDP Request~n"),
+      lager:debug("Received UDP Request ~p ~p ~p", [Socket, Host, Port]),
       spawn(fun() -> handle_dns_query(Socket, Host, Port, Bin) end),
       loop(Socket)
   end.
 
 %% Handle DNS query that comes in over UDP
 handle_dns_query(Socket, Host, Port, Bin) ->
+  lager:debug("handle_dns_query(~p ~p ~p)", [Socket, Host, Port]),
   %% TODO: measure
   DecodedMessage = dns:decode_message(Bin),
-  lager:debug("Decoded message ~p~n", [DecodedMessage]),
-  Response = erldns_handler:handle(DecodedMessage),
+  Response = erldns_handler:handle(DecodedMessage, Host),
   EncodedMessage = erldns_encoder:encode_message(Response),
   BinLength = byte_size(EncodedMessage),
   gen_udp:send(Socket, Host, Port, 
