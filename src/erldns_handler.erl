@@ -2,6 +2,8 @@
 
 -include("dns_records.hrl").
 
+-define(AXFR_ENABLED, true).
+
 -export([handle/2, build_response/2]).
 
 %% Handle the decoded message
@@ -27,7 +29,7 @@ handle(DecodedMessage, Host) ->
           nxdomain_response(DecodedMessage)
       end
   end,
-  erldns_edns:handle(Message).
+  erldns_axfr:optionally_append_soa(erldns_edns:handle(Message)).
 
 %% Check to see if we are authoritative for the domain.
 check_soa(Questions) ->
@@ -50,7 +52,16 @@ answer_questions([Q|Rest], Response) ->
   answer_questions(Rest, build_response(lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype))), Response)).
 
 %% Retreive all answers to the specific question.
-answer_question(Qname, Qtype) -> lists:flatten([F(Qname, dns:type_name(Qtype)) || F <- answer_functions()]).
+answer_question(Qname, Qtype = ?DNS_TYPE_AXFR_BSTR) ->
+  case ?AXFR_ENABLED of
+    true -> query_responders(Qname, Qtype);
+    _ -> lager:info("AXFR not enabled."), []
+  end;
+answer_question(Qname, Qtype) ->
+  query_responders(Qname, Qtype).
+
+query_responders(Qname, Qtype) ->
+  lists:flatten([F(Qname, dns:type_name(Qtype)) || F <- answer_functions()]).
 
 % Return an NXDOMAIN response since we are not authoritative.
 nxdomain_response(Message) ->

@@ -3,19 +3,12 @@
 -include("dns.hrl").
 -include("mysql.hrl").
 
--define(AXFR_ENABLED, false).
-
 -export([answer/2, get_soa/1]).
 
 %% Get the SOA record for the name.
 get_soa(Qname) -> lookup_soa(Qname).
 
 %% Answer the given question for the given name.
-answer(Qname, Qtype=?DNS_TYPE_AXFR_BSTR) ->
-  case ?AXFR_ENABLED of
-    true -> lists:flatten(lookup(Qname, Qtype)) ++ [lookup_soa(Qname)];
-    _ -> lager:info("AXFR not enabled."), []
-  end;
 answer(Qname, Qtype) ->
   lager:debug("~p:answer(~p, ~p)~n", [?MODULE, Qname, Qtype]),
   lists:flatten(lookup(Qname, Qtype)).
