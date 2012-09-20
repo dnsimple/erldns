@@ -5,11 +5,12 @@
 
 -define(AXFR_ENABLED, false).
 
--export([answer/2, check_soa/1]).
+-export([answer/2, get_soa/1]).
 
-check_soa(Qname) ->
-  lookup_soa(Qname).
+%% Get the SOA record for the name.
+get_soa(Qname) -> lookup_soa(Qname).
 
+%% Answer the given question for the given name.
 answer(Qname, Qtype=?DNS_TYPE_AXFR_BSTR) ->
   case ?AXFR_ENABLED of
     true -> lists:flatten(lookup(Qname, Qtype)) ++ [lookup_soa(Qname)];
@@ -114,8 +115,7 @@ parse_content(_, _, Type) ->
 
 
 %% Utility method for converting a string to an integer.
-to_i(Str) ->
-  {Int, _} = string:to_integer(Str), Int.
+to_i(Str) -> {Int, _} = string:to_integer(Str), Int.
 
 %% Return the TTL value or 3600 if it is undefined.
 default_ttl(TTL) ->

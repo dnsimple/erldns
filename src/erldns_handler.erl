@@ -69,7 +69,7 @@ answer_functions() ->
 %% Build a list of functions for looking up SOA records based on the
 %% registered responders.
 soa_functions() ->
-  lists:map(fun(M) -> fun M:check_soa/1 end, get_responder_modules()).
+  lists:map(fun(M) -> fun M:get_soa/1 end, get_responder_modules()).
 
 %% Find the responder module names from the app environment. Default 
 %% to just the erldns_mysql_responder.
