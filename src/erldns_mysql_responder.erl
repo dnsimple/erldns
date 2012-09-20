@@ -13,15 +13,14 @@ check_soa(Qname) ->
 answer(Qname, Qtype) ->
   lager:debug("~p:answer(~p, ~p)~n", [?MODULE, Qname, Qtype]),
   case Qtype of
-    ?DNS_TYPE_AXFR_BSTR ->
-      case ?AXFR_ENABLED of
-        true -> lists:flatten(lookup(Qname, Qtype)) ++ [lookup_soa(Qname)];
-        _ ->
-          lager:debug("AXFR not enabled."),
-          []
-      end;
-    _ ->
-      lists:flatten(lookup(Qname, Qtype))
+    ?DNS_TYPE_AXFR_BSTR -> answer_axfr(Qname, Qtype);
+    _ -> lists:flatten(lookup(Qname, Qtype))
+  end.
+
+answer_axfr(Qname, Qtype) ->
+  case ?AXFR_ENABLED of
+    true -> lists:flatten(lookup(Qname, Qtype)) ++ [lookup_soa(Qname)];
+    _ -> lager:debug("AXFR not enabled."), []
   end.
 
 %% Lookup a specific name and type and convert it into a list of DNS records.
