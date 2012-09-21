@@ -2,7 +2,7 @@
 
 -include("dns_records.hrl").
 
--define(AXFR_ENABLED, true).
+-define(AXFR_ENABLED, false).
 
 -export([handle/2, build_response/2]).
 
