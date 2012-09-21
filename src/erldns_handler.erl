@@ -40,6 +40,7 @@ check_soa(Questions) ->
 
 %% Check all of the questions against all of the responders.
 %% TODO: optimize to return first match
+%% TODO: rescue from case where soa function is not defined.
 check_soas(Questions) ->
   lists:flatten(lists:map(fun(Q) -> [F([Q#dns_query.name]) || F <- soa_functions()] end, Questions)).
 
@@ -60,6 +61,7 @@ answer_question(Qname, Qtype = ?DNS_TYPE_AXFR_BSTR) ->
 answer_question(Qname, Qtype) ->
   query_responders(Qname, Qtype).
 
+%% Get the answers for a query from the responders.
 query_responders(Qname, Qtype) ->
   lists:flatten([F(Qname, dns:type_name(Qtype)) || F <- answer_functions()]).
 
