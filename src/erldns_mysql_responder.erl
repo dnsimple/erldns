@@ -103,7 +103,7 @@ parse_content(Content, _, ?DNS_TYPE_AFSDB_BSTR) ->
   #dns_rrdata_afsdb{subtype = to_i(SubtypeStr), hostname = Hostname};
 
 parse_content(_, _, Type) ->
-  lager:info("Mysql responder unsupported record type: ~p", [Type]),
+  lager:debug("Mysql responder unsupported record type: ~p", [Type]),
   unsupported.
 
 
