@@ -44,7 +44,7 @@ get_soas(Questions) ->
 
 %% Get metadata for the domain connected to the given query name.
 get_metadata(Qname) ->
-  [lists:flatten(F(Qname)) || F <- metadata_functions()].
+  lists:merge([F(Qname) || F <- metadata_functions()]).
 
 %% Answer the questions and return an updated copy of the given
 %% Response.
@@ -59,7 +59,9 @@ answer_question(Qname, Qtype = ?DNS_TYPE_AXFR_NUMBER, Host) ->
   lager:info("Answers AXFR question for host ~p", [Host]),
   case erldns_axfr:is_enabled(Host, get_metadata(Qname)) of
     true -> query_responders(Qname, Qtype);
-    _ -> lager:info("AXFR not enabled."), []
+    _ ->
+      lager:info("AXFR not allowed."),
+      []
   end;
 answer_question(Qname, Qtype, _) ->
   query_responders(Qname, Qtype).
