@@ -31,7 +31,7 @@ handle(DecodedMessage, Host) ->
 
 %% Check to see if we are authoritative for the domain.
 check_soa(Questions) ->
-  case check_soas(Questions) of
+  case get_soas(Questions) of
     [] -> false;
     _ -> true
   end.
@@ -39,8 +39,12 @@ check_soa(Questions) ->
 %% Check all of the questions against all of the responders.
 %% TODO: optimize to return first match
 %% TODO: rescue from case where soa function is not defined.
-check_soas(Questions) ->
+get_soas(Questions) ->
   lists:flatten(lists:map(fun(Q) -> [F([Q#dns_query.name]) || F <- soa_functions()] end, Questions)).
+
+%% Get metadata for the domain connected to the given query name.
+get_metadata(Qname) ->
+  [lists:flatten(F(Qname)) || F <- metadata_functions()].
 
 %% Answer the questions and return an updated copy of the given
 %% Response.
@@ -53,7 +57,7 @@ answer_questions([Q|Rest], Response, Host) ->
 %% Retreive all answers to the specific question.
 answer_question(Qname, Qtype = ?DNS_TYPE_AXFR_NUMBER, Host) ->
   lager:info("Answers AXFR question for host ~p", [Host]),
-  case erldns_axfr:is_enabled(Host) of
+  case erldns_axfr:is_enabled(Host, get_metadata(Qname)) of
     true -> query_responders(Qname, Qtype);
     _ -> lager:info("AXFR not enabled."), []
   end;
@@ -82,6 +86,11 @@ answer_functions() ->
 %% registered responders.
 soa_functions() ->
   lists:map(fun(M) -> fun M:get_soa/1 end, get_responder_modules()).
+
+%% Build a list of functions for getting metdata based on the registered
+%% responders.
+metadata_functions() ->
+  lists:map(fun(M) -> fun M:get_metadata/1 end, get_responder_modules()).
 
 %% Find the responder module names from the app environment. Default 
 %% to just the erldns_mysql_responder.

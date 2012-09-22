@@ -3,10 +3,16 @@
 -include("dns.hrl").
 -include("mysql.hrl").
 
--export([answer/2, get_soa/1]).
+-export([answer/2, get_soa/1, get_metadata/1]).
 
 %% Get the SOA record for the name.
 get_soa(Qname) -> lookup_soa(Qname).
+
+%% Get the metadata for the name.
+get_metadata(Qname) ->
+  mysql:prepare(select_domainmetadata, <<"select domainmetadata.* from domains join domainmetadata on domains.id = domainmetadata.domain_id where domains.id = (select records.domain_id from records where name = ? limit 1)">>),
+  {data, Data} = mysql:execute(dns_pool, select_domainmetadata, [Qname]),
+  Data#mysql_result.rows.
 
 %% Answer the given question for the given name.
 answer(Qname, Qtype) ->
@@ -34,7 +40,7 @@ lookup_soa(Qname) ->
   lager:debug("~p:lookup_soa(~p)~n", [?MODULE, Qname]),
   mysql:prepare(select_soa, <<"select records.* from domains join records on domains.id = records.domain_id where domains.id = (select records.domain_id from records where name = ? limit 1) and records.type = ? limit 1">>),
   {data, Data} = mysql:execute(dns_pool, select_soa, [Qname, <<"SOA">>]),
-  case  Data#mysql_result.rows of
+  case Data#mysql_result.rows of
     [] -> [];
     [SoaRecord] -> row_to_record(SoaRecord);
     [SoaRecord|_] -> row_to_record(SoaRecord)

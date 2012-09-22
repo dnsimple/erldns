@@ -2,13 +2,26 @@
 
 -include("dns_records.hrl").
 
--define(AXFR_ENABLED, false).
+-define(AXFR_ENABLED, true).
 
--export([is_enabled/1, optionally_append_soa/1]).
+-export([is_enabled/2, optionally_append_soa/1]).
 
-is_enabled(Host) ->
+is_enabled(Host, Metadata) ->
   lager:debug("Checking AXFR for ~p", [Host]),
-  ?AXFR_ENABLED.
+  lager:debug("Metadata: ~p", [Metadata]),
+  Value = metadata_value(<<"axfr">>, Metadata),
+  lager:debug("Value for axfr: ~p", [Value]),
+  {ok, Address} = inet_parse:address(binary_to_list(Value)),
+  lager:debug("~p =:= ~p", [Address, Host]),
+  Address =:= Host andalso ?AXFR_ENABLED.
+
+%% Extracts the metadata value for the given key.
+metadata_value(_Key, []) -> undefined;
+metadata_value(Key, [[_Id, _DomainId, Kind, Content]|Rest]) ->
+  case Key =:= Kind of
+    true -> Content;
+    false -> metadata_value(Key, Rest)
+  end.
 
 %% If the message is an AXFR request then append the SOA record.
 optionally_append_soa(Message) ->
