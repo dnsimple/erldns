@@ -2,9 +2,13 @@
 
 -include("dns_records.hrl").
 
--define(AXFR_ENABLED, true).
+-define(AXFR_ENABLED, false).
 
--export([optionally_append_soa/1]).
+-export([is_enabled/1, optionally_append_soa/1]).
+
+is_enabled(Host) ->
+  lager:debug("Checking AXFR for ~p", [Host]),
+  ?AXFR_ENABLED.
 
 %% If the message is an AXFR request then append the SOA record.
 optionally_append_soa(Message) ->

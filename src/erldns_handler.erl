@@ -2,8 +2,6 @@
 
 -include("dns_records.hrl").
 
--define(AXFR_ENABLED, false).
-
 -export([handle/2, build_response/2]).
 
 %% Handle the decoded message
@@ -21,7 +19,7 @@ handle(DecodedMessage, Host) ->
       lager:debug("Packet cache miss"), %% TODO: measure
       case check_soa(Questions) of
         true ->
-          Response = answer_questions(Questions, DecodedMessage),
+          Response = answer_questions(Questions, DecodedMessage, Host),
           erldns_packet_cache:put(Questions, Response#dns_message.answers),
           Response;
         _ ->
@@ -46,19 +44,20 @@ check_soas(Questions) ->
 
 %% Answer the questions and return an updated copy of the given
 %% Response.
-answer_questions([], Response) ->
+answer_questions([], Response, _Host) ->
   Response;
-answer_questions([Q|Rest], Response) ->
+answer_questions([Q|Rest], Response, Host) ->
   [Qname, Qtype] = [Q#dns_query.name, Q#dns_query.type],
-  answer_questions(Rest, build_response(lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype))), Response)).
+  answer_questions(Rest, build_response(lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype, Host), Host)), Response), Host).
 
 %% Retreive all answers to the specific question.
-answer_question(Qname, Qtype = ?DNS_TYPE_AXFR_BSTR) ->
-  case ?AXFR_ENABLED of
+answer_question(Qname, Qtype = ?DNS_TYPE_AXFR_NUMBER, Host) ->
+  lager:info("Answers AXFR question for host ~p", [Host]),
+  case erldns_axfr:is_enabled(Host) of
     true -> query_responders(Qname, Qtype);
     _ -> lager:info("AXFR not enabled."), []
   end;
-answer_question(Qname, Qtype) ->
+answer_question(Qname, Qtype, _) ->
   query_responders(Qname, Qtype).
 
 %% Get the answers for a query from the responders.
@@ -102,21 +101,21 @@ get_responder_modules(_) -> [erldns_mysql_responder].
 %% specified in the data field of the CNAME record.
 %% The one exception to this rule is that queries which
 %% match the CNAME type are not restarted."
-resolve_cnames(Qtype, Records) ->
+resolve_cnames(Qtype, Records, Host) ->
   case Qtype of
     ?DNS_TYPE_CNAME_NUMBER -> Records;
     ?DNS_TYPE_AXFR_NUMBER -> Records;
     ?DNS_TYPE_ANY_NUMBER -> Records;
-    _ -> [resolve_cname(Qtype, Record) || Record <- Records]
+    _ -> [resolve_cname(Qtype, Record, Host) || Record <- Records]
   end.
 
 %% Restart the query.
-resolve_cname(OriginalQtype, Record) ->
+resolve_cname(OriginalQtype, Record, Host) ->
   case Record#dns_rr.type of
     ?DNS_TYPE_CNAME_NUMBER ->
       lager:debug("~p:resolve_cname(~p)~n", [?MODULE, Record]),
       Qname = Record#dns_rr.data#dns_rrdata_cname.dname,
-      answer_question(Qname, OriginalQtype) ++ [Record];
+      answer_question(Qname, OriginalQtype, Host) ++ [Record];
     _ ->
       Record
   end.

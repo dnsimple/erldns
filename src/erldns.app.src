@@ -7,6 +7,7 @@
              erldns_handler,
              erldns_edns,
              erldns_dnssec,
+             erldns_axfr,
              erldns_udp_server,
              erldns_tcp_server,
              erldns_records]},
