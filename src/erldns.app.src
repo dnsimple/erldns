@@ -10,7 +10,8 @@
              erldns_axfr,
              erldns_udp_server,
              erldns_tcp_server,
-             erldns_records]},
+             erldns_records,
+             erldns_debugger]},
   {registered, [erldns_udp_server, erldns_tcp_server]},
   {mod, { erldns_app, []}},
   {applications, [kernel, stdlib]}]}.
