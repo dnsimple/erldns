@@ -6,7 +6,7 @@
 
 start() ->
   timer:start(),
-  spawn(fun() -> loop() end).
+  spawn_link(fun() -> loop() end).
 
 loop() ->
   loop(1).

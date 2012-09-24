@@ -26,8 +26,8 @@ start_link() ->
 init(_Args) ->
   {ok, Port} = application:get_env(erldns, port),
   random:seed(erlang:now()),
-  spawn(fun() -> start(Port, inet) end),
-  spawn(fun() -> start(Port, inet6) end),
+  spawn_link(fun() -> start(Port, inet) end),
+  spawn_link(fun() -> start(Port, inet6) end),
   {ok, #state{port=Port}}.
 handle_call(_Request, _From, State) ->
   {ok, State}.
@@ -62,7 +62,7 @@ loop(LSocket) ->
     {tcp, Socket, Bin} ->
       %% TODO: need the host IP for zone transfers
       lager:debug("Received TCP Request~n"),
-      spawn(fun() -> handle_dns_query(Socket, Bin) end),
+      spawn_link(fun() -> handle_dns_query(Socket, Bin) end),
       loop(LSocket)
   end.
 

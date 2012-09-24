@@ -6,7 +6,7 @@
 
 start(Type, Args) ->
   lager:info("~p:start(~p, ~p)~n", [?MODULE, Type, Args]),
-  %erldns_debugging:start(),
+  erldns_debugging:start(),
   erldns_sup:start_link().
 
 stop(State) ->
