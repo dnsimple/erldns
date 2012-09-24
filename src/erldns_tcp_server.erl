@@ -27,7 +27,7 @@ init(_Args) ->
   {ok, Port} = application:get_env(erldns, port),
   random:seed(erlang:now()),
   spawn_link(fun() -> start(Port, inet) end),
-  spawn_link(fun() -> start(Port, inet6) end),
+  %spawn_link(fun() -> start(Port, inet6) end),
   {ok, #state{port=Port}}.
 handle_call(_Request, _From, State) ->
   {ok, State}.
@@ -48,10 +48,7 @@ start(Port, InetFamily) ->
   case gen_tcp:listen(Port, Options) of
     {ok, LSocket} ->
       lager:info("TCP server (~p) opened listener: ~p~n", [InetFamily, LSocket]),
-      loop(LSocket);
-    {error, eacces} ->
-      lager:error("Failed to open TCP listener. Need to run as sudo?"),
-      {error, eacces}
+      loop(LSocket)
   end.
 
 %% Loop for accepting TCP requests

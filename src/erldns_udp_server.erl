@@ -30,7 +30,7 @@ init(_Args) ->
   {ok, Port} = application:get_env(erldns, port),
   random:seed(erlang:now()),
   spawn_link(fun() -> start(Port, inet) end),
-  spawn_link(fun() -> start(Port, inet6) end),
+  %spawn_link(fun() -> start(Port, inet6) end),
   {ok, #state{port = Port}}.
 handle_call(_Request, _From, State) ->
   {ok, State}.
