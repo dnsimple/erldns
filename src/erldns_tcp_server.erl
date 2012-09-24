@@ -78,5 +78,4 @@ handle_dns_query(Socket, Packet) ->
   BinLength = byte_size(BinReply),
   TcpBinReply = <<BinLength:16, BinReply/binary>>,
   gen_tcp:send(Socket, TcpBinReply),
-  gen_tcp:close(Socket),
-  exit(normal).
+  gen_tcp:close(Socket).

@@ -75,8 +75,7 @@ handle_dns_query(Socket, Host, Port, Bin) ->
   EncodedMessage = erldns_encoder:encode_message(Response),
   BinLength = byte_size(EncodedMessage),
   gen_udp:send(Socket, Host, Port, 
-    optionally_truncate(Response, EncodedMessage, BinLength)),
-  exit(normal).
+    optionally_truncate(Response, EncodedMessage, BinLength)).
 
 %% Determine the max payload size by looking for additional
 %% options passed by the client.
