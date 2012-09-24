@@ -4,18 +4,14 @@
 
 -export([is_enabled/2, optionally_append_soa/1]).
 
+%% Determine if AXFR is enabled for the given request host.
 is_enabled(Host, Metadata) ->
-  lager:debug("Checking AXFR for ~p", [Host]),
-  lager:debug("Metadata: ~p", [Metadata]),
-
   MatchingMetadata = lists:filter(
       fun(MetadataRow) ->
           [_Id, _DomainId, Kind, Content] = MetadataRow,
           {ok, AllowedAddress} = inet_parse:address(binary_to_list(Content)),
-          lager:debug("Checking ~p ~p", [Kind, AllowedAddress]),
           AllowedAddress =:= Host andalso Kind =:= <<"axfr">>
       end, Metadata),
-  lager:debug("Matching metadata: ~p", [MatchingMetadata]),
   length(MatchingMetadata) > 0.
 
 %% If the message is an AXFR request then append the SOA record.
