@@ -5,7 +5,7 @@
 -behavior(gen_server).
 
 % API
--export([start_link/0]).
+-export([start_link/2]).
 
 % Gen server hooks
 -export([init/1,
@@ -19,23 +19,26 @@
 -define(SERVER, ?MODULE).
 -define(MAX_PACKET_SIZE, 512).
 
--record(state, {port=53}).
+-record(state, {port=53, socket}).
 
 %% Public API
-start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Name, InetFamily) ->
+  gen_server:start_link({local, Name}, ?MODULE, [InetFamily], []).
 
 %% gen_server hooks
-init(_Args) ->
+init([InetFamily]) ->
   {ok, Port} = application:get_env(erldns, port),
-  random:seed(erlang:now()),
-  spawn_link(fun() -> start(Port, inet) end),
-  %spawn_link(fun() -> start(Port, inet6) end),
-  {ok, #state{port = Port}}.
+  {ok, Socket} = start(Port, InetFamily),
+  {ok, #state{port = Port, socket = Socket}}.
 handle_call(_Request, _From, State) ->
   {ok, State}.
 handle_cast(_Message, State) ->
   {noreply, State}.
+handle_info({udp, Socket, Host, Port, Bin}, State) ->
+  lager:debug("Received UDP Request ~p ~p ~p", [Socket, Host, Port]),
+  handle_dns_query(Socket, Host, Port, Bin),
+  inet:set_opts(State#state.socket, [{active, once}]),
+  {noreply, State};
 handle_info(_Message, State) ->
   {noreply, State}.
 terminate(_Reason, _State) ->
@@ -47,23 +50,13 @@ code_change(_PreviousVersion, State, _Extra) ->
 %% Start a UDP server.
 start(Port, InetFamily) ->
   lager:info("Starting UDP server for ~p on port ~p~n", [InetFamily, Port]),
-  case gen_udp:open(Port, [binary, InetFamily]) of
+  case gen_udp:open(Port, [binary, {active, once}, InetFamily]) of
     {ok, Socket} -> 
       lager:info("UDP server (~p) opened socket: ~p~n", [InetFamily, Socket]),
-      loop(Socket);
+      {ok, Socket};
     {error, eacces} ->
       lager:error("Failed to open UDP socket. Need to run as sudo?"),
       {error, eacces}
-  end.
-
-%% Loop for accepting UDP requests
-loop(Socket) ->
-  lager:debug("Awaiting Request~n"),
-  receive
-    {udp, Socket, Host, Port, Bin} ->
-      lager:debug("Received UDP Request ~p ~p ~p", [Socket, Host, Port]),
-      spawn_link(fun() -> handle_dns_query(Socket, Host, Port, Bin) end),
-      loop(Socket)
   end.
 
 %% Handle DNS query that comes in over UDP
