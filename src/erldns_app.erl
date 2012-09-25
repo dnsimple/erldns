@@ -6,6 +6,7 @@
 
 start(Type, Args) ->
   lager:info("~p:start(~p, ~p)~n", [?MODULE, Type, Args]),
+  random:seed(erlang:now()),
   erldns_debugging:start(),
   erldns_sup:start_link().
 

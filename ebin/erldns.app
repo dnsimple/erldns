@@ -1,11 +1,11 @@
 {application,erldns,
              [{description,"Erlang Authoritative DNS Server"},
-              {vsn,"fa7a55c"},
+              {vsn,"c497dfa"},
               {modules,[erldns,erldns_app,erldns_axfr,erldns_debugging,
                         erldns_dnssec,erldns_edns,erldns_encoder,
                         erldns_handler,erldns_mysql_responder,
                         erldns_packet_cache,erldns_records,erldns_sup,
-                        erldns_tcp_server,erldns_udp_server]},
+                        erldns_tcp_server,erldns_udp_server,gen_nb_server]},
               {registered,[erldns_udp_server,erldns_tcp_server]},
               {mod,{erldns_app,[]}},
               {applications,[kernel,stdlib]}]}.

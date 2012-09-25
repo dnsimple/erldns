@@ -37,7 +37,7 @@ handle_cast(_Message, State) ->
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
   lager:debug("Received UDP Request ~p ~p ~p", [Socket, Host, Port]),
   handle_dns_query(Socket, Host, Port, Bin),
-  inet:set_opts(State#state.socket, [{active, once}]),
+  inet:setopts(State#state.socket, [{active, once}]),
   {noreply, State};
 handle_info(_Message, State) ->
   {noreply, State}.
