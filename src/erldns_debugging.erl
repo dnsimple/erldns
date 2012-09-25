@@ -6,7 +6,8 @@
 
 start() ->
   timer:start(),
-  spawn_link(fun() -> loop() end).
+  ets:new(precrash_process_info, [set, named_table]),
+  spawn(fun() -> loop() end).
 
 loop() ->
   loop(1).
@@ -14,7 +15,7 @@ loop() ->
 loop(IterationNumber) ->
   lager:info("Iteration ~p (processes: ~p)", [IterationNumber, length(erlang:processes())]),
   case length(erlang:processes()) of
-    N when N > ?MIN_PROCESS_COUNT -> lager:info("~p", [lists:map(fun erlang:process_info/1, erlang:processes())]);
+    N when N > ?MIN_PROCESS_COUNT -> ets:insert(precrash_process_info, [lists:map(fun erlang:process_info/1, erlang:processes())]);
     _ -> ok
   end,
   timer:sleep(10000),
