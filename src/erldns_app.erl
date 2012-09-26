@@ -8,6 +8,7 @@ start(Type, Args) ->
   lager:info("~p:start(~p, ~p)~n", [?MODULE, Type, Args]),
   random:seed(erlang:now()),
   optionally_start_debugger(),
+  enable_metrics(),
   erldns_sup:start_link().
 
 stop(State) ->
@@ -19,3 +20,8 @@ optionally_start_debugger() ->
     {ok, true} -> erldns_debugging:start();
     _ -> ok
   end.
+
+enable_metrics() ->
+  folsom_metrics:new_histogram(packet_cache_hit, slide),
+  folsom_metrics:new_histogram(packet_cache_miss, slide),
+  ok.

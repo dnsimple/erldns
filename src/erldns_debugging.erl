@@ -7,7 +7,8 @@
 start() ->
   timer:start(),
   ets:new(precrash_process_info, [set, named_table]),
-  spawn(fun() -> loop() end).
+  spawn(fun() -> loop() end),
+  ok.
 
 loop() ->
   loop(1).
