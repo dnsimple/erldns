@@ -14,11 +14,11 @@ handle(DecodedMessage, Host) ->
   Message = case erldns_packet_cache:get(Questions) of
     {ok, Answers} -> 
       lager:debug("Packet cache hit"),
-      folsom_metrics:notify({packet_cache_hit, 1}),
+      %folsom_metrics:notify({packet_cache_hit, 1}),
       build_response(Answers, DecodedMessage);
     {error, _} -> 
       lager:debug("Packet cache miss"),
-      folsom_metrics:notify({packet_cache_miss, 1}),
+      %folsom_metrics:notify({packet_cache_miss, 1}),
       case check_soa(Questions) of
         true ->
           Response = answer_questions(Questions, DecodedMessage, Host),
