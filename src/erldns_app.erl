@@ -22,7 +22,9 @@ optionally_start_debugger() ->
   end.
 
 enable_metrics() ->
-  folsom_metrics:new_histogram(packet_cache_hit, slide),
-  folsom_metrics:new_histogram(packet_cache_miss, slide),
-  folsom_metrics:new_histogram(mysql_responder_lookup_time, slide),
+  lager:info("~p:enabling metrics", [?MODULE]),
+  folsom_metrics:new_histogram(packet_cache_hit, slide, 60),
+  folsom_metrics:new_histogram(packet_cache_miss, slide, 60),
+  folsom_metrics:new_histogram(mysql_responder_lookup_time, slide, 60),
+  lager:info("~p:metrics enabled", [?MODULE]),
   ok.
