@@ -24,4 +24,5 @@ optionally_start_debugger() ->
 enable_metrics() ->
   folsom_metrics:new_histogram(packet_cache_hit, slide),
   folsom_metrics:new_histogram(packet_cache_miss, slide),
+  folsom_metrics:new_histogram(mysql_responder_lookup_time, slide),
   ok.
