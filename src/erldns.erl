@@ -4,6 +4,6 @@
 
 start() ->
   lager:start(),
-  application:start(folsom),
+  folsom:start(),
   application:start(mysql),
   application:start(erldns).
