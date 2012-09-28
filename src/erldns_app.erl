@@ -5,7 +5,7 @@
 -export([start/2, stop/1]).
 
 start(Type, Args) ->
-  lager:info("~p:start(~p, ~p)~n", [?MODULE, Type, Args]),
+  lager:info("~p:start(~p, ~p)", [?MODULE, Type, Args]),
   random:seed(erlang:now()),
   optionally_start_debugger(),
   enable_metrics(),
