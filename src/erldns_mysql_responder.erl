@@ -11,18 +11,23 @@ get_soa(Qname) -> lookup_soa(Qname).
 %% Get the metadata for the name.
 get_metadata(Qname) ->
   mysql:prepare(select_domainmetadata, <<"select domainmetadata.* from domains join domainmetadata on domains.id = domainmetadata.domain_id where domains.id = (select records.domain_id from records where name = ? limit 1)">>),
-  {data, Data} = mysql:execute(dns_pool, select_domainmetadata, [Qname]),
-  Data#mysql_result.rows.
+  safe_mysql_handler(mysql:execute(dns_pool, select_domainmetadata, [Qname]),
+    fun(Data) -> Data#mysql_result.rows end
+  ).
 
 %% Answer the given question for the given name.
 answer(Qname, Qtype) ->
-  lager:debug("~p:answer(~p, ~p)~n", [?MODULE, Qname, Qtype]),
-  lists:flatten(lookup(Qname, Qtype)).
+  lager:debug("~p:answer(~p, ~p)", [?MODULE, Qname, Qtype]),
+  lists:flatten(
+    folsom_metrics:histogram_timed_update(
+      mysql_responder_lookup_time, fun lookup/2, [Qname, Qtype]
+    )
+  ).
 
 %% Lookup a specific name and type and convert it into a list of DNS records.
 lookup(Qname, Qtype) ->
-  lager:debug("~p:lookup(~p, ~p)~n", [?MODULE, Qname, Qtype]),
-  {data, Data} = case Qtype of
+  lager:debug("~p:lookup(~p, ~p)", [?MODULE, Qname, Qtype]),
+  safe_mysql_handler(case Qtype of
     ?DNS_TYPE_ANY_BSTR ->
       mysql:prepare(select_records, <<"select * from records where name = ?">>),
       mysql:execute(dns_pool, select_records, [Qname]);
@@ -32,18 +37,29 @@ lookup(Qname, Qtype) ->
     _ ->
       mysql:prepare(select_records_of_type, <<"select * from records where name = ? and (type = ? or type = ?)">>),
       mysql:execute(dns_pool, select_records_of_type, [Qname, Qtype, <<"CNAME">>])
-  end,
-  lists:map(fun row_to_record/1, Data#mysql_result.rows).
+  end, fun(Data) -> lists:map(fun row_to_record/1, Data#mysql_result.rows) end).
 
 %% Lookup the SOA record for a given name.
 lookup_soa(Qname) ->
-  lager:debug("~p:lookup_soa(~p)~n", [?MODULE, Qname]),
+  lager:debug("~p:lookup_soa(~p)", [?MODULE, Qname]),
   mysql:prepare(select_soa, <<"select records.* from domains join records on domains.id = records.domain_id where domains.id = (select records.domain_id from records where name = ? limit 1) and records.type = ? limit 1">>),
-  {data, Data} = mysql:execute(dns_pool, select_soa, [Qname, <<"SOA">>]),
-  case Data#mysql_result.rows of
-    [] -> [];
-    [SoaRecord] -> row_to_record(SoaRecord);
-    [SoaRecord|_] -> row_to_record(SoaRecord)
+  safe_mysql_handler(mysql:execute(dns_pool, select_soa, [Qname, <<"SOA">>]),
+    fun(Data) ->
+        case Data#mysql_result.rows of
+          [] -> [];
+          [SoaRecord] -> row_to_record(SoaRecord);
+          [SoaRecord|_] -> row_to_record(SoaRecord)
+        end
+    end).
+
+%% Wrap MySQL response handling so errors are handled in a consistent
+%% fashion. The function F will be executed upon success.
+safe_mysql_handler(Response, F) ->
+  case Response of
+    {data, Data} -> F(Data);
+    {error, Data} ->
+      lager:error("~p:~p", [?MODULE, Data#mysql_result.error]),
+      []
   end.
 
 %% Take a MySQL row and turn it into a DNS resource record.
