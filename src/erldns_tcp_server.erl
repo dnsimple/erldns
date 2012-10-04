@@ -55,11 +55,15 @@ handle_dns_query(Socket, Packet) ->
   lager:debug("handle_dns_query(~p)", [Socket]),
   %% TODO: measure 
   <<_Len:16, Bin/binary>> = Packet,
-  DecodedMessage = dns:decode_message(Bin),
   {ok, {Address, _Port}} = inet:peername(Socket),
-  Response = erldns_handler:handle(DecodedMessage, Address),
-  BinReply = erldns_encoder:encode_message(Response),
-  BinLength = byte_size(BinReply),
-  TcpBinReply = <<BinLength:16, BinReply/binary>>,
-  gen_tcp:send(Socket, TcpBinReply),
+  case Bin of
+    <<>> -> ok;
+    _ ->
+      DecodedMessage = dns:decode_message(Bin),
+      Response = erldns_handler:handle(DecodedMessage, Address),
+      BinReply = erldns_encoder:encode_message(Response),
+      BinLength = byte_size(BinReply),
+      TcpBinReply = <<BinLength:16, BinReply/binary>>,
+      gen_tcp:send(Socket, TcpBinReply)
+  end,
   gen_tcp:close(Socket).
