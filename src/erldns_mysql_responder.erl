@@ -44,6 +44,7 @@ lookup_soa(Qname) ->
   lager:debug("~p:lookup_soa(~p)", [?MODULE, Qname]),
   DomainNames = domain_names(Qname),
   lager:debug("~p:domain names: ~p", [?MODULE, DomainNames]),
+  % I feel this is an ok use of list_to_atom because there are only a small number of possible atom names.
   QueryName = list_to_atom("select_soa" ++ integer_to_list(length(DomainNames))),
   mysql:prepare(QueryName, build_soa_query(DomainNames)),
   safe_mysql_handler(mysql:execute(dns_pool, QueryName, lists:flatten([DomainNames, <<"SOA">>])),
