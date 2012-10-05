@@ -29,21 +29,24 @@ lookup(Qname, Qtype) ->
   lager:debug("~p:lookup(~p, ~p)", [?MODULE, Qname, Qtype]),
   safe_mysql_handler(case Qtype of
     ?DNS_TYPE_ANY_BSTR ->
-      mysql:prepare(select_records, <<"select * from records where name = ?">>),
-      mysql:execute(dns_pool, select_records, [Qname]);
+      mysql:prepare(select_records, <<"select * from records where name = ? or name = ?">>),
+      mysql:execute(dns_pool, select_records, [Qname, wildcard_qname(Qname)]);
     ?DNS_TYPE_AXFR_BSTR ->
       mysql:prepare(select_axfr, <<"select records.* from domains join records on domains.id = records.domain_id where domains.name = ?">>),
       mysql:execute(dns_pool, select_axfr, [Qname]);
     _ ->
-      mysql:prepare(select_records_of_type, <<"select * from records where name = ? and (type = ? or type = ?)">>),
-      mysql:execute(dns_pool, select_records_of_type, [Qname, Qtype, <<"CNAME">>])
+      mysql:prepare(select_records_of_type, <<"select * from records where (name = ? or name = ?) and (type = ? or type = ?)">>),
+      mysql:execute(dns_pool, select_records_of_type, [Qname, wildcard_qname(Qname), Qtype, <<"CNAME">>])
   end, fun(Data) -> lists:map(fun row_to_record/1, Data#mysql_result.rows) end).
 
 %% Lookup the SOA record for a given name.
 lookup_soa(Qname) ->
   lager:debug("~p:lookup_soa(~p)", [?MODULE, Qname]),
-  mysql:prepare(select_soa, <<"select records.* from domains join records on domains.id = records.domain_id where domains.id = (select records.domain_id from records where name = ? limit 1) and records.type = ? limit 1">>),
-  safe_mysql_handler(mysql:execute(dns_pool, select_soa, [Qname, <<"SOA">>]),
+  DomainNames = domain_names(Qname),
+  lager:debug("~p:domain names: ~p", [?MODULE, DomainNames]),
+  QueryName = list_to_atom("select_soa" ++ integer_to_list(length(DomainNames))),
+  mysql:prepare(QueryName, build_soa_query(DomainNames)),
+  safe_mysql_handler(mysql:execute(dns_pool, QueryName, lists:flatten([DomainNames, <<"SOA">>])),
     fun(Data) ->
         case Data#mysql_result.rows of
           [] -> [];
@@ -51,6 +54,11 @@ lookup_soa(Qname) ->
           [SoaRecord|_] -> row_to_record(SoaRecord)
         end
     end).
+
+%% This is a hack because the mysql driver cannot encode lists
+%% for us in queries like "foo IN (?)"
+build_soa_query(DomainNames) ->
+  list_to_binary(["select records.* from domains join records on domains.id = records.domain_id where domains.id = (select records.domain_id from records where "] ++ string:join(lists:map(fun(_) -> "name = ?" end, DomainNames), " or ") ++ [" limit 1) and records.type = ? limit 1"]).
 
 %% Wrap MySQL response handling so errors are handled in a consistent
 %% fashion. The function F will be executed upon success.
@@ -69,6 +77,18 @@ row_to_record(Row) ->
     unsupported -> [];
     Data -> #dns_rr{name=Name, type=erldns_records:name_type(TypeStr), data=Data, ttl=default_ttl(TTL)}
   end.
+
+%% Convert a name to a list of possible domain names by working
+%% back through the labels to construct each possible domain.
+domain_names(Qname) -> domain_names(dns:dname_to_labels(Qname), []).
+domain_names([], Names) -> Names;
+domain_names([Label|Rest], Names) -> domain_names(Rest, Names ++ [dns:labels_to_dname([Label] ++ Rest)]).
+
+%% Get a wildcard variation of a Qname. Replaces the leading
+%% label with an asterisk for wildcard lookup.
+wildcard_qname(Qname) ->
+  [_|Rest] = dns:dname_to_labels(Qname),
+  dns:labels_to_dname([<<"*">>] ++ Rest).
 
 %% All of these functions are used to parse the content field
 %% stored in MySQL into a correct dns_rrdata in-memory record.
