@@ -37,7 +37,7 @@ lookup(Qname, Qtype) ->
     _ ->
       mysql:prepare(select_records_of_type, <<"select * from records where (name = ? or name = ?) and (type = ? or type = ?)">>),
       mysql:execute(dns_pool, select_records_of_type, [Qname, wildcard_qname(Qname), Qtype, <<"CNAME">>])
-  end, fun(Data) -> lists:map(fun row_to_record/1, Data#mysql_result.rows) end).
+  end, fun(Data) -> lists:map(fun(Row) -> row_to_record(Qname, Row) end, Data#mysql_result.rows) end).
 
 %% Lookup the SOA record for a given name.
 lookup_soa(Qname) ->
@@ -51,8 +51,8 @@ lookup_soa(Qname) ->
     fun(Data) ->
         case Data#mysql_result.rows of
           [] -> [];
-          [SoaRecord] -> row_to_record(SoaRecord);
-          [SoaRecord|_] -> row_to_record(SoaRecord)
+          [SoaRecord] -> row_to_record(Qname, SoaRecord);
+          [SoaRecord|_] -> row_to_record(Qname, SoaRecord)
         end
     end).
 
@@ -72,11 +72,20 @@ safe_mysql_handler(Response, F) ->
   end.
 
 %% Take a MySQL row and turn it into a DNS resource record.
-row_to_record(Row) ->
+row_to_record(Qname, Row) ->
   [_, _Id, Name, TypeStr, Content, TTL, Priority, _ChangeDate] = Row,
   case parse_content(Content, Priority, TypeStr) of
     unsupported -> [];
-    Data -> #dns_rr{name=Name, type=erldns_records:name_type(TypeStr), data=Data, ttl=default_ttl(TTL)}
+    Data -> #dns_rr{name=optionally_convert_wildcard(Name, Qname), type=erldns_records:name_type(TypeStr), data=Data, ttl=default_ttl(TTL)}
+  end.
+
+%% If the name returned from the DB is a wildcard name then the
+%% Original Qname needs to be returned in its place.
+optionally_convert_wildcard(Name, Qname) ->
+  [Head|_] = dns:dname_to_labels(Name),
+  case Head of
+    <<"*">> -> Qname;
+    _ -> Name
   end.
 
 %% Convert a name to a list of possible domain names by working
