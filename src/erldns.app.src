@@ -5,6 +5,7 @@
              erldns_app,
              erldns_encoder,
              erldns_handler,
+             erldns_mysql,
              erldns_edns,
              erldns_dnssec,
              erldns_axfr,
