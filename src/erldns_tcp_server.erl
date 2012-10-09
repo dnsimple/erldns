@@ -1,5 +1,4 @@
 -module(erldns_tcp_server).
-
 -behavior(gen_nb_server).
 
 % API
@@ -36,7 +35,9 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Message, State) ->
   {noreply, State}.
 handle_info({tcp, Socket, Bin}, State) ->
-  handle_dns_query(Socket, Bin),
+  poolboy:transaction(tcp_worker_pool, fun(Worker) ->
+    gen_server:call(Worker, {tcp_query, Socket, Bin})
+  end),
   {noreply, State};
 handle_info(_Message, State) ->
   {noreply, State}.
@@ -49,21 +50,3 @@ new_connection(Socket, State) ->
   {ok, State}.
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
-
-%% Handle DNS query that comes in over TCP
-handle_dns_query(Socket, Packet) ->
-  lager:debug("handle_dns_query(~p)", [Socket]),
-  %% TODO: measure 
-  <<_Len:16, Bin/binary>> = Packet,
-  {ok, {Address, _Port}} = inet:peername(Socket),
-  case Bin of
-    <<>> -> ok;
-    _ ->
-      DecodedMessage = dns:decode_message(Bin),
-      Response = erldns_handler:handle(DecodedMessage, Address),
-      BinReply = erldns_encoder:encode_message(Response),
-      BinLength = byte_size(BinReply),
-      TcpBinReply = <<BinLength:16, BinReply/binary>>,
-      gen_tcp:send(Socket, TcpBinReply)
-  end,
-  gen_tcp:close(Socket).

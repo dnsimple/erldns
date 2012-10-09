@@ -17,6 +17,14 @@ start_link() ->
   supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
 init(_Args) ->
+  {ok, Pools} = application:get_env(erldns, pools),
+  PoolSpecs = lists:map(fun({PoolName, PoolConfig}) ->
+        Args = [{name, {local, PoolName}},
+                {worker_module, erldns_worker}]
+              ++ PoolConfig,
+        poolboy:child_spec(PoolName, Args)
+    end, Pools),
+
   Procs = [
     ?CHILD(erldns_packet_cache, worker, []),
     {udp_inet, {erldns_udp_server, start_link, [udp_inet, inet]}, permanent, 5000, worker, [erldns_udp_server]},
@@ -24,5 +32,5 @@ init(_Args) ->
     {tcp_inet, {erldns_tcp_server, start_link, [tcp_inet, inet]}, permanent, 5000, worker, [erldns_tcp_server]}
     %{tcp_inet6, {erldns_tcp_server, start_link, [tcp_inet6, inet6]}, permanent, 5000, worker, [erldns_tcp_server]}
   ],
-  %% More than 20 failures in 10 seconds
-  {ok, {{one_for_one, 20, 10}, Procs}}.
+
+  {ok, {{one_for_one, 20, 10}, Procs ++ PoolSpecs}}.
