@@ -15,7 +15,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {port=53, socket}).
+-record(state, {port, socket}).
 
 %% Public API
 start_link(Name, InetFamily) ->
@@ -23,7 +23,7 @@ start_link(Name, InetFamily) ->
 
 %% gen_server hooks
 init([InetFamily]) ->
-  {ok, Port} = application:get_env(erldns, port),
+  Port = erldns_config:get_port(),
   {ok, Socket} = start(Port, InetFamily),
   {ok, #state{port = Port, socket = Socket}}.
 handle_call(_Request, _From, State) ->
@@ -49,7 +49,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 %% Start a UDP server.
 start(Port, InetFamily) ->
   lager:info("Starting UDP server for ~p on port ~p~n", [InetFamily, Port]),
-  case gen_udp:open(Port, [binary, {active, once}, InetFamily]) of
+  case gen_udp:open(Port, [binary, {active, once}, {ip, erldns_config:get_address(InetFamily)}, InetFamily]) of
     {ok, Socket} -> 
       lager:info("UDP server (~p) opened socket: ~p~n", [InetFamily, Socket]),
       {ok, Socket};

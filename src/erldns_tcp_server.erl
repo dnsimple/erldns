@@ -16,17 +16,12 @@
   ]).
 
 -define(SERVER, ?MODULE).
--define(DEFAULT_IPV4_ADDRESS, {127,0,0,1}).
--define(DEFAULT_IPV6_ADDRESS, {0,0,0,0,0,0,0,1}).
--define(DEFAULT_PORT, 53).
 
--record(state, {port=?DEFAULT_PORT, socket}).
+-record(state, {port, socket}).
 
 %% Public API
-start_link(_Name, inet) ->
-  gen_nb_server:start_link(?MODULE, get_address(inet4) , get_port(), []);
-start_link(_Name, inet6) ->
-  gen_nb_server:start_link(?MODULE, get_address(inet6) , get_port(), []).
+start_link(_Name, Family) ->
+  gen_nb_server:start_link(?MODULE, erldns_config:get_address(Family), erldns_config:get_port(), []).
 
 %% gen_server hooks
 init([]) ->
@@ -52,21 +47,4 @@ new_connection(Socket, State) ->
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
-%% Private functions
-get_address(inet4) ->
-  case application:get_env(erldns, inet4) of
-    {ok, Address} -> Address;
-    _ -> ?DEFAULT_IPV4_ADDRESS
-  end;
-get_address(inet6) ->
-  case application:get_env(erldns, inet6) of
-    {ok, Address} -> Address;
-    _ -> ?DEFAULT_IPV6_ADDRESS
-  end.
-
-get_port() ->
-  case application:get_env(erldns, port) of
-    {ok, Port} -> Port;
-    _ -> ?DEFAULT_PORT
-  end.
 

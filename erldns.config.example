@@ -16,7 +16,7 @@
   {erldns,[
     {port, 8053},
     {inet4, {127,0,0,1}},
-    {inet6, {0,0,0,0,0,0,0,1}},
+    {inet6, "::1"},
     {debugger, false},
     {responders, [erldns_mysql_responder]},
     {pools, [
