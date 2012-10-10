@@ -14,8 +14,20 @@
     }]
   },
   {erldns,[
-    {port, 53},
-    {responders, [erldns_mysql_responder]}
+    {port, 8053},
+    {inet4, {127,0,0,1}},
+    {inet6, {0,0,0,0,0,0,0,1}},
+    {debugger, false},
+    {responders, [erldns_mysql_responder]},
+    {pools, [
+      {tcp_worker_pool, [
+        {size, 10},
+        {max_overflow, 20}
+      ]},
+      {udp_worker_pool, [
+        {size, 10},
+        {max_overflow, 20}
+      ]}
   ]},
   {lager, [
     {handlers, [
