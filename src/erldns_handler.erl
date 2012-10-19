@@ -124,9 +124,9 @@ resolve_cnames(Qtype, Records, Host) ->
 
 %% Restart the query.
 resolve_cname(OriginalQtype, Record, Host) ->
+  lager:debug("~p:resolve_cname(~p, ~p, ~p)~n", [?MODULE, OriginalQtype, Record, Host]),
   case Record#dns_rr.type of
     ?DNS_TYPE_CNAME_NUMBER ->
-      lager:debug("~p:resolve_cname(~p)~n", [?MODULE, Record]),
       Qname = Record#dns_rr.data#dns_rrdata_cname.dname,
       answer_question(Qname, OriginalQtype, Host) ++ [Record];
     _ ->
