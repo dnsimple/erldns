@@ -25,18 +25,29 @@ answer(Qname, Qtype) ->
   ).
 
 %% Lookup a specific name and type and convert it into a list of DNS records.
+%% First a non-wildcard lookup will occur and if there are results those will
+%% be used. If no results are found then a wildcard lookup is attempted.
 lookup(Qname, Qtype) ->
-  lager:debug("~p:lookup(~p, ~p)", [?MODULE, Qname, Qtype]),
+  Answers = lookup_name(Qname, Qtype, Qname),
+  case Answers of
+    [] -> lookup_name(Qname, Qtype, erldns_mysql:wildcard_qname(Qname));
+    _ -> Answers
+  end.
+
+%% Lookup the record with the given name and type. The LookupName should
+%% be the value expected in the database (which may be a wildcard).
+lookup_name(Qname, Qtype, LookupName) ->
+  lager:debug("~p:lookup_name(~p, ~p, ~p)", [?MODULE, Qname, Qtype, LookupName]),
   erldns_mysql:safe_mysql_handler(case Qtype of
-    ?DNS_TYPE_ANY_BSTR ->
-      mysql:prepare(select_records, <<"select * from records where name = ? or name = ?">>),
-      mysql:execute(dns_pool, select_records, [Qname, erldns_mysql:wildcard_qname(Qname)]);
     ?DNS_TYPE_AXFR_BSTR ->
       mysql:prepare(select_axfr, <<"select records.* from domains join records on domains.id = records.domain_id where domains.name = ?">>),
       mysql:execute(dns_pool, select_axfr, [Qname]);
+    ?DNS_TYPE_ANY_BSTR ->
+      mysql:prepare(select_records, <<"select * from records where name = ?">>),
+      mysql:execute(dns_pool, select_records, [LookupName]);
     _ ->
-      mysql:prepare(select_records_of_type, <<"select * from records where (name = ? or name = ?) and (type = ? or type = ?)">>),
-      mysql:execute(dns_pool, select_records_of_type, [Qname, erldns_mysql:wildcard_qname(Qname), Qtype, <<"CNAME">>])
+      mysql:prepare(select_records_of_type, <<"select * from records where name = ? and (type = ? or type = ?)">>),
+      mysql:execute(dns_pool, select_records_of_type, [LookupName, Qtype, <<"CNAME">>])
   end, fun(Data) -> lists:map(fun(Row) -> row_to_record(Qname, Row) end, Data#mysql_result.rows) end).
 
 %% Lookup the SOA record for a given name.
