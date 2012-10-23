@@ -10,7 +10,7 @@ safe_mysql_handler(Response, F) ->
   case Response of
     {data, Data} -> F(Data);
     {error, Data} ->
-      lager:error("~p:~p", [?MODULE, Data#mysql_result.error]),
+      lager:error("~p:~p", [?MODULE, Data]),
       []
   end.
 
