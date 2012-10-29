@@ -70,7 +70,13 @@ answer_question(Qname, Qtype, _) ->
 
 %% Get the answers for a query from the responders.
 query_responders(Qname, Qtype) ->
-  lists:flatten([F(Qname, dns:type_name(Qtype)) || F <- answer_functions()]).
+  query_responders(Qname, Qtype, answer_functions()).
+query_responders(_Qname, _Qtype, []) -> [];
+query_responders(Qname, Qtype, [F|AnswerFunctions]) ->
+  case Answers = F(Qname, dns:type_name(Qtype)) of
+    [] -> query_responders(Qname, Qtype, AnswerFunctions);
+    _ -> Answers
+  end.
 
 % Return an NXDOMAIN response since we are not authoritative.
 nxdomain_response(Message) ->
