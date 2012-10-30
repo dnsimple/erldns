@@ -7,10 +7,10 @@
 %% Handle the decoded message
 handle({trailing_garbage, DecodedMessage, _}, Host) ->
   handle(DecodedMessage, Host);
-handle(DecodedMessage, Host) ->
-  lager:debug("From host ~p received decoded message: ~p~n", [Host, DecodedMessage]),
+handle(DecodedMessage, Host) when is_record(DecodedMessage, dns_message) ->
+  lager:debug("From host ~p received decoded message: ~p", [Host, DecodedMessage]),
   Questions = DecodedMessage#dns_message.questions,
-  lager:info("Questions: ~p~n", [Questions]),
+  lager:info("Questions: ~p", [Questions]),
   case lists:any(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Questions) of
     true ->
       lager:info("Refusing to respond to ANY query"),
@@ -18,7 +18,10 @@ handle(DecodedMessage, Host) ->
     false ->
       Message = handle_message(DecodedMessage, Questions, Host),
       erldns_axfr:optionally_append_soa(erldns_edns:handle(Message))
-  end.
+  end;
+handle(BadMessage, Host) ->
+  lager:error("Received a bad message: ~p from ~p", [BadMessage, Host]),
+  BadMessage.
 
 %% Handle the message by hitting the packet cache and either
 %% using the cached packet or continuing with the lookup process.
