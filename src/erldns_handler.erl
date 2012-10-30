@@ -11,7 +11,19 @@ handle(DecodedMessage, Host) ->
   lager:debug("From host ~p received decoded message: ~p~n", [Host, DecodedMessage]),
   Questions = DecodedMessage#dns_message.questions,
   lager:info("Questions: ~p~n", [Questions]),
-  Message = case erldns_packet_cache:get(Questions) of
+  case lists:any(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Questions) of
+    true ->
+      lager:info("Refusing to respond to ANY query"),
+      DecodedMessage#dns_message{rc = ?DNS_RCODE_REFUSED};
+    false ->
+      Message = handle_message(DecodedMessage, Questions, Host),
+      erldns_axfr:optionally_append_soa(erldns_edns:handle(Message))
+  end.
+
+%% Handle the message by hitting the packet cache and either
+%% using the cached packet or continuing with the lookup process.
+handle_message(DecodedMessage, Questions, Host) ->
+  case erldns_packet_cache:get(Questions) of
     {ok, Answers} -> 
       lager:debug("Packet cache hit"),
       %folsom_metrics:notify({packet_cache_hit, 1}),
@@ -28,8 +40,7 @@ handle(DecodedMessage, Host) ->
           %% TODO: should this response be packet cached?
           nxdomain_response(DecodedMessage)
       end
-  end,
-  erldns_axfr:optionally_append_soa(erldns_edns:handle(Message)).
+  end.
 
 %% Check to see if we are authoritative for the domain.
 check_soa(Questions) ->
