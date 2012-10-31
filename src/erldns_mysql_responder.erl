@@ -90,8 +90,7 @@ domain_names([Label|Rest], Names) -> domain_names(Rest, Names ++ [dns:labels_to_
 %% stored in MySQL into a correct dns_rrdata in-memory record.
 parse_content(Content, _, ?DNS_TYPE_SOA_BSTR) ->
   [MnameStr, RnameStr, SerialStr, RefreshStr, RetryStr, ExpireStr, MinimumStr] = string:tokens(binary_to_list(Content), " "),
-  [Mname, Rname, Serial, Refresh, Retry, Expire, Minimum] =
-    [MnameStr, RnameStr, to_i(SerialStr), to_i(RefreshStr), to_i(RetryStr), to_i(ExpireStr), to_i(MinimumStr)],
+  [Mname, Rname, Serial, Refresh, Retry, Expire, Minimum] = [MnameStr, re:replace(RnameStr, "@", ".", [{return, list}]), to_i(SerialStr), to_i(RefreshStr), to_i(RetryStr), to_i(ExpireStr), to_i(MinimumStr)],
   #dns_rrdata_soa{mname=Mname, rname=Rname, serial=Serial, refresh=Refresh, retry=Retry, expire=Expire, minimum=Minimum};
 
 parse_content(Content, _, ?DNS_TYPE_NS_BSTR) ->
