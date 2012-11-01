@@ -40,12 +40,15 @@ lookup_name(Qname, Qtype, LookupName) ->
 lookup_soa(Qname) -> mysql_to_record(Qname, erldns_mysql:lookup_soa(Qname)).
 
 %% Convert an internal MySQL representation to a dns RR.
-mysql_to_record(Qname, Record) ->
+mysql_to_record(Qname, Record) when is_record(Record, mysql_rr) ->
   lager:debug("~p:mysql_to_record(~p, ~p)", [?MODULE, Qname, Record]),
   case parse_content(Record#mysql_rr.content, Record#mysql_rr.priority, Record#mysql_rr.type) of
     unsupported -> [];
     Data -> #dns_rr{name=erldns_mysql:optionally_convert_wildcard(Record#mysql_rr.name, Qname), type=erldns_records:name_type(Record#mysql_rr.type), data=Data, ttl=default_ttl(Record#mysql_rr.ttl)}
-  end.
+  end;
+mysql_to_record(Qname, Value) ->
+  lager:debug("~p:failed to convert mysql to record for ~p with ~p", [?MODULE, Qname, Value]),
+  [].
 
 %% All of these functions are used to parse the content field
 %% stored in MySQL into a correct dns_rrdata in-memory record.
