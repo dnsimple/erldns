@@ -27,7 +27,7 @@ answer(Qname, Qtype) ->
 lookup(Qname, Qtype) ->
   Answers = lookup_name(Qname, Qtype, Qname),
   case Answers of
-    [] -> lookup_name(Qname, Qtype, erldns_mysql:wildcard_qname(Qname));
+    [] -> lookup_wildcard_name(Qname, Qtype);
     _ -> Answers
   end.
 
@@ -38,6 +38,19 @@ lookup_name(Qname, Qtype, LookupName) ->
 
 %% Lookup the SOA record for a given name.
 lookup_soa(Qname) -> mysql_to_record(Qname, erldns_mysql:lookup_soa(Qname)).
+
+%% Given the Qname find any wildcard matches.
+lookup_wildcard_name(Qname, Qtype) ->
+  lists:map(fun(R) -> mysql_to_record(Qname, R) end, lookup_wildcard_name(Qname, Qtype, erldns_mysql:domain_names(Qname), erldns_mysql:lookup_records(Qname), [])).
+
+lookup_wildcard_name(_Qname, _Qtype, [], _Records, Matches) -> Matches;
+lookup_wildcard_name(Qname, Qtype, [DomainName|Rest], Records, Matches) ->
+  WildcardName = erldns_mysql:wildcard_qname(DomainName),
+  NewMatches = lists:filter(
+    fun(R) ->
+        (R#mysql_rr.name =:= WildcardName) and ((R#mysql_rr.type =:= Qtype) or (R#mysql_rr.type =:= <<"CNAME">>))
+    end, Records),
+  lookup_wildcard_name(Qname, Qtype, Rest, Records, Matches ++ NewMatches).
 
 %% Convert an internal MySQL representation to a dns RR.
 mysql_to_record(Qname, Record) when is_record(Record, mysql_rr) ->

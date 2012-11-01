@@ -4,7 +4,7 @@
 -include("mysql.hrl").
 -include("erldns.hrl").
 
--export([init/0, lookup_name/3, lookup_soa/1, get_metadata/1, domain_names/1]).
+-export([init/0, lookup_name/3, lookup_records/1, lookup_soa/1, get_metadata/1, domain_names/1]).
 -export([safe_mysql_handler/2, optionally_convert_wildcard/2, wildcard_qname/1]).
 
 % Prepare all statements.
@@ -31,10 +31,26 @@ lookup_soa(Qname) ->
     end).
 
 %% This is a hack because the mysql driver cannot encode lists
-%% for us in queries like "foo IN (?)"
+%% for use in queries like "foo IN (?)"
 build_soa_query(DomainNames) ->
   list_to_binary(["select records.* from domains join records on domains.id = records.domain_id where domains.id = (select records.domain_id from records where "] ++ string:join(lists:map(fun(_) -> "name = ?" end, DomainNames), " or ") ++ [" limit 1) and records.type = ? limit 1"]).
 
+%% Lookup all records for a given Qname.
+lookup_records(Qname) ->
+  DomainNames = domain_names(Qname),
+  QueryName = list_to_atom("select_domain_records" ++ integer_to_list(length(DomainNames))),
+  mysql:prepare(QueryName, build_domain_records_query(DomainNames)),
+  erldns_mysql:safe_mysql_handler(mysql:execute(dns_pool, QueryName, DomainNames),
+    fun(Data) ->
+        lists:map(fun(Row) -> row_to_record(Qname, Row) end, Data#mysql_result.rows)
+    end).
+
+%% This is a hack because the mysql driver cannot encode lists
+%% for use in queries like "foo IN (?)"
+build_domain_records_query(DomainNames) ->
+  list_to_binary(["select records.* from domains join records on domains.id = records.domain_id where domains.id = (select records.domain_id from records where "] ++ string:join(lists:map(fun(_) -> "name = ?" end, DomainNames), " or ") ++ [" limit 1)"]).
+
+%% Lookup a name of a particular type.
 lookup_name(Qname, Qtype, LookupName) ->
   lager:debug("~p:lookup_name(~p, ~p, ~p)", [?MODULE, Qname, Qtype, LookupName]),
   erldns_mysql:safe_mysql_handler(case Qtype of
