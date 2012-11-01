@@ -7,7 +7,6 @@
 start(Type, Args) ->
   lager:info("~p:start(~p, ~p)", [?MODULE, Type, Args]),
   random:seed(erlang:now()),
-  erldns_mysql:init(),
   optionally_start_debugger(),
   enable_metrics(),
   erldns_sup:start_link().

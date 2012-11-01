@@ -2,7 +2,6 @@
 
 -include("dns.hrl").
 -include("mysql.hrl").
--include("erldns.hrl").
 
 -export([answer/2, get_soa/1, get_metadata/1]).
 
@@ -10,7 +9,11 @@
 get_soa(Qname) -> lookup_soa(Qname).
 
 %% Get the metadata for the name.
-get_metadata(Qname) -> erldns_mysql:get_metadata(Qname).
+get_metadata(Qname) ->
+  mysql:prepare(select_domainmetadata, <<"select domainmetadata.* from domains join domainmetadata on domains.id = domainmetadata.domain_id where domains.id = (select records.domain_id from records where name = ? limit 1)">>),
+  erldns_mysql:safe_mysql_handler(mysql:execute(dns_pool, select_domainmetadata, [Qname]),
+    fun(Data) -> Data#mysql_result.rows end
+  ).
 
 %% Answer the given question for the given name.
 answer(Qname, Qtype) ->
@@ -34,17 +37,54 @@ lookup(Qname, Qtype) ->
 %% Lookup the record with the given name and type. The LookupName should
 %% be the value expected in the database (which may be a wildcard).
 lookup_name(Qname, Qtype, LookupName) ->
-  lists:map(fun(RR) -> mysql_to_record(Qname, RR) end, erldns_mysql:lookup_name(Qname, Qtype, LookupName)). 
+  lager:debug("~p:lookup_name(~p, ~p, ~p)", [?MODULE, Qname, Qtype, LookupName]),
+  erldns_mysql:safe_mysql_handler(case Qtype of
+    ?DNS_TYPE_AXFR_BSTR ->
+      mysql:prepare(select_axfr, <<"select records.* from domains join records on domains.id = records.domain_id where domains.name = ?">>),
+      mysql:execute(dns_pool, select_axfr, [Qname]);
+    ?DNS_TYPE_ANY_BSTR ->
+      mysql:prepare(select_records, <<"select * from records where name = ?">>),
+      mysql:execute(dns_pool, select_records, [LookupName]);
+    _ ->
+      mysql:prepare(select_records_of_type, <<"select * from records where name = ? and (type = ? or type = ?)">>),
+      mysql:execute(dns_pool, select_records_of_type, [LookupName, Qtype, <<"CNAME">>])
+  end, fun(Data) -> lists:map(fun(Row) -> row_to_record(Qname, Row) end, Data#mysql_result.rows) end).
 
 %% Lookup the SOA record for a given name.
-lookup_soa(Qname) -> mysql_to_record(Qname, erldns_mysql:lookup_soa(Qname)).
+lookup_soa(Qname) ->
+  lager:debug("~p:lookup_soa(~p)", [?MODULE, Qname]),
+  DomainNames = domain_names(Qname),
+  lager:debug("~p:domain names: ~p", [?MODULE, DomainNames]),
+  % I feel this is an ok use of list_to_atom because there are only a small number of possible atom names.
+  QueryName = list_to_atom("select_soa" ++ integer_to_list(length(DomainNames))),
+  mysql:prepare(QueryName, build_soa_query(DomainNames)),
+  erldns_mysql:safe_mysql_handler(mysql:execute(dns_pool, QueryName, lists:flatten([DomainNames, <<"SOA">>])),
+    fun(Data) ->
+        case Data#mysql_result.rows of
+          [] -> [];
+          [SoaRecord] -> row_to_record(Qname, SoaRecord);
+          [SoaRecord|_] -> row_to_record(Qname, SoaRecord)
+        end
+    end).
 
-%% Convert an internal MySQL representation to a dns RR.
-mysql_to_record(Qname, Record) ->
-  case parse_content(Record#mysql_rr.content, Record#mysql_rr.priority, Record#mysql_rr.type) of
+%% This is a hack because the mysql driver cannot encode lists
+%% for us in queries like "foo IN (?)"
+build_soa_query(DomainNames) ->
+  list_to_binary(["select records.* from domains join records on domains.id = records.domain_id where domains.id = (select records.domain_id from records where "] ++ string:join(lists:map(fun(_) -> "name = ?" end, DomainNames), " or ") ++ [" limit 1) and records.type = ? limit 1"]).
+
+%% Take a MySQL row and turn it into a DNS resource record.
+row_to_record(Qname, Row) ->
+  [_, _Id, Name, TypeStr, Content, TTL, Priority, _ChangeDate] = Row,
+  case parse_content(Content, Priority, TypeStr) of
     unsupported -> [];
-    Data -> #dns_rr{name=erldns_mysql:optionally_convert_wildcard(Record#mysql_rr.name, Qname), type=erldns_records:name_type(Record#mysql_rr.type), data=Data, ttl=default_ttl(Record#mysql_rr.ttl)}
+    Data -> #dns_rr{name=erldns_mysql:optionally_convert_wildcard(Name, Qname), type=erldns_records:name_type(TypeStr), data=Data, ttl=default_ttl(TTL)}
   end.
+
+%% Convert a name to a list of possible domain names by working
+%% back through the labels to construct each possible domain.
+domain_names(Qname) -> domain_names(dns:dname_to_labels(Qname), []).
+domain_names([], Names) -> Names;
+domain_names([Label|Rest], Names) -> domain_names(Rest, Names ++ [dns:labels_to_dname([Label] ++ Rest)]).
 
 %% All of these functions are used to parse the content field
 %% stored in MySQL into a correct dns_rrdata in-memory record.
