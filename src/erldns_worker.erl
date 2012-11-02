@@ -71,7 +71,7 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
 %% options passed by the client.
 max_payload_size(Message) ->
   case Message#dns_message.additional of
-    [Opt|_] ->
+    [Opt|_] when is_record(Opt, dns_optrr) ->
       case Opt#dns_optrr.udp_payload_size of
         [] -> ?MAX_PACKET_SIZE;
         _ -> Opt#dns_optrr.udp_payload_size
@@ -91,5 +91,4 @@ optionally_truncate(Message, EncodedMessage, BinLength) ->
 %% tc bit to indicate the message was truncated.
 truncate(Message) ->
   lager:debug("Message was truncated: ~p", [Message]),
-  %Response = erldns_handler:build_response(Message#dns_message.answers, Message),
   Message#dns_message{tc = true}.
