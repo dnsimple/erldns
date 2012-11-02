@@ -14,8 +14,6 @@ encode_message(Response) ->
   end.
 
 %% Populate a response with a servfail error
-build_error_response({truncated, Response}) ->
-  Response#dns_message{anc = 0, qr = true, aa = true, rc = ?DNS_RCODE_NOERROR, tc = true, answers=[]};
 build_error_response(Response) ->
   build_error_response(Response, ?DNS_RCODE_SERVFAIL).
 build_error_response(Response, Rcode) ->

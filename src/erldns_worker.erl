@@ -42,12 +42,15 @@ handle_tcp_dns_query(Socket, Packet) ->
   case Bin of
     <<>> -> ok;
     _ ->
-      DecodedMessage = dns:decode_message(Bin),
-      Response = erldns_handler:handle(DecodedMessage, Address),
-      BinReply = erldns_encoder:encode_message(Response),
-      BinLength = byte_size(BinReply),
-      TcpBinReply = <<BinLength:16, BinReply/binary>>,
-      gen_tcp:send(Socket, TcpBinReply)
+      case dns:decode_message(Bin) of
+        {truncated, _} -> lager:info("received bad request from ~p", [Address]);
+        DecodedMessage ->
+          Response = erldns_handler:handle(DecodedMessage, Address),
+          BinReply = erldns_encoder:encode_message(Response),
+          BinLength = byte_size(BinReply),
+          TcpBinReply = <<BinLength:16, BinReply/binary>>,
+          gen_tcp:send(Socket, TcpBinReply)
+      end
   end,
   gen_tcp:close(Socket).
 
@@ -55,12 +58,14 @@ handle_tcp_dns_query(Socket, Packet) ->
 handle_udp_dns_query(Socket, Host, Port, Bin) ->
   lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
   %% TODO: measure
-  DecodedMessage = dns:decode_message(Bin),
-  Response = erldns_handler:handle(DecodedMessage, Host),
-  EncodedMessage = erldns_encoder:encode_message(Response),
-  BinLength = byte_size(EncodedMessage),
-  gen_udp:send(Socket, Host, Port, 
-    optionally_truncate(Response, EncodedMessage, BinLength)).
+  case dns:decode_message(Bin) of
+    {truncated, _} -> lager:debug("received bad request from ~p", [Host]);
+    DecodedMessage ->
+      Response = erldns_handler:handle(DecodedMessage, Host),
+      EncodedMessage = erldns_encoder:encode_message(Response),
+      BinLength = byte_size(EncodedMessage),
+      gen_udp:send(Socket, Host, Port, optionally_truncate(Response, EncodedMessage, BinLength))
+  end.
 
 %% Determine the max payload size by looking for additional
 %% options passed by the client.
