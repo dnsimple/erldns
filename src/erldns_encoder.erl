@@ -14,7 +14,9 @@ encode_message(Response) ->
   end.
 
 %% Populate a response with a servfail error
-build_error_response(Response) ->
+build_error_response(Response) when is_record(Response, dns_message) ->
+  build_error_response(Response, ?DNS_RCODE_SERVFAIL);
+build_error_response({_, Response}) ->
   build_error_response(Response, ?DNS_RCODE_SERVFAIL).
 build_error_response(Response, Rcode) ->
   Response#dns_message{anc = 0, qr = true, aa = true, rc = Rcode, answers=[]}.
