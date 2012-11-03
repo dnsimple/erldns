@@ -78,17 +78,18 @@ answer_questions([], Response, _Host) ->
 answer_questions([Q|Rest], Response, Host) ->
   [Qname, Qtype] = [Q#dns_query.name, Q#dns_query.type],
   case lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype, Host), Host)) of
-    [] ->
-      case get_exact_soas(Qname) of
-        [] ->
-          case answer_question(Qname, ?DNS_TYPE_NS_NUMBER, Host) of
-            [] -> answer_questions(Rest, build_authoritative_response([], get_soas_by_name(Qname), [], Response), Host);
-            Answers -> answer_questions(Rest, build_delegated_response([], Answers, [], Response), Host)
-          end;
-        _ -> answer_questions(Rest, build_authoritative_response([], get_soas_by_name(Qname), [], Response), Host)
-      end;
+    [] -> try_delegation(Qname, Rest, get_exact_soas(Qname), Response, Host);
     Answers -> answer_questions(Rest, build_authoritative_response(Answers, [], [], Response), Host)
   end.
+
+%% Try to delegate a Qname since we couldn't find any answers.
+try_delegation(Qname, Questions, [], Response, Host) ->
+  case answer_question(Qname, ?DNS_TYPE_NS_NUMBER, Host) of
+    [] -> answer_questions(Questions, build_authoritative_response([], get_soas_by_name(Qname), [], Response), Host);
+    Answers -> answer_questions(Questions, build_delegated_response([], Answers, [], Response), Host)
+  end;
+try_delegation(Qname, Questions, _, Response, Host) ->
+  answer_questions(Questions, build_authoritative_response([], get_soas_by_name(Qname), [], Response), Host).
 
 %% Retreive all answers to the specific question.
 answer_question(Qname, Qtype = ?DNS_TYPE_AXFR_NUMBER, Host) ->
