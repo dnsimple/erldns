@@ -60,6 +60,7 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
   %% TODO: measure
   case dns:decode_message(Bin) of
     {truncated, _} -> lager:debug("received bad request from ~p", [Host]);
+    {formerr, _, _} -> lager:debug("formerr bad request from ~p", [Host]);
     DecodedMessage ->
       Response = erldns_handler:handle(DecodedMessage, Host),
       EncodedMessage = erldns_encoder:encode_message(Response),
