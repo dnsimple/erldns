@@ -19,4 +19,4 @@ build_error_response(Response) when is_record(Response, dns_message) ->
 build_error_response({_, Response}) ->
   build_error_response(Response, ?DNS_RCODE_SERVFAIL).
 build_error_response(Response, Rcode) ->
-  Response#dns_message{anc = 0, qr = true, aa = true, rc = Rcode, answers=[]}.
+  Response#dns_message{anc = 0, auc = 0, adc = 0, qr = true, aa = true, rc = Rcode, answers=[], authority=[], additional=[]}.
