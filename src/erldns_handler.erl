@@ -35,19 +35,25 @@ handle_message(DecodedMessage, Questions, Host) ->
     {error, _} -> 
       lager:debug("Packet cache miss"),
       %folsom_metrics:notify({packet_cache_miss, 1}),
-      case get_soas(Questions) of
-        [] ->
-          %% TODO: should this response be packet cached?
-          nxdomain_response(DecodedMessage);
-        _ ->
-          Response = answer_questions(Questions, DecodedMessage, Host),
-          case Response#dns_message.aa of
-            true -> erldns_packet_cache:put(Questions, Response#dns_message.answers, Response#dns_message.authority, Response#dns_message.additional);
-            _ -> ok
-          end,
-          Response
-      end
+      handle_packet_cache_miss(DecodedMessage, Questions, get_soas(Questions), Host)
   end.
+
+handle_packet_cache_miss(DecodedMessage, _Questions, [], _Host) ->
+  %% TODO: should this response be packet cached?
+  nxdomain_response(DecodedMessage);
+handle_packet_cache_miss(DecodedMessage, Questions, _, Host) ->
+  try answer_questions(Questions, DecodedMessage, Host) of
+    Response ->
+      case Response#dns_message.aa of
+        true -> erldns_packet_cache:put(Questions, Response#dns_message.answers, Response#dns_message.authority, Response#dns_message.additional);
+        _ -> ok
+      end,
+      Response
+    catch
+      Exception:Reason ->
+        lager:error("Error answering request: ~p (~p)", [Exception, Reason]),
+        error_response(DecodedMessage)
+    end.
 
 %% Check all of the questions against all of the responders.
 %% TODO: optimize to return first match
@@ -110,6 +116,10 @@ query_responders(Qname, Qtype, [F|AnswerFunctions]) ->
 nxdomain_response(Message) ->
   Response = build_response([], [], [], Message),
   Response#dns_message{aa = false, rc = ?DNS_RCODE_NXDOMAIN}.
+
+error_response(Message) ->
+  Response = build_response([], [], [], Message),
+  Response#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}.
 
 build_delegated_response(Answers, Authority, Additional, Message) ->
   Response = build_response(Answers, Authority, Additional, Message),
