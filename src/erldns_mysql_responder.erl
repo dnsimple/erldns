@@ -25,8 +25,7 @@ answer(Qname, Qtype) ->
 %% First a non-wildcard lookup will occur and if there are results those will
 %% be used. If no results are found then a wildcard lookup is attempted.
 lookup(Qname, Qtype) ->
-  Answers = lookup_name(Qname, Qtype, Qname),
-  case Answers of
+  case Answers = lookup_name(Qname, Qtype, Qname) of
     [] -> lookup_wildcard_name(Qname, Qtype);
     _ -> Answers
   end.

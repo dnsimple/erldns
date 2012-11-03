@@ -69,7 +69,10 @@ answer_questions([], Response, _Host) ->
   Response;
 answer_questions([Q|Rest], Response, Host) ->
   [Qname, Qtype] = [Q#dns_query.name, Q#dns_query.type],
-  answer_questions(Rest, build_response(lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype, Host), Host)), Response), Host).
+  case lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype, Host), Host)) of
+    [] -> answer_questions(Rest, build_response(answer_question(Qname, ?DNS_TYPE_NS, Host), Response), Host);
+    Answers -> answer_questions(Rest, build_response(Answers, Response), Host)
+  end.
 
 %% Retreive all answers to the specific question.
 answer_question(Qname, Qtype = ?DNS_TYPE_AXFR_NUMBER, Host) ->
@@ -99,9 +102,10 @@ nxdomain_response(Message) ->
 
 %% Populate a response with the given answers
 build_response(Answers, Response) ->
-  NewResponse = Response#dns_message{anc = length(Answers), qr = true, aa = true, answers = Answers},
-  lager:debug("Response: ~p~n", [NewResponse]),
-  NewResponse.
+  case lists:all(fun(A) -> A#dns_rr.type =:= ?DNS_TYPE_NS end, Answers) of
+    true -> Response#dns_message{auc = length(Answers), qr = true, aa = false, authority = Answers};
+    false -> Response#dns_message{anc = length(Answers), qr = true, aa = true, answers = Answers}
+  end.
 
 %% Build a list of answer functions based on the registered responders.
 answer_functions() ->
