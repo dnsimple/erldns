@@ -69,14 +69,7 @@ answer_questions([], Response, _Host) ->
   Response;
 answer_questions([Q|Rest], Response, Host) ->
   [Qname, Qtype] = [Q#dns_query.name, Q#dns_query.type],
-  case lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype, Host), Host)) of
-    [] ->
-      lager:info("~p:No response for ~p, trying NS records", [?MODULE, Qname]),
-      Answers = answer_questions(Rest, build_response(answer_question(Qname, ?DNS_TYPE_NS, Host), Response), Host),
-      lager:info("~p:Found ~p", [?MODULE, Answers]),
-      Answers;
-    Answers -> answer_questions(Rest, build_response(Answers, Response), Host)
-  end.
+  answer_questions(Rest, build_response(lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype, Host), Host)), Response), Host).
 
 %% Retreive all answers to the specific question.
 answer_question(Qname, Qtype = ?DNS_TYPE_AXFR_NUMBER, Host) ->
