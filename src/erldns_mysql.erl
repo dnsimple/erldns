@@ -4,7 +4,7 @@
 -include("mysql.hrl").
 -include("erldns.hrl").
 
--export([init/0, lookup_name/3, lookup_ns_records/1, lookup_records/1, lookup_soa/1, get_metadata/1, domain_names/1]).
+-export([init/0, lookup_name/3, lookup_records/1, lookup_soa/1, get_metadata/1, domain_names/1]).
 -export([safe_mysql_handler/2, optionally_convert_wildcard/2, wildcard_qname/1]).
 
 % Prepare all statements.
@@ -13,9 +13,6 @@ init() ->
   mysql:prepare(select_records, <<"select * from records where name = ?">>),
   mysql:prepare(select_records_of_type, <<"select * from records where name = ? and (type = ? or type = ?)">>),
   mysql:prepare(select_domainmetadata, <<"select domainmetadata.* from domains join domainmetadata on domains.id = domainmetadata.domain_id where domains.id = (select records.domain_id from records where name = ? limit 1)">>).
-
-lookup_ns_records(Qname) ->
-  lists:filter(fun(R) -> (R#mysql_rr.name =:= Qname) and (R#mysql_rr.type =:= <<"NS">>) end, lookup_records(Qname)).
 
 lookup_soa(Qname) ->
   lager:debug("~p:lookup_soa(~p)", [?MODULE, Qname]),

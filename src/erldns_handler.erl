@@ -2,7 +2,7 @@
 
 -include("dns_records.hrl").
 
--export([handle/2, build_response/2]).
+-export([handle/2]).
 
 %% Handle the decoded message
 handle({trailing_garbage, DecodedMessage, _}, Host) ->
@@ -28,29 +28,25 @@ handle(BadMessage, Host) ->
 %% using the cached packet or continuing with the lookup process.
 handle_message(DecodedMessage, Questions, Host) ->
   case erldns_packet_cache:get(Questions) of
-    {ok, Answers} -> 
+    {ok, Answers, Authority, Additional} ->
       lager:debug("Packet cache hit"),
       %folsom_metrics:notify({packet_cache_hit, 1}),
-      build_response(Answers, DecodedMessage);
+      build_authoritative_response(Answers, Authority, Additional, DecodedMessage);
     {error, _} -> 
       lager:debug("Packet cache miss"),
       %folsom_metrics:notify({packet_cache_miss, 1}),
-      case check_soa(Questions) of
-        true ->
-          Response = answer_questions(Questions, DecodedMessage, Host),
-          erldns_packet_cache:put(Questions, Response#dns_message.answers),
-          Response;
-        _ ->
+      case get_soas(Questions) of
+        [] ->
           %% TODO: should this response be packet cached?
-          nxdomain_response(DecodedMessage)
+          nxdomain_response(DecodedMessage);
+        _ ->
+          Response = answer_questions(Questions, DecodedMessage, Host),
+          case Response#dns_message.aa of
+            true -> erldns_packet_cache:put(Questions, Response#dns_message.answers, Response#dns_message.authority, Response#dns_message.additional);
+            _ -> ok
+          end,
+          Response
       end
-  end.
-
-%% Check to see if we are authoritative for the domain.
-check_soa(Questions) ->
-  case get_soas(Questions) of
-    [] -> false;
-    _ -> true
   end.
 
 %% Check all of the questions against all of the responders.
@@ -58,6 +54,12 @@ check_soa(Questions) ->
 %% TODO: rescue from case where soa function is not defined.
 get_soas(Questions) ->
   lists:flatten(lists:map(fun(Q) -> [F([Q#dns_query.name]) || F <- soa_functions()] end, Questions)).
+
+get_soas_by_name(Qname) ->
+  [F([Qname]) || F <- soa_functions()].
+
+%% Look for an exact match SOA
+get_exact_soas(Qname) -> query_responders(Qname, ?DNS_TYPE_SOA_NUMBER).
 
 %% Get metadata for the domain connected to the given query name.
 get_metadata(Qname) ->
@@ -69,7 +71,18 @@ answer_questions([], Response, _Host) ->
   Response;
 answer_questions([Q|Rest], Response, Host) ->
   [Qname, Qtype] = [Q#dns_query.name, Q#dns_query.type],
-  answer_questions(Rest, build_response(lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype, Host), Host)), Response), Host).
+  case lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype, Host), Host)) of
+    [] ->
+      case get_exact_soas(Qname) of
+        [] ->
+          case answer_question(Qname, ?DNS_TYPE_NS_NUMBER, Host) of
+            [] -> answer_questions(Rest, build_authoritative_response([], get_soas_by_name(Qname), [], Response), Host);
+            Answers -> answer_questions(Rest, build_delegated_response([], Answers, [], Response), Host)
+          end;
+        _ -> answer_questions(Rest, build_authoritative_response([], get_soas_by_name(Qname), [], Response), Host)
+      end;
+    Answers -> answer_questions(Rest, build_authoritative_response(Answers, [], [], Response), Host)
+  end.
 
 %% Retreive all answers to the specific question.
 answer_question(Qname, Qtype = ?DNS_TYPE_AXFR_NUMBER, Host) ->
@@ -95,14 +108,29 @@ query_responders(Qname, Qtype, [F|AnswerFunctions]) ->
 
 % Return an NXDOMAIN response since we are not authoritative.
 nxdomain_response(Message) ->
-  Message#dns_message{anc = 0, qr = true, aa = false, rc = ?DNS_RCODE_NXDOMAIN, answers = []}.
+  Response = build_response([], [], [], Message),
+  Response#dns_message{aa = false, rc = ?DNS_RCODE_NXDOMAIN}.
 
-%% Populate a response with the given answers
-build_response(Answers, Response) ->
-  case lists:all(fun(A) -> A#dns_rr.type =:= ?DNS_TYPE_NS end, Answers) of
-    true -> Response#dns_message{auc = length(Answers), qr = true, aa = false, authority = Answers};
-    false -> Response#dns_message{anc = length(Answers), qr = true, aa = true, answers = Answers}
-  end.
+build_delegated_response(Answers, Authority, Additional, Message) ->
+  Response = build_response(Answers, Authority, Additional, Message),
+  Response#dns_message{aa = false}.
+
+build_authoritative_response(Answers, Authority, Additional, Message) ->
+  Response = build_response(Answers, Authority, Additional, Message),
+  Response#dns_message{aa = true}.
+
+%% Populate a response with the given answers, authority and additional
+%% sections.
+build_response(Answers, Authority, Additional, Message) ->
+  Message#dns_message{
+    anc = length(Answers),
+    auc = length(Authority),
+    adc = length(Additional),
+    qr = true,
+    answers = Answers,
+    authority = Authority,
+    additional = Additional
+  }.
 
 %% Build a list of answer functions based on the registered responders.
 answer_functions() ->

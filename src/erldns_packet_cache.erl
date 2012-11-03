@@ -3,7 +3,7 @@
 -behavior(gen_server).
 
 % API
--export([start_link/0, get/1, put/2]).
+-export([start_link/0, get/1, put/4]).
 
 % Gen server hooks
 -export([init/1,
@@ -24,8 +24,8 @@ start_link() ->
 
 get(Question) ->
   gen_server:call(?SERVER, {get_packet, Question}).
-put(Question, Answer) ->
-  gen_server:call(?SERVER, {set_packet, [Question, Answer]}).
+put(Question, Answers, Authority, Additional) ->
+  gen_server:call(?SERVER, {set_packet, [Question, Answers, Authority, Additional]}).
 
 %% Gen server hooks
 init([]) ->
@@ -35,7 +35,7 @@ init([TTL]) ->
   {ok, #state{ttl = TTL}}.
 handle_call({get_packet, Question}, _From, State) ->
   case ets:lookup(packet_cache, Question) of
-    [{Question, {Answer, ExpiresAt}}] -> 
+    [{Question, {Answers, Authority, Additional, ExpiresAt}}] ->
       {_,T,_} = erlang:now(),
       case T > ExpiresAt of
         true -> 
@@ -43,13 +43,13 @@ handle_call({get_packet, Question}, _From, State) ->
           {reply, {error, cache_expired}, State};
         false ->
           lager:debug("Time is ~p. Packet hit expires at ~p.", [T, ExpiresAt]),
-          {reply, {ok, Answer}, State}
+          {reply, {ok, Answers, Authority, Additional}, State}
       end;
     _ -> {reply, {error, cache_miss}, State}
   end;
-handle_call({set_packet, [Question, Answer]}, _From, State) ->
+handle_call({set_packet, [Question, Answers, Authority, Additional]}, _From, State) ->
   {_,T,_} = erlang:now(),
-  ets:insert(packet_cache, {Question, {Answer, T + State#state.ttl}}),
+  ets:insert(packet_cache, {Question, {Answers, Authority, Additional, T + State#state.ttl}}),
   {reply, ok, State}.
 handle_cast(_Message, State) ->
   {noreply, State}.
