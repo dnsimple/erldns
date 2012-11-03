@@ -56,7 +56,7 @@ get_soas(Questions) ->
   lists:flatten(lists:map(fun(Q) -> [F([Q#dns_query.name]) || F <- soa_functions()] end, Questions)).
 
 get_soas_by_name(Qname) ->
-  [F([Qname]) || F <- soa_functions()].
+  lists:flatten([F([Qname]) || F <- soa_functions()]).
 
 %% Look for an exact match SOA
 get_exact_soas(Qname) -> query_responders(Qname, ?DNS_TYPE_SOA_NUMBER).
