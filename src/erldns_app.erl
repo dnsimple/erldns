@@ -8,19 +8,12 @@ start(Type, Args) ->
   lager:info("~p:start(~p, ~p)", [?MODULE, Type, Args]),
   random:seed(erlang:now()),
   erldns_mysql:init(),
-  optionally_start_debugger(),
   enable_metrics(),
   erldns_sup:start_link().
 
 stop(State) ->
   lager:info("~p:stop(~p)~n", [?MODULE, State]),
   ok.
-
-optionally_start_debugger() ->
-  case application:get_env(erldns, debugger) of
-    {ok, true} -> erldns_debugging:start();
-    _ -> ok
-  end.
 
 enable_metrics() ->
   lager:info("~p:enabling metrics", [?MODULE]),
