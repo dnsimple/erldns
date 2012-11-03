@@ -99,10 +99,9 @@ nxdomain_response(Message) ->
 
 %% Populate a response with the given answers
 build_response(Answers, Response) ->
-  case lists:all(fun(A) -> A#dns_rr.type =:= ?DNS_TYPE_NS end, Answers) of
-    true -> Response#dns_message{auc = length(Answers), qr = true, aa = false, authority = Answers};
-    false -> Response#dns_message{anc = length(Answers), qr = true, aa = true, answers = Answers}
-  end.
+  NewResponse = Response#dns_message{anc = length(Answers), qr = true, aa = true, answers = Answers},
+  lager:debug("Response: ~p~n", [NewResponse]),
+  NewResponse.
 
 %% Build a list of answer functions based on the registered responders.
 answer_functions() ->
