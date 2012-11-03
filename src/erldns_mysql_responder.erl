@@ -25,11 +25,16 @@ answer(Qname, Qtype) ->
 %% First a non-wildcard lookup will occur and if there are results those will
 %% be used. If no results are found then a wildcard lookup is attempted.
 lookup(Qname, Qtype) ->
-  Answers = lookup_name(Qname, Qtype, Qname),
-  case Answers of
-    [] -> lookup_wildcard_name(Qname, Qtype);
+  case Answers = lookup_name(Qname, Qtype, Qname) of
+    [] ->
+      case WildcardAnswers = lookup_wildcard_name(Qname, Qtype) of
+        [] -> lookup_delegations(Qname);
+        _ -> WildcardAnswers
+      end;
     _ -> Answers
   end.
+
+lookup_delegations(Qname) -> lists:map(fun(RR) -> mysql_to_record(Qname, RR) end, erldns_mysql:lookup_ns_records(Qname)).
 
 %% Lookup the record with the given name and type. The LookupName should
 %% be the value expected in the database (which may be a wildcard).
