@@ -44,7 +44,7 @@ lookup_wildcard_name(Qname, Qtype) ->
 
 lookup_wildcard_name(_Qname, _Qtype, [], _Records, Matches) -> Matches;
 lookup_wildcard_name(Qname, Qtype, [DomainName|Rest], Records, Matches) ->
-  WildcardName = erldns_mysql:wildcard_qname(DomainName),
+  WildcardName = erldns_records:wildcard_qname(DomainName),
   NewMatches = lists:filter(
     fun(R) ->
         (R#mysql_rr.name =:= WildcardName) and ((R#mysql_rr.type =:= Qtype) or (R#mysql_rr.type =:= <<"CNAME">>))
@@ -56,7 +56,7 @@ mysql_to_record(Qname, Record) when is_record(Record, mysql_rr) ->
   lager:debug("~p:mysql_to_record(~p, ~p)", [?MODULE, Qname, Record]),
   case parse_content(Record#mysql_rr.content, Record#mysql_rr.priority, Record#mysql_rr.type) of
     unsupported -> [];
-    Data -> #dns_rr{name=erldns_mysql:optionally_convert_wildcard(Record#mysql_rr.name, Qname), type=erldns_records:name_type(Record#mysql_rr.type), data=Data, ttl=default_ttl(Record#mysql_rr.ttl)}
+    Data -> #dns_rr{name=erldns_records:optionally_convert_wildcard(Record#mysql_rr.name, Qname), type=erldns_records:name_type(Record#mysql_rr.type), data=Data, ttl=default_ttl(Record#mysql_rr.ttl)}
   end;
 mysql_to_record(Qname, Value) ->
   lager:debug("~p:failed to convert mysql to record for ~p with ~p", [?MODULE, Qname, Value]),

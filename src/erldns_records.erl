@@ -1,6 +1,21 @@
 -module(erldns_records).
 -include("dns.hrl").
--export([name_type/1]).
+-export([optionally_convert_wildcard/2, wildcard_qname/1, name_type/1]).
+
+%% If the name returned from the DB is a wildcard name then the
+%% Original Qname needs to be returned in its place.
+optionally_convert_wildcard(Name, Qname) ->
+  [Head|_] = dns:dname_to_labels(Name),
+  case Head of
+    <<"*">> -> Qname;
+    _ -> Name
+  end.
+
+%% Get a wildcard variation of a Qname. Replaces the leading
+%% label with an asterisk for wildcard lookup.
+wildcard_qname(Qname) ->
+  [_|Rest] = dns:dname_to_labels(Qname),
+  dns:labels_to_dname([<<"*">>] ++ Rest).
 
 %% @doc Returns the type value given a binary string.
 -spec name_type(binary()) -> dns:type() | 'undefined'.

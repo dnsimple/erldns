@@ -5,7 +5,7 @@
 -include("erldns.hrl").
 
 -export([init/0, lookup_name/3, lookup_records/1, lookup_soa/1, get_metadata/1, domain_names/1]).
--export([safe_mysql_handler/2, optionally_convert_wildcard/2, wildcard_qname/1]).
+-export([safe_mysql_handler/2]).
 
 % Prepare all statements.
 init() ->
@@ -88,18 +88,3 @@ safe_mysql_handler(Response, F) ->
       lager:error("~p:~p", [?MODULE, Data]),
       []
   end.
-
-%% If the name returned from the DB is a wildcard name then the
-%% Original Qname needs to be returned in its place.
-optionally_convert_wildcard(Name, Qname) ->
-  [Head|_] = dns:dname_to_labels(Name),
-  case Head of
-    <<"*">> -> Qname;
-    _ -> Name
-  end.
-
-%% Get a wildcard variation of a Qname. Replaces the leading
-%% label with an asterisk for wildcard lookup.
-wildcard_qname(Qname) ->
-  [_|Rest] = dns:dname_to_labels(Qname),
-  dns:labels_to_dname([<<"*">>] ++ Rest).
