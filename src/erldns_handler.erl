@@ -10,12 +10,12 @@ handle({trailing_garbage, DecodedMessage, _}, Host) ->
 handle(DecodedMessage, Host) when is_record(DecodedMessage, dns_message) ->
   lager:debug("From host ~p received decoded message: ~p", [Host, DecodedMessage]),
   Questions = DecodedMessage#dns_message.questions,
-  case lists:any(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Questions) of
-    true ->
-      lager:debug("Questions: ~p", [Questions]),
-      lager:debug("Refusing to respond to ANY query"),
+  case erldns_query_throttle:throttle(DecodedMessage, Questions, Host) of
+    {throttled, Host, ReqCount} ->
+      lager:info("Throttled ANY query for ~p. (req count: ~p)", [Host, ReqCount]),
       DecodedMessage#dns_message{rc = ?DNS_RCODE_REFUSED};
-    false ->
+    ThrottleResponse ->
+      lager:debug("Throttle response: ~p", [ThrottleResponse]),
       lager:info("Questions: ~p", [Questions]),
       Message = handle_message(DecodedMessage, Questions, Host),
       erldns_axfr:optionally_append_soa(erldns_edns:handle(Message))
