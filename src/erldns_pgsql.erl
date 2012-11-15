@@ -3,7 +3,7 @@
 -include("dns.hrl").
 -include("erldns.hrl").
 
--export([init/0, lookup_name/3, lookup_records/1, lookup_soa/1, get_metadata/1, domain_names/1]).
+-export([init/0, lookup_name/3, lookup_records/1, lookup_soa/1, get_metadata/1, domain_names/1, equery/2, equery/3]).
 
 init() -> ok.
 
