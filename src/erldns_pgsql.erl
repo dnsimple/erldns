@@ -78,8 +78,9 @@ domain_names([], Names) -> Names;
 domain_names([Label|Rest], Names) -> domain_names(Rest, Names ++ [dns:labels_to_dname([Label] ++ Rest)]).
 
 %% Take a row and turn it into a DNS resource record.
-row_to_record(_, Row) ->
-  {_, _Id, Name, Type, Content, TTL, Priority, _ChangeDate, _Auth} = Row,
+row_to_record(_, {_, _Id, Name, Type, Content, TTL, Priority, _ChangeDate}) ->
+  #db_rr{name=Name, type=Type, content=Content, ttl=TTL, priority=Priority};
+row_to_record(_, {_, _Id, Name, Type, Content, TTL, Priority, _ChangeDate, _Auth}) ->
   #db_rr{name=Name, type=Type, content=Content, ttl=TTL, priority=Priority}.
 
 % Internal API
