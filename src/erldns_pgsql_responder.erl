@@ -1,7 +1,6 @@
--module(erldns_mysql_responder).
+-module(erldns_pgsql_responder).
 
 -include("dns.hrl").
--include("mysql.hrl").
 -include("erldns.hrl").
 
 -export([answer/2, get_soa/1, get_metadata/1]).
@@ -10,60 +9,63 @@
 get_soa(Qname) -> lookup_soa(Qname).
 
 %% Get the metadata for the name.
-get_metadata(Qname) -> erldns_mysql:get_metadata(Qname).
+get_metadata(Qname) -> erldns_pgsql:get_metadata(Qname).
 
 %% Answer the given question for the given name.
 answer(Qname, Qtype) ->
   lager:debug("~p:answer(~p, ~p)", [?MODULE, Qname, Qtype]),
   lists:flatten(
     folsom_metrics:histogram_timed_update(
-      mysql_responder_lookup_time, fun lookup/2, [Qname, Qtype]
+      pgsql_responder_lookup_time, fun lookup/2, [Qname, Qtype]
     )
   ).
 
-%% Lookup a specific name and type and convert it into a list of DNS records.
-%% First a non-wildcard lookup will occur and if there are results those will
-%% be used. If no results are found then a wildcard lookup is attempted.
+%% Lookup a specific name and type and convert it into a list 
+%% of DNS records. First a non-wildcard lookup will occur and
+%% if there are results those will be used. If no results are 
+%% found then a wildcard lookup is attempted.
 lookup(Qname, Qtype) ->
   case Answers = lookup_name(Qname, Qtype, Qname) of
     [] -> lookup_wildcard_name(Qname, Qtype);
     _ -> Answers
   end.
 
-%% Lookup the record with the given name and type. The LookupName should
-%% be the value expected in the database (which may be a wildcard).
+%% Lookup the record with the given name and type. The 
+%% LookupName should be the value expected in the database 
+%% (which may be a wildcard).
 lookup_name(Qname, Qtype, LookupName) ->
-  lists:map(fun(RR) -> mysql_to_record(Qname, RR) end, erldns_mysql:lookup_name(Qname, Qtype, LookupName)). 
+  lists:map(fun(RR) -> db_to_record(Qname, RR) end, erldns_pgsql:lookup_name(Qname, Qtype, LookupName)). 
 
 %% Lookup the SOA record for a given name.
-lookup_soa(Qname) -> mysql_to_record(Qname, erldns_mysql:lookup_soa(Qname)).
+lookup_soa(Qname) -> db_to_record(Qname, erldns_pgsql:lookup_soa(Qname)).
 
 %% Given the Qname find any wildcard matches.
 lookup_wildcard_name(Qname, Qtype) ->
-  lists:map(fun(R) -> mysql_to_record(Qname, R) end, lookup_wildcard_name(Qname, Qtype, erldns_mysql:domain_names(Qname), erldns_mysql:lookup_records(Qname), [])).
+  lists:map(fun(R) -> db_to_record(Qname, R) end, lookup_wildcard_name(Qname, Qtype, erldns_pgsql:domain_names(Qname), erldns_pgsql:lookup_records(Qname), [])).
 
 lookup_wildcard_name(_Qname, _Qtype, [], _Records, Matches) -> Matches;
 lookup_wildcard_name(Qname, Qtype, [DomainName|Rest], Records, Matches) ->
   WildcardName = erldns_records:wildcard_qname(DomainName),
   NewMatches = lists:filter(
     fun(R) ->
-        (R#mysql_rr.name =:= WildcardName) and ((R#mysql_rr.type =:= Qtype) or (R#mysql_rr.type =:= <<"CNAME">>))
+        (R#db_rr.name =:= WildcardName) and ((R#db_rr.type =:= Qtype) or (R#db_rr.type =:= <<"CNAME">>))
     end, Records),
   lookup_wildcard_name(Qname, Qtype, Rest, Records, Matches ++ NewMatches).
 
 %% Convert an internal MySQL representation to a dns RR.
-mysql_to_record(Qname, Record) when is_record(Record, mysql_rr) ->
-  lager:debug("~p:mysql_to_record(~p, ~p)", [?MODULE, Qname, Record]),
-  case parse_content(Record#mysql_rr.content, Record#mysql_rr.priority, Record#mysql_rr.type) of
+db_to_record(Qname, Record) when is_record(Record, db_rr) ->
+  lager:debug("~p:db_to_record(~p, ~p)", [?MODULE, Qname, Record]),
+  case parse_content(Record#db_rr.content, Record#db_rr.priority, Record#db_rr.type) of
     unsupported -> [];
-    Data -> #dns_rr{name=erldns_records:optionally_convert_wildcard(Record#mysql_rr.name, Qname), type=erldns_records:name_type(Record#mysql_rr.type), data=Data, ttl=default_ttl(Record#mysql_rr.ttl)}
+    Data -> #dns_rr{name=erldns_records:optionally_convert_wildcard(Record#db_rr.name, Qname), type=erldns_records:name_type(Record#db_rr.type), data=Data, ttl=default_ttl(Record#db_rr.ttl)}
   end;
-mysql_to_record(Qname, Value) ->
-  lager:debug("~p:failed to convert mysql to record for ~p with ~p", [?MODULE, Qname, Value]),
+db_to_record(Qname, Value) ->
+  lager:debug("~p:failed to convert DB record to DNS record for ~p with ~p", [?MODULE, Qname, Value]),
   [].
 
+
 %% All of these functions are used to parse the content field
-%% stored in MySQL into a correct dns_rrdata in-memory record.
+%% stored in the DB into a correct dns_rrdata in-memory record.
 parse_content(Content, _, ?DNS_TYPE_SOA_BSTR) ->
   [MnameStr, RnameStr, SerialStr, RefreshStr, RetryStr, ExpireStr, MinimumStr] = string:tokens(binary_to_list(Content), " "),
   [Mname, Rname, Serial, Refresh, Retry, Expire, Minimum] = [MnameStr, re:replace(RnameStr, "@", ".", [{return, list}]), to_i(SerialStr), to_i(RefreshStr), to_i(RetryStr), to_i(ExpireStr), to_i(MinimumStr)],

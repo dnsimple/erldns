@@ -1,24 +1,10 @@
-[{mysql,[
-    {pools, [
-        {dns_pool, [
-            {size, 10},
-            {max_overflow, 20},
-            {host, "localhost"},
-            {port, 3306},
-            {database, "dbname"},
-            {user, "dbuser"},
-            {password, "dbpassword"},
-            {encoding, utf8}]
-        }
-      ]
-    }]
-  },
+[
   {erldns,[
     {port, 8053},
-    {inet4, {127,0,0,1}},
+    {inet4, "127.0.0.1"}},
     {inet6, "::1"},
     {debugger, false},
-    {responders, [erldns_mysql_responder]},
+    {responders, [erldns_pgsql_responder]},
     {pools, [
       {tcp_worker_pool, [
         {size, 10},
@@ -28,6 +14,18 @@
         {size, 10},
         {max_overflow, 20}
       ]}
+    ]},
+    {pg_pool, [
+      {pgsql_pool, [
+        {size, 10},
+        {max_overflow, 20}
+      ],[
+        {hostname, "127.0.0.1"},
+        {database, "dbname"},
+        {username, "dbuser"},
+        {password, "dbpassword"}
+      ]}
+    ]}
   ]},
   {lager, [
     {handlers, [
@@ -35,4 +33,3 @@
     ]}
   ]}
 ].
-
