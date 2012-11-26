@@ -48,13 +48,15 @@ lookup_wildcard_name(Qname, Qtype, [DomainName|Rest], Records, Matches) ->
   WildcardName = erldns_records:wildcard_qname(DomainName),
   NewMatches = lists:filter(
     fun(R) ->
-        (R#db_rr.name =:= WildcardName) and ((R#db_rr.type =:= Qtype) or (R#db_rr.type =:= <<"CNAME">>))
+        case Qtype of
+          ?DNS_TYPE_ANY_BSTR -> R#db_rr.name =:= WildcardName;
+          _ -> (R#db_rr.name =:= WildcardName) and ((R#db_rr.type =:= Qtype) or (R#db_rr.type =:= <<"CNAME">>))
+        end
     end, Records),
   lookup_wildcard_name(Qname, Qtype, Rest, Records, Matches ++ NewMatches).
 
 %% Convert an internal MySQL representation to a dns RR.
 db_to_record(Qname, Record) when is_record(Record, db_rr) ->
-  lager:debug("~p:db_to_record(~p, ~p)", [?MODULE, Qname, Record]),
   case parse_content(Record#db_rr.content, Record#db_rr.priority, Record#db_rr.type) of
     unsupported -> [];
     Data -> #dns_rr{name=erldns_records:optionally_convert_wildcard(Record#db_rr.name, Qname), type=erldns_records:name_type(Record#db_rr.type), data=Data, ttl=default_ttl(Record#db_rr.ttl)}
