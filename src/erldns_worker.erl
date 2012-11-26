@@ -1,6 +1,6 @@
 -module(erldns_worker).
 
--include("dns_records.hrl").
+-include("dns.hrl").
 
 -behaviour(gen_server).
 -behaviour(poolboy_worker).

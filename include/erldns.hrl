@@ -1,5 +1,5 @@
--record(mysql_rr, {name,
-                   type, 
-                   content, 
-                   ttl, 
-                   priority}).
+-record(db_rr, {name,
+                type,
+                content,
+                ttl,
+                priority}).

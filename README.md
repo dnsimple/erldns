@@ -4,18 +4,17 @@ Serve DNS authoritative responses...with Erlang.
 
 ## Building
 
-In one call:
+To build clean:
 
-    make
+   ./build.sh
 
-Or two:
+If you've already built once and just want to recompile the erl-dns source:
 
-    ./rebar get-deps
     ./rebar compile
 
 ## Database
 
-Currently the MySQL responder uses the PowerDNS schema. See "http://doc.powerdns.com/generic-mypgsql-backends.html#idp8855424":http://doc.powerdns.com/generic-mypgsql-backends.html#idp8855424
+Currently the PostgreSQL responder uses the PowerDNS schema. See "http://doc.powerdns.com/generic-mypgsql-backends.html#idp9091088"
 
 ## Running
 
@@ -56,5 +55,6 @@ To implement your own responder:
 * Implement the answer/2, get_soa/1 and get_metadata/1 functions and export them.
 * Add your module name to the responders list in erldns.config.
 
-The erldns_mysql_responder is an example of how to write a responder.
+The erldns_pgsql_responder is provided to answer queries using data in a PostgreSQL database.
 
+Responders in the erldns.config are processed in order. The first responder to answer with at least one answer will short-circuit responder processing and will return the answers it has.
