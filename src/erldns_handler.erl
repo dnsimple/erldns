@@ -28,10 +28,10 @@ handle(BadMessage, Host) ->
 %% using the cached packet or continuing with the lookup process.
 handle_message(DecodedMessage, Questions, Host) ->
   case erldns_packet_cache:get(Questions) of
-    {ok, Answers, Authority, Additional} ->
+    {ok, CachedResponse} ->
       lager:debug("Packet cache hit"),
       %folsom_metrics:notify({packet_cache_hit, 1}),
-      build_authoritative_response(Answers, Authority, Additional, DecodedMessage);
+      CachedResponse#dns_message{id=DecodedMessage#dns_message.id};
     {error, _} -> 
       lager:debug("Packet cache miss"),
       %folsom_metrics:notify({packet_cache_miss, 1}),
@@ -56,7 +56,7 @@ handle_packet_cache_miss(DecodedMessage, Questions, _, Host) ->
 
 maybe_cache_packet(Questions, Response) ->
   case Response#dns_message.aa of
-    true -> erldns_packet_cache:put(Questions, Response#dns_message.answers, Response#dns_message.authority, Response#dns_message.additional);
+    true -> erldns_packet_cache:put(Questions, Response);
     _ -> ok
   end,
   Response.

@@ -3,7 +3,7 @@
 -behavior(gen_server).
 
 % API
--export([start_link/0, get/1, put/4, sweep/0]).
+-export([start_link/0, get/1, put/2, sweep/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -25,8 +25,8 @@ start_link() ->
 
 get(Question) ->
   gen_server:call(?SERVER, {get_packet, Question}).
-put(Question, Answers, Authority, Additional) ->
-  gen_server:call(?SERVER, {set_packet, [Question, Answers, Authority, Additional]}).
+put(Question, Response) ->
+  gen_server:call(?SERVER, {set_packet, [Question, Response]}).
 sweep() ->
   gen_server:cast(?SERVER, {sweep, []}).
 
@@ -39,7 +39,7 @@ init([TTL]) ->
   {ok, #state{ttl = TTL, tref = Tref}}.
 handle_call({get_packet, Question}, _From, State) ->
   case ets:lookup(packet_cache, Question) of
-    [{Question, {Answers, Authority, Additional, ExpiresAt}}] ->
+    [{Question, {Response, ExpiresAt}}] ->
       {_,T,_} = erlang:now(),
       case T > ExpiresAt of
         true -> 
@@ -47,18 +47,18 @@ handle_call({get_packet, Question}, _From, State) ->
           {reply, {error, cache_expired}, State};
         false ->
           lager:debug("Time is ~p. Packet hit expires at ~p.", [T, ExpiresAt]),
-          {reply, {ok, Answers, Authority, Additional}, State}
+          {reply, {ok, Response}, State}
       end;
     _ -> {reply, {error, cache_miss}, State}
   end;
-handle_call({set_packet, [Question, Answers, Authority, Additional]}, _From, State) ->
+handle_call({set_packet, [Question, Response]}, _From, State) ->
   {_,T,_} = erlang:now(),
-  ets:insert(packet_cache, {Question, {Answers, Authority, Additional, T + State#state.ttl}}),
+  ets:insert(packet_cache, {Question, {Response, T + State#state.ttl}}),
   {reply, ok, State}.
 handle_cast({sweep, []}, State) ->
   lager:debug("Sweeping packet cache"),
   {_, T, _} = erlang:now(),
-  Keys = ets:select(packet_cache, [{{'$1', {'_', '_', '_', '$2'}}, [{'<', '$2', T - 10}], ['$1']}]),
+  Keys = ets:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', T - 10}], ['$1']}]),
   lager:debug("Found keys: ~p", [Keys]),
   lists:foreach(fun(K) -> ets:delete(packet_cache, K) end, Keys),
   {noreply, State}.
