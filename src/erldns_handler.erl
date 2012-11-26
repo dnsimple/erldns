@@ -1,6 +1,6 @@
 -module(erldns_handler).
 
--include("dns_records.hrl").
+-include("dns.hrl").
 
 -export([handle/2]).
 
@@ -16,7 +16,6 @@ handle(DecodedMessage, Host) when is_record(DecodedMessage, dns_message) ->
       DecodedMessage#dns_message{rc = ?DNS_RCODE_REFUSED};
     ThrottleResponse ->
       lager:debug("Throttle response: ~p", [ThrottleResponse]),
-      lager:info("Questions: ~p", [Questions]),
       Message = handle_message(DecodedMessage, Questions, Host),
       erldns_axfr:optionally_append_soa(erldns_edns:handle(Message))
   end;
@@ -42,18 +41,24 @@ handle_packet_cache_miss(DecodedMessage, _Questions, [], _Host) ->
   %% TODO: should this response be packet cached?
   nxdomain_response(DecodedMessage);
 handle_packet_cache_miss(DecodedMessage, Questions, _, Host) ->
-  try answer_questions(Questions, DecodedMessage, Host) of
-    Response ->
-      case Response#dns_message.aa of
-        true -> erldns_packet_cache:put(Questions, Response#dns_message.answers, Response#dns_message.authority, Response#dns_message.additional);
-        _ -> ok
-      end,
-      Response
-    catch
-      Exception:Reason ->
-        lager:error("Error answering request: ~p (~p)", [Exception, Reason]),
-        error_response(DecodedMessage)
-    end.
+  case application:get_env(erldns, catch_exceptions) of
+    {ok, false} -> maybe_cache_packet(Questions, answer_questions(Questions, DecodedMessage, Host));
+    _ ->
+      try answer_questions(Questions, DecodedMessage, Host) of
+        Response -> maybe_cache_packet(Questions, Response)
+      catch
+        Exception:Reason ->
+          lager:error("Error answering request: ~p (~p)", [Exception, Reason]),
+          error_response(DecodedMessage)
+      end
+  end.
+
+maybe_cache_packet(Questions, Response) ->
+  case Response#dns_message.aa of
+    true -> erldns_packet_cache:put(Questions, Response#dns_message.answers, Response#dns_message.authority, Response#dns_message.additional);
+    _ -> ok
+  end,
+  Response.
 
 %% Check all of the questions against all of the responders.
 %% TODO: optimize to return first match
@@ -73,14 +78,38 @@ get_metadata(Qname) ->
 
 %% Answer the questions and return an updated copy of the given
 %% Response.
-answer_questions([], Response, _Host) ->
-  Response;
+answer_questions([], Response, Host) ->
+  additional_processing(Response, Host);
 answer_questions([Q|Rest], Response, Host) ->
   [Qname, Qtype] = [Q#dns_query.name, Q#dns_query.type],
   case lists:flatten(resolve_cnames(Qtype, answer_question(Qname, Qtype, Host), Host)) of
     [] -> try_delegation(Qname, Rest, get_exact_soas(Qname), Response, Host);
     Answers -> answer_questions(Rest, build_authoritative_response(Answers, [], [], Response), Host)
   end.
+
+%% Do additional processing
+additional_processing(Response, Host) ->
+  Names = lists:flatten(requires_additional_processing(Response#dns_message.answers, [])),
+  case Names of
+    [] -> Response;
+    _ ->
+      Records = lists:flatten(lists:map(
+          fun(Qname) ->
+              resolve_cnames(?DNS_TYPE_A, answer_question(Qname, ?DNS_TYPE_A, Host), Host)
+          end, Names)),
+      Additional = Response#dns_message.additional ++ Records,
+      AdditionalCount = length(Additional),
+      Response#dns_message{adc=AdditionalCount, additional=Additional}
+  end.
+
+requires_additional_processing([], RequiresAdditional) -> RequiresAdditional;
+requires_additional_processing([Answer|Rest], RequiresAdditional) ->
+  Names = case Answer#dns_rr.data of
+    Data when is_record(Data, dns_rrdata_ns) -> [Data#dns_rrdata_ns.dname];
+    Data when is_record(Data, dns_rrdata_mx) -> [Data#dns_rrdata_mx.exchange];
+    _ -> []
+  end,
+  requires_additional_processing(Rest, RequiresAdditional ++ Names).
 
 %% Try to delegate a Qname since we couldn't find any answers.
 try_delegation(Qname, Questions, [], Response, Host) ->
@@ -132,7 +161,6 @@ build_authoritative_response(Answers, Authority, Additional, Message) ->
 
 build_authoritative_nxdomain_response(Answers, Authority, Additional, Message) ->
   NewAuthority = rewrite_soa_ttl(Authority),
-  lager:info("New authority: ~p", [NewAuthority]),
   Response = build_response(Answers, NewAuthority, Additional, Message),
   Response#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN}.
 
@@ -151,18 +179,14 @@ build_response(Answers, Authority, Additional, Message) ->
 
 %% According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
 %% must be set to the value of the minimum field in the SOA content.
-rewrite_soa_ttl(Authority) ->
-  lager:info("Rewriting SOA TTL: ~p", [Authority]),
-  rewrite_soa_ttl(Authority, []).
+rewrite_soa_ttl(Authority) -> rewrite_soa_ttl(Authority, []).
 rewrite_soa_ttl([], NewAuthority) -> NewAuthority;
 rewrite_soa_ttl([R|Rest], NewAuthority) ->
   Rdata = R#dns_rr.data,
-  lager:info("Record data: ~p", [Rdata]),
   Record = case Rdata of
     Data when is_record(Data, dns_rrdata_soa) -> R#dns_rr{ttl = Data#dns_rrdata_soa.minimum};
     _ -> R
   end,
-  lager:info("Rewritten record: ~p", [Record]),
   rewrite_soa_ttl(Rest, NewAuthority ++ [Record]).
 
 %% Build a list of answer functions based on the registered responders.
