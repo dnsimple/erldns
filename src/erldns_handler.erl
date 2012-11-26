@@ -16,6 +16,7 @@ handle(DecodedMessage, Host) when is_record(DecodedMessage, dns_message) ->
       DecodedMessage#dns_message{rc = ?DNS_RCODE_REFUSED};
     ThrottleResponse ->
       lager:debug("Throttle response: ~p", [ThrottleResponse]),
+      lager:info("Questions: ~p", [Questions]),
       Message = handle_message(DecodedMessage, Questions, Host),
       erldns_axfr:optionally_append_soa(erldns_edns:handle(Message))
   end;
@@ -102,6 +103,7 @@ additional_processing(Response, Host) ->
       Response#dns_message{adc=AdditionalCount, additional=Additional}
   end.
 
+%% Given a list of answers find the names that require additional processing.
 requires_additional_processing([], RequiresAdditional) -> RequiresAdditional;
 requires_additional_processing([Answer|Rest], RequiresAdditional) ->
   Names = case Answer#dns_rr.data of
