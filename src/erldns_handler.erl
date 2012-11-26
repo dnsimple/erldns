@@ -85,7 +85,7 @@ answer_questions([Q|Rest], Response, Host) ->
 %% Try to delegate a Qname since we couldn't find any answers.
 try_delegation(Qname, Questions, [], Response, Host) ->
   case answer_question(Qname, ?DNS_TYPE_NS_NUMBER, Host) of
-    [] -> answer_questions(Questions, build_authoritative_response([], get_soas_by_name(Qname), [], Response), Host);
+    [] -> answer_questions(Questions, build_authoritative_nxdomain_response([], get_soas_by_name(Qname), [], Response), Host);
     Answers -> answer_questions(Questions, build_delegated_response([], Answers, [], Response), Host)
   end;
 try_delegation(Qname, Questions, _, Response, Host) ->
@@ -130,6 +130,12 @@ build_authoritative_response(Answers, Authority, Additional, Message) ->
   Response = build_response(Answers, Authority, Additional, Message),
   Response#dns_message{aa = true}.
 
+build_authoritative_nxdomain_response(Answers, Authority, Additional, Message) ->
+  NewAuthority = rewrite_soa_ttl(Authority),
+  lager:info("New authority: ~p", [NewAuthority]),
+  Response = build_response(Answers, NewAuthority, Additional, Message),
+  Response#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN}.
+
 %% Populate a response with the given answers, authority and additional
 %% sections.
 build_response(Answers, Authority, Additional, Message) ->
@@ -138,10 +144,26 @@ build_response(Answers, Authority, Additional, Message) ->
     auc = length(Authority),
     adc = length(Additional),
     qr = true,
-    answers = Answers,
-    authority = Authority,
-    additional = Additional
+    answers = Answers ++ Message#dns_message.answers,
+    authority = Authority ++ Message#dns_message.authority,
+    additional = Additional ++ Message#dns_message.additional
   }.
+
+%% According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
+%% must be set to the value of the minimum field in the SOA content.
+rewrite_soa_ttl(Authority) ->
+  lager:info("Rewriting SOA TTL: ~p", [Authority]),
+  rewrite_soa_ttl(Authority, []).
+rewrite_soa_ttl([], NewAuthority) -> NewAuthority;
+rewrite_soa_ttl([R|Rest], NewAuthority) ->
+  Rdata = R#dns_rr.data,
+  lager:info("Record data: ~p", [Rdata]),
+  Record = case Rdata of
+    Data when is_record(Data, dns_rrdata_soa) -> R#dns_rr{ttl = Data#dns_rrdata_soa.minimum};
+    _ -> R
+  end,
+  lager:info("Rewritten record: ~p", [Record]),
+  rewrite_soa_ttl(Rest, NewAuthority ++ [Record]).
 
 %% Build a list of answer functions based on the registered responders.
 answer_functions() ->
