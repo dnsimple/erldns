@@ -82,6 +82,7 @@ record_request({Response, Host, ReqCount}) ->
   ets:insert(host_throttle, {Host, {ReqCount, T}}),
   {Response, Host, ReqCount}.
 
+is_throttled({127,0,0,1}, ReqCount, _) -> {false, ReqCount + 1};
 is_throttled(Host, ReqCount, LastRequestAt) ->
    {_,T,_} = erlang:now(),
    ExceedsLimit = ReqCount >= ?LIMIT,
