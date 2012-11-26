@@ -144,9 +144,9 @@ build_response(Answers, Authority, Additional, Message) ->
     auc = length(Authority),
     adc = length(Additional),
     qr = true,
-    answers = Answers ++ Message#dns_message.answers,
-    authority = Authority ++ Message#dns_message.authority,
-    additional = Additional ++ Message#dns_message.additional
+    answers = Answers,
+    authority = Authority,
+    additional = Additional
   }.
 
 %% According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
