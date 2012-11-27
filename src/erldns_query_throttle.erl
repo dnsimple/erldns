@@ -5,7 +5,7 @@
 -include("dns_records.hrl").
 
 % API
--export([start_link/0, throttle/3, sweep/0]).
+-export([start_link/0, throttle/2, sweep/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -26,8 +26,8 @@
 start_link() ->
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-throttle(DecodedMessage, Questions, Host) ->
-  gen_server:call(?MODULE, {throttle, DecodedMessage, Questions, Host}).
+throttle(Message, Host) ->
+  gen_server:call(?MODULE, {throttle, Message, Host}).
 sweep() ->
   gen_server:cast(?MODULE, {sweep}).
 
@@ -37,8 +37,8 @@ init([]) ->
   {ok, Tref} = timer:apply_interval(?SWEEP_INTERVAL, ?MODULE, sweep, []),
   {ok, #state{tref = Tref}}.
 
-handle_call({throttle, _, Questions, Host}, _From, State) ->
-  case lists:filter(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Questions) of
+handle_call({throttle, Message, Host}, _From, State) ->
+  case lists:filter(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Message#dns_message.questions) of
     [] -> {reply, ok, State};
     _ -> {reply, record_request(maybe_throttle(Host)), State}
   end.
@@ -76,11 +76,11 @@ maybe_throttle(Host) ->
       {ok, Host, 1}
   end.
 
-record_request({Response, Host, ReqCount}) ->
+record_request({ThrottleResponse, Host, ReqCount}) ->
   {_, T, _} = erlang:now(),
   lager:debug("Recording request for ~p {~p, ~p}", [Host, ReqCount, T]),
   ets:insert(host_throttle, {Host, {ReqCount, T}}),
-  {Response, Host, ReqCount}.
+  {ThrottleResponse, Host, ReqCount}.
 
 is_throttled({127,0,0,1}, ReqCount, _) -> {false, ReqCount + 1};
 is_throttled(Host, ReqCount, LastRequestAt) ->

@@ -3,20 +3,20 @@
 -include("dns.hrl").
 -include("erldns.hrl").
 
--export([answer/2, get_soa/1, get_metadata/1]).
+-export([answer/3, get_soa/2, get_metadata/2]).
 
 %% Get the SOA record for the name.
-get_soa(Qname) -> lookup_soa(Qname).
+get_soa(Qname, _Message) -> lookup_soa(Qname).
 
 %% Get the metadata for the name.
-get_metadata(Qname) -> erldns_pgsql:get_metadata(Qname).
+get_metadata(Qname, _Message) -> erldns_pgsql:get_metadata(Qname).
 
 %% Answer the given question for the given name.
-answer(Qname, Qtype) ->
+answer(Qname, Qtype, Message) ->
   lager:debug("~p:answer(~p, ~p)", [?MODULE, Qname, Qtype]),
   lists:flatten(
     folsom_metrics:histogram_timed_update(
-      pgsql_responder_lookup_time, fun lookup/2, [Qname, Qtype]
+      pgsql_responder_lookup_time, fun lookup/3, [Qname, Qtype, Message]
     )
   ).
 
@@ -24,10 +24,10 @@ answer(Qname, Qtype) ->
 %% of DNS records. First a non-wildcard lookup will occur and
 %% if there are results those will be used. If no results are 
 %% found then a wildcard lookup is attempted.
-lookup(Qname, Qtype) ->
-  case Answers = lookup_name(Qname, Qtype, Qname) of
+lookup(Qname, Qtype, _Message) ->
+  case lookup_name(Qname, Qtype, Qname) of
     [] -> lookup_wildcard_name(Qname, Qtype);
-    _ -> Answers
+    Answers -> Answers
   end.
 
 %% Lookup the record with the given name and type. The 
@@ -41,28 +41,41 @@ lookup_soa(Qname) -> db_to_record(Qname, erldns_pgsql:lookup_soa(Qname)).
 
 %% Given the Qname find any wildcard matches.
 lookup_wildcard_name(Qname, Qtype) ->
-  lists:map(fun(R) -> db_to_record(Qname, R) end, lookup_wildcard_name(Qname, Qtype, erldns_pgsql:domain_names(Qname), erldns_pgsql:lookup_records(Qname), [])).
+  lists:map(fun(R) -> db_to_record(Qname, R, true) end, lookup_wildcard_name(Qname, Qtype, erldns_pgsql:domain_names(Qname), erldns_pgsql:lookup_records(Qname))).
 
-lookup_wildcard_name(_Qname, _Qtype, [], _Records, Matches) -> Matches;
-lookup_wildcard_name(Qname, Qtype, [DomainName|Rest], Records, Matches) ->
+lookup_wildcard_name(_Qname, _Qtype, [], _Records) -> [];
+lookup_wildcard_name(Qname, Qtype, [DomainName|Rest], Records) ->
   WildcardName = erldns_records:wildcard_qname(DomainName),
-  NewMatches = lists:filter(
+  Matches = lists:filter(
     fun(R) ->
         case Qtype of
           ?DNS_TYPE_ANY_BSTR -> R#db_rr.name =:= WildcardName;
           _ -> (R#db_rr.name =:= WildcardName) and ((R#db_rr.type =:= Qtype) or (R#db_rr.type =:= <<"CNAME">>))
         end
     end, Records),
-  lookup_wildcard_name(Qname, Qtype, Rest, Records, Matches ++ NewMatches).
+  case Matches of
+    [] -> lookup_wildcard_name(Qname, Qtype, Rest, Records);
+    _ -> Matches
+  end.
 
 %% Convert an internal MySQL representation to a dns RR.
-db_to_record(Qname, Record) when is_record(Record, db_rr) ->
+db_to_record(Qname, Record) when is_record(Record, db_rr) -> db_to_record(Qname, Record, false).
+db_to_record(Qname, Record, IsWildcard) when is_record(Record, db_rr) ->
   case parse_content(Record#db_rr.content, Record#db_rr.priority, Record#db_rr.type) of
     unsupported -> [];
-    Data -> #dns_rr{name=erldns_records:optionally_convert_wildcard(Record#db_rr.name, Qname), type=erldns_records:name_type(Record#db_rr.type), data=Data, ttl=default_ttl(Record#db_rr.ttl)}
+    Data -> 
+      #rr{
+        dns_rr = #dns_rr{
+          name = erldns_records:optionally_convert_wildcard(Record#db_rr.name, Qname),
+          type = erldns_records:name_type(Record#db_rr.type),
+          data = Data,
+          ttl  = default_ttl(Record#db_rr.ttl) 
+        },
+        wildcard = IsWildcard
+      }
   end;
-db_to_record(Qname, Value) ->
-  lager:debug("~p:failed to convert DB record to DNS record for ~p with ~p", [?MODULE, Qname, Value]),
+db_to_record(Qname, Value, IsWildcard) ->
+  lager:debug("~p:failed to convert DB record to DNS record for ~p with ~p (wildcard? ~p)", [?MODULE, Qname, Value, IsWildcard]),
   [].
 
 
@@ -114,6 +127,18 @@ parse_content(Content, _, ?DNS_TYPE_RP_BSTR) ->
 parse_content(Content, _, ?DNS_TYPE_HINFO_BSTR) ->
   [Cpu, Os] = string:tokens(binary_to_list(Content), " "),
   #dns_rrdata_hinfo{cpu=Cpu, os=Os};
+
+% TODO: this does not properly encode yet.
+parse_content(Content, _, ?DNS_TYPE_LOC_BSTR) ->
+  % 51 56 0.123 N 5 54 0.000 E 4.00m 1.00m 10000.00m 10.00m
+  [DegLat, MinLat, SecLat, _DirLat, DegLon, MinLon, SecLon, _DirLon, AltStr, SizeStr, HorizontalStr, VerticalStr] = string:tokens(binary_to_list(Content), " "),
+  Alt = to_i(string:strip(AltStr, right, $m)),
+  Size = list_to_float(string:strip(SizeStr, right, $m)),
+  Horizontal = list_to_float(string:strip(HorizontalStr, right, $m)),
+  Vertical = list_to_float(string:strip(VerticalStr, right, $m)),
+  Lat = to_i(DegLat) + to_i(MinLat) / 60 + to_i(SecLat) / 3600,
+  Lon = to_i(DegLon) + to_i(MinLon) / 60 + to_i(SecLon) / 3600,
+  #dns_rrdata_loc{lat=Lat, lon=Lon, alt=Alt, size=Size, horiz=Horizontal, vert=Vertical};
 
 parse_content(Content, _, ?DNS_TYPE_AFSDB_BSTR) ->
   [SubtypeStr, Hostname] = string:tokens(binary_to_list(Content), " "),
