@@ -85,8 +85,13 @@ exact_match_resolution(Message, Qname, Qtype, Records, Host, Wildcard, CnameChai
         _ ->
           lager:info("Found CNAME, but qtype is ~p", [Qtype]),
           RR = lists:last(lists:filter(match_type(?DNS_TYPE_CNAME), RRs)),
-          lager:info("Restarting query with CNAME name ~p", [RR#dns_rr.data#dns_rrdata_cname.dname]),
-          resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [RR]}, RR#dns_rr.data#dns_rrdata_cname.dname, Qtype, Records, Host, CnameChain ++ [RR], Wildcard)
+          case lists:member(RR, CnameChain) of
+            true ->
+              Message#dns_message{aa = true, rc = ?DNS_RCODE_SERVFAIL};
+            false ->
+              lager:info("Restarting query with CNAME name ~p", [RR#dns_rr.data#dns_rrdata_cname.dname]),
+              resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [RR]}, RR#dns_rr.data#dns_rrdata_cname.dname, Qtype, Records, Host, Wildcard, CnameChain ++ [RR])
+          end
       end;
     false ->
       lager:info("No CNAME records found in matches"),
@@ -136,10 +141,14 @@ best_match_resolution(Message, Qname, Qtype, Records, Host, _Wildcard, CnameChai
   IsAuthority = lists:any(match_type(?DNS_TYPE_SOA), BestMatchRecords),
   case AnyReferrals of
     true ->
+      lager:info("Referral found"),
       case IsAuthority of
         true ->
-          rewrite_soa_ttl(Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = lists:filter(match_type(?DNS_TYPE_SOA), BestMatchRecords)});
+          Authority = lists:filter(match_type(?DNS_TYPE_SOA), BestMatchRecords),
+          lager:info("Is authority: ~p", [Authority]),
+          rewrite_soa_ttl(Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Authority});
         false ->
+          lager:info("Is not authority"),
           NSRecords = lists:filter(match_type(?DNS_TYPE_NS), BestMatchRecords),
           lager:info("Referral found: ~p", [NSRecords]),
           AuthorityRecords = Message#dns_message.authority ++ NSRecords,
@@ -167,8 +176,13 @@ best_match_resolution(Message, Qname, Qtype, Records, Host, _Wildcard, CnameChai
                 _ ->
                   lager:info("Found CNAME, but qtype is ~p", [Qtype]),
                   RR = lists:last(lists:filter(match_type(?DNS_TYPE_CNAME), lists:map(replace_name(Qname), BestMatchRecords))),
-                  lager:info("Restarting resolve with ~p", [RR#dns_rr.data#dns_rrdata_cname.dname]),
-                  resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [RR]}, RR#dns_rr.data#dns_rrdata_cname.dname, Qtype, Records, Host, IsWildcard, CnameChain ++ [RR])
+                  case lists:member(RR, CnameChain) of
+                    true ->
+                      Message#dns_message{aa = true, rc = ?DNS_RCODE_SERVFAIL};
+                    false ->
+                      lager:info("Restarting resolve with ~p", [RR#dns_rr.data#dns_rrdata_cname.dname]),
+                      resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [RR]}, RR#dns_rr.data#dns_rrdata_cname.dname, Qtype, Records, Host, IsWildcard, CnameChain ++ [RR])
+                  end
               end;
             false ->
               lager:info("Wildcard is not CNAME"),
@@ -209,12 +223,17 @@ best_match(Qname, [_|Rest], Records) ->
   end.
 
 %% Various matching functions.
-match_type(Type) -> fun(R) -> R#dns_rr.type =:= Type end.
-match_name(Name) -> fun(R) -> R#dns_rr.name =:= Name end.
-match_wildcard() -> fun(R) -> lists:any(fun(L) -> L =:= <<"*">> end, dns:dname_to_labels(R#dns_rr.name)) end.
+match_type(Type) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.type =:= Type end.
+match_name(Name) -> fun(R) -> 
+      case R of
+        _ when is_record(R, dns_rr) -> R#dns_rr.name =:= Name;
+        _ -> lager:error("match_name(~p)(~p)", [Name, R]), false
+      end
+  end.
+match_wildcard() -> fun(R) when is_record(R, dns_rr) -> lists:any(fun(L) -> L =:= <<"*">> end, dns:dname_to_labels(R#dns_rr.name)) end.
 
 %% Replacement functions.
-replace_name(Name) -> fun(R) -> R#dns_rr{name = Name} end.
+replace_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} end.
 
 %% Check all of the questions against all of the responders.
 %% TODO: optimize to return first match
@@ -234,7 +253,7 @@ to_dns_rr(Answers) -> lists:map(
         R when is_record(R, rr) -> R#rr.dns_rr;
         R when is_record(R, dns_rr) -> R
       end
-    end, Answers).
+    end, lists:flatten(Answers)).
 
 %% Do additional processing
 additional_processing(Message, Host) ->
