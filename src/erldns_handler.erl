@@ -98,37 +98,42 @@ exact_match_resolution(Message, Qname, Qtype, Records, Host, Wildcard, CnameChai
       % Step 3b: Referrals
       AnyReferrals = lists:any(match_type(?DNS_TYPE_NS), RRs),
       IsAuthority = lists:any(match_type(?DNS_TYPE_SOA), RRs),
-      case AnyReferrals of
-        true ->
-          lager:info("Found referrals"),
-          case IsAuthority of
+      ExactTypeMatch = lists:any(match_type(Qtype), RRs),
+      case ExactTypeMatch of
+        true -> Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = lists:filter(match_type(Qtype), RRs)};
+        false ->
+          case AnyReferrals of
             true ->
-              lager:info("Found an SOA record"),
-              case Qtype of
-                ?DNS_TYPE_ANY -> Message#dns_message{aa = true, answers = RRs};
-                ?DNS_TYPE_NS -> Message#dns_message{aa = true, answers = lists:filter(match_type(?DNS_TYPE_NS), RRs)};
-                ?DNS_TYPE_SOA -> Message#dns_message{aa = true, answers = lists:filter(match_type(?DNS_TYPE_SOA), RRs)};
-                _ -> Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = lists:filter(match_type(?DNS_TYPE_SOA), RRs)}
+              lager:info("Found referrals"),
+              case IsAuthority of
+                true ->
+                  lager:info("Found an SOA record"),
+                  case Qtype of
+                    ?DNS_TYPE_ANY -> Message#dns_message{aa = true, answers = RRs};
+                    ?DNS_TYPE_NS -> Message#dns_message{aa = true, answers = lists:filter(match_type(?DNS_TYPE_NS), RRs)};
+                    ?DNS_TYPE_SOA -> Message#dns_message{aa = true, answers = lists:filter(match_type(?DNS_TYPE_SOA), RRs)};
+                    _ -> Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = lists:filter(match_type(?DNS_TYPE_SOA), RRs)}
+                  end;
+                false ->
+                  NSRecords = lists:filter(match_type(?DNS_TYPE_NS), RRs),
+                  Message#dns_message{authority = Message#dns_message.authority ++ NSRecords}
               end;
             false ->
-              NSRecords = lists:filter(match_type(?DNS_TYPE_NS), RRs),
-              Message#dns_message{authority = Message#dns_message.authority ++ NSRecords}
-          end;
-        false ->
-          lager:info("No referrals"),
-          Authority = lists:filter(match_type(?DNS_TYPE_SOA), AllRecords),
-          TypeMatches = case Qtype of
-            ?DNS_TYPE_ANY -> RRs;
-            _ -> lists:filter(match_type(Qtype), RRs)
-          end,
-          lager:info("Type matches: ~p", [TypeMatches]),
-          case TypeMatches of
-            [] ->
-              case CnameChain of
-                [] -> Message#dns_message{aa = true, authority = Authority};
-                _ -> rewrite_soa_ttl(Message#dns_message{aa = true, authority = Authority})
-              end;
-            _ -> Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}
+              lager:info("No referrals"),
+              Authority = lists:filter(match_type(?DNS_TYPE_SOA), AllRecords),
+              TypeMatches = case Qtype of
+                ?DNS_TYPE_ANY -> RRs;
+                _ -> lists:filter(match_type(Qtype), RRs)
+              end,
+              lager:info("Type matches: ~p", [TypeMatches]),
+              case TypeMatches of
+                [] ->
+                  case CnameChain of
+                    [] -> Message#dns_message{aa = true, authority = Authority};
+                    _ -> rewrite_soa_ttl(Message#dns_message{aa = true, authority = Authority})
+                  end;
+                _ -> Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}
+              end
           end
       end
   end.
