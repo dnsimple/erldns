@@ -9,7 +9,6 @@
 handle({trailing_garbage, Message, _}, Host) ->
   handle(Message, Host);
 handle(Message, Host) when is_record(Message, dns_message) ->
-  lager:debug("From host ~p received decoded message: ~p", [Host, Message]),
   case erldns_query_throttle:throttle(Message, Host) of
     {throttled, Host, ReqCount} ->
       lager:info("Throttled ANY query for ~p. (req count: ~p)", [Host, ReqCount]),
@@ -27,23 +26,17 @@ handle(BadMessage, Host) ->
 %% using the cached packet or continuing with the lookup process.
 handle_message(Message, Host) ->
   case erldns_packet_cache:get(Message#dns_message.questions) of
-    {ok, CachedResponse} ->
-      lager:debug("Packet cache hit"),
-      %folsom_metrics:notify({packet_cache_hit, 1}),
-      CachedResponse#dns_message{id=Message#dns_message.id};
-    {error, _} -> 
-      lager:debug("Packet cache miss"),
-      %folsom_metrics:notify({packet_cache_miss, 1}),
-      handle_packet_cache_miss(Message, get_soas(Message), Host)
+    {ok, CachedResponse} -> CachedResponse#dns_message{id=Message#dns_message.id};
+    {error, _} -> handle_packet_cache_miss(Message, get_soas(Message), Host)
   end.
 
 handle_packet_cache_miss(Message, [], _Host) -> Message#dns_message{aa = false, rc = ?DNS_RCODE_NXDOMAIN};
 handle_packet_cache_miss(Message, _, Host) ->
   Message2 = Message#dns_message{ra = false},
   case application:get_env(erldns, catch_exceptions) of
-    {ok, false} -> maybe_cache_packet(answer_questions(Message2, Host));
+    {ok, false} -> maybe_cache_packet(resolve(Message2, Host));
     _ ->
-      try answer_questions(Message2, Host) of
+      try resolve(Message2, Host) of
         Response -> maybe_cache_packet(Response)
       catch
         Exception:Reason ->
@@ -59,42 +52,167 @@ maybe_cache_packet(Message) ->
   end,
   Message.
 
+resolve(Message, Host) ->
+  % Step 1: Set the RA bit to false
+  Message2 = Message#dns_message{ra = false},
+  % Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
+  [Question|_] = Message2#dns_message.questions,
+  Records = erldns_pgsql:lookup_records(Question#dns_query.name),
+  additional_processing(resolve(Message2, Question#dns_query.name, Question#dns_query.type, Records, Host), Host).
+
+resolve(Message, Qname, Qtype, Records, Host) -> resolve(Message, Qname, Qtype, Records, Host, false, []).
+
+resolve(Message, Qname, Qtype, Records, Host, Wildcard, CnameChain) ->
+  % Step 3a: Exact match
+  AllRecords = to_dns_rr(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, Records)),
+  FilteredRecords = lists:filter(fun(R) -> R#db_rr.name =:= Qname end, Records),
+  case FilteredRecords of
+    [] ->
+      % Best match
+      BestMatchRecords = best_match(Qname, AllRecords),
+      lager:info("No exact match found, using ~p", [BestMatchRecords]),
+
+      % Step 3b: Referrals
+      AnyReferrals = lists:any(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_NS end, BestMatchRecords),
+      IsAuthority = lists:any(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_SOA end, BestMatchRecords),
+      case AnyReferrals of
+        true ->
+          case IsAuthority of
+            true ->
+              rewrite_soa_ttl(Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = lists:filter(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_SOA end, BestMatchRecords)});
+            false ->
+              NSRecords = lists:filter(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_NS end, BestMatchRecords),
+              lager:info("Referral found: ~p", [NSRecords]),
+              AuthorityRecords = Message#dns_message.authority ++ NSRecords,
+              Message#dns_message{authority = AuthorityRecords}
+          end;
+        false ->
+          % Step 3c
+          lager:info("No referrals found"),
+          IsWildcard = lists:any(fun(R) -> lists:any(fun(L) -> L =:= <<"*">> end, dns:dname_to_labels(R#dns_rr.name)) end, BestMatchRecords),
+          AnyCnames =  lists:any(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_CNAME end, BestMatchRecords),
+          case IsWildcard of
+            true ->
+              lager:info("Matched records are wildcard."),
+              case AnyCnames of
+                true ->
+                  lager:info("Wildcard record is CNAME"),
+                  case Qtype of
+                    ?DNS_TYPE_CNAME ->
+                      TypeMatchedRecords = case Qtype of
+                        ?DNS_TYPE_ANY -> BestMatchRecords;
+                        _ -> lists:filter(fun(R) -> R#dns_rr.type =:= Qtype end, BestMatchRecords)
+                      end,
+                      TypeMatches = lists:map(fun(R) -> R#dns_rr{name = Qname} end, TypeMatchedRecords),
+                      Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches};
+                    _ ->
+                      lager:info("Found CNAME, but qtype is ~p", [Qtype]),
+                      RR = lists:last(lists:filter(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_CNAME end, lists:map(fun(R) -> R#dns_rr{name = Qname} end, BestMatchRecords))),
+                      lager:info("Restarting resolve with ~p", [RR#dns_rr.data#dns_rrdata_cname.dname]),
+                      resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [RR]}, RR#dns_rr.data#dns_rrdata_cname.dname, Qtype, Records, Host, IsWildcard, CnameChain ++ [RR])
+                  end;
+                false ->
+                  lager:info("Wildcard is not CNAME"),
+                  TypeMatchedRecords = case Qtype of
+                    ?DNS_TYPE_ANY -> BestMatchRecords;
+                    _ -> lists:filter(fun(R) -> R#dns_rr.type =:= Qtype end, BestMatchRecords)
+                  end,
+                  TypeMatches = lists:map(fun(R) -> R#dns_rr{name = Qname} end, TypeMatchedRecords),
+                  Message#dns_message{aa = true, answers = TypeMatches}
+              end;
+            false ->
+              lager:info("Matched records are not wildcard."),
+              [Question|_] = Message#dns_message.questions,
+              case Qname =:= Question#dns_query.name of
+                true -> rewrite_soa_ttl(Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN});
+                false -> Message
+              end
+          end
+      end;
+    MatchedRecords ->
+      lager:info("Exact matches found: ~p", [length(MatchedRecords)]),
+      lager:info("Exact matches: ~p", [MatchedRecords]),
+      RRs = to_dns_rr(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, MatchedRecords)),
+      AnyCnames = lists:any(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_CNAME end, RRs),
+      case AnyCnames of
+        true ->
+          lager:info("Found CNAME records in matches"),
+          case Qtype of
+            ?DNS_TYPE_CNAME ->
+              TypeMatches = lists:filter(fun(R) -> R#dns_rr.type =:= Qtype end, RRs),
+              Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches};
+            _ ->
+              lager:info("Found CNAME, but qtype is ~p", [Qtype]),
+              RR = lists:last(lists:filter(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_CNAME end, RRs)),
+              lager:info("Restarting query with CNAME name ~p", [RR#dns_rr.data#dns_rrdata_cname.dname]),
+              resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [RR]}, RR#dns_rr.data#dns_rrdata_cname.dname, Qtype, Records, Host, CnameChain ++ [RR], Wildcard)
+          end;
+        false ->
+          lager:info("No CNAME records found in matches"),
+          % Step 3b: Referrals
+          AnyReferrals = lists:any(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_NS end, RRs),
+          IsAuthority = lists:any(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_SOA end, RRs),
+          case AnyReferrals of
+            true ->
+              lager:info("Found referrals"),
+              case IsAuthority of
+                true ->
+                  lager:info("Found an SOA record"),
+                  case Qtype of
+                    ?DNS_TYPE_ANY -> Message#dns_message{aa = true, answers = RRs};
+                    ?DNS_TYPE_NS -> Message#dns_message{aa = true, answers = lists:filter(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_NS end, RRs)};
+                    ?DNS_TYPE_SOA -> Message#dns_message{aa = true, answers = lists:filter(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_SOA end, RRs)};
+                    _ -> Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = lists:filter(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_SOA end, RRs)}
+                  end;
+                false ->
+                  NSRecords = lists:filter(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_NS end, RRs),
+                  Message#dns_message{authority = Message#dns_message.authority ++ NSRecords}
+              end;
+            false ->
+              lager:info("No referrals"),
+              Authority = lists:filter(fun(R) -> R#dns_rr.type =:= ?DNS_TYPE_SOA end, AllRecords),
+              TypeMatches = case Qtype of
+                ?DNS_TYPE_ANY -> RRs;
+                _ -> lists:filter(fun(R) -> R#dns_rr.type =:= Qtype end, RRs)
+              end,
+              lager:info("Type matches: ~p", [TypeMatches]),
+              case TypeMatches of
+                [] ->
+                  case CnameChain of
+                    [] -> Message#dns_message{aa = true, authority = Authority};
+                    _ -> rewrite_soa_ttl(Message#dns_message{aa = true, authority = Authority})
+                  end;
+                _ -> Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}
+              end
+          end
+      end
+  end.
+
+best_match(Qname, Records) ->
+  lager:info("Looking for best match in ~p", [Records]),
+  best_match(Qname, dns:dname_to_labels(Qname), Records).
+best_match(_, [], _) -> [];
+best_match(Qname, [_|Rest], Records) ->
+  WildcardName = dns:labels_to_dname([<<"*">>] ++ Rest),
+  case lists:filter(fun(R) -> R#dns_rr.name =:= WildcardName end, Records) of
+    [] ->
+      Name = dns:labels_to_dname(Rest),
+      case lists:filter(fun(R) -> R#dns_rr.name =:= Name end, Records) of
+        [] -> best_match(Qname, Rest, Records);
+        Matches -> Matches
+      end;
+    Matches -> Matches
+  end.
+
 %% Check all of the questions against all of the responders.
 %% TODO: optimize to return first match
 %% TODO: rescue from case where soa function is not defined.
 get_soas(Message) ->
   to_dns_rr(lists:flatten(lists:map(fun(Q) -> [F([Q#dns_query.name], Message) || F <- soa_functions()] end, Message#dns_message.questions))).
 
-get_soas_by_name(Qname, Message) ->
-  to_dns_rr(lists:flatten([F([Qname], Message) || F <- soa_functions()])).
-
-%% Look for an exact match SOA
-get_exact_soas(Qname, Message) -> 
-  to_dns_rr(query_responders(Qname, ?DNS_TYPE_SOA_NUMBER, Message)).
-
 %% Get metadata for the domain connected to the given query name.
 get_metadata(Qname, Message) ->
   lists:merge([F(Qname, Message) || F <- metadata_functions()]).
-
-%% Answer the questions and return an updated copy of the given
-%% Response.
-answer_questions(Message, Host) ->
-  answer_questions(Message#dns_message.questions, Message, Host).
-answer_questions([], Message, Host) ->
-  additional_processing(Message, Host);
-answer_questions([Q|Rest], Message, Host) ->
-  [Qname, Qtype] = [Q#dns_query.name, Q#dns_query.type],
-  Answers = answer_question(Qname, Qtype, Host, Message),
-  case cname_not_alone(Q, Answers, Message) of
-    true ->
-      Message#dns_message{aa = true, answers = to_dns_rr(extract_cname(Answers, Qname, Qtype, Host, Message)), rc = ?DNS_RCODE_NOERROR, authority = get_soas(Message)};
-    false ->
-      NewAnswers = to_dns_rr(lists:flatten(resolve_cnames(Qtype, Answers, Host, Message))),
-      case NewAnswers of
-        [] -> try_delegation(Qname, Rest, get_exact_soas(Qname, Message), Message, Host);
-        _ -> answer_questions(Rest, Message#dns_message{aa = true, answers = NewAnswers}, Host)
-      end
-  end.
 
 %% Answers are returned from responders as #rr records. This function
 %% converts those types of records to #dns_rr records.
@@ -106,31 +224,9 @@ to_dns_rr(Answers) -> lists:map(
       end
     end, Answers).
 
-% This logic is FUBAR'ed.
-extract_cname(Answers, Qname, Qtype, Host, Message) -> 
-  CnameRecords = lists:filter(fun(A) -> A#rr.dns_rr#dns_rr.type =:= ?DNS_TYPE_CNAME end, Answers), 
-  ResolvedCnameAnyRecords = to_dns_rr(lists:flatten(resolve_any_cnames(CnameRecords, Host, Message))),
-  case lists:any(fun(R) -> R#dns_rr.type =:= Qtype end, ResolvedCnameAnyRecords) of
-    false ->
-      case lists:any(fun(R) -> R#dns_rr.name =:= Qname end, ResolvedCnameAnyRecords) of
-        true -> 
-          lists:filter(fun(A) -> A#rr.wildcard =:= false end, CnameRecords);
-        false ->
-          []
-      end;
-    true ->
-      lists:filter(fun(A) -> A#rr.wildcard =:= false end, CnameRecords)
-  end.
-
-cname_not_alone(Q, Answers, Message) ->
-  case lists:any(fun(A) -> A#dns_rr.type =:= ?DNS_TYPE_CNAME end, to_dns_rr(Answers)) of
-    true -> length(query_responders(Q#dns_query.name, ?DNS_TYPE_ANY, Message)) > 0;
-    false -> false
-  end.
-
 %% Do additional processing
 additional_processing(Message, Host) ->
-  Names = lists:flatten(requires_additional_processing(Message#dns_message.answers, [])),
+  Names = lists:flatten(requires_additional_processing(Message#dns_message.answers ++ Message#dns_message.authority, [])),
   case Names of
     [] -> Message;
     _ ->
@@ -152,17 +248,6 @@ requires_additional_processing([Answer|Rest], RequiresAdditional) ->
     _ -> []
   end,
   requires_additional_processing(Rest, RequiresAdditional ++ Names).
-
-%% Try to delegate a Qname since we couldn't find any answers.
-try_delegation(Qname, Questions, [], Message, Host) ->
-  case answer_question(Qname, ?DNS_TYPE_NS_NUMBER, Host, Message) of
-    [] -> 
-      answer_questions(Questions, Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = rewrite_soa_ttl(get_soas_by_name(Qname, Message))}, Host);
-    Answers -> 
-      answer_questions(Questions, Message#dns_message{aa = false, authority = Answers}, Host)
-  end;
-try_delegation(Qname, Questions, _, Message, Host) ->
-  answer_questions(Questions, Message#dns_message{aa = true, authority = get_soas_by_name(Qname, Message)}, Host).
 
 %% Retreive all answers to the specific question.
 answer_question(Qname, Qtype = ?DNS_TYPE_AXFR_NUMBER, Host, Message) ->
@@ -197,15 +282,15 @@ complete_response(Message) ->
 
 %% According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
 %% must be set to the value of the minimum field in the SOA content.
-rewrite_soa_ttl(Authority) -> rewrite_soa_ttl(Authority, []).
-rewrite_soa_ttl([], NewAuthority) -> NewAuthority;
-rewrite_soa_ttl([R|Rest], NewAuthority) ->
+rewrite_soa_ttl(Message) -> rewrite_soa_ttl(Message, Message#dns_message.authority, []).
+rewrite_soa_ttl(Message, [], NewAuthority) -> Message#dns_message{authority = NewAuthority};
+rewrite_soa_ttl(Message, [R|Rest], NewAuthority) ->
   Rdata = R#dns_rr.data,
   Record = case Rdata of
-    Data when is_record(Data, dns_rrdata_soa) -> R#dns_rr{ttl = Data#dns_rrdata_soa.minimum};
+    Data when is_record(Data, dns_rrdata_soa) -> R#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, R#dns_rr.ttl)};
     _ -> R
   end,
-  rewrite_soa_ttl(Rest, NewAuthority ++ [Record]).
+  rewrite_soa_ttl(Message, Rest, NewAuthority ++ [Record]).
 
 %% Build a list of answer functions based on the registered responders.
 answer_functions() ->
@@ -258,5 +343,3 @@ resolve_cname(OriginalQtype, Record, Host, Message) ->
       Record
   end.
 
-resolve_any_cnames(Records, Host, Message) ->
-  [resolve_cname(?DNS_TYPE_ANY, Record, Host, Message) || Record <- to_dns_rr(Records)].

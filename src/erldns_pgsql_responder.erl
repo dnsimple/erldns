@@ -3,7 +3,7 @@
 -include("dns.hrl").
 -include("erldns.hrl").
 
--export([answer/3, get_soa/2, get_metadata/2]).
+-export([answer/3, get_soa/2, get_metadata/2, db_to_record/2, db_to_record/3]).
 
 %% Get the SOA record for the name.
 get_soa(Qname, _Message) -> lookup_soa(Qname).
@@ -66,7 +66,8 @@ db_to_record(Qname, Record, IsWildcard) when is_record(Record, db_rr) ->
     Data -> 
       #rr{
         dns_rr = #dns_rr{
-          name = erldns_records:optionally_convert_wildcard(Record#db_rr.name, Qname),
+          name = Record#db_rr.name,
+          %name = erldns_records:optionally_convert_wildcard(Record#db_rr.name, Qname),
           type = erldns_records:name_type(Record#db_rr.type),
           data = Data,
           ttl  = default_ttl(Record#db_rr.ttl) 
