@@ -210,7 +210,9 @@ best_match_resolution(Message, Qname, Qtype, Records, Host, _Wildcard, CnameChai
           [Question|_] = Message#dns_message.questions,
           case Qname =:= Question#dns_query.name of
             true -> rewrite_soa_ttl(Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN});
-            false -> Message
+            false ->
+              {Authority, Additional} = erldns_records:root_hints(),
+              Message#dns_message{authority=Authority, additional=Additional}
           end
       end
   end.
@@ -221,15 +223,20 @@ best_match_resolution(Message, Qname, Qtype, Records, Host, _Wildcard, CnameChai
 %% wildcard matches.
 best_match(Qname, Records) -> best_match(Qname, dns:dname_to_labels(Qname), Records).
 
-best_match(_, [], _) -> [];
+best_match(_Qname, [], _Records) -> [];
 best_match(Qname, [_|Rest], Records) ->
   WildcardName = dns:labels_to_dname([<<"*">>] ++ Rest),
   case lists:filter(match_name(WildcardName), Records) of
     [] ->
-      Name = dns:labels_to_dname(Rest),
-      case lists:filter(match_name(Name), Records) of
-        [] -> best_match(Qname, Rest, Records);
-        Matches -> Matches
+      case Rest of
+        [] -> [];
+        _ ->
+          lager:info("Rest: ~p", [Rest]),
+          Name = dns:labels_to_dname(Rest),
+          case lists:filter(match_name(Name), Records) of
+            [] -> best_match(Qname, Rest, Records);
+            Matches -> Matches
+          end
       end;
     Matches -> Matches
   end.

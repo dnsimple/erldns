@@ -1,6 +1,6 @@
 {application,erldns,
              [{description,"Erlang Authoritative DNS Server"},
-              {vsn,"32c4f3c"},
+              {vsn,"3ce888c"},
               {modules,[erldns,erldns_app,erldns_axfr,erldns_config,
                         erldns_dnssec,erldns_edns,erldns_encoder,
                         erldns_handler,erldns_packet_cache,erldns_pgsql,
