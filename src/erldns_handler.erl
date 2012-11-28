@@ -58,7 +58,11 @@ resolve(Message, Host) ->
   % Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
   [Question|_] = Message2#dns_message.questions,
   Records = erldns_pgsql:lookup_records(Question#dns_query.name),
-  additional_processing(resolve(Message2, Question#dns_query.name, Question#dns_query.type, Records, Host), Host).
+  additional_processing(
+    rewrite_soa_ttl(
+      resolve(Message2, Question#dns_query.name, Question#dns_query.type, Records, Host)
+    ), Host
+  ).
 
 resolve(Message, Qname, Qtype, Records, Host) -> resolve(Message, Qname, Qtype, Records, Host, false, []).
 
@@ -130,7 +134,7 @@ exact_match_resolution(Message, Qname, Qtype, Records, Host, Wildcard, CnameChai
                 [] ->
                   case CnameChain of
                     [] -> Message#dns_message{aa = true, authority = Authority};
-                    _ -> rewrite_soa_ttl(Message#dns_message{aa = true, authority = Authority})
+                    _ -> Message#dns_message{aa = true, authority = Authority}
                   end;
                 _ -> Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}
               end
@@ -152,11 +156,11 @@ best_match_resolution(Message, Qname, Qtype, Records, Host, _Wildcard, CnameChai
           Authority = lists:filter(match_type(?DNS_TYPE_SOA), BestMatchRecords),
           lager:info("Is authority: ~p", [Authority]),
           case CnameChain of
-            [] -> rewrite_soa_ttl(Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Authority});
+            [] -> Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Authority};
             _ ->
               case Qtype of
                 ?DNS_TYPE_ANY -> Message;
-                _ -> rewrite_soa_ttl(Message#dns_message{authority = Authority})
+                _ -> Message#dns_message{authority = Authority}
               end
           end;
         false ->
@@ -209,7 +213,7 @@ best_match_resolution(Message, Qname, Qtype, Records, Host, _Wildcard, CnameChai
           lager:info("Matched records are not wildcard."),
           [Question|_] = Message#dns_message.questions,
           case Qname =:= Question#dns_query.name of
-            true -> rewrite_soa_ttl(Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN});
+            true -> Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN};
             false ->
               {Authority, Additional} = erldns_records:root_hints(),
               Message#dns_message{authority=Authority, additional=Additional}
