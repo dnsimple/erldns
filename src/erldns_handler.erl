@@ -151,13 +151,20 @@ best_match_resolution(Message, Qname, Qtype, Records, Host, _Wildcard, CnameChai
         true ->
           Authority = lists:filter(match_type(?DNS_TYPE_SOA), BestMatchRecords),
           lager:info("Is authority: ~p", [Authority]),
-          rewrite_soa_ttl(Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Authority});
+          case CnameChain of
+            [] -> rewrite_soa_ttl(Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Authority});
+            _ ->
+              case Qtype of
+                ?DNS_TYPE_ANY -> Message;
+                _ -> rewrite_soa_ttl(Message#dns_message{authority = Authority})
+              end
+          end;
         false ->
           lager:info("Is not authority"),
           NSRecords = lists:filter(match_type(?DNS_TYPE_NS), BestMatchRecords),
           lager:info("Referral found: ~p", [NSRecords]),
           AuthorityRecords = Message#dns_message.authority ++ NSRecords,
-          Message#dns_message{authority = AuthorityRecords}
+          Message#dns_message{aa = false, authority = AuthorityRecords}
       end;
     false ->
       % Step 3c
