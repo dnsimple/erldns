@@ -68,16 +68,16 @@ resolve(Message, Qname, Qtype, Records, Host) -> resolve(Message, Qname, Qtype, 
 
 resolve(Message, Qname, Qtype, Records, Host, Wildcard, CnameChain) ->
   % Step 3a: Exact match
-  AllRecords = to_dns_rr(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, Records)),
-  FilteredRecords = lists:filter(fun(R) -> R#db_rr.name =:= Qname end, Records),
+  AllRecords = lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, Records)),
+  FilteredRecords = lists:filter(fun(R) -> R#dns_rr.name =:= Qname end, AllRecords),
   case FilteredRecords of
     [] -> best_match_resolution(Message, Qname, Qtype, Records, Host, Wildcard, CnameChain, best_match(Qname, AllRecords), AllRecords);
     MatchedRecords -> exact_match_resolution(Message, Qname, Qtype, Records, Host, Wildcard, CnameChain, MatchedRecords, AllRecords)
   end.
 
-exact_match_resolution(Message, Qname, Qtype, Records, Host, Wildcard, CnameChain, MatchedRecords, AllRecords) ->
+exact_match_resolution(Message, _Qname, Qtype, Records, Host, Wildcard, CnameChain, MatchedRecords, AllRecords) ->
   lager:info("Exact matches found: ~p", [length(MatchedRecords)]),
-  RRs = to_dns_rr(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, MatchedRecords)),
+  RRs = MatchedRecords,
   AnyCnames = lists:any(match_type(?DNS_TYPE_CNAME), RRs),
   case AnyCnames of
     true ->
@@ -262,21 +262,11 @@ replace_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} 
 %% TODO: optimize to return first match
 %% TODO: rescue from case where soa function is not defined.
 get_soas(Message) ->
-  to_dns_rr(lists:flatten(lists:map(fun(Q) -> [F([Q#dns_query.name], Message) || F <- soa_functions()] end, Message#dns_message.questions))).
+  lists:flatten(lists:map(fun(Q) -> [F([Q#dns_query.name], Message) || F <- soa_functions()] end, Message#dns_message.questions)).
 
 %% Get metadata for the domain connected to the given query name.
 get_metadata(Qname, Message) ->
   lists:merge([F(Qname, Message) || F <- metadata_functions()]).
-
-%% Answers are returned from responders as #rr records. This function
-%% converts those types of records to #dns_rr records.
-to_dns_rr(Answers) -> lists:map(
-    fun(A) ->
-      case A of
-        R when is_record(R, rr) -> R#rr.dns_rr;
-        R when is_record(R, dns_rr) -> R
-      end
-    end, lists:flatten(Answers)).
 
 %% Do additional processing
 additional_processing(Message, Host) ->
@@ -383,7 +373,7 @@ resolve_cnames(Qtype, Records, Host, Message) ->
     ?DNS_TYPE_CNAME_NUMBER -> Records;
     ?DNS_TYPE_AXFR_NUMBER -> Records;
     ?DNS_TYPE_ANY_NUMBER -> Records;
-    _ -> [resolve_cname(Qtype, Record, Host, Message) || Record <- to_dns_rr(Records)]
+    _ -> [resolve_cname(Qtype, Record, Host, Message) || Record <- Records]
   end.
 
 %% Restart the query.

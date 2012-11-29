@@ -3,7 +3,7 @@
 -include("dns.hrl").
 -include("erldns.hrl").
 
--export([answer/3, get_soa/2, get_metadata/2, db_to_record/2, db_to_record/3]).
+-export([answer/3, get_soa/2, get_metadata/2, db_to_record/2]).
 
 %% Get the SOA record for the name.
 get_soa(Qname, _Message) -> lookup_soa(Qname).
@@ -41,7 +41,7 @@ lookup_soa(Qname) -> db_to_record(Qname, erldns_pgsql:lookup_soa(Qname)).
 
 %% Given the Qname find any wildcard matches.
 lookup_wildcard_name(Qname, Qtype) ->
-  lists:map(fun(R) -> db_to_record(Qname, R, true) end, lookup_wildcard_name(Qname, Qtype, erldns_pgsql:domain_names(Qname), erldns_pgsql:lookup_records(Qname))).
+  lists:map(fun(R) -> db_to_record(Qname, R) end, lookup_wildcard_name(Qname, Qtype, erldns_pgsql:domain_names(Qname), erldns_pgsql:lookup_records(Qname))).
 
 lookup_wildcard_name(_Qname, _Qtype, [], _Records) -> [];
 lookup_wildcard_name(Qname, Qtype, [DomainName|Rest], Records) ->
@@ -59,24 +59,19 @@ lookup_wildcard_name(Qname, Qtype, [DomainName|Rest], Records) ->
   end.
 
 %% Convert an internal MySQL representation to a dns RR.
-db_to_record(Qname, Record) when is_record(Record, db_rr) -> db_to_record(Qname, Record, false).
-db_to_record(Qname, Record, IsWildcard) when is_record(Record, db_rr) ->
+db_to_record(_Qname, Record) when is_record(Record, db_rr) ->
   case parse_content(Record#db_rr.content, Record#db_rr.priority, Record#db_rr.type) of
     unsupported -> [];
     Data -> 
-      #rr{
-        dns_rr = #dns_rr{
-          name = Record#db_rr.name,
-          %name = erldns_records:optionally_convert_wildcard(Record#db_rr.name, Qname),
-          type = erldns_records:name_type(Record#db_rr.type),
-          data = Data,
-          ttl  = default_ttl(Record#db_rr.ttl) 
-        },
-        wildcard = IsWildcard
+      #dns_rr{
+        name = Record#db_rr.name,
+        type = erldns_records:name_type(Record#db_rr.type),
+        data = Data,
+        ttl  = default_ttl(Record#db_rr.ttl)
       }
   end;
-db_to_record(Qname, Value, IsWildcard) ->
-  lager:debug("~p:failed to convert DB record to DNS record for ~p with ~p (wildcard? ~p)", [?MODULE, Qname, Value, IsWildcard]),
+db_to_record(Qname, Value) ->
+  lager:debug("~p:failed to convert DB record to DNS record for ~p with ~p (wildcard? ~p)", [?MODULE, Qname, Value]),
   [].
 
 

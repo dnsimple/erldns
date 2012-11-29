@@ -5,8 +5,3 @@
     ttl,
     priority
   }).
-
--record(rr, {
-    dns_rr,
-    wildcard = false
-  }).
