@@ -52,15 +52,27 @@ maybe_cache_packet(Message) ->
   end,
   Message.
 
+find_zone(Qname) ->
+  erldns_pgsql:lookup_records(Qname).
+
+%% Resolve the first question inside the given message.
 resolve(Message, Host) ->
+  case Message#dns_message.questions of
+    [] -> Message;
+    [Question] -> resolve(Message, Question, Host);
+    [Question|_] -> resolve(Message, Question, Host)
+  end.
+
+resolve(Message, Question, Host) ->
   % Step 1: Set the RA bit to false
-  Message2 = Message#dns_message{ra = false},
+  resolve(Message#dns_message{ra = false}, Question#dns_query.name, Question#dns_query.type, Host).
+
+resolve(Message, Qname, Qtype, Host) ->
   % Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
-  [Question|_] = Message2#dns_message.questions,
-  Records = erldns_pgsql:lookup_records(Question#dns_query.name),
+  Records = find_zone(Qname),
   additional_processing(
     rewrite_soa_ttl(
-      resolve(Message2, Question#dns_query.name, Question#dns_query.type, Records, Host)
+      resolve(Message, Qname, Qtype, Records, Host)
     ), Host
   ).
 
@@ -71,11 +83,11 @@ resolve(Message, Qname, Qtype, Records, Host, Wildcard, CnameChain) ->
   AllRecords = lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, Records)),
   FilteredRecords = lists:filter(fun(R) -> R#dns_rr.name =:= Qname end, AllRecords),
   case FilteredRecords of
-    [] -> best_match_resolution(Message, Qname, Qtype, Records, Host, Wildcard, CnameChain, best_match(Qname, AllRecords), AllRecords);
-    MatchedRecords -> exact_match_resolution(Message, Qname, Qtype, Records, Host, Wildcard, CnameChain, MatchedRecords, AllRecords)
+    [] -> best_match_resolution(Message, Qname, Qtype, Host, Wildcard, CnameChain, best_match(Qname, AllRecords), AllRecords);
+    MatchedRecords -> exact_match_resolution(Message, Qname, Qtype, Host, Wildcard, CnameChain, MatchedRecords, AllRecords)
   end.
 
-exact_match_resolution(Message, _Qname, Qtype, Records, Host, Wildcard, CnameChain, MatchedRecords, AllRecords) ->
+exact_match_resolution(Message, _Qname, Qtype, Host, Wildcard, CnameChain, MatchedRecords, AllRecords) ->
   lager:info("Exact matches found: ~p", [length(MatchedRecords)]),
   RRs = MatchedRecords,
   AnyCnames = lists:any(match_type(?DNS_TYPE_CNAME), RRs),
@@ -93,8 +105,9 @@ exact_match_resolution(Message, _Qname, Qtype, Records, Host, Wildcard, CnameCha
             true ->
               Message#dns_message{aa = true, rc = ?DNS_RCODE_SERVFAIL};
             false ->
-              lager:info("Restarting query with CNAME name ~p", [RR#dns_rr.data#dns_rrdata_cname.dname]),
-              resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [RR]}, RR#dns_rr.data#dns_rrdata_cname.dname, Qtype, Records, Host, Wildcard, CnameChain ++ [RR])
+              Name = RR#dns_rr.data#dns_rrdata_cname.dname,
+              lager:info("Restarting query with CNAME name ~p", [Name]),
+              resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [RR]}, Name, Qtype, find_zone(Name), Host, Wildcard, CnameChain ++ [RR])
           end
       end;
     false ->
@@ -142,7 +155,7 @@ exact_match_resolution(Message, _Qname, Qtype, Records, Host, Wildcard, CnameCha
       end
   end.
 
-best_match_resolution(Message, Qname, Qtype, Records, Host, _Wildcard, CnameChain, BestMatchRecords, _AllRecords) ->
+best_match_resolution(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, _AllRecords) ->
   lager:info("No exact match found, using ~p", [BestMatchRecords]),
 
   % Step 3b: Referrals
@@ -196,8 +209,9 @@ best_match_resolution(Message, Qname, Qtype, Records, Host, _Wildcard, CnameChai
                     true ->
                       Message#dns_message{aa = true, rc = ?DNS_RCODE_SERVFAIL};
                     false ->
-                      lager:info("Restarting resolve with ~p", [RR#dns_rr.data#dns_rrdata_cname.dname]),
-                      resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [RR]}, RR#dns_rr.data#dns_rrdata_cname.dname, Qtype, Records, Host, IsWildcard, CnameChain ++ [RR])
+                      Name = RR#dns_rr.data#dns_rrdata_cname.dname,
+                      lager:info("Restarting resolve with ~p", [Name]),
+                      resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [RR]}, Name, Qtype, find_zone(Name), Host, IsWildcard, CnameChain ++ [RR])
                   end
               end;
             false ->
