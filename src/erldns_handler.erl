@@ -80,8 +80,8 @@ resolve(Message, Qname, Qtype, Records, Host) -> resolve(Message, Qname, Qtype, 
 
 resolve(Message, Qname, Qtype, Records, Host, Wildcard, CnameChain) ->
   % Step 3a: Exact match
-  AllRecords = lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, Records)),
-  FilteredRecords = lists:filter(fun(R) -> R#dns_rr.name =:= Qname end, AllRecords),
+  AllRecords = lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, Records))),
+  FilteredRecords = lists:filter(match_name(Qname), AllRecords),
   case FilteredRecords of
     [] -> best_match_resolution(Message, Qname, Qtype, Host, Wildcard, CnameChain, best_match(Qname, AllRecords), AllRecords);
     MatchedRecords -> exact_match_resolution(Message, Qname, Qtype, Host, Wildcard, CnameChain, MatchedRecords, AllRecords)
