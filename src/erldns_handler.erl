@@ -207,7 +207,7 @@ best_match_resolution(Message, Qname, Qtype, Records, Host, _Wildcard, CnameChai
                 _ -> lists:filter(match_type(Qtype), BestMatchRecords)
               end,
               TypeMatches = lists:map(replace_name(Qname), TypeMatchedRecords),
-              Message#dns_message{aa = true, answers = TypeMatches}
+              Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}
           end;
         false ->
           lager:info("Matched records are not wildcard."),
