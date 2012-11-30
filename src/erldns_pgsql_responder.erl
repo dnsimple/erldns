@@ -100,7 +100,8 @@ parse_content(Content, Priority, ?DNS_TYPE_MX_BSTR) ->
   #dns_rrdata_mx{exchange=Content, preference=default_priority(Priority)};
 
 parse_content(Content, _, ?DNS_TYPE_TXT_BSTR) ->
-  #dns_rrdata_txt{txt=binary_to_list(Content)};
+  #dns_rrdata_txt{txt=parse_txt(binary_to_list(Content))};
+
 parse_content(Content, _, ?DNS_TYPE_SPF_BSTR) ->
   #dns_rrdata_spf{spf=binary_to_list(Content)};
 
@@ -144,6 +145,18 @@ parse_content(_, _, Type) ->
   lager:debug("Mysql responder unsupported record type: ~p", [Type]),
   unsupported.
 
+parse_txt([C|Rest]) -> parse_txt_char([C|Rest], C, Rest, [], false).
+parse_txt(String, [], [], _) -> [String];
+parse_txt(_, [], Tokens, _) -> Tokens;
+parse_txt(String, [C|Rest], Tokens, Escaped) -> parse_txt_char(String, C, Rest, Tokens, Escaped).
+parse_txt(String, [C|Rest], Tokens, CurrentToken, Escaped) -> parse_txt_char(String, C, Rest, Tokens, CurrentToken, Escaped).
+parse_txt_char(String, $", Rest, Tokens, _) -> parse_txt(String, Rest, Tokens, [], false);
+parse_txt_char(String, _, Rest, Tokens, _) -> parse_txt(String, Rest, Tokens, false).
+parse_txt_char(String, $", Rest, Tokens, CurrentToken, false) -> parse_txt(String, Rest, Tokens ++ [CurrentToken], false);
+parse_txt_char(String, $", Rest, Tokens, CurrentToken, true) -> parse_txt(String, Rest, Tokens, CurrentToken ++ [$"], false);
+parse_txt_char(String, $\\, Rest, Tokens, CurrentToken, false) -> parse_txt(String, Rest, Tokens, CurrentToken, true);
+parse_txt_char(String, $\\, Rest, Tokens, CurrentToken, true) -> parse_txt(String, Rest, Tokens, CurrentToken ++ [$\\], false);
+parse_txt_char(String, C, Rest, Tokens, CurrentToken, _) -> parse_txt(String, Rest, Tokens, CurrentToken ++ [C], false).
 
 %% Utility method for converting a string to an integer.
 to_i(Str) -> {Int, _} = string:to_integer(Str), Int.

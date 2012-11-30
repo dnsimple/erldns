@@ -118,6 +118,7 @@ exact_match_resolution(Message, _Qname, Qtype, Host, Wildcard, CnameChain, Match
       ExactTypeMatch = lists:any(match_type(Qtype), RRs),
       case ExactTypeMatch of
         true ->
+          lager:info("Found exact type match"),
           Answers = lists:filter(match_type(Qtype), RRs),
           Answer = lists:last(Answers),
           NSRecords = delegation_records(Answer#dns_rr.name, AllRecords),
@@ -129,7 +130,7 @@ exact_match_resolution(Message, _Qname, Qtype, Host, Wildcard, CnameChain, Match
               lager:info("Restarting query with delegated name ~p", [DelegatedName]),
               resolve(Message, DelegatedName, Qtype, find_zone(DelegatedName), Host, Wildcard, CnameChain);
             false ->
-              Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Answers}
+              Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ Answers}
           end;
         false ->
           case AnyReferrals of
@@ -168,7 +169,7 @@ exact_match_resolution(Message, _Qname, Qtype, Host, Wildcard, CnameChain, Match
       end
   end.
 
-best_match_resolution(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, _AllRecords) ->
+best_match_resolution(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords) ->
   lager:info("No exact match found, using ~p", [BestMatchRecords]),
 
   % Step 3b: Referrals
@@ -234,7 +235,13 @@ best_match_resolution(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMa
                 _ -> lists:filter(match_type(Qtype), BestMatchRecords)
               end,
               TypeMatches = lists:map(replace_name(Qname), TypeMatchedRecords),
-              Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}
+              case length(TypeMatches) of
+                0 ->
+                  Authority = lists:filter(match_type(?DNS_TYPE_SOA), AllRecords),
+                  Message#dns_message{aa = true, authority=Authority};
+                _ ->
+                  Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}
+              end
           end;
         false ->
           lager:info("Matched records are not wildcard."),
