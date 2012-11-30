@@ -117,7 +117,20 @@ exact_match_resolution(Message, _Qname, Qtype, Host, Wildcard, CnameChain, Match
       IsAuthority = lists:any(match_type(?DNS_TYPE_SOA), RRs),
       ExactTypeMatch = lists:any(match_type(Qtype), RRs),
       case ExactTypeMatch of
-        true -> Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = lists:filter(match_type(Qtype), RRs)};
+        true ->
+          Answers = lists:filter(match_type(Qtype), RRs),
+          Answer = lists:last(Answers),
+          NSRecords = delegation_records(Answer#dns_rr.name, AllRecords),
+          IsGlueRecord = length(NSRecords) > 0,
+          case IsGlueRecord of
+            true ->
+              NSRecord = lists:last(NSRecords),
+              DelegatedName = NSRecord#dns_rr.name,
+              lager:info("Restarting query with delegated name ~p", [DelegatedName]),
+              resolve(Message, DelegatedName, Qtype, find_zone(DelegatedName), Host, Wildcard, CnameChain);
+            false ->
+              Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Answers}
+          end;
         false ->
           case AnyReferrals of
             true ->
@@ -268,9 +281,15 @@ match_name(Name) -> fun(R) ->
       end
   end.
 match_wildcard() -> fun(R) when is_record(R, dns_rr) -> lists:any(fun(L) -> L =:= <<"*">> end, dns:dname_to_labels(R#dns_rr.name)) end.
+match_glue(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.data =:= #dns_rrdata_ns{dname=Name} end.
 
 %% Replacement functions.
 replace_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} end.
+
+%% Find all delegation records for the given Name in the provided
+%% Records. This function may return an empty list, which means
+%% the record is not a glue record.
+delegation_records(Name, Records) -> lists:filter(fun(R) -> apply(match_type(?DNS_TYPE_NS), [R]) and apply(match_glue(Name), [R]) end, Records).
 
 %% Check all of the questions against all of the responders.
 %% TODO: optimize to return first match
