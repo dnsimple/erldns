@@ -122,16 +122,31 @@ exact_match_resolution(Message, _Qname, Qtype, Host, Wildcard, CnameChain, Match
           lager:info("Found exact type match"),
           Answers = lists:filter(match_type(Qtype), RRs),
           Answer = lists:last(Answers),
-          NSRecords = delegation_records(Answer#dns_rr.name, AllRecords),
-          IsGlueRecord = length(NSRecords) > 0,
-          case IsGlueRecord of
-            true ->
-              NSRecord = lists:last(NSRecords),
-              DelegatedName = NSRecord#dns_rr.name,
-              lager:info("Restarting query with delegated name ~p", [DelegatedName]),
-              resolve(Message, DelegatedName, Qtype, find_zone(DelegatedName), Host, Wildcard, CnameChain);
-            false ->
-              Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ Answers}
+          case Qtype of
+            ?DNS_TYPE_NS ->
+              DelegatedName = Answer#dns_rr.name,
+              lager:info("Type was NS so we're looking to see if it's a delegation: ~p", [DelegatedName]),
+              IsAuthority = lists:any(match_type(?DNS_TYPE_SOA), RRs),
+              case IsAuthority of
+                false ->
+                  lager:info("Restarting query with delegated name ~p", [DelegatedName]),
+                  resolve(Message, DelegatedName, ?DNS_TYPE_A, find_zone(DelegatedName), Host, Wildcard, CnameChain);
+                true ->
+                  lager:info("Authoritative for record, returning answers"),
+                  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ Answers}
+              end;
+            _ ->
+              NSRecords = delegation_records(Answer#dns_rr.name, AllRecords),
+              IsGlueRecord = length(NSRecords) > 0,
+              case IsGlueRecord of
+                true ->
+                  NSRecord = lists:last(NSRecords),
+                  DelegatedName = NSRecord#dns_rr.name,
+                  lager:info("Restarting query with delegated name ~p", [DelegatedName]),
+                  resolve(Message, DelegatedName, Qtype, find_zone(DelegatedName), Host, Wildcard, CnameChain);
+                false ->
+                  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ Answers}
+              end
           end;
         false ->
           case AnyReferrals of
