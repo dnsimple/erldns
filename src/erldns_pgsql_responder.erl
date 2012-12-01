@@ -50,7 +50,7 @@ lookup_wildcard_name(Qname, Qtype, [DomainName|Rest], Records) ->
     fun(R) ->
         case Qtype of
           ?DNS_TYPE_ANY_BSTR -> R#db_rr.name =:= WildcardName;
-          _ -> (R#db_rr.name =:= WildcardName) and ((R#db_rr.type =:= Qtype) or (R#db_rr.type =:= <<"CNAME">>))
+          _ -> (R#db_rr.name =:= WildcardName) and (R#db_rr.type =:= Qtype)
         end
     end, Records),
   case Matches of

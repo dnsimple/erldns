@@ -47,7 +47,7 @@ lookup_name(Qname, Qtype, LookupName) ->
     ?DNS_TYPE_ANY_BSTR ->
       equery(<<"select * from records where lower(name) = $1">> , [LookupName]);
     _ ->
-      equery(pgsql_pool, <<"select * from records where lower(name) = $1 and (type = $2 or type = $3)">>, [LookupName, Qtype, <<"CNAME">>])
+      equery(pgsql_pool, <<"select * from records where lower(name) = $1 and type = $2">>, [LookupName, Qtype])
   end,
   case QueryResult of
     {ok, _, Rows} ->

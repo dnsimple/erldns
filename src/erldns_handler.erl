@@ -313,13 +313,19 @@ additional_processing(Message, Host) ->
   case Names of
     [] -> Message;
     _ ->
+      lager:info("Doing additional processing on ~p", [Names]),
       Records = lists:flatten(lists:map(
           fun(Qname) ->
-              resolve_cnames(?DNS_TYPE_A, answer_question(Qname, ?DNS_TYPE_A, Host, Message), Host, Message)
+              answer_question(Qname, ?DNS_TYPE_A, Host, Message)
           end, Names)),
-      Additional = Message#dns_message.additional ++ Records,
-      AdditionalCount = length(Additional),
-      Message#dns_message{adc=AdditionalCount, additional=Additional}
+      case Records of
+        [] -> Message;
+        _ ->
+          lager:info("Additional processing found: ~p", [Records]),
+          Additional = Message#dns_message.additional ++ Records,
+          AdditionalCount = length(Additional),
+          Message#dns_message{adc=AdditionalCount, additional=Additional}
+      end
   end.
 
 %% Given a list of answers find the names that require additional processing.
@@ -394,35 +400,3 @@ metadata_functions() ->
 get_responder_modules() -> get_responder_modules(application:get_env(erldns, responders)).
 get_responder_modules({ok, RM}) -> RM;
 get_responder_modules(_) -> [erldns_mysql_responder].
-
-%% According to RFC 1034:
-%%
-%% "CNAME RRs cause special action in DNS software.
-%% When a name server fails to find a desired RR
-%% in the resource set associated with the domain name,
-%% it checks to see if the resource set consists
-%% of a CNAME record with a matching class.  If so, the
-%% name server includes the CNAME record in the
-%% response and restarts the query at the domain name
-%% specified in the data field of the CNAME record.
-%% The one exception to this rule is that queries which
-%% match the CNAME type are not restarted."
-resolve_cnames(Qtype, Records, Host, Message) ->
-  case Qtype of
-    ?DNS_TYPE_CNAME_NUMBER -> Records;
-    ?DNS_TYPE_AXFR_NUMBER -> Records;
-    ?DNS_TYPE_ANY_NUMBER -> Records;
-    _ -> [resolve_cname(Qtype, Record, Host, Message) || Record <- Records]
-  end.
-
-%% Restart the query.
-resolve_cname(OriginalQtype, Record, Host, Message) ->
-  lager:debug("~p:resolve_cname(~p, ~p, ~p)~n", [?MODULE, OriginalQtype, Record, Host]),
-  case Record#dns_rr.type of
-    ?DNS_TYPE_CNAME_NUMBER ->
-      Qname = Record#dns_rr.data#dns_rrdata_cname.dname,
-      answer_question(Qname, OriginalQtype, Host, Message) ++ [Record];
-    _ ->
-      Record
-  end.
-
