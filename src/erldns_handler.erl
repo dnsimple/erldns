@@ -30,7 +30,10 @@ handle_message(Message, Host) ->
     {error, _} -> handle_packet_cache_miss(Message, get_soas(Message), Host)
   end.
 
-handle_packet_cache_miss(Message, [], _Host) -> Message#dns_message{aa = false, rc = ?DNS_RCODE_NXDOMAIN};
+handle_packet_cache_miss(Message, [], _Host) ->
+  lager:info("Not authoritative"),
+  {Authority, Additional} = erldns_records:root_hints(),
+  Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
 handle_packet_cache_miss(Message, _, Host) ->
   Message2 = Message#dns_message{ra = false},
   case application:get_env(erldns, catch_exceptions) of
