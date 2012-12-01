@@ -263,7 +263,9 @@ best_match_resolution(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMa
           lager:info("Matched records are not wildcard."),
           [Question|_] = Message#dns_message.questions,
           case Qname =:= Question#dns_query.name of
-            true -> Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN};
+            true ->
+              Authority = lists:filter(match_type(?DNS_TYPE_SOA), AllRecords),
+              Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN, authority = Authority, aa = true};
             false ->
               {Authority, Additional} = erldns_records:root_hints(),
               Message#dns_message{authority=Authority, additional=Additional}
@@ -336,7 +338,7 @@ additional_processing(Message, Host) ->
       case Records of
         [] -> Message;
         _ ->
-          lager:info("Additional processing found: ~p", [Records]),
+          lager:info("Additional processing, found ~p records", [length(Records)]),
           Additional = Message#dns_message.additional ++ Records,
           AdditionalCount = length(Additional),
           Message#dns_message{adc=AdditionalCount, additional=Additional}

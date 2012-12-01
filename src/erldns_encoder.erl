@@ -2,13 +2,14 @@
 
 -include("dns_records.hrl").
 
--export([encode_message/1]).
+-export([encode_message/1, encode_message/2]).
 
-encode_message(Response) ->
+encode_message(Response) -> encode_message(Response, []).
+encode_message(Response, Opts) ->
   case application:get_env(erldns, catch_exceptions) of
-    {ok, false} -> dns:encode_message(Response);
+    {ok, false} -> dns:encode_message(Response, Opts);
     _ ->
-      try dns:encode_message(Response) of
+      try dns:encode_message(Response, Opts) of
         M -> M
       catch
         Exception:Reason ->
