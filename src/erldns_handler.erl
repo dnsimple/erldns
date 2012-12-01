@@ -53,7 +53,7 @@ maybe_cache_packet(Message) ->
   Message.
 
 find_zone(Qname) ->
-  erldns_pgsql:lookup_records(Qname).
+  erldns_pgsql:lookup_records(normalize_name(Qname)).
 
 %% Resolve the first question inside the given message.
 resolve(Message, Host) ->
@@ -70,6 +70,7 @@ resolve(Message, Question, Host) ->
 resolve(Message, Qname, Qtype, Host) ->
   % Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
   Records = find_zone(Qname),
+  lager:info("Zone has ~p records", [length(Records)]),
   additional_processing(
     rewrite_soa_ttl(
       resolve(Message, Qname, Qtype, Records, Host)
@@ -281,12 +282,7 @@ best_match(Qname, [_|Rest], Records) ->
 
 %% Various matching functions.
 match_type(Type) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.type =:= Type end.
-match_name(Name) -> fun(R) -> 
-      case R of
-        _ when is_record(R, dns_rr) -> R#dns_rr.name =:= Name;
-        _ -> lager:error("match_name(~p)(~p)", [Name, R]), false
-      end
-  end.
+match_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.name =:= normalize_name(Name) end.
 match_wildcard() -> fun(R) when is_record(R, dns_rr) -> lists:any(fun(L) -> L =:= <<"*">> end, dns:dname_to_labels(R#dns_rr.name)) end.
 match_glue(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.data =:= #dns_rrdata_ns{dname=Name} end.
 
@@ -298,11 +294,14 @@ replace_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} 
 %% the record is not a glue record.
 delegation_records(Name, Records) -> lists:filter(fun(R) -> apply(match_type(?DNS_TYPE_NS), [R]) and apply(match_glue(Name), [R]) end, Records).
 
+normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
+normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
+
 %% Check all of the questions against all of the responders.
 %% TODO: optimize to return first match
 %% TODO: rescue from case where soa function is not defined.
 get_soas(Message) ->
-  lists:flatten(lists:map(fun(Q) -> [F([Q#dns_query.name], Message) || F <- soa_functions()] end, Message#dns_message.questions)).
+  lists:flatten(lists:map(fun(Q) -> [F([normalize_name(Q#dns_query.name)], Message) || F <- soa_functions()] end, Message#dns_message.questions)).
 
 %% Get metadata for the domain connected to the given query name.
 get_metadata(Qname, Message) ->

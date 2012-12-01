@@ -43,11 +43,11 @@ lookup_name(Qname, Qtype, LookupName) ->
   lager:debug("~p:lookup_name(~p, ~p, ~p)", [?MODULE, Qname, Qtype, LookupName]),
   QueryResult = case Qtype of
     ?DNS_TYPE_AXFR_BSTR ->
-      equery(<<"select records.* from domains join records on domains.id = records.domain_id where domains.name = $1">>, [Qname]);
+      equery(<<"select records.* from domains join records on domains.id = records.domain_id where lower(domains.name) = $1">>, [Qname]);
     ?DNS_TYPE_ANY_BSTR ->
-      equery(<<"select * from records where name = $1">> , [LookupName]);
+      equery(<<"select * from records where lower(name) = $1">> , [LookupName]);
     _ ->
-      equery(pgsql_pool, <<"select * from records where name = $1 and (type = $2 or type = $3)">>, [LookupName, Qtype, <<"CNAME">>])
+      equery(pgsql_pool, <<"select * from records where lower(name) = $1 and (type = $2 or type = $3)">>, [LookupName, Qtype, <<"CNAME">>])
   end,
   case QueryResult of
     {ok, _, Rows} ->
@@ -57,7 +57,7 @@ lookup_name(Qname, Qtype, LookupName) ->
   end.
 
 get_metadata(Qname) -> 
-  case equery(<<"select domainmetadata.* from domains join domainmetadata on domains.id = domainmetadata.domain_id where domains.id = (select records.domain_id from records where name = $1 limit 1)">>, [Qname]) of
+  case equery(<<"select domainmetadata.* from domains join domainmetadata on domains.id = domainmetadata.domain_id where domains.id = (select records.domain_id from records where lower(name) = $1 limit 1)">>, [Qname]) of
     {ok, _, Rows} -> Rows
   end.
 
@@ -71,7 +71,7 @@ build_domain_list_clause(DomainNames, Offset) ->
 build_domain_list_clause([], Index, Clauses) ->
   {string:join(Clauses, " or "), Index};
 build_domain_list_clause([_|Rest], Index, Clauses) ->
-  build_domain_list_clause(Rest, Index + 1, Clauses ++ [lists:concat(["name = $", Index])]).
+  build_domain_list_clause(Rest, Index + 1, Clauses ++ [lists:concat(["lower(name) = $", Index])]).
 
 %% Convert a name to a list of possible domain names by working
 %% back through the labels to construct each possible domain.
