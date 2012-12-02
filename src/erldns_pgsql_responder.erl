@@ -5,6 +5,8 @@
 
 -export([answer/3, get_soa/2, get_metadata/2, db_to_record/2]).
 
+-define(MAX_TXT_SIZE, 255).
+
 %% Get the SOA record for the name.
 get_soa(Qname, _Message) -> lookup_soa(Qname).
 
@@ -99,9 +101,6 @@ parse_content(Content, _, ?DNS_TYPE_AAAA_BSTR) ->
 parse_content(Content, Priority, ?DNS_TYPE_MX_BSTR) ->
   #dns_rrdata_mx{exchange=Content, preference=default_priority(Priority)};
 
-parse_content(Content, _, ?DNS_TYPE_TXT_BSTR) ->
-  #dns_rrdata_txt{txt=parse_txt(binary_to_list(Content))};
-
 parse_content(Content, _, ?DNS_TYPE_SPF_BSTR) ->
   #dns_rrdata_spf{spf=binary_to_list(Content)};
 
@@ -141,22 +140,39 @@ parse_content(Content, _, ?DNS_TYPE_AFSDB_BSTR) ->
   [SubtypeStr, Hostname] = string:tokens(binary_to_list(Content), " "),
   #dns_rrdata_afsdb{subtype = to_i(SubtypeStr), hostname = Hostname};
 
+parse_content(Content, _, ?DNS_TYPE_TXT_BSTR) ->
+  #dns_rrdata_txt{txt=lists:flatten(parse_txt(binary_to_list(Content)))};
+
 parse_content(_, _, Type) ->
   lager:debug("Mysql responder unsupported record type: ~p", [Type]),
   unsupported.
 
 parse_txt([C|Rest]) -> parse_txt_char([C|Rest], C, Rest, [], false).
-parse_txt(String, [], [], _) -> [String];
+parse_txt(String, [], [], _) -> [split_txt(String)];
 parse_txt(_, [], Tokens, _) -> Tokens;
 parse_txt(String, [C|Rest], Tokens, Escaped) -> parse_txt_char(String, C, Rest, Tokens, Escaped).
 parse_txt(String, [C|Rest], Tokens, CurrentToken, Escaped) -> parse_txt_char(String, C, Rest, Tokens, CurrentToken, Escaped).
 parse_txt_char(String, $", Rest, Tokens, _) -> parse_txt(String, Rest, Tokens, [], false);
 parse_txt_char(String, _, Rest, Tokens, _) -> parse_txt(String, Rest, Tokens, false).
-parse_txt_char(String, $", Rest, Tokens, CurrentToken, false) -> parse_txt(String, Rest, Tokens ++ [CurrentToken], false);
+parse_txt_char(String, $", Rest, Tokens, CurrentToken, false) -> parse_txt(String, Rest, Tokens ++ [split_txt(CurrentToken)], false);
 parse_txt_char(String, $", Rest, Tokens, CurrentToken, true) -> parse_txt(String, Rest, Tokens, CurrentToken ++ [$"], false);
 parse_txt_char(String, $\\, Rest, Tokens, CurrentToken, false) -> parse_txt(String, Rest, Tokens, CurrentToken, true);
 parse_txt_char(String, $\\, Rest, Tokens, CurrentToken, true) -> parse_txt(String, Rest, Tokens, CurrentToken ++ [$\\], false);
 parse_txt_char(String, C, Rest, Tokens, CurrentToken, _) -> parse_txt(String, Rest, Tokens, CurrentToken ++ [C], false).
+
+split_txt(Data) -> split_txt(Data, []).
+split_txt(Data, Parts) ->
+  case byte_size(list_to_binary(Data)) > ?MAX_TXT_SIZE of
+    true ->
+      First = list_to_binary(string:substr(Data, 1, ?MAX_TXT_SIZE)),
+      Rest = string:substr(Data, ?MAX_TXT_SIZE + 1),
+      case Rest of
+        [] -> Parts ++ [First];
+        _ -> split_txt(Rest, Parts ++ [First])
+      end;
+    false ->
+      Parts ++ [list_to_binary(Data)]
+  end.
 
 %% Utility method for converting a string to an integer.
 to_i(Str) -> {Int, _} = string:to_integer(Str), Int.

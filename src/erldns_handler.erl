@@ -148,6 +148,7 @@ exact_match_resolution(Message, _Qname, Qtype, Host, Wildcard, CnameChain, Match
                   lager:info("Restarting query with delegated name ~p", [DelegatedName]),
                   resolve(Message, DelegatedName, Qtype, find_zone(DelegatedName), Host, Wildcard, CnameChain);
                 false ->
+                  lager:info("Returning authoritative answer with ~p appended answers", [length(Answers)]),
                   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ Answers}
               end
           end;
