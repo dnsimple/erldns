@@ -68,14 +68,12 @@ measure(Name, FunctionName, Args) when is_list(Args) ->
 measure(Name, FunctionName, Arg) -> measure(Name, FunctionName, [Arg]).
 
 %% Resolve the first question inside the given message.
-resolve(Message, Host) ->
-  case Message#dns_message.questions of
-    [] -> Message;
-    [Question] -> measure(Question#dns_query.name, resolve, [Message, Question, Host]);
-    [Question|_] -> measure(Question#dns_query.name, resolve, [Message, Question, Host])
-  end.
+resolve(Message, Host) -> resolve(Message, Host, Message#dns_message.questions).
 
-resolve(Message, Question, Host) ->
+resolve(Message, _Host, []) -> Message;
+resolve(Message, Host, [Question]) -> measure(Question#dns_query.name, resolve, [Message, Host, Question]);
+resolve(Message, Host, [Question|_]) -> measure(Question#dns_query.name, resolve, [Message, Host, Question]);
+resolve(Message, Host, Question) when is_record(Question, dns_query) ->
   % Step 1: Set the RA bit to false
   resolve(Message#dns_message{ra = false}, Question#dns_query.name, Question#dns_query.type, Host).
 
@@ -92,107 +90,98 @@ resolve(Message, Qname, Qtype, Host) ->
 resolve(Message, Qname, Qtype, Records, Host) -> resolve(Message, Qname, Qtype, Records, Host, false, []).
 
 resolve(Message, Qname, Qtype, Records, Host, Wildcard, CnameChain) ->
-  % Step 3a: Exact match
+  % Step 3: Match records
   AllRecords = lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, Records))),
-  FilteredRecords = lists:filter(match_name(Qname), AllRecords),
-  case FilteredRecords of
-    [] -> best_match_resolution(Message, Qname, Qtype, Host, Wildcard, CnameChain, best_match(Qname, AllRecords), AllRecords);
-    MatchedRecords -> exact_match_resolution(Message, Qname, Qtype, Host, Wildcard, CnameChain, MatchedRecords, AllRecords)
-  end.
+  resolve(Message, Qname, Qtype, Records, Host, Wildcard, CnameChain, AllRecords, lists:filter(match_name(Qname), AllRecords)). 
+
+resolve(Message, Qname, Qtype, _Records, Host, Wildcard, CnameChain, AllRecords, []) ->
+  best_match_resolution(Message, Qname, Qtype, Host, Wildcard, CnameChain, best_match(Qname, AllRecords), AllRecords);
+resolve(Message, Qname, Qtype, _Records, Host, Wildcard, CnameChain, AllRecords, MatchedRecords) ->
+  exact_match_resolution(Message, Qname, Qtype, Host, Wildcard, CnameChain, MatchedRecords, AllRecords).
+
 
 exact_match_resolution(Message, _Qname, Qtype, Host, Wildcard, CnameChain, MatchedRecords, AllRecords) ->
   lager:debug("Exact matches found: ~p", [length(MatchedRecords)]),
-  AnyCnames = lists:any(match_type(?DNS_TYPE_CNAME), MatchedRecords),
-  case AnyCnames of
-    true -> resolve_exact_match_with_cname(Message, Qtype, Host, Wildcard, CnameChain, MatchedRecords);
+  CnameRecords = lists:filter(match_type(?DNS_TYPE_CNAME), MatchedRecords),
+  case length(CnameRecords) > 0 of
+    true -> resolve_exact_match_with_cname(Message, Qtype, Host, Wildcard, CnameChain, MatchedRecords, CnameRecords);
     false -> resolve_exact_match(Message, Qtype, Host, Wildcard, CnameChain, MatchedRecords, AllRecords)
   end.
 
 resolve_exact_match(Message, Qtype, Host, Wildcard, CnameChain, MatchedRecords, AllRecords) ->
   lager:debug("No CNAME records found in matches"),
-  % Step 3b: Referrals
-  AnyReferrals = lists:any(match_type(?DNS_TYPE_NS), MatchedRecords),
-  IsAuthority = lists:any(match_type(?DNS_TYPE_SOA), MatchedRecords),
-  ExactTypeMatch = lists:any(match_type(Qtype), MatchedRecords),
-  case ExactTypeMatch of
-    true ->
-      lager:debug("Found exact type match"),
-      Answers = lists:filter(match_type(Qtype), MatchedRecords),
-      Answer = lists:last(Answers),
-      case Qtype of
-        ?DNS_TYPE_NS ->
-          DelegatedName = Answer#dns_rr.name,
-          lager:debug("Type was NS so we're looking to see if it's a delegation: ~p", [DelegatedName]),
-          case IsAuthority of
-            false ->
-              lager:debug("Restarting query with delegated name ~p", [DelegatedName]),
-              resolve(Message, DelegatedName, ?DNS_TYPE_A, find_zone(DelegatedName), Host, Wildcard, CnameChain);
-            true ->
-              lager:debug("Authoritative for record, returning answers"),
-              Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ Answers}
-          end;
-        _ ->
-          NSRecords = delegation_records(Answer#dns_rr.name, AllRecords),
-          IsGlueRecord = length(NSRecords) > 0,
-          case IsGlueRecord of
-            true ->
-              NSRecord = lists:last(NSRecords),
-              DelegatedName = NSRecord#dns_rr.name,
-              lager:debug("Restarting query with delegated name ~p", [DelegatedName]),
-              resolve(Message, DelegatedName, Qtype, find_zone(DelegatedName), Host, Wildcard, CnameChain);
-            false ->
-              lager:debug("Returning authoritative answer with ~p appended answers", [length(Answers)]),
-              Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ Answers}
-          end
-      end;
-    false ->
-      case AnyReferrals of
-        true ->
-          lager:debug("Found referrals"),
-          case IsAuthority of
-            true ->
-              lager:debug("Found an SOA record"),
-              case Qtype of
-                ?DNS_TYPE_ANY -> Message#dns_message{aa = true, answers = MatchedRecords};
-                ?DNS_TYPE_NS -> Message#dns_message{aa = true, answers = lists:filter(match_type(?DNS_TYPE_NS), MatchedRecords)};
-                ?DNS_TYPE_SOA -> Message#dns_message{aa = true, answers = lists:filter(match_type(?DNS_TYPE_SOA), MatchedRecords)};
-                _ -> Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = lists:filter(match_type(?DNS_TYPE_SOA), MatchedRecords)}
-              end;
-            false ->
-              NSRecords = lists:filter(match_type(?DNS_TYPE_NS), MatchedRecords),
-              Message#dns_message{authority = Message#dns_message.authority ++ NSRecords}
-          end;
-        false ->
-          lager:debug("No referrals"),
-          Authority = lists:filter(match_type(?DNS_TYPE_SOA), AllRecords),
-          TypeMatches = case Qtype of
-            ?DNS_TYPE_ANY -> MatchedRecords;
-            _ -> lists:filter(match_type(Qtype), MatchedRecords)
-          end,
-          lager:debug("Type matches: ~p", [TypeMatches]),
-          case TypeMatches of
-            [] -> Message#dns_message{aa = true, authority = Authority};
-            _ -> Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}
-          end
-      end
-  end.
+  AuthorityRecords = lists:filter(match_type(?DNS_TYPE_SOA), MatchedRecords),
+  ExactTypeMatches = lists:filter(match_type(Qtype), MatchedRecords),
+  resolve_exact_match(Message, Qtype, Host, Wildcard, CnameChain, MatchedRecords, AllRecords, ExactTypeMatches, AuthorityRecords).
 
-resolve_exact_match_with_cname(Message, Qtype, Host, Wildcard, CnameChain, MatchedRecords) ->
-  case Qtype of
-    ?DNS_TYPE_CNAME ->
-      TypeMatches = lists:filter(match_type(Qtype), MatchedRecords),
-      Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches};
-    _ ->
-      lager:debug("Found CNAME, but qtype is ~p", [Qtype]),
-      RR = lists:last(lists:filter(match_type(?DNS_TYPE_CNAME), MatchedRecords)),
-      case lists:member(RR, CnameChain) of
-        true -> Message#dns_message{aa = true, rc = ?DNS_RCODE_SERVFAIL};
-        false ->
-          Name = RR#dns_rr.data#dns_rrdata_cname.dname,
-          lager:debug("Restarting query with CNAME name ~p", [Name]),
-          resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [RR]}, Name, Qtype, find_zone(Name), Host, Wildcard, CnameChain ++ [RR])
-      end
-  end.
+resolve_exact_match(Message, Qtype, Host, Wildcard, CnameChain, MatchedRecords, AllRecords, [], AuthorityRecords) ->
+  ReferralRecords = lists:filter(match_type(?DNS_TYPE_NS), MatchedRecords),
+  resolve_no_exact_type_match(Message, Qtype, Host, Wildcard, CnameChain, [], AllRecords, MatchedRecords, ReferralRecords, AuthorityRecords);
+resolve_exact_match(Message, Qtype, Host, Wildcard, CnameChain, _MatchedRecords, AllRecords, ExactTypeMatches, AuthorityRecords) ->
+  resolve_exact_type_match(Message, Qtype, Host, Wildcard, CnameChain, ExactTypeMatches, AllRecords, AuthorityRecords).
+
+resolve_exact_type_match(Message, ?DNS_TYPE_NS, Host, Wildcard, CnameChain, MatchedRecords, _AllRecords, []) ->
+  Answer = lists:last(MatchedRecords),
+  Name = Answer#dns_rr.name,
+  lager:debug("Restarting query with delegated name ~p", [Name]),
+  resolve(Message, Name, ?DNS_TYPE_A, find_zone(Name), Host, Wildcard, CnameChain);
+resolve_exact_type_match(Message, ?DNS_TYPE_NS, _Host, _Wildcard, _CnameChain, MatchedRecords, _AllRecords, _AuthorityRecords) ->
+  lager:debug("Authoritative for record, returning answers"),
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
+resolve_exact_type_match(Message, Qtype, Host, Wildcard, CnameChain, MatchedRecords, AllRecords, _AuthorityRecords) ->
+  Answer = lists:last(MatchedRecords),
+  NSRecords = delegation_records(Answer#dns_rr.name, AllRecords),
+  resolve_exact_type_match(Message, Qtype, Host, Wildcard, CnameChain, MatchedRecords, AllRecords, _AuthorityRecords, NSRecords).
+
+resolve_exact_type_match(Message, _Qtype, _Host, _Wildcard, _CnameChain, MatchedRecords, _AllRecords, _AuthorityRecords, []) ->
+  lager:debug("Returning authoritative answer with ~p appended answers", [length(MatchedRecords)]),
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
+resolve_exact_type_match(Message, Qtype, Host, Wildcard, CnameChain, _MatchedRecords, _AllRecords, _AuthorityRecords, NSRecords) ->
+  NSRecord = lists:last(NSRecords),
+  DelegatedName = NSRecord#dns_rr.name,
+  lager:debug("Restarting query with delegated name ~p", [DelegatedName]),
+  resolve(Message, DelegatedName, Qtype, find_zone(DelegatedName), Host, Wildcard, CnameChain).
+
+
+resolve_no_exact_type_match(Message, Qtype, _Host, _Wildcard, _CnameChain, ExactTypeMatches, AllRecords, MatchedRecords, [], _AuthorityRecords) ->
+  lager:debug("No referrals"),
+  Answers = case Qtype of
+    ?DNS_TYPE_ANY -> MatchedRecords;
+    _ -> ExactTypeMatches
+  end,
+  lager:debug("Type matches: ~p", [Answers]),
+  case Answers of
+    [] -> Message#dns_message{aa = true, authority = lists:filter(match_type(?DNS_TYPE_SOA), AllRecords)};
+    _ -> Message#dns_message{aa = true, answers = Message#dns_message.answers ++ Answers}
+  end;
+resolve_no_exact_type_match(Message, Qtype, _Host, _Wildcard, _CnameChain, _ExactTypeMatches, _AllRecords, MatchedRecords, ReferralRecords, AuthorityRecords) ->
+  resolve_exact_match_referral(Message, Qtype, MatchedRecords, ReferralRecords, AuthorityRecords).
+
+resolve_exact_match_referral(Message, _Qtype, _MatchedRecords, ReferralRecords, []) ->
+  Message#dns_message{authority = Message#dns_message.authority ++ ReferralRecords};
+resolve_exact_match_referral(Message, ?DNS_TYPE_ANY, MatchedRecords, _ReferralRecords, _AuthorityRecords) ->
+  Message#dns_message{aa = true, answers = MatchedRecords};
+resolve_exact_match_referral(Message, ?DNS_TYPE_NS, _MatchedRecords, ReferralRecords, _AuthorityRecords) ->
+  Message#dns_message{aa = true, answers = ReferralRecords};
+resolve_exact_match_referral(Message, ?DNS_TYPE_SOA, _MatchedRecords, _ReferralRecords, AuthorityRecords) ->
+  Message#dns_message{aa = true, answers = AuthorityRecords};
+resolve_exact_match_referral(Message, _, _MatchedRecords, _ReferralRecords, AuthorityRecords) ->
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = AuthorityRecords}.
+
+resolve_exact_match_with_cname(Message, ?DNS_TYPE_CNAME, _Host, _Wildcard, _CnameChain, _MatchedRecords, CnameRecords) ->
+  Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
+resolve_exact_match_with_cname(Message, Qtype, Host, Wildcard, CnameChain, MatchedRecords, CnameRecords) ->
+  lager:debug("Found CNAME, but qtype is ~p", [Qtype]),
+  resolve_exact_match_with_cname(Message, Qtype, Host, Wildcard, CnameChain, MatchedRecords, CnameRecords, lists:member(lists:last(CnameRecords), CnameChain)).
+
+%% Indicates a CNAME loop
+resolve_exact_match_with_cname(Message, _Qtype, _Host, _Wildcard, _CnameChain, _MatchedRecords, _CnameRecords, true) ->
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_SERVFAIL};
+resolve_exact_match_with_cname(Message, Qtype, Host, Wildcard, CnameChain, _MatchedRecords, CnameRecords, false) ->
+  CnameRecord = lists:last(CnameRecords),
+  Name = CnameRecord#dns_rr.data#dns_rrdata_cname.dname,
+  lager:debug("Restarting query with CNAME name ~p", [Name]),
+  resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords}, Name, Qtype, find_zone(Name), Host, Wildcard, CnameChain ++ CnameRecords).
 
 best_match_resolution(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords) ->
   lager:debug("No exact match found, using ~p", [BestMatchRecords]),
