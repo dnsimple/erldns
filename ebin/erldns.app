@@ -1,6 +1,6 @@
 {application,erldns,
              [{description,"Erlang Authoritative DNS Server"},
-              {vsn,"0541637"},
+              {vsn,"9ea2ac2"},
               {modules,[erldns,erldns_app,erldns_axfr,erldns_config,
                         erldns_dnssec,erldns_edns,erldns_encoder,
                         erldns_handler,erldns_metrics,erldns_packet_cache,
