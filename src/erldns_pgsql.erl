@@ -26,14 +26,12 @@ build_soa_query(DomainNames) ->
 
 lookup_records(Qname) -> 
   DomainNames = domain_names(Qname),
-  Records = case equery(build_domain_records_query(DomainNames), DomainNames) of
+  case equery(build_domain_records_query(DomainNames), DomainNames) of
     {ok, _, Rows} ->
       lists:map(fun(Row) -> row_to_record(Qname, Row) end, Rows);
     Result ->
       lager:error("~p:~p", [?MODULE, Result]), []
-  end,
-  %lager:info("lookup_records(~p): ~p", [Qname, Records]),
-  Records.
+  end.
 
 build_domain_records_query(DomainNames) ->
   {WhereClause, _} = build_domain_list_clause(DomainNames),
