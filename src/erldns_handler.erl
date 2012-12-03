@@ -190,84 +190,84 @@ best_match_resolution(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMa
   AnyReferrals = lists:any(match_type(?DNS_TYPE_NS), BestMatchRecords), 
   case AnyReferrals of
     true ->
-      lager:debug("Referral found"),
-      Authority = lists:filter(match_type(?DNS_TYPE_SOA), BestMatchRecords),
-      IsAuthority = length(Authority) > 0,
-      case IsAuthority of
+      resolve_best_match_referral(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords);
+    false ->
+      resolve_best_match(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords)
+  end.
+
+resolve_best_match(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords) ->
+  lager:debug("No referrals found"),
+  IsWildcard = lists:any(match_wildcard(), BestMatchRecords),
+  case IsWildcard of
+    true ->
+      lager:debug("Matched records are wildcard."),
+      resolve_best_match(Message, Qname, Qtype, Host, IsWildcard, CnameChain, BestMatchRecords, AllRecords, lists:filter(match_type(?DNS_TYPE_CNAME), lists:map(replace_name(Qname), BestMatchRecords)));
+    false ->
+      lager:debug("Matched records are not wildcard."),
+      [Question|_] = Message#dns_message.questions,
+      case Qname =:= Question#dns_query.name of
         true ->
-          lager:debug("Is authority: ~p", [Authority]),
-          case CnameChain of
-            [] -> Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Authority};
-            _ ->
-              case Qtype of
-                ?DNS_TYPE_ANY -> Message;
-                _ -> Message#dns_message{authority = Authority}
-              end
-          end;
+          Authority = lists:filter(match_type(?DNS_TYPE_SOA), AllRecords),
+          Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN, authority = Authority, aa = true};
         false ->
-          lager:debug("Is not authority"),
-          NSRecords = lists:filter(match_type(?DNS_TYPE_NS), BestMatchRecords),
-          Message#dns_message{aa = false, authority = Message#dns_message.authority ++ NSRecords}
+          {Authority, Additional} = erldns_records:root_hints(),
+          Message#dns_message{authority=Authority, additional=Additional}
+      end
+  end.
+
+resolve_best_match(Message, Qname, Qtype, _Host, _Wildcard, _CnameChain, BestMatchRecords, AllRecords, []) ->
+  lager:debug("Wildcard is not CNAME"),
+  TypeMatchedRecords = case Qtype of
+    ?DNS_TYPE_ANY -> BestMatchRecords;
+    _ -> lists:filter(match_type(Qtype), BestMatchRecords)
+  end,
+  TypeMatches = lists:map(replace_name(Qname), TypeMatchedRecords),
+  case length(TypeMatches) of
+    0 ->
+      Authority = lists:filter(match_type(?DNS_TYPE_SOA), AllRecords),
+      Message#dns_message{aa = true, authority=Authority};
+    _ ->
+      Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}
+  end;
+resolve_best_match(Message, Qname, Qtype, Host, Wildcard, CnameChain, BestMatchRecords, _AllRecords, CnameRecords) ->
+  resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, Wildcard, CnameChain, BestMatchRecords, CnameRecords).
+
+resolve_best_match_with_wildcard_cname(Message, _Qname, ?DNS_TYPE_CNAME, _Host, _Wildcard, _CnameChain, _BestMatchRecords, CnameRecords) ->
+  Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
+resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, Wildcard, CnameChain, BestMatchRecords, CnameRecords) ->
+  lager:debug("Found CNAME, but qtype is ~p", [Qtype]),
+  CnameRecord = lists:last(CnameRecords),
+  resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, Wildcard, CnameChain, BestMatchRecords, CnameRecords, lists:member(CnameRecord, CnameChain)).
+
+% Indicates CNAME loop
+resolve_best_match_with_wildcard_cname(Message, _Qname, _Qtype, _Host, _Wildcard, _CnameChain, _BestMatchRecords, _CnameRecords, true) ->
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_SERVFAIL};
+resolve_best_match_with_wildcard_cname(Message, _Qname, Qtype, Host, Wildcard, CnameChain, _BestMatchRecords, CnameRecords, false) ->
+  CnameRecord = lists:last(CnameRecords),
+  Name = CnameRecord#dns_rr.data#dns_rrdata_cname.dname,
+  lager:debug("Restarting resolve with ~p", [Name]),
+  resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [CnameRecord]}, Name, Qtype, find_zone(Name), Host, Wildcard, CnameChain ++ [CnameRecord]).
+
+
+resolve_best_match_referral(Message, _Qname, Qtype, _Host, _Wildcard, CnameChain, BestMatchRecords, _AllRecords) ->
+  lager:debug("Referral found"),
+  Authority = lists:filter(match_type(?DNS_TYPE_SOA), BestMatchRecords),
+  IsAuthority = length(Authority) > 0,
+  case IsAuthority of
+    true ->
+      lager:debug("Is authority: ~p", [Authority]),
+      case CnameChain of
+        [] -> Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Authority};
+        _ ->
+          case Qtype of
+            ?DNS_TYPE_ANY -> Message;
+            _ -> Message#dns_message{authority = Authority}
+          end
       end;
     false ->
-      % Step 3c
-      lager:debug("No referrals found"),
-      IsWildcard = lists:any(match_wildcard(), BestMatchRecords), 
-      case IsWildcard of
-        true ->
-          lager:debug("Matched records are wildcard."),
-          CnameMatches =  lists:filter(match_type(?DNS_TYPE_CNAME), BestMatchRecords),
-          AnyCnames = length(CnameMatches) > 0,
-          case AnyCnames of
-            true ->
-              lager:debug("Wildcard record is CNAME"),
-              case Qtype of
-                ?DNS_TYPE_CNAME ->
-                  TypeMatchedRecords = case Qtype of
-                    ?DNS_TYPE_ANY -> BestMatchRecords;
-                    _ -> lists:filter(match_type(Qtype), BestMatchRecords)
-                  end,
-                  TypeMatches = lists:map(replace_name(Qname), TypeMatchedRecords),
-                  Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches};
-                _ ->
-                  lager:debug("Found CNAME, but qtype is ~p", [Qtype]),
-                  RR = lists:last(lists:filter(match_type(?DNS_TYPE_CNAME), lists:map(replace_name(Qname), BestMatchRecords))),
-                  case lists:member(RR, CnameChain) of
-                    true ->
-                      Message#dns_message{aa = true, rc = ?DNS_RCODE_SERVFAIL};
-                    false ->
-                      Name = RR#dns_rr.data#dns_rrdata_cname.dname,
-                      lager:debug("Restarting resolve with ~p", [Name]),
-                      resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [RR]}, Name, Qtype, find_zone(Name), Host, IsWildcard, CnameChain ++ [RR])
-                  end
-              end;
-            false ->
-              lager:debug("Wildcard is not CNAME"),
-              TypeMatchedRecords = case Qtype of
-                ?DNS_TYPE_ANY -> BestMatchRecords;
-                _ -> lists:filter(match_type(Qtype), BestMatchRecords)
-              end,
-              TypeMatches = lists:map(replace_name(Qname), TypeMatchedRecords),
-              case length(TypeMatches) of
-                0 ->
-                  Authority = lists:filter(match_type(?DNS_TYPE_SOA), AllRecords),
-                  Message#dns_message{aa = true, authority=Authority};
-                _ ->
-                  Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}
-              end
-          end;
-        false ->
-          lager:debug("Matched records are not wildcard."),
-          [Question|_] = Message#dns_message.questions,
-          case Qname =:= Question#dns_query.name of
-            true ->
-              Authority = lists:filter(match_type(?DNS_TYPE_SOA), AllRecords),
-              Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN, authority = Authority, aa = true};
-            false ->
-              {Authority, Additional} = erldns_records:root_hints(),
-              Message#dns_message{authority=Authority, additional=Additional}
-          end
-      end
+      lager:debug("Is not authority"),
+      NSRecords = lists:filter(match_type(?DNS_TYPE_NS), BestMatchRecords),
+      Message#dns_message{aa = false, authority = Message#dns_message.authority ++ NSRecords}
   end.
 
 %% Find the best match records for the given Qname in the
