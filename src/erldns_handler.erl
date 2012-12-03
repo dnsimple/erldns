@@ -185,15 +185,12 @@ resolve_exact_match_with_cname(Message, Qtype, Host, Wildcard, CnameChain, _Matc
 
 best_match_resolution(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords) ->
   lager:debug("No exact match found, using ~p", [BestMatchRecords]),
+  best_match_resolution(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords, lists:filter(match_type(?DNS_TYPE_NS), BestMatchRecords)).
 
-  % Step 3b: Referrals
-  AnyReferrals = lists:any(match_type(?DNS_TYPE_NS), BestMatchRecords), 
-  case AnyReferrals of
-    true ->
-      resolve_best_match_referral(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords);
-    false ->
-      resolve_best_match(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords)
-  end.
+best_match_resolution(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords, []) ->
+  resolve_best_match(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords);
+best_match_resolution(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords, ReferralRecords) ->
+  resolve_best_match_referral(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords, ReferralRecords).
 
 resolve_best_match(Message, Qname, Qtype, Host, _Wildcard, CnameChain, BestMatchRecords, AllRecords) ->
   lager:debug("No referrals found"),
@@ -242,33 +239,27 @@ resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, Wildcard, Cn
 % Indicates CNAME loop
 resolve_best_match_with_wildcard_cname(Message, _Qname, _Qtype, _Host, _Wildcard, _CnameChain, _BestMatchRecords, _CnameRecords, true) ->
   Message#dns_message{aa = true, rc = ?DNS_RCODE_SERVFAIL};
+% We should follow the CNAME
 resolve_best_match_with_wildcard_cname(Message, _Qname, Qtype, Host, Wildcard, CnameChain, _BestMatchRecords, CnameRecords, false) ->
   CnameRecord = lists:last(CnameRecords),
   Name = CnameRecord#dns_rr.data#dns_rrdata_cname.dname,
   lager:debug("Restarting resolve with ~p", [Name]),
   resolve(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ [CnameRecord]}, Name, Qtype, find_zone(Name), Host, Wildcard, CnameChain ++ [CnameRecord]).
 
+% There are referral records
+resolve_best_match_referral(Message, Qname, Qtype, Host, Wildcard, CnameChain, BestMatchRecords, AllRecords, ReferralRecords) ->
+  resolve_best_match_referral(Message, Qname, Qtype, Host, Wildcard, CnameChain, BestMatchRecords, AllRecords, ReferralRecords, lists:filter(match_type(?DNS_TYPE_SOA), BestMatchRecords)).
 
-resolve_best_match_referral(Message, _Qname, Qtype, _Host, _Wildcard, CnameChain, BestMatchRecords, _AllRecords) ->
-  lager:debug("Referral found"),
-  Authority = lists:filter(match_type(?DNS_TYPE_SOA), BestMatchRecords),
-  IsAuthority = length(Authority) > 0,
-  case IsAuthority of
-    true ->
-      lager:debug("Is authority: ~p", [Authority]),
-      case CnameChain of
-        [] -> Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Authority};
-        _ ->
-          case Qtype of
-            ?DNS_TYPE_ANY -> Message;
-            _ -> Message#dns_message{authority = Authority}
-          end
-      end;
-    false ->
-      lager:debug("Is not authority"),
-      NSRecords = lists:filter(match_type(?DNS_TYPE_NS), BestMatchRecords),
-      Message#dns_message{aa = false, authority = Message#dns_message.authority ++ NSRecords}
-  end.
+% Indicate that we are not authoritative for the name.
+resolve_best_match_referral(Message, _Qname, _Qtype, _Host, _Wildcard, _CnameChain, _BestMatchRecords, _AllRecords, ReferralRecords, []) ->
+  Message#dns_message{aa = false, authority = Message#dns_message.authority ++ ReferralRecords};
+% We are authoritative for the name
+resolve_best_match_referral(Message, _Qname, _Qtype, _Host, _Wildcard, [], _BestMatchRecords, _AllRecords, _ReferralRecords, Authority) ->
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Authority};
+resolve_best_match_referral(Message, _Qname, ?DNS_TYPE_ANY, _Host, _Wildcard, _CnameChain, _BestMatchRecords, _AllRecords, _ReferralRecords, _Authority) ->
+   Message;
+resolve_best_match_referral(Message, _Qname, _Qtype, _Host, _Wildcard, _CnameChain, _BestMatchRecords, _AllRecords, _ReferralRecords, Authority) ->
+  Message#dns_message{authority = Authority}.
 
 %% Find the best match records for the given Qname in the
 %% given Record set. This will attempt to walk through the
