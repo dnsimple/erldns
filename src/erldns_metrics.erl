@@ -3,7 +3,7 @@
 -behavior(gen_server).
 
 % Public API
--export([start_link/0, insert/2, display/0, slowest/0]).
+-export([start_link/0, measure/4, insert/2, display/0, slowest/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -30,6 +30,13 @@ display() ->
 
 slowest() ->
   gen_server:cast(?SERVER, {display, slowest}).
+
+measure(Name, Module, FunctionName, Args) when is_list(Args) ->
+  {T, R} = timer:tc(Module, FunctionName, Args),
+  erldns_metrics:insert(Name, T),
+  lager:info("~p:~p took ~p ms", [Module, FunctionName, T / 1000]),
+  R;
+measure(Name, Module, FunctionName, Arg) -> measure(Name, Module, FunctionName, [Arg]).
 
 % Gen server functions
 init(_) ->
