@@ -7,9 +7,9 @@
 encode_message(Response) -> encode_message(Response, []).
 encode_message(Response, Opts) ->
   case application:get_env(erldns, catch_exceptions) of
-    {ok, false} -> dns:encode_message(Response, Opts);
+    {ok, false} -> erldns_metrics:measure(none, dns, encode_message, [Response, Opts]);
     _ ->
-      try dns:encode_message(Response, Opts) of
+      try erldns_metrics:measure(none, dns, encode_message, [Response, Opts]) of
         M -> M
       catch
         Exception:Reason ->
