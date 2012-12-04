@@ -6,7 +6,7 @@
 -export([handle/2]).
 
 % Internal API
--export([resolve/3]).
+-export([resolve/3, find_zone/1]).
 
 %% Handle the decoded message
 handle({trailing_garbage, Message, _}, Host) ->
@@ -33,32 +33,36 @@ handle_message(Message, Host) ->
     {error, _} -> handle_packet_cache_miss(Message, get_soas(Message), Host)
   end.
 
+%% If the packet is not in the cache and we are not authoritative, then answer
+%% immediately with the root delegation hints.
 handle_packet_cache_miss(Message, [], _Host) ->
   {Authority, Additional} = erldns_records:root_hints(),
   Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
-handle_packet_cache_miss(Message, _, Host) ->
-  Message2 = Message#dns_message{ra = false},
-  Authoritative = Message2#dns_message.aa,
+%% The packet is not in the cache yet we are authoritative, so try to resolve
+%% the request.
+handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
+  handle_packet_cache_miss(Message#dns_message{ra = false}, AuthorityRecords, Host, Message#dns_message.aa).
+
+handle_packet_cache_miss(Message, _, Host, Authoritative) ->
   case application:get_env(erldns, catch_exceptions) of
-    {ok, false} -> maybe_cache_packet(resolve(Message2, Host), Authoritative);
+    {ok, false} -> maybe_cache_packet(resolve(Message, Host), Authoritative);
     _ ->
-      try resolve(Message2, Host) of
+      try resolve(Message, Host) of
         Response -> maybe_cache_packet(Response, Authoritative)
       catch
         Exception:Reason ->
           lager:error("Error answering request: ~p (~p)", [Exception, Reason]),
-          Message2#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
+          Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
       end
   end.
 
+%% We are authoritative so cache the packet.
 maybe_cache_packet(Message, true) ->
   erldns_packet_cache:put(Message#dns_message.questions, Message),
   Message;
+%% We are not authoritative so just return the message.
 maybe_cache_packet(Message, false) ->
   Message.
-
-find_zone(Qname) ->
-  erldns_pgsql:lookup_records(normalize_name(Qname)).
 
 %% Resolve the first question inside the given message.
 resolve(Message, Host) -> resolve(Message, Host, Message#dns_message.questions).
@@ -190,30 +194,31 @@ resolve_best_match(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Al
 
 %% It's a wildcard match
 resolve_best_match(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, AllRecords, true) ->
-  resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, AllRecords, lists:filter(match_type(?DNS_TYPE_CNAME), lists:map(replace_name(Qname), BestMatchRecords)));
+  CnameRecords = lists:filter(match_type(?DNS_TYPE_CNAME), lists:map(replace_name(Qname), BestMatchRecords)),
+  resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, AllRecords, CnameRecords);
 resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, AllRecords, false) ->
   lager:debug("Matched records are not wildcard."),
   [Question|_] = Message#dns_message.questions,
   resolve_best_match_with_wildcard(Message, AllRecords, Qname =:= Question#dns_query.name).
 
 % It's not a wildcard CNAME
-resolve_best_match_with_wildcard(Message, Qname, Qtype, _Host, _CnameChain, BestMatchRecords, AllRecords, []) ->
+resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, AllRecords, []) ->
   lager:debug("Wildcard is not CNAME"),
   TypeMatchedRecords = case Qtype of
     ?DNS_TYPE_ANY -> BestMatchRecords;
     _ -> lists:filter(match_type(Qtype), BestMatchRecords)
   end,
   TypeMatches = lists:map(replace_name(Qname), TypeMatchedRecords),
-  case length(TypeMatches) of
-    0 ->
-      Authority = lists:filter(match_type(?DNS_TYPE_SOA), AllRecords),
-      Message#dns_message{aa = true, authority=Authority};
-    _ ->
-      Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}
-  end;
+  resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, AllRecords, [], TypeMatches);
+
 % It is a wildcard CNAME
 resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, _AllRecords, CnameRecords) ->
   resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, CnameRecords).
+
+resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, AllRecords, _CnameRecords, []) ->
+  Message#dns_message{aa = true, authority=lists:filter(match_type(?DNS_TYPE_SOA), AllRecords)};
+resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _AllRecords, _CnameRecords, TypeMatches) ->
+  Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}.
 
 resolve_best_match_with_wildcard(Message, _AllRecords, false) ->
   {Authority, Additional} = erldns_records:root_hints(),
@@ -320,6 +325,10 @@ requires_additional_processing([Answer|Rest], RequiresAdditional) ->
     _ -> []
   end,
   requires_additional_processing(Rest, RequiresAdditional ++ Names).
+
+%% Find the zone for the given name.
+find_zone(Qname) ->
+  erldns_metrics:measure(lists:concat(["find_zone: ", binary_to_list(Qname)]), erldns_pgsql, lookup_records, [normalize_name(Qname)]).
 
 %% Retreive all answers to the specific question.
 answer_question(Qname, Qtype = ?DNS_TYPE_AXFR_NUMBER, Host, Message) ->
