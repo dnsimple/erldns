@@ -9,7 +9,10 @@ init() -> ok.
 
 lookup_soa(Qname) ->
   DomainNames = domain_names(Qname),
-  case equery(pgsql_pool, build_soa_query(DomainNames), lists:flatten([DomainNames, <<"SOA">>])) of
+  Query = build_soa_query(DomainNames),
+  QueryArgs = lists:flatten([DomainNames, <<"SOA">>]),
+  lager:info("Executing query: ~p (args: ~p)", [Query, QueryArgs]),
+  case erldns_metrics:measure(none, ?MODULE, equery, [pgsql_pool, Query, QueryArgs]) of
     {ok, _, []} -> [];
     {ok, _, [Row]} -> row_to_record(Qname, Row);
     {ok, _, [Row|_]} -> row_to_record(Qname, Row);

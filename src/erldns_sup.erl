@@ -32,6 +32,7 @@ init(_Args) ->
     end, PgsqlPools),
 
   Procs = [
+    ?CHILD(erldns_zone_cache, worker, []),
     ?CHILD(erldns_packet_cache, worker, []),
     ?CHILD(erldns_query_throttle, worker, []),
     ?CHILD(erldns_metrics, worker, []),

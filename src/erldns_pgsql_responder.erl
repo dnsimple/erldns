@@ -3,12 +3,12 @@
 -include("dns.hrl").
 -include("erldns.hrl").
 
--export([answer/3, get_soa/2, get_metadata/2, db_to_record/2]).
+-export([answer/3, get_soa/1, get_metadata/2, db_to_record/2]).
 
 -define(MAX_TXT_SIZE, 255).
 
 %% Get the SOA record for the name.
-get_soa(Qname, _Message) -> lookup_soa(Qname).
+get_soa(Qname) -> lookup_soa(Qname).
 
 %% Get the metadata for the name.
 get_metadata(Qname, _Message) -> erldns_pgsql:get_metadata(Qname).
