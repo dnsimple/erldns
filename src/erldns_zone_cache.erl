@@ -82,6 +82,7 @@ handle_call({get_authority, Name}, _From, State) ->
       end
   end;
 handle_call({put_authority, Name, Authority}, _From, State) ->
+  lager:info("handle_call({put, ~p})", [Name]),
   ets:insert(authority_cache, {Name, {Authority}}),
   {reply, ok, State}.
 
