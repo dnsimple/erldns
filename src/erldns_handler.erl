@@ -77,9 +77,8 @@ resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_
 
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   % Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
-  Authority = lists:last(AuthorityRecords),
-  Zone = erldns_metrics:measure(none, ?MODULE, find_zone, [Qname, Authority]),
-  Records = erldns_metrics:measure(none, ?MODULE, resolve, [Message, Qname, Qtype, Zone#zone{authority=Authority}, Host, []]),
+  Zone = erldns_metrics:measure(none, ?MODULE, find_zone, [Qname, lists:last(AuthorityRecords)]),
+  Records = erldns_metrics:measure(none, ?MODULE, resolve, [Message, Qname, Qtype, Zone, Host, []]),
   RewrittenRecords = erldns_metrics:measure(none, ?MODULE, rewrite_soa_ttl, [Records]),
   erldns_metrics:measure(none, ?MODULE, additional_processing, [RewrittenRecords, Host, Zone]).
 
@@ -323,6 +322,8 @@ normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
 normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
 
 %% See if additional processing is necessary.
+additional_processing(Message, _Host, {error, _}) ->
+  Message;
 additional_processing(Message, Host, Zone) ->
   RequiresAdditionalProcessing = erldns_metrics:measure(none, ?MODULE, requires_additional_processing, [Message#dns_message.answers ++ Message#dns_message.authority, []]),
   erldns_metrics:measure(none, ?MODULE, additional_processing, [Message, Host, Zone, lists:flatten(RequiresAdditionalProcessing)]).

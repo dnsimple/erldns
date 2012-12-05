@@ -63,7 +63,8 @@ init([]) ->
   {ok, #state{}}.
 
 handle_call({get, Name}, _From, State) ->
-  case ets:lookup(zone_cache, normalize_name(Name)) of
+  lager:info("handle_call({get, ~p})", [Name]),
+  case erldns_metrics:measure(none, ets, lookup, [zone_cache, normalize_name(Name)]) of
     [{Name, {Zone}}] -> {reply, {ok, Zone}, State};
     _ -> {reply, {error, zone_not_found}, State}
   end;
@@ -121,12 +122,18 @@ load_authority(Qname, Authorities) ->
 
 % Find the zone for the given name.
 find_zone(Qname) ->
+  lager:info("Finding zone for name ~p", [Qname]),
   Authority = erldns_metrics:measure(none, ?MODULE, get_authority, [Qname]),
   find_zone(normalize_name(Qname), Authority).
 
+find_zone(Qname, {error, _}) -> find_zone(Qname, []);
+find_zone(Qname, {ok, Authority}) -> find_zone(Qname, Authority);
 find_zone(_Qname, []) ->
   {error, not_authoritative};
-find_zone(Qname, Authority) when is_list(Authority) -> find_zone(Qname, lists:last(Authority));
+find_zone(Qname, Authorities) when is_list(Authorities) ->
+  lager:info("Finding zone ~p (Authorities: ~p)", [Qname, Authorities]),
+  Authority = lists:last(Authorities),
+  find_zone(Qname, Authority);
 find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
   lager:info("Finding zone ~p (Authority: ~p)", [Qname, Authority]),
   Name = normalize_name(Qname),
@@ -134,7 +141,7 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
     [] -> {error, zone_not_found};
     [_] -> {error, zone_not_found};
     [_|Labels] ->
-      case erldns_zone_cache:get(Name) of
+      case erldns_metrics:measure(none, erldns_zone_cache, get, [Name]) of
         {ok, Zone} -> Zone;
         {error, zone_not_found} -> 
           case Name =:= Authority#dns_rr.name of
