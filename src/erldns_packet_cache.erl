@@ -3,7 +3,7 @@
 -behavior(gen_server).
 
 % API
--export([start_link/0, get/1, put/2, sweep/0]).
+-export([start_link/0, get/1, put/2, sweep/0, clear/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -29,6 +29,8 @@ put(Question, Response) ->
   gen_server:call(?SERVER, {set_packet, [Question, Response]}).
 sweep() ->
   gen_server:cast(?SERVER, {sweep, []}).
+clear() ->
+  gen_server:cast(?SERVER, {clear}).
 
 %% Gen server hooks
 init([]) ->
@@ -61,6 +63,9 @@ handle_cast({sweep, []}, State) ->
   Keys = ets:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', T - 10}], ['$1']}]),
   lager:debug("Found keys: ~p", [Keys]),
   lists:foreach(fun(K) -> ets:delete(packet_cache, K) end, Keys),
+  {noreply, State};
+handle_cast({clear}, State) ->
+  ets:delete_all_objects(packet_cache),
   {noreply, State}.
 handle_info(_Message, State) ->
   {noreply, State}.
