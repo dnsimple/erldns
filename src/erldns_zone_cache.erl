@@ -6,8 +6,7 @@
 -include("erldns.hrl").
 
 % API
--export([start_link/0, get_zone/1, put_zone/2, get_authority/1, put_authority/2, get_delegations/1, get_records_by_name/1, in_zone/1]).
--export([find_authority/1, find_zone/1, find_zone/2]).
+-export([start_link/0, find_zone/1, find_zone/2, get_zone/1, put_zone/2, get_authority/1, put_authority/2, get_delegations/1, get_records_by_name/1, in_zone/1]).
 
 % Internal API
 -export([build_named_index/1]).
@@ -28,6 +27,37 @@
 %% Public API
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+find_zone(Qname) ->
+  lager:info("Finding zone for name ~p", [Qname]),
+  Authority = erldns_metrics:measure(none, ?MODULE, get_authority, [Qname]),
+  find_zone(normalize_name(Qname), Authority).
+
+find_zone(Qname, {error, _}) -> find_zone(Qname, []);
+find_zone(Qname, {ok, Authority}) -> find_zone(Qname, Authority);
+find_zone(_Qname, []) ->
+  {error, not_authoritative};
+find_zone(Qname, Authorities) when is_list(Authorities) ->
+  lager:info("Finding zone ~p (Authorities: ~p)", [Qname, Authorities]),
+  Authority = lists:last(Authorities),
+  find_zone(Qname, Authority);
+
+find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
+  lager:info("Finding zone ~p (Authority: ~p)", [Qname, Authority]),
+  Name = normalize_name(Qname),
+  case dns:dname_to_labels(Name) of
+    [] -> {error, zone_not_found};
+    [_] -> {error, zone_not_found};
+    [_|Labels] ->
+      case erldns_metrics:measure(none, erldns_zone_cache, get_zone, [Name]) of
+        {ok, Zone} -> Zone;
+        {error, zone_not_found} ->
+          case Name =:= Authority#dns_rr.name of
+            true -> make_zone(Name);
+            false -> find_zone(dns:labels_to_dname(Labels), Authority)
+          end
+      end
+  end.
 
 get_zone(Name) ->
   gen_server:call(?SERVER, {get, Name}).
@@ -146,57 +176,12 @@ internal_in_zone(Name, Zone) ->
       end
   end.
 
-%% Get the SOA authority for the current query.
-find_authority(Qname) -> 
-  case dns:dname_to_labels(Qname) of
-    [] -> {error, authority_not_found};
-    [_] -> {error, authority_not_found};
-    [_|Labels] ->
-      Name = dns:labels_to_dname(Labels),
-      case find_authority(Name) of
-        {ok, Authority} -> Authority;
-        {error, authority_not_found} -> find_authority(Name)
-      end
-  end.
-
 load_authority(Qname) ->
   load_authority(Qname, [F([normalize_name(Qname)]) || F <- soa_functions()]).
 
 load_authority(_Qname, []) -> [];
 load_authority(_Qname, Authorities) ->
   lists:last(Authorities).
-
-% Find the zone for the given name.
-find_zone(Qname) ->
-  lager:info("Finding zone for name ~p", [Qname]),
-  Authority = erldns_metrics:measure(none, ?MODULE, get_authority, [Qname]),
-  find_zone(normalize_name(Qname), Authority).
-
-find_zone(Qname, {error, _}) -> find_zone(Qname, []);
-find_zone(Qname, {ok, Authority}) -> find_zone(Qname, Authority);
-find_zone(_Qname, []) ->
-  {error, not_authoritative};
-find_zone(Qname, Authorities) when is_list(Authorities) ->
-  lager:info("Finding zone ~p (Authorities: ~p)", [Qname, Authorities]),
-  Authority = lists:last(Authorities),
-  find_zone(Qname, Authority);
-
-find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
-  lager:info("Finding zone ~p (Authority: ~p)", [Qname, Authority]),
-  Name = normalize_name(Qname),
-  case dns:dname_to_labels(Name) of
-    [] -> {error, zone_not_found};
-    [_] -> {error, zone_not_found};
-    [_|Labels] ->
-      case erldns_metrics:measure(none, erldns_zone_cache, get_zone, [Name]) of
-        {ok, Zone} -> Zone;
-        {error, zone_not_found} -> 
-          case Name =:= Authority#dns_rr.name of
-            true -> make_zone(Name);
-            false -> find_zone(dns:labels_to_dname(Labels), Authority)
-          end
-      end
-  end.
 
 find_zone_in_cache(Qname, State) ->
   Name = normalize_name(Qname),
