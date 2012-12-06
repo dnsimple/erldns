@@ -6,8 +6,8 @@
 -include("erldns.hrl").
 
 % API
--export([start_link/0, get/1, put/2, get_authority/1, put_authority/2]).
--export([in_zone/2, find_authority/1, find_zone/1, find_zone/2]).
+-export([start_link/0, get_zone/1, put_zone/2, get_authority/1, put_authority/2, get_delegations/1, get_records_by_name/1, in_zone/1]).
+-export([find_authority/1, find_zone/1, find_zone/2]).
 
 % Internal API
 -export([build_named_index/1]).
@@ -23,16 +23,18 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {zones}).
+-record(state, {zones, authorities}).
 
 %% Public API
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-get(Name) ->
+get_zone(Name) ->
   gen_server:call(?SERVER, {get, Name}).
-put(Name, Zone) ->
+
+put_zone(Name, Zone) ->
   gen_server:call(?SERVER, {put, Name, Zone}).
+
 get_authority(Message) when is_record(Message, dns_message) ->
   case Message#dns_message.questions of
     [] -> [];
@@ -42,62 +44,107 @@ get_authority(Message) when is_record(Message, dns_message) ->
   end;
 get_authority(Name) ->
   gen_server:call(?SERVER, {get_authority, Name}).
+
 put_authority(Name, Authority) ->
   gen_server:call(?SERVER, {put_authority, Name, Authority}).
 
-in_zone(Name, Zone) ->
-  case dict:is_key(Name, Zone#zone.records_by_name) of
-    true -> true;
-    false ->
-      case dns:dname_to_labels(Name) of
-        [] -> false;
-        [_] -> false;
-        [_|Labels] -> in_zone(dns:labels_to_dname(Labels), Zone)
-      end
+get_delegations(Name) ->
+  Result = gen_server:call(?SERVER, {get_delegations, Name}),
+  lager:info("get_delegations(~p): ~p", [Name, Result]),
+  case Result of
+    {ok, Delegations} -> Delegations;
+    _ -> []
   end.
+
+get_records_by_name(Name) ->
+  gen_server:call(?SERVER, {get_records_by_name, Name}).
+
+in_zone(Name) ->
+  gen_server:call(?SERVER, {in_zone, Name}).
 
 %% Gen server hooks
 init([]) ->
-  ets:new(zone_cache, [set, named_table]),
-  ets:new(authority_cache, [set, named_table]),
-  {ok, #state{}}.
+  Zones = dict:new(),
+  Authorities = dict:new(),
+  {ok, #state{zones = Zones, authorities = Authorities}}.
 
 handle_call({get, Name}, _From, State) ->
-  lager:info("handle_call({get, ~p})", [Name]),
-  case erldns_metrics:measure(none, ets, lookup, [zone_cache, normalize_name(Name)]) of
-    [{Name, {Zone}}] -> {reply, {ok, Zone}, State};
+  case dict:find(normalize_name(Name), State#state.zones) of
+    {ok, Zone} -> {reply, {ok, Zone#zone{name = normalize_name(Name), records = [], records_by_name=trimmed}}, State};
     _ -> {reply, {error, zone_not_found}, State}
   end;
+
+handle_call({get_delegations, Name}, _From, State) ->
+  case find_zone_in_cache(Name, State) of
+    {ok, Zone} ->
+      Records = lists:filter(fun(R) -> apply(match_type(?DNS_TYPE_NS), [R]) and apply(match_glue(Name), [R]) end, Zone#zone.records),
+      {reply, {ok, Records}, State};
+    Response ->
+      lager:info("Failed to get zone for ~p: ~p", [Name, Response]),
+      {reply, Response, State}
+  end;
+
 handle_call({put, Name, Zone}, _From, State) ->
-  ets:insert(zone_cache, {Name, {Zone}}),
-  {reply, ok, State};
+  Zones = dict:store(normalize_name(Name), Zone, State#state.zones),
+  {reply, ok, State#state{zones = Zones}};
+
 handle_call({get_authority, Name}, _From, State) ->
-  case ets:lookup(authority_cache, normalize_name(Name)) of
-    [{Name, {Authority}}] -> 
-      {reply, {ok, Authority}, State};
+  case dict:find(normalize_name(Name), State#state.authorities) of
+    {ok, Authority} -> {reply, {ok, Authority}, State};
     _ -> 
       case load_authority(Name) of
         [] -> {reply, {error, authority_not_found}, State};
-        Authority -> {reply, {ok, Authority}, State}
+        Authority ->
+          Authorities = dict:store(normalize_name(Name), Authority, State#state.authorities),
+          {reply, {ok, Authority}, State#state{authorities = Authorities}}
       end
   end;
+
 handle_call({put_authority, Name, Authority}, _From, State) ->
-  lager:info("handle_call({put, ~p})", [Name]),
-  ets:insert(authority_cache, {Name, {Authority}}),
-  {reply, ok, State}.
+  Authorities = dict:store(normalize_name(Name), Authority, State#state.authorities),
+  {reply, ok, State#state{authorities = Authorities}};
+
+handle_call({get_records_by_name, Name}, _From, State) ->
+  case find_zone_in_cache(Name, State) of
+    {ok, Zone} ->
+      case dict:find(normalize_name(Name), Zone#zone.records_by_name) of
+        {ok, RecordSet} -> {reply, RecordSet, State};
+        _ -> {reply, [], State}
+      end;
+    Response ->
+      lager:info("Failed to get zone: ~p", [Response]),
+      {reply, [], State}
+  end;
+
+handle_call({in_zone, Name}, _From, State) ->
+  case find_zone_in_cache(Name, State) of
+    {ok, Zone} ->
+      {reply, internal_in_zone(Name, Zone), State};
+    _ ->
+      {reply, false, State}
+  end.
 
 handle_cast(_Message, State) ->
   {noreply, State}.
 handle_info(_Message, State) ->
   {noreply, State}.
 terminate(_Reason, _State) ->
-  ets:delete(zone_cache),
-  ets:delete(authority_cache),
   ok.
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
 % Internal API%
+
+internal_in_zone(Name, Zone) ->
+  case dict:is_key(normalize_name(Name), Zone#zone.records_by_name) of
+    true -> true;
+    false ->
+      case dns:dname_to_labels(Name) of
+        [] -> false;
+        [_] -> false;
+        [_|Labels] -> internal_in_zone(dns:labels_to_dname(Labels), Zone)
+      end
+  end.
 
 %% Get the SOA authority for the current query.
 find_authority(Qname) -> 
@@ -116,10 +163,8 @@ load_authority(Qname) ->
   load_authority(Qname, [F([normalize_name(Qname)]) || F <- soa_functions()]).
 
 load_authority(_Qname, []) -> [];
-load_authority(Qname, Authorities) -> 
-  Authority = lists:last(Authorities),
-  ets:insert(authority_cache, {normalize_name(Qname), {Authority}}),
-  Authority.
+load_authority(_Qname, Authorities) ->
+  lists:last(Authorities).
 
 % Find the zone for the given name.
 find_zone(Qname) ->
@@ -135,6 +180,7 @@ find_zone(Qname, Authorities) when is_list(Authorities) ->
   lager:info("Finding zone ~p (Authorities: ~p)", [Qname, Authorities]),
   Authority = lists:last(Authorities),
   find_zone(Qname, Authority);
+
 find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
   lager:info("Finding zone ~p (Authority: ~p)", [Qname, Authority]),
   Name = normalize_name(Qname),
@@ -142,7 +188,7 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
     [] -> {error, zone_not_found};
     [_] -> {error, zone_not_found};
     [_|Labels] ->
-      case erldns_metrics:measure(none, erldns_zone_cache, get, [Name]) of
+      case erldns_metrics:measure(none, erldns_zone_cache, get_zone, [Name]) of
         {ok, Zone} -> Zone;
         {error, zone_not_found} -> 
           case Name =:= Authority#dns_rr.name of
@@ -152,13 +198,26 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
       end
   end.
 
+find_zone_in_cache(Qname, State) ->
+  Name = normalize_name(Qname),
+  case dns:dname_to_labels(Name) of
+    [] -> {error, zone_not_found};
+    [_] -> {error, zone_not_found};
+    [_|Labels] ->
+      case dict:find(Name, State#state.zones) of
+        {ok, Zone} -> {ok, Zone};
+        error -> find_zone_in_cache(dns:labels_to_dname(Labels), State)
+      end
+  end.
+
 make_zone(Qname) ->
   lager:info("Constructing new zone for ~p", [Qname]),
   DbRecords = erldns_metrics:measure(Qname, erldns_pgsql, lookup_records, [normalize_name(Qname)]),
   Records = lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, DbRecords))),
   RecordsByName = erldns_metrics:measure(Qname, ?MODULE, build_named_index, [Records]),
-  Zone = #zone{records = Records, records_by_name = RecordsByName},
-  erldns_zone_cache:put(Qname, Zone),
+  Authorities = lists:filter(match_type(?DNS_TYPE_SOA), Records),
+  Zone = #zone{record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName},
+  erldns_zone_cache:put_zone(Qname, Zone),
   Zone.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
@@ -177,3 +236,8 @@ normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(bina
 %% registered responders.
 soa_functions() ->
   lists:map(fun(M) -> fun M:get_soa/1 end, erldns_handler:get_responder_modules()).
+
+%% Various matching functions.
+match_type(Type) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.type =:= Type end.
+%match_wildcard() -> fun(R) when is_record(R, dns_rr) -> lists:any(fun(L) -> L =:= <<"*">> end, dns:dname_to_labels(R#dns_rr.name)) end.
+match_glue(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.data =:= #dns_rrdata_ns{dname=Name} end.

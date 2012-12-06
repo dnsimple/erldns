@@ -79,7 +79,7 @@ resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   % Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
   Zone = erldns_metrics:measure(none, ?MODULE, find_zone, [Qname, lists:last(AuthorityRecords)]),
   Records = erldns_metrics:measure(none, ?MODULE, resolve, [Message, Qname, Qtype, Zone, Host, []]),
-  RewrittenRecords = erldns_metrics:measure(none, ?MODULE, rewrite_soa_ttl, [Records]),
+  RewrittenRecords = rewrite_soa_ttl(Records),
   erldns_metrics:measure(none, ?MODULE, additional_processing, [RewrittenRecords, Host, Zone]).
 
 resolve(Message, Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain) ->
@@ -87,7 +87,7 @@ resolve(Message, Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain) 
   {Authority, Additional} = erldns_records:root_hints(),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
-  lager:debug("Zone has ~p records", [length(Zone#zone.records)]),
+  lager:info("Zone has ~p records", [Zone#zone.record_count]),
   % Step 3: Match records
   resolve(Message, Qname, Qtype, find_records_by_name(Qname, Zone), Host, CnameChain, Zone).
 
@@ -135,7 +135,7 @@ resolve_exact_type_match(Message, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecor
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
 resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
   Answer = lists:last(MatchedRecords),
-  NSRecords = delegation_records(Answer#dns_rr.name, Zone#zone.records),
+  NSRecords = delegation_records(Answer#dns_rr.name, Zone),
   resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords).
 
 resolve_exact_type_match(Message, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, []) ->
@@ -153,8 +153,7 @@ resolve_exact_type_match(Message, Qtype, Host, CnameChain, _MatchedRecords, Zone
 resolve_no_exact_type_match(Message, ?DNS_TYPE_ANY, _Host, _CnameChain, _ExactTypeMatches, _Zone, [], [], AuthorityRecords) ->
   Message#dns_message{aa = true, authority = AuthorityRecords};
 resolve_no_exact_type_match(Message, _Qtype, _Host, _CnameChain, [], Zone, _MatchedRecords, [], _AuthorityRecords) ->
-  Authority = lists:filter(match_type(?DNS_TYPE_SOA), Zone#zone.records),
-  Message#dns_message{aa = true, authority = Authority};
+  Message#dns_message{aa = true, authority = Zone#zone.authority};
 resolve_no_exact_type_match(Message, _Qtype, _Host, _CnameChain, ExactTypeMatches, _Zone, _MatchedRecords, [], _AuthorityRecords) ->
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ ExactTypeMatches};
 resolve_no_exact_type_match(Message, Qtype, _Host, _CnameChain, _ExactTypeMatches, _Zone, MatchedRecords, ReferralRecords, AuthorityRecords) ->
@@ -223,8 +222,7 @@ resolve_best_match_with_wildcard(Message, _Zone, false) ->
   Message#dns_message{authority=Authority, additional=Additional};
 resolve_best_match_with_wildcard(Message, Zone, true) ->
   lager:debug("Qname matched query name"),
-  Authority = lists:filter(match_type(?DNS_TYPE_SOA), Zone#zone.records),
-  Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN, authority = Authority, aa = true}.
+  Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN, authority = Zone#zone.authority, aa = true}.
 
 % It's not a wildcard CNAME
 resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, []) ->
@@ -241,7 +239,7 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMa
   resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords).
 
 resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, _CnameRecords, []) ->
-  Message#dns_message{aa = true, authority=lists:filter(match_type(?DNS_TYPE_SOA), Zone#zone.records)};
+  Message#dns_message{aa = true, authority=Zone#zone.authority};
 resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _Zone, _CnameRecords, TypeMatches) ->
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}.
 
@@ -308,7 +306,6 @@ best_match(_Qname, _Labels, _Zone, WildcardMatches) -> WildcardMatches.
 %% Various matching functions.
 match_type(Type) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.type =:= Type end.
 match_wildcard() -> fun(R) when is_record(R, dns_rr) -> lists:any(fun(L) -> L =:= <<"*">> end, dns:dname_to_labels(R#dns_rr.name)) end.
-match_glue(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.data =:= #dns_rrdata_ns{dname=Name} end.
 
 %% Replacement functions.
 replace_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} end.
@@ -316,10 +313,7 @@ replace_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} 
 %% Find all delegation records for the given Name in the provided
 %% Records. This function may return an empty list, which means
 %% the record is not a glue record.
-delegation_records(Name, Records) -> lists:filter(fun(R) -> apply(match_type(?DNS_TYPE_NS), [R]) and apply(match_glue(Name), [R]) end, Records).
-
-normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
-normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
+delegation_records(Name, _Zone) -> erldns_zone_cache:get_delegations(Name).
 
 %% See if additional processing is necessary.
 additional_processing(Message, _Host, {error, _}) ->
@@ -364,17 +358,13 @@ get_authority(MessageOrName) ->
     {error, _} -> []
   end.
 
-in_zone(Name, Zone) -> erldns_zone_cache:in_zone(Name, Zone).
+in_zone(Name, _Zone) -> erldns_zone_cache:in_zone(Name).
 
 %% Find the zone for the given name.
 find_zone(Qname) -> erldns_zone_cache:find_zone(Qname).
 find_zone(Qname, Authority) -> erldns_zone_cache:find_zone(Qname, Authority).
 
-find_records_by_name(Name, Zone) ->
-  case dict:find(normalize_name(Name), Zone#zone.records_by_name) of
-    {ok, RecordSet} -> RecordSet;
-    error -> []
-  end.
+find_records_by_name(Name, _Zone) -> erldns_zone_cache:get_records_by_name(Name).
 
 %% Update the message counts and set the QR flag to true.
 complete_response(Message) ->
