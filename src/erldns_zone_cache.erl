@@ -41,12 +41,9 @@ find_zone(Qname, {ok, Authority}) -> find_zone(Qname, Authority);
 find_zone(_Qname, []) ->
   {error, not_authoritative};
 find_zone(Qname, Authorities) when is_list(Authorities) ->
-  lager:info("Finding zone ~p (Authorities: ~p)", [Qname, Authorities]),
-  Authority = lists:last(Authorities),
-  find_zone(Qname, Authority);
+  find_zone(Qname, lists:last(Authorities));
 
 find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
-  lager:info("Finding zone ~p (Authority: ~p)", [Qname, Authority]),
   Name = normalize_name(Qname),
   case dns:dname_to_labels(Name) of
     [] -> {error, zone_not_found};
@@ -83,7 +80,6 @@ put_authority(Name, Authority) ->
 
 get_delegations(Name) ->
   Result = gen_server:call(?SERVER, {get_delegations, Name}),
-  lager:info("get_delegations(~p): ~p", [Name, Result]),
   case Result of
     {ok, Delegations} -> Delegations;
     _ -> []

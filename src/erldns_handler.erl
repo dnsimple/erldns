@@ -6,7 +6,7 @@
 -export([handle/2, get_responder_modules/0]).
 
 % Internal API
--export([resolve/4, resolve/6, find_zone/2, requires_additional_processing/2, additional_processing/3, additional_processing/4, 
+-export([resolve/4, resolve/6, handle_message/2, find_zone/2, requires_additional_processing/2, additional_processing/3, additional_processing/4, 
     rewrite_soa_ttl/1]).
 
 %% If the message has trailing garbage just throw the garbage away and continue
@@ -32,7 +32,7 @@ handle(Message, Host, {throttled, Host, ReqCount}) ->
 %% by filling out count-related header fields.
 handle(Message, Host, _) ->
   lager:info("Questions: ~p", [Message#dns_message.questions]),
-  NewMessage = handle_message(Message, Host),
+  NewMessage = erldns_metrics:measure(none, ?MODULE, handle_message, [Message, Host]),
   complete_response(erldns_axfr:optionally_append_soa(erldns_edns:handle(NewMessage))).
 
 %% Handle the message by hitting the packet cache and either
@@ -75,7 +75,8 @@ maybe_cache_packet(Message, false) ->
   Message.
 
 %% Resolve the first question inside the given message.
-resolve(Message, AuthorityRecords, Host) -> resolve(Message, AuthorityRecords, Host, Message#dns_message.questions).
+resolve(Message, AuthorityRecords, Host) -> 
+  erldns_metrics:measure(none, ?MODULE, resolve, [Message, AuthorityRecords, Host, Message#dns_message.questions]).
 
 %% There were no questions in the message so just return it.
 resolve(Message, _AuthorityRecords, _Host, []) -> Message;
@@ -91,7 +92,7 @@ resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   % Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
   Zone = erldns_metrics:measure(none, ?MODULE, find_zone, [Qname, lists:last(AuthorityRecords)]), % Zone lookup
-  Records = erldns_metrics:measure(none, ?MODULE, resolve, [Message, Qname, Qtype, Zone, Host, []]),
+  Records = resolve(Message, Qname, Qtype, Zone, Host, []),
   RewrittenRecords = rewrite_soa_ttl(Records),
   erldns_metrics:measure(none, ?MODULE, additional_processing, [RewrittenRecords, Host, Zone]).
 
