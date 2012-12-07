@@ -122,17 +122,7 @@ handle_call({put, Name, Zone}, _From, State) ->
   {reply, ok, State#state{zones = Zones}};
 
 handle_call({get_authority, Name}, _From, State) ->
-  case dict:find(normalize_name(Name), State#state.authorities) of
-    {ok, Authority} -> {reply, {ok, Authority}, State};
-    _ -> 
-      lager:info("Authority not found: ~p", [normalize_name(Name)]),
-      case load_authority(Name) of
-        [] -> {reply, {error, authority_not_found}, State};
-        Authority ->
-          Authorities = dict:store(normalize_name(Name), Authority, State#state.authorities),
-          {reply, {ok, Authority}, State#state{authorities = Authorities}}
-      end
-  end;
+  find_authority(normalize_name(Name), State);
 
 handle_call({put_authority, Name, Authority}, _From, State) ->
   Authorities = dict:store(normalize_name(Name), Authority, State#state.authorities),
@@ -188,12 +178,11 @@ internal_in_zone(Name, Zone) ->
       end
   end.
 
-load_authority(Qname) ->
-  load_authority(Qname, [F([normalize_name(Qname)]) || F <- soa_functions()]).
-
-load_authority(_Qname, []) -> [];
-load_authority(_Qname, Authorities) ->
-  lists:last(Authorities).
+find_authority(Name, State) ->
+  case find_zone_in_cache(Name, State) of
+    {ok, Zone} -> {reply, {ok, Zone#zone.authority}, State};
+    _ -> {reply, {error, authority_not_found}, State}
+  end.
 
 find_zone_in_cache(Qname, State) ->
   Name = normalize_name(Qname),
@@ -222,7 +211,7 @@ make_zone(Qname, Records) ->
 build_zone(Qname, Records) ->
   RecordsByName = erldns_metrics:measure(Qname, ?MODULE, build_named_index, [Records]),
   Authorities = lists:filter(match_type(?DNS_TYPE_SOA), Records),
-  #zone{record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
+  #zone{name = Qname, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;
@@ -235,11 +224,6 @@ build_named_index([R|Rest], Idx) ->
 
 normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
 normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
-
-%% Build a list of functions for looking up SOA records based on the
-%% registered responders.
-soa_functions() ->
-  lists:map(fun(M) -> fun M:get_soa/1 end, erldns_handler:get_responder_modules()).
 
 %% Various matching functions.
 match_type(Type) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.type =:= Type end.
