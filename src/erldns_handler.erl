@@ -328,18 +328,6 @@ best_match(Qname, Labels, Zone, []) ->
   end;
 best_match(_Qname, _Labels, _Zone, WildcardMatches) -> WildcardMatches.
 
-%% Various matching functions.
-match_type(Type) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.type =:= Type end.
-match_wildcard() -> fun(R) when is_record(R, dns_rr) -> lists:any(fun(L) -> L =:= <<"*">> end, dns:dname_to_labels(R#dns_rr.name)) end.
-
-%% Replacement functions.
-replace_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} end.
-
-%% Find all delegation records for the given Name in the provided
-%% Records. This function may return an empty list, which means
-%% the record is not a glue record.
-delegation_records(Name, _Zone) -> erldns_zone_cache:get_delegations(Name).
-
 %% See if additional processing is necessary.
 additional_processing(Message, _Host, {error, _}) ->
   Message;
@@ -388,6 +376,18 @@ find_zone(Qname, Authority) -> erldns_zone_cache:find_zone(Qname, Authority).
 
 %% Find the records for the given name in the given zone.
 find_records_by_name(Name, _Zone) -> erldns_zone_cache:get_records_by_name(Name).
+
+%% Various matching functions.
+match_type(Type) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.type =:= Type end.
+match_wildcard() -> fun(R) when is_record(R, dns_rr) -> lists:any(fun(L) -> L =:= <<"*">> end, dns:dname_to_labels(R#dns_rr.name)) end.
+
+%% Replacement functions.
+replace_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} end.
+
+%% Find all delegation records for the given Name in the provided
+%% Records. This function may return an empty list, which means
+%% the record is not a glue record.
+delegation_records(Name, _Zone) -> erldns_zone_cache:get_delegations(Name).
 
 %% Update the message counts and set the QR flag to true.
 complete_response(Message) ->
