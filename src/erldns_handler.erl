@@ -127,6 +127,8 @@ resolve_exact_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
   TypeMatches = lists:filter(match_type(Qtype), MatchedRecords), % Query matched records for Qtype
   resolve_exact_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, TypeMatches, AuthorityRecords).
 
+%% There were no matches for exact name and type, so now we are looking for NS records
+%% in the exact name matches.
 resolve_exact_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, [], AuthorityRecords) ->
   ReferralRecords = lists:filter(match_type(?DNS_TYPE_NS), MatchedRecords), % Query matched records for NS type
   resolve_no_exact_type_match(Message, Qtype, Host, CnameChain, [], Zone, MatchedRecords, ReferralRecords, AuthorityRecords);
@@ -138,10 +140,8 @@ resolve_exact_type_match(Message, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords
   Name = Answer#dns_rr.name,
   lager:info("Restarting query with delegated name ~p", [Name]),
   % It isn't clear what the QTYPE should be on a delegated restart. I assume an A record.
-  case in_zone(Name, Zone) of
-    true -> resolve(Message, Name, ?DNS_TYPE_A, Zone, Host, CnameChain);
-    false -> resolve(Message, Name, ?DNS_TYPE_A, find_zone(Name, Zone#zone.authority), Host, CnameChain) % Zone lookup
-  end;
+  restart_delegated_query(Message, Name, ?DNS_TYPE_A, Host, CnameChain, Zone, in_zone(Name, Zone));
+
 resolve_exact_type_match(Message, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords) ->
   lager:debug("Authoritative for record, returning answers"),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
@@ -164,6 +164,8 @@ restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
 restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, false) ->
   resolve(Message, Name, Qtype, find_zone(Name, Zone#zone.authority), Host, CnameChain). % Zone lookup
 
+%% There were no exact type matches, but there were other name matches and there are NS records.
+%% Since the Qtype is ANY we indicate we are authoritative and include the NS records.
 resolve_no_exact_type_match(Message, ?DNS_TYPE_ANY, _Host, _CnameChain, _ExactTypeMatches, _Zone, [], [], AuthorityRecords) ->
   Message#dns_message{aa = true, authority = AuthorityRecords};
 resolve_no_exact_type_match(Message, _Qtype, _Host, _CnameChain, [], Zone, _MatchedRecords, [], _AuthorityRecords) ->
@@ -221,8 +223,6 @@ restart_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
 % CNAME content.
 restart_query(Message, Name, Qtype, Host, CnameChain, _Zone, false) ->
   resolve(Message, Name, Qtype, find_zone(Name), Host, CnameChain).
-
-
 
 best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone) ->
   lager:debug("No exact match found, using ~p", [BestMatchRecords]),
