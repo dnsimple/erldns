@@ -3,9 +3,20 @@
 -include("dns.hrl").
 -include("erldns.hrl").
 
--export([init/0, lookup_name/3, lookup_records/1, lookup_soa/1, get_metadata/1, domain_names/1, equery/2, equery/3]).
+-export([init/0, lookup_name/3, lookup_records/0, lookup_records/1, lookup_soa/1, get_metadata/1, domain_names/1, equery/2, equery/3]).
 
 init() -> ok.
+
+lookup_records() ->
+  case squery("select * from domains") of
+    {ok, _, Rows} ->
+      lists:map(
+        fun({_,Name,_,_,_,_,_}) ->
+          {Name, lookup_records(Name)}
+        end, Rows);
+    Result ->
+      lager:error("~p:~p", [?MODULE, Result]), []
+  end.
 
 lookup_soa(Qname) ->
   DomainNames = domain_names(Qname),
@@ -87,10 +98,18 @@ row_to_record(_, {_, _Id, Name, Type, Content, TTL, Priority, _ChangeDate, _Auth
   #db_rr{name=Name, type=Type, content=Content, ttl=TTL, priority=Priority}.
 
 % Internal API
+squery(Stmt) -> squery(pgsql_pool, Stmt).
+squery(PoolName, Stmt) ->
+  poolboy:transaction(PoolName,
+    fun(Worker) ->
+        gen_server:call(Worker, {squery, Stmt})
+    end).
+
 equery(Stmt, Params) -> equery(pgsql_pool, Stmt, Params).
 equery(PoolName, Stmt, Params) ->
-  poolboy:transaction(PoolName, fun(Worker) ->
-      gen_server:call(Worker, {equery, Stmt, Params})
-  end).
+  poolboy:transaction(PoolName,
+    fun(Worker) ->
+        gen_server:call(Worker, {equery, Stmt, Params})
+    end).
   
 

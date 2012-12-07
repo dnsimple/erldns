@@ -6,7 +6,7 @@
 -include("erldns.hrl").
 
 % API
--export([start_link/0, find_zone/1, find_zone/2, get_zone/1, put_zone/2, get_authority/1, put_authority/2, get_delegations/1, get_records_by_name/1, in_zone/1]).
+-export([start_link/0, load_zones/0, find_zone/1, find_zone/2, get_zone/1, put_zone/2, get_authority/1, put_authority/2, get_delegations/1, get_records_by_name/1, in_zone/1]).
 
 % Internal API
 -export([build_named_index/1]).
@@ -27,6 +27,9 @@
 %% Public API
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+load_zones() ->
+  gen_server:cast(?SERVER, {load_zones}).
 
 find_zone(Qname) ->
   lager:info("Finding zone for name ~p", [Qname]),
@@ -154,8 +157,16 @@ handle_call({in_zone, Name}, _From, State) ->
       {reply, false, State}
   end.
 
-handle_cast(_Message, State) ->
+
+handle_cast({load_zones}, State) ->
+  lists:foreach(
+    fun({Name, Records}) ->
+        Zone = build_zone(Name, lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Name, R) end, Records)))),
+        dict:store(Name, Zone, State#state.zones),
+        Zone
+    end, erldns_pgsql:lookup_records()),
   {noreply, State}.
+
 handle_info(_Message, State) ->
   {noreply, State}.
 terminate(_Reason, _State) ->
@@ -198,12 +209,19 @@ find_zone_in_cache(Qname, State) ->
 make_zone(Qname) ->
   lager:info("Constructing new zone for ~p", [Qname]),
   DbRecords = erldns_metrics:measure(Qname, erldns_pgsql, lookup_records, [normalize_name(Qname)]),
-  Records = lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, DbRecords))),
+  make_zone(Qname, lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, DbRecords)))).
+
+make_zone(Qname, Records) ->
   RecordsByName = erldns_metrics:measure(Qname, ?MODULE, build_named_index, [Records]),
   Authorities = lists:filter(match_type(?DNS_TYPE_SOA), Records),
   Zone = #zone{record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName},
   erldns_zone_cache:put_zone(Qname, Zone),
   Zone.
+
+build_zone(Qname, Records) ->
+  RecordsByName = erldns_metrics:measure(Qname, ?MODULE, build_named_index, [Records]),
+  Authorities = lists:filter(match_type(?DNS_TYPE_SOA), Records),
+  #zone{record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;

@@ -328,7 +328,6 @@ additional_processing(Message, _Host, _Zone, []) ->
 additional_processing(Message, Host, Zone, Names) ->
   lager:debug("Doing additional processing on ~p", [Names]),
   RRs = lists:flatten(lists:map(fun(Name) -> find_records_by_name(Name, Zone) end, Names)),
-  lager:debug("Records: ~p", [RRs]),
   Records = lists:filter(match_type(?DNS_TYPE_A), RRs),
   additional_processing(Message, Host, Zone, Names, Records).
 %% No additional A records were found, so just return the message.
