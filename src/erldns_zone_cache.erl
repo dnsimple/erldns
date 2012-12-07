@@ -113,7 +113,7 @@ handle_call({get_delegations, Name}, _From, State) ->
       Records = lists:filter(fun(R) -> apply(match_type(?DNS_TYPE_NS), [R]) and apply(match_glue(Name), [R]) end, Zone#zone.records),
       {reply, {ok, Records}, State};
     Response ->
-      lager:info("Failed to get zone for ~p: ~p", [Name, Response]),
+      lager:info("get_delegations, failed to get zone for ~p: ~p", [Name, Response]),
       {reply, Response, State}
   end;
 
@@ -145,7 +145,7 @@ handle_call({get_records_by_name, Name}, _From, State) ->
         _ -> {reply, [], State}
       end;
     Response ->
-      lager:info("Failed to get zone: ~p", [Response]),
+      lager:info("get_records_by_name, failed to get zone for ~p: ~p", [Name, Response]),
       {reply, [], State}
   end;
 
