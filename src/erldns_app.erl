@@ -8,7 +8,9 @@ start(Type, Args) ->
   lager:info("~p:start(~p, ~p)", [?MODULE, Type, Args]),
   random:seed(erlang:now()),
   enable_metrics(),
-  erldns_sup:start_link().
+  AppLink = erldns_sup:start_link(),
+  erldns_zone_cache:load_zones(),
+  AppLink.
 
 stop(State) ->
   lager:info("~p:stop(~p)~n", [?MODULE, State]),

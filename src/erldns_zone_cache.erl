@@ -125,6 +125,7 @@ handle_call({get_authority, Name}, _From, State) ->
   case dict:find(normalize_name(Name), State#state.authorities) of
     {ok, Authority} -> {reply, {ok, Authority}, State};
     _ -> 
+      lager:info("Authority not found: ~p", [normalize_name(Name)]),
       case load_authority(Name) of
         [] -> {reply, {error, authority_not_found}, State};
         Authority ->
@@ -157,15 +158,10 @@ handle_call({in_zone, Name}, _From, State) ->
       {reply, false, State}
   end.
 
-
 handle_cast({load_zones}, State) ->
-  lists:foreach(
-    fun({Name, Records}) ->
-        Zone = build_zone(Name, lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Name, R) end, Records)))),
-        dict:store(Name, Zone, State#state.zones),
-        Zone
-    end, erldns_pgsql:lookup_records()),
-  {noreply, State}.
+  Zones = load_zones(erldns_pgsql:lookup_records(), State#state.zones),
+  lager:info("Zones loaded: ~p", [dict:size(Zones)]),
+  {noreply, State#state{zones = Zones}}.
 
 handle_info(_Message, State) ->
   {noreply, State}.
@@ -175,6 +171,11 @@ code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
 % Internal API%
+
+load_zones([], Zones) -> Zones;
+load_zones([{Name,Records}|Rest], Zones) ->
+  Zone = build_zone(Name, lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Name, R) end, Records)))),
+  load_zones(Rest, dict:store(Name, Zone, Zones)).
 
 internal_in_zone(Name, Zone) ->
   case dict:is_key(normalize_name(Name), Zone#zone.records_by_name) of
@@ -214,7 +215,7 @@ make_zone(Qname) ->
 make_zone(Qname, Records) ->
   RecordsByName = erldns_metrics:measure(Qname, ?MODULE, build_named_index, [Records]),
   Authorities = lists:filter(match_type(?DNS_TYPE_SOA), Records),
-  Zone = #zone{record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName},
+  Zone = #zone{name = Qname, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName},
   erldns_zone_cache:put_zone(Qname, Zone),
   Zone.
 
