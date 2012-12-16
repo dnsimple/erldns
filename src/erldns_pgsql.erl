@@ -124,7 +124,7 @@ parse_content(Content, _, ?DNS_TYPE_TXT_BSTR) ->
   #dns_rrdata_txt{txt=lists:flatten(parse_txt(binary_to_list(Content)))};
 
 parse_content(_, _, Type) ->
-  lager:debug("Mysql responder unsupported record type: ~p", [Type]),
+  lager:debug("Unsupported record type: ~p", [Type]),
   unsupported.
 
 parse_txt([C|Rest]) -> parse_txt_char([C|Rest], C, Rest, [], false).

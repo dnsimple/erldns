@@ -6,7 +6,8 @@
 -include("erldns.hrl").
 
 % API
--export([start_link/0, load_zones/0, find_zone/1, find_zone/2, get_zone/1, put_zone/2, get_authority/1, put_authority/2, get_delegations/1, get_records_by_name/1, in_zone/1]).
+-export([start_link/0, load_zones/0, register_parser/2]).
+-export([find_zone/1, find_zone/2, get_zone/1, put_zone/2, get_authority/1, put_authority/2, get_delegations/1, get_records_by_name/1, in_zone/1]).
 
 % Internal API
 -export([build_named_index/1]).
@@ -22,7 +23,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {zones, authorities}).
+-record(state, {zones, authorities, parsers}).
 
 %% Public API
 start_link() ->
@@ -30,6 +31,9 @@ start_link() ->
 
 load_zones() ->
   gen_server:cast(?SERVER, {load_zones}).
+
+register_parser(Types, Module) ->
+  gen_server:call(?SERVER, {register_parser, {Types, Module}}).
 
 find_zone(Qname) ->
   lager:info("Finding zone for name ~p", [Qname]),
@@ -95,7 +99,7 @@ in_zone(Name) ->
 init([]) ->
   Zones = dict:new(),
   Authorities = dict:new(),
-  {ok, #state{zones = Zones, authorities = Authorities}}.
+  {ok, #state{zones = Zones, authorities = Authorities, parsers = []}}.
 
 handle_call({get, Name}, _From, State) ->
   case dict:find(normalize_name(Name), State#state.zones) of
@@ -142,7 +146,11 @@ handle_call({in_zone, Name}, _From, State) ->
       {reply, internal_in_zone(Name, Zone), State};
     _ ->
       {reply, false, State}
-  end.
+  end;
+
+handle_call({register_parser, {Types, Module}}, _From, State) ->
+  lager:info("Register parser ~p for types ~p", [Module, Types]), 
+  {reply, ok, State#state{parsers = State#state.parsers ++ [{Types, Module}]}}.
 
 handle_cast({load_zones}, State) ->
   Zones = load_zones(erldns_pgsql:lookup_records(), State#state.zones),

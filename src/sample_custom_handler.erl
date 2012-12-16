@@ -22,6 +22,7 @@ handle(Records) ->
 %% Gen server hooks
 init([]) ->
   erldns_handler:register_handler([?DNS_TYPE_A], ?MODULE),
+  erldns_zone_cache:register_parser([<<"SAMPLE">>], ?MODULE),
   {ok, #state{}}.
 
 handle_call({handle, Records}, _From, State) ->
