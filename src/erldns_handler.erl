@@ -3,11 +3,15 @@
 -include("dns.hrl").
 -include("erldns.hrl").
 
--export([handle/2, get_responder_modules/0]).
+-export([handle/2, get_responder_modules/0, register_handler/2]).
 
 % Internal API
 -export([resolve/4, resolve/6, handle_message/2, find_zone/2, requires_additional_processing/2, additional_processing/3, additional_processing/4, 
     rewrite_soa_ttl/1]).
+
+register_handler(RecordTypes, Module) ->
+  lager:info("Registered handler ~p for types ~p", [Module, RecordTypes]),
+  ok.
 
 %% If the message has trailing garbage just throw the garbage away and continue
 %% trying to process the message.
@@ -202,7 +206,7 @@ resolve_exact_match_referral(Message, _, _MatchedRecords, _ReferralRecords, Auth
 % the answers section..
 resolve_exact_match_with_cname(Message, ?DNS_TYPE_CNAME, _Host, _CnameChain, _MatchedRecords, _Zone, CnameRecords) ->
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
-% There is a CNAME record, however the type is not CNAME, check for a CNAME loop before continuing.
+% There is a CNAME record, however the Qtype is not CNAME, check for a CNAME loop before continuing.
 resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords) ->
   resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords, lists:member(lists:last(CnameRecords), CnameChain)).
 
@@ -225,13 +229,17 @@ restart_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
 restart_query(Message, Name, Qtype, Host, CnameChain, _Zone, false) ->
   resolve(Message, Name, Qtype, find_zone(Name), Host, CnameChain).
 
+% There was no exact match for the Qname, so we use the best matches that were
+% returned by the best_match() function.
 best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone) ->
   lager:debug("No exact match found, using ~p", [BestMatchRecords]),
   ReferralRecords = lists:filter(match_type(?DNS_TYPE_NS), BestMatchRecords), % NS lookup
   best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, ReferralRecords).
 
+% There were no NS records in the best matches.
 best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, []) ->
   resolve_best_match(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone);
+% There were NS records in the best matches, so this is a referral.
 best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, ReferralRecords) ->
   resolve_best_match_referral(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, ReferralRecords).
 
@@ -298,12 +306,17 @@ resolve_best_match_with_wildcard_cname(Message, _Qname, Qtype, Host, CnameChain,
 resolve_best_match_referral(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, ReferralRecords) ->
   resolve_best_match_referral(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, ReferralRecords, lists:filter(match_type(?DNS_TYPE_SOA), BestMatchRecords)). % Lookup SOA in best match records
 
-% Indicate that we are not authoritative for the name.
+% Indicate that we are not authoritative for the name as there were no
+% SOA records in the best-match results. The name has thus been delegated
+% to another authority.
 resolve_best_match_referral(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _Zone, ReferralRecords, []) ->
   Message#dns_message{aa = false, authority = Message#dns_message.authority ++ ReferralRecords};
-% We are authoritative for the name
+% We are authoritative for the name since there was an SOA record in
+% the best match results.
 resolve_best_match_referral(Message, _Qname, _Qtype, _Host, [], _BestMatchRecords, _Zone, _ReferralRecords, Authority) ->
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Authority};
+% We are authoritative and the Qtype is ANY so we just return the 
+% original message.
 resolve_best_match_referral(Message, _Qname, ?DNS_TYPE_ANY, _Host, _CnameChain, _BestMatchRecords, _Zone, _ReferralRecords, _Authority) ->
    Message;
 resolve_best_match_referral(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _Zone, _ReferralRecords, Authority) ->

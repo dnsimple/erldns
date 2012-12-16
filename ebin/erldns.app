@@ -1,6 +1,6 @@
 {application,erldns,
              [{description,"Erlang Authoritative DNS Server"},
-              {vsn,"f5b19bb"},
+              {vsn,"977ddaa"},
               {modules,[erldns,erldns_app,erldns_axfr,erldns_config,
                         erldns_dnssec,erldns_edns,erldns_encoder,
                         erldns_handler,erldns_metrics,erldns_packet_cache,
@@ -8,7 +8,7 @@
                         erldns_pgsql_worker,erldns_query_throttle,
                         erldns_records,erldns_sup,erldns_tcp_server,
                         erldns_udp_server,erldns_worker,erldns_zone_cache,
-                        gen_nb_server]},
+                        gen_nb_server,sample_custom_handler]},
               {registered,[erldns_udp_server,erldns_tcp_server]},
               {mod,{erldns_app,[]}},
               {applications,[kernel,stdlib]}]}.
