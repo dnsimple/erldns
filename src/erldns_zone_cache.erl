@@ -160,7 +160,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 load_zones([], Zones) -> Zones;
 load_zones([{Name,Records}|Rest], Zones) ->
-  Zone = build_zone(Name, lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Name, R) end, Records)))),
+  Zone = build_zone(Name, lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql:db_to_record(Name, R) end, Records)))),
   load_zones(Rest, dict:store(Name, Zone, Zones)).
 
 internal_in_zone(Name, Zone) ->
@@ -195,7 +195,7 @@ find_zone_in_cache(Qname, State) ->
 make_zone(Qname) ->
   lager:info("Constructing new zone for ~p", [Qname]),
   DbRecords = erldns_metrics:measure(Qname, erldns_pgsql, lookup_records, [normalize_name(Qname)]),
-  make_zone(Qname, lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql_responder:db_to_record(Qname, R) end, DbRecords)))).
+  make_zone(Qname, lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql:db_to_record(Qname, R) end, DbRecords)))).
 
 make_zone(Qname, Records) ->
   RecordsByName = erldns_metrics:measure(Qname, ?MODULE, build_named_index, [Records]),

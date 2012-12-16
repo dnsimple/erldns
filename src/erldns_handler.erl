@@ -3,11 +3,12 @@
 -include("dns.hrl").
 -include("erldns.hrl").
 
--export([handle/2, get_responder_modules/0, register_handler/2]).
+-export([handle/2, register_handler/2]).
 
 % Internal API
--export([resolve/4, resolve/6, handle_message/2, find_zone/2, requires_additional_processing/2, additional_processing/3, additional_processing/4, 
-    rewrite_soa_ttl/1]).
+-export([resolve/4, resolve/6, handle_message/2, find_zone/2]).
+-export([requires_additional_processing/2, additional_processing/3, additional_processing/4]).
+-export([rewrite_soa_ttl/1]).
 
 register_handler(RecordTypes, Module) ->
   lager:info("Registered handler ~p for types ~p", [Module, RecordTypes]),
@@ -420,9 +421,3 @@ rewrite_soa_ttl(Message, [R|Rest], NewAuthority) -> rewrite_soa_ttl(Message, Res
 
 minimum_soa_ttl(Record, Data) when is_record(Data, dns_rrdata_soa) -> Record#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, Record#dns_rr.ttl)};
 minimum_soa_ttl(Record, _) -> Record.
-
-%% Find the responder module names from the app environment. Default 
-%% to just the erldns_mysql_responder.
-get_responder_modules() -> get_responder_modules(application:get_env(erldns, responders)).
-get_responder_modules({ok, RM}) -> RM;
-get_responder_modules(_) -> [erldns_mysql_responder].
