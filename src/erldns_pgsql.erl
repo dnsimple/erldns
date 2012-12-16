@@ -3,7 +3,7 @@
 -include("dns.hrl").
 -include("erldns.hrl").
 
--export([init/0, lookup_name/3, lookup_records/0, lookup_records/1, lookup_soa/1, get_metadata/1, domain_names/1, equery/2, equery/3]).
+-export([init/0, lookup_name/3, lookup_records/0, lookup_records/1, domain_names/1, equery/2, equery/3]).
 
 init() -> ok.
 
@@ -17,26 +17,6 @@ lookup_records() ->
     Result ->
       lager:error("~p:~p", [?MODULE, Result]), []
   end.
-
-lookup_soa(Qname) ->
-  DomainNames = domain_names(Qname),
-  Query = build_soa_query(DomainNames),
-  QueryArgs = lists:flatten([DomainNames, <<"SOA">>]),
-  lager:info("Executing query: ~p (args: ~p)", [Query, QueryArgs]),
-  case erldns_metrics:measure(none, ?MODULE, equery, [pgsql_pool, Query, QueryArgs]) of
-    {ok, _, []} -> [];
-    {ok, _, [Row]} -> row_to_record(Qname, Row);
-    {ok, _, [Row|_]} -> row_to_record(Qname, Row);
-    Result ->
-      lager:error("~p:~p", [?MODULE, Result]), []
-  end.
-
-%% This is a hack because the PostgreSQL driver cannot encode lists
-%% for use in queries like "foo IN (?)"
-build_soa_query(DomainNames) ->
-  {WhereClause, NextIndex} = build_domain_list_clause(DomainNames), 
-  PostWhereClause = lists:concat([" limit 1) and records.type = $", NextIndex, " limit 1"]),
-  list_to_binary(["select records.* from domains join records on domains.id = records.domain_id where domains.id = (select records.domain_id from records where "] ++ [WhereClause, PostWhereClause]).
 
 lookup_records(Qname) -> 
   DomainNames = domain_names(Qname),
@@ -66,11 +46,6 @@ lookup_name(Qname, Qtype, LookupName) ->
       lists:map(fun(Row) -> row_to_record(Qname, Row) end, Rows);
     Result ->
       lager:error("~p:~p", [?MODULE, Result]), []
-  end.
-
-get_metadata(Qname) -> 
-  case equery(<<"select domainmetadata.* from domains join domainmetadata on domains.id = domainmetadata.domain_id where domains.id = (select records.domain_id from records where lower(name) = $1 limit 1)">>, [Qname]) of
-    {ok, _, Rows} -> Rows
   end.
 
 %% Given a list of domain names, build an OR-separated SQL where
