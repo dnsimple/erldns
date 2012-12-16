@@ -1,6 +1,6 @@
 -module(erldns_records).
 -include("dns.hrl").
--export([optionally_convert_wildcard/2, wildcard_qname/1, name_type/1, root_hints/0]).
+-export([optionally_convert_wildcard/2, wildcard_qname/1, default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
 
 %% If the name returned from the DB is a wildcard name then the
 %% Original Qname needs to be returned in its place.
@@ -16,6 +16,20 @@ optionally_convert_wildcard(Name, Qname) ->
 wildcard_qname(Qname) ->
   [_|Rest] = dns:dname_to_labels(Qname),
   dns:labels_to_dname([<<"*">>] ++ Rest).
+
+%% Return the TTL value or 3600 if it is undefined.
+default_ttl(TTL) ->
+  case TTL of
+    undefined -> 3600;
+    Value -> Value
+  end.
+
+%% Return the Priority value or 0 if it is undefined.
+default_priority(Priority) ->
+  case Priority of
+    undefined -> 0;
+    Value -> Value
+  end.
 
 %% @doc Returns the type value given a binary string.
 -spec name_type(binary()) -> dns:type() | 'undefined'.

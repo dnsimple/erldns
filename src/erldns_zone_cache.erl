@@ -153,7 +153,7 @@ handle_call({register_parser, {Types, Module}}, _From, State) ->
   {reply, ok, State#state{parsers = State#state.parsers ++ [{Types, Module}]}}.
 
 handle_cast({load_zones}, State) ->
-  Zones = load_zones(erldns_pgsql:lookup_records(), State#state.zones),
+  Zones = load_zones(erldns_pgsql:lookup_records(), State#state.zones, State#state.parsers),
   lager:info("Zones loaded: ~p", [dict:size(Zones)]),
   {noreply, State#state{zones = Zones}}.
 
@@ -166,10 +166,41 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 % Internal API%
 
-load_zones([], Zones) -> Zones;
-load_zones([{Name,Records}|Rest], Zones) ->
-  Zone = build_zone(Name, lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql:db_to_record(Name, R) end, Records)))),
-  load_zones(Rest, dict:store(Name, Zone, Zones)).
+%% Return a function that may use a registered parser
+%% to parse an internal db_rr record into a dns_rr.
+record_parser(Record) ->
+  fun({Types, Module}) ->
+      case lists:member(Record#db_rr.type, Types) of
+        true -> Module:parse(Record);
+        false -> []
+      end
+  end.
+
+%% Return a function that is used to try to parse an internal
+%% representation of a record (i.e. a db_rr) into the dns_rr
+%% format.
+record_parser(Name, Parsers) ->
+  fun(Record) ->
+      case erldns_pgsql:db_to_record(Name, Record) of
+        unsupported ->
+          Records = lists:map(record_parser(Record), Parsers),
+          lager:info("Records from custom parsers: ~p", [Records]),
+          Records;
+        RR -> [RR]
+      end
+  end.
+
+%% Load the zone by parsing the internal representation of the
+%% resource record for each record and then build a zone object.
+load_zones([], Zones, _Parsers) -> Zones;
+load_zones([{Name,Records}|Rest], Zones, Parsers) ->
+  DnsRecords = lists:flatten(lists:map(record_parser(Name, Parsers), Records)),
+  Zone = build_zone(Name, lists:usort(DnsRecords)),
+  if
+    Name =:= <<"alias.com">> -> lager:info("Zone: ~p", [Zone]);
+    true -> ok
+  end,
+  load_zones(Rest, dict:store(Name, Zone, Zones), Parsers).
 
 internal_in_zone(Name, Zone) ->
   case dict:is_key(normalize_name(Name), Zone#zone.records_by_name) of

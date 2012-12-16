@@ -1,18 +1,50 @@
 -module(erldns_handler).
+-behavior(gen_server).
 
 -include("dns.hrl").
 -include("erldns.hrl").
 
--export([handle/2, register_handler/2]).
+-export([start_link/0, register_handler/2, handle/2]).
+
+% Gen server hooks
+-export([init/1,
+	 handle_call/3,
+	 handle_cast/2,
+	 handle_info/2,
+	 terminate/2,
+	 code_change/3
+       ]).
 
 % Internal API
 -export([resolve/4, resolve/6, handle_message/2, find_zone/2]).
 -export([requires_additional_processing/2, additional_processing/3, additional_processing/4]).
 -export([rewrite_soa_ttl/1]).
 
+-record(state, {}).
+
+start_link() ->
+  gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
 register_handler(RecordTypes, Module) ->
+  gen_server:call(?MODULE, {register_handler, RecordTypes, Module}).
+
+init([]) ->
+  lager:info("Initialized the handler_registry"),
+  ets:new(handler_registry, [set, named_table]),
+  {ok, #state{}}.
+handle_call({register_handler, RecordTypes, Module}, _, State) ->
   lager:info("Registered handler ~p for types ~p", [Module, RecordTypes]),
+  ets:insert(handler_registry, {Module, RecordTypes}),
+  {reply, ok, State}.
+handle_cast(_, State) ->
+  {noreply, State}.
+handle_info(_, State) ->
+  {noreply, State}.
+terminate(_, _) ->
+  ets:delete(handler_registry),
   ok.
+code_change(_PreviousVersion, State, _Extra) ->
+  {ok, State}.
 
 %% If the message has trailing garbage just throw the garbage away and continue
 %% trying to process the message.
@@ -113,6 +145,7 @@ resolve(Message, Qname, Qtype, [], Host, CnameChain, Zone) ->
   best_match_resolution(Message, Qname, Qtype, Host, CnameChain, best_match(Qname, Zone), Zone); % Query Zone for best match name
 %% There was at least one exact match on name.
 resolve(Message, Qname, Qtype, MatchedRecords, Host, CnameChain, Zone) ->
+  lager:debug("Exect match on name ~p (records: ~p)", [Qname, MatchedRecords]),
   exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone).
 
 %% Determine if there is a CNAME anywhere in the records with the given Qname.
@@ -129,8 +162,14 @@ exact_match_resolution(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords,
 %% There were no CNAMEs found in the exact name matches, so now we grab the authority
 %% records and find any type matches on QTYPE and continue on.
 resolve_exact_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
+  lager:debug("Resolving exact match on type ~p", [Qtype]),
   AuthorityRecords = lists:filter(match_type(?DNS_TYPE_SOA), MatchedRecords), % Query matched records for SOA type
   TypeMatches = lists:filter(match_type(Qtype), MatchedRecords), % Query matched records for Qtype
+  case TypeMatches of
+    [] ->
+      lager:debug("There were no exact type matches, so look in registered handlers");
+    _ -> ok
+  end,
   resolve_exact_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, TypeMatches, AuthorityRecords).
 
 %% There were no matches for exact name and type, so now we are looking for NS records
@@ -138,13 +177,14 @@ resolve_exact_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
 resolve_exact_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, [], AuthorityRecords) ->
   ReferralRecords = lists:filter(match_type(?DNS_TYPE_NS), MatchedRecords), % Query matched records for NS type
   resolve_no_exact_type_match(Message, Qtype, Host, CnameChain, [], Zone, MatchedRecords, ReferralRecords, AuthorityRecords);
+%% There were exact matches of name and type.
 resolve_exact_match(Message, Qtype, Host, CnameChain, _MatchedRecords, Zone, ExactTypeMatches, AuthorityRecords) ->
   resolve_exact_type_match(Message, Qtype, Host, CnameChain, ExactTypeMatches, Zone, AuthorityRecords).
 
 resolve_exact_type_match(Message, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords, Zone, []) ->
   Answer = lists:last(MatchedRecords),
   Name = Answer#dns_rr.name,
-  lager:info("Restarting query with delegated name ~p", [Name]),
+  lager:debug("Restarting query with delegated name ~p", [Name]),
   % It isn't clear what the QTYPE should be on a delegated restart. I assume an A record.
   restart_delegated_query(Message, Name, ?DNS_TYPE_A, Host, CnameChain, Zone, in_zone(Name, Zone));
 
@@ -162,7 +202,7 @@ resolve_exact_type_match(Message, _Qtype, _Host, _CnameChain, MatchedRecords, _Z
 resolve_exact_type_match(Message, Qtype, Host, CnameChain, _MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
   NSRecord = lists:last(NSRecords),
   Name = NSRecord#dns_rr.name,
-  lager:info("Restarting query with delegated name ~p", [Name]),
+  lager:debug("Restarting query with delegated name ~p", [Name]),
   restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, in_zone(Name, Zone)).
 
 restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
@@ -219,7 +259,7 @@ resolve_exact_match_with_cname(Message, _Qtype, _Host, _CnameChain, _MatchedReco
 resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, _MatchedRecords, Zone, CnameRecords, false) ->
   CnameRecord = lists:last(CnameRecords),
   Name = CnameRecord#dns_rr.data#dns_rrdata_cname.dname,
-  lager:info("Restarting query with CNAME name ~p (exact match)", [Name]),
+  lager:debug("Restarting query with CNAME name ~p (exact match)", [Name]),
   restart_query(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords}, Name, Qtype, Host, CnameChain ++ CnameRecords, Zone, in_zone(Name, Zone)).
 
 % The CNAME is in the zone so we do not need to look it up again.

@@ -44,13 +44,13 @@ row_to_record(_, {_, _Id, Name, Type, Content, TTL, Priority, _ChangeDate, _Auth
 %% Convert an internal DB representation to a dns RR.
 db_to_record(_Qname, Record) when is_record(Record, db_rr) ->
   case parse_content(Record#db_rr.content, Record#db_rr.priority, Record#db_rr.type) of
-    unsupported -> [];
+    unsupported -> unsupported;
     Data ->
       #dns_rr{
         name = Record#db_rr.name,
         type = erldns_records:name_type(Record#db_rr.type),
         data = Data,
-        ttl  = default_ttl(Record#db_rr.ttl)
+        ttl  = erldns_records:default_ttl(Record#db_rr.ttl)
       }
   end;
 db_to_record(Qname, Value) ->
@@ -79,14 +79,14 @@ parse_content(Content, _, ?DNS_TYPE_AAAA_BSTR) ->
   #dns_rrdata_aaaa{ip=Address};
 
 parse_content(Content, Priority, ?DNS_TYPE_MX_BSTR) ->
-  #dns_rrdata_mx{exchange=Content, preference=default_priority(Priority)};
+  #dns_rrdata_mx{exchange=Content, preference=erldns_records:default_priority(Priority)};
 
 parse_content(Content, _, ?DNS_TYPE_SPF_BSTR) ->
   #dns_rrdata_spf{spf=binary_to_list(Content)};
 
 parse_content(Content, Priority, ?DNS_TYPE_SRV_BSTR) ->
   [WeightStr, PortStr, Target] = string:tokens(binary_to_list(Content), " "),
-  #dns_rrdata_srv{priority=default_priority(Priority), weight=to_i(WeightStr), port=to_i(PortStr), target=Target};
+  #dns_rrdata_srv{priority=erldns_records:default_priority(Priority), weight=to_i(WeightStr), port=to_i(PortStr), target=Target};
 
 parse_content(Content, _, ?DNS_TYPE_NAPTR_BSTR) ->
   [OrderStr, PreferenceStr, FlagsStr, ServicesStr, RegexpStr, ReplacementStr] = string:tokens(binary_to_list(Content), " "),
@@ -156,20 +156,6 @@ split_txt(Data, Parts) ->
 
 %% Utility method for converting a string to an integer.
 to_i(Str) -> {Int, _} = string:to_integer(Str), Int.
-
-%% Return the TTL value or 3600 if it is undefined.
-default_ttl(TTL) ->
-  case TTL of
-    undefined -> 3600;
-    Value -> Value
-  end.
-
-%% Return the Priority value or 0 if it is undefined.
-default_priority(Priority) ->
-  case Priority of
-    undefined -> 0;
-    Value -> Value
-  end.
 
 squery(Stmt) -> squery(pgsql_pool, Stmt).
 squery(PoolName, Stmt) ->
