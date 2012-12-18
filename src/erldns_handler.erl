@@ -20,7 +20,7 @@
 -export([requires_additional_processing/2, additional_processing/3, additional_processing/4]).
 -export([rewrite_soa_ttl/1]).
 
--record(state, {}).
+-record(state, {handlers}).
 
 start_link() ->
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -28,14 +28,19 @@ start_link() ->
 register_handler(RecordTypes, Module) ->
   gen_server:call(?MODULE, {register_handler, RecordTypes, Module}).
 
+get_handlers() ->
+  gen_server:call(?MODULE, {get_handlers}).
+
 init([]) ->
   lager:info("Initialized the handler_registry"),
-  ets:new(handler_registry, [set, named_table]),
-  {ok, #state{}}.
+  {ok, #state{handlers=[]}}.
+
 handle_call({register_handler, RecordTypes, Module}, _, State) ->
   lager:info("Registered handler ~p for types ~p", [Module, RecordTypes]),
-  ets:insert(handler_registry, {Module, RecordTypes}),
-  {reply, ok, State}.
+  {reply, ok, State#state{handlers = State#state.handlers ++ [{Module, RecordTypes}]}};
+handle_call({get_handlers}, _, State) ->
+  {reply, State#state.handlers, State}.
+
 handle_cast(_, State) ->
   {noreply, State}.
 handle_info(_, State) ->
@@ -113,7 +118,7 @@ maybe_cache_packet(Message, false) ->
 
 %% Resolve the first question inside the given message.
 resolve(Message, AuthorityRecords, Host) -> 
-  erldns_metrics:measure(none, ?MODULE, resolve, [Message, AuthorityRecords, Host, Message#dns_message.questions]).
+  resolve(Message, AuthorityRecords, Host, Message#dns_message.questions).
 
 %% There were no questions in the message so just return it.
 resolve(Message, _AuthorityRecords, _Host, []) -> Message;
@@ -129,7 +134,7 @@ resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   % Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
   Zone = erldns_metrics:measure(none, ?MODULE, find_zone, [Qname, lists:last(AuthorityRecords)]), % Zone lookup
-  Records = resolve(Message, Qname, Qtype, Zone, Host, []),
+  Records = erldns_metrics:measure(none, ?MODULE, resolve, [Message, Qname, Qtype, Zone, Host, []]),
   RewrittenRecords = rewrite_soa_ttl(Records),
   erldns_metrics:measure(none, ?MODULE, additional_processing, [RewrittenRecords, Host, Zone]).
 
@@ -153,32 +158,34 @@ exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, 
   CnameRecords = lists:filter(match_type(?DNS_TYPE_CNAME), MatchedRecords), % Query record set for CNAME type
   exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords).
 %% No CNAME records found in the records with the Qname
-exact_match_resolution(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, []) ->
-  resolve_exact_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone);
+exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, []) ->
+  resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone);
 %% CNAME records found in the records for the Qname
 exact_match_resolution(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords) ->
   resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords).
 
 %% There were no CNAMEs found in the exact name matches, so now we grab the authority
 %% records and find any type matches on QTYPE and continue on.
-resolve_exact_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
+resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
   lager:debug("Resolving exact match on type ~p", [Qtype]),
   AuthorityRecords = lists:filter(match_type(?DNS_TYPE_SOA), MatchedRecords), % Query matched records for SOA type
   TypeMatches = lists:filter(match_type(Qtype), MatchedRecords), % Query matched records for Qtype
   case TypeMatches of
     [] ->
-      lager:debug("There were no exact type matches, so look in registered handlers");
-    _ -> ok
-  end,
-  resolve_exact_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, TypeMatches, AuthorityRecords).
+      %% Ask the custom handlers for their records.
+      NewRecords = lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), get_handlers())),
+      resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, NewRecords, AuthorityRecords);
+    _ ->
+      resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, TypeMatches, AuthorityRecords)
+  end.
 
 %% There were no matches for exact name and type, so now we are looking for NS records
 %% in the exact name matches.
-resolve_exact_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, [], AuthorityRecords) ->
+resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], AuthorityRecords) ->
   ReferralRecords = lists:filter(match_type(?DNS_TYPE_NS), MatchedRecords), % Query matched records for NS type
   resolve_no_exact_type_match(Message, Qtype, Host, CnameChain, [], Zone, MatchedRecords, ReferralRecords, AuthorityRecords);
 %% There were exact matches of name and type.
-resolve_exact_match(Message, Qtype, Host, CnameChain, _MatchedRecords, Zone, ExactTypeMatches, AuthorityRecords) ->
+resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, _MatchedRecords, Zone, ExactTypeMatches, AuthorityRecords) ->
   resolve_exact_type_match(Message, Qtype, Host, CnameChain, ExactTypeMatches, Zone, AuthorityRecords).
 
 resolve_exact_type_match(Message, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords, Zone, []) ->
@@ -435,6 +442,15 @@ find_records_by_name(Name, _Zone) -> erldns_zone_cache:get_records_by_name(Name)
 %% Various matching functions.
 match_type(Type) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.type =:= Type end.
 match_wildcard() -> fun(R) when is_record(R, dns_rr) -> lists:any(fun(L) -> L =:= <<"*">> end, dns:dname_to_labels(R#dns_rr.name)) end.
+
+%% Function for executing custom lookups by registered handlers.
+custom_lookup(Qname, Qtype, Records) ->
+  fun({Module, Types}) ->
+      case lists:member(Qtype, Types) of
+        true -> Module:handle(Qname, Qtype, Records);
+        false -> []
+      end
+  end.
 
 %% Replacement functions.
 replace_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} end.

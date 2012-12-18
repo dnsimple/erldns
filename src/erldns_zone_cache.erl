@@ -182,10 +182,7 @@ record_parser(Record) ->
 record_parser(Name, Parsers) ->
   fun(Record) ->
       case erldns_pgsql:db_to_record(Name, Record) of
-        unsupported ->
-          Records = lists:map(record_parser(Record), Parsers),
-          lager:info("Records from custom parsers: ~p", [Records]),
-          Records;
+        unsupported -> lists:map(record_parser(Record), Parsers);
         RR -> [RR]
       end
   end.
