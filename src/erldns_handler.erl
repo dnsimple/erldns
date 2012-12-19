@@ -303,40 +303,51 @@ resolve_best_match(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zo
 resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, false) ->
   lager:debug("Matched records are not wildcard."),
   [Question|_] = Message#dns_message.questions,
-  resolve_best_match_with_wildcard(Message, Zone, Qname =:= Question#dns_query.name).
+  resolve_best_match_not_wildcard(Message, Zone, Qname =:= Question#dns_query.name).
 
-resolve_best_match_with_wildcard(Message, _Zone, false) ->
+resolve_best_match_not_wildcard(Message, _Zone, false) ->
   lager:debug("Qname did not match query name"),
   {Authority, Additional} = erldns_records:root_hints(),
   Message#dns_message{authority=Authority, additional=Additional};
-resolve_best_match_with_wildcard(Message, Zone, true) ->
+resolve_best_match_not_wildcard(Message, Zone, true) ->
   lager:debug("Qname matched query name"),
   Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN, authority = Zone#zone.authority, aa = true}.
 
 % It's not a wildcard CNAME
-resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, []) ->
+resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, []) ->
   lager:debug("Wildcard is not CNAME"),
   TypeMatchedRecords = case Qtype of
-    ?DNS_TYPE_ANY -> BestMatchRecords;
-    _ -> lists:filter(match_type(Qtype), BestMatchRecords)
+    ?DNS_TYPE_ANY -> MatchedRecords;
+    _ -> lists:filter(match_type(Qtype), MatchedRecords)
   end,
   TypeMatches = lists:map(replace_name(Qname), TypeMatchedRecords),
-  resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, [], TypeMatches);
+  case TypeMatches of
+    [] ->
+      %% Ask the custom handlers for their records.
+      NewRecords = lists:map(replace_name(Qname), lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), get_handlers()))),
+      resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], NewRecords);
+    _ ->
+       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], TypeMatches)
+  end;
 
 % It is a wildcard CNAME
 resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords) ->
   resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords).
 
-resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, _CnameRecords, []) ->
+% It is not a CNAME and there were no exact type matches
+resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, [], []) ->
   Message#dns_message{aa = true, authority=Zone#zone.authority};
-resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _Zone, _CnameRecords, TypeMatches) ->
+% It is not a CNAME and there were exact type matches
+resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _Zone, [], TypeMatches) ->
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}.
 
 
+% It is a CNAME and the Qtype was CNAME
 resolve_best_match_with_wildcard_cname(Message, _Qname, ?DNS_TYPE_CNAME, _Host, _CnameChain, _BestMatchRecords, _Zone, CnameRecords) ->
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
+% It is a CNAME and the Qtype was not CNAME
 resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords) ->
-  CnameRecord = lists:last(CnameRecords),
+  CnameRecord = lists:last(CnameRecords), % There should only be one CNAME. Multiple CNAMEs kills unicorns.
   resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords, lists:member(CnameRecord, CnameChain)).
 
 % Indicates CNAME loop
