@@ -6,7 +6,11 @@
     priority
   }).
 
--record(rr, {
-    dns_rr,
-    wildcard = false
+-record(zone, {
+    name,
+    authority = [],
+    record_count = 0,
+    records = [],
+    records_by_name,
+    records_by_type
   }).

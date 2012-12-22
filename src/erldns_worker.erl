@@ -45,7 +45,7 @@ handle_tcp_dns_query(Socket, Packet) ->
       case dns:decode_message(Bin) of
         {truncated, _} -> lager:info("received bad request from ~p", [Address]);
         DecodedMessage ->
-          Response = erldns_handler:handle(DecodedMessage, Address),
+          Response = erldns_metrics:measure(none, erldns_handler, handle, [DecodedMessage, Address]),
           BinReply = erldns_encoder:encode_message(Response),
           BinLength = byte_size(BinReply),
           TcpBinReply = <<BinLength:16, BinReply/binary>>,
@@ -62,10 +62,19 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
     {truncated, _} -> lager:debug("received bad request from ~p", [Host]);
     {formerr, _, _} -> lager:debug("formerr bad request from ~p", [Host]);
     DecodedMessage ->
-      Response = erldns_handler:handle(DecodedMessage, Host),
-      EncodedMessage = erldns_encoder:encode_message(Response),
-      BinLength = byte_size(EncodedMessage),
-      gen_udp:send(Socket, Host, Port, optionally_truncate(Response, EncodedMessage, BinLength))
+      Response = erldns_metrics:measure(none, erldns_handler, handle, [DecodedMessage, Host]),
+      case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
+        {false, EncodedMessage} -> gen_udp:send(Socket, Host, Port, EncodedMessage);
+        {true, EncodedMessage, Message} when is_record(Message, dns_message)->
+          lager:info("Leftover: ~p", [Message]),
+          gen_udp:send(Socket, Host, Port, EncodedMessage);
+        {false, EncodedMessage, TsigMac} ->
+          lager:info("TSIG mac: ~p", [TsigMac]),
+          gen_udp:send(Socket, Host, Port, EncodedMessage);
+        {true, EncodedMessage, TsigMac, Message} ->
+          lager:info("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
+          gen_udp:send(Socket, Host, Port, EncodedMessage)
+      end
   end.
 
 %% Determine the max payload size by looking for additional
@@ -79,17 +88,3 @@ max_payload_size(Message) ->
       end;
     _ -> ?MAX_PACKET_SIZE
   end.
-
-%% Truncate the message and encode if necessary.
-optionally_truncate(Message, EncodedMessage, BinLength) ->
-  case BinLength > max_payload_size(Message) of
-    true -> dns:encode_message(truncate(Message));
-    false -> EncodedMessage
-  end.
-
-%% Truncate the message for UDP packet limitations (at least that
-%% is what it may eventually do. Right now it simply sets the
-%% tc bit to indicate the message was truncated.
-truncate(Message) ->
-  lager:debug("Message was truncated: ~p", [Message]),
-  Message#dns_message{tc = true}.
