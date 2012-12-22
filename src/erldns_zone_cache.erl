@@ -193,10 +193,6 @@ load_zones([], Zones, _Parsers) -> Zones;
 load_zones([{Name,Records}|Rest], Zones, Parsers) ->
   DnsRecords = lists:flatten(lists:map(record_parser(Name, Parsers), Records)),
   Zone = build_zone(Name, lists:usort(DnsRecords)),
-  if
-    Name =:= <<"alias.com">> -> lager:info("Zone: ~p", [Zone]);
-    true -> ok
-  end,
   load_zones(Rest, dict:store(Name, Zone, Zones), Parsers).
 
 internal_in_zone(Name, Zone) ->
