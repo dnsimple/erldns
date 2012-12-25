@@ -61,9 +61,14 @@ db_to_record(Qname, Value) ->
 %% All of these functions are used to parse the content field
 %% stored in the DB into a correct dns_rrdata in-memory record.
 parse_content(Content, _, ?DNS_TYPE_SOA_BSTR) ->
-  [MnameStr, RnameStr, SerialStr, RefreshStr, RetryStr, ExpireStr, MinimumStr] = string:tokens(binary_to_list(Content), " "),
-  [Mname, Rname, Serial, Refresh, Retry, Expire, Minimum] = [MnameStr, re:replace(RnameStr, "@", ".", [{return, list}]), to_i(SerialStr), to_i(RefreshStr), to_i(RetryStr), to_i(ExpireStr), to_i(MinimumStr)],
-  #dns_rrdata_soa{mname=Mname, rname=Rname, serial=Serial, refresh=Refresh, retry=Retry, expire=Expire, minimum=Minimum};
+  case string:tokens(binary_to_list(Content), " ") of
+    [MnameStr, RnameStr, SerialStr, RefreshStr, RetryStr, ExpireStr, MinimumStr] ->
+      [Mname, Rname, Serial, Refresh, Retry, Expire, Minimum] = [MnameStr, re:replace(RnameStr, "@", ".", [{return, list}]), to_i(SerialStr), to_i(RefreshStr), to_i(RetryStr), to_i(ExpireStr), to_i(MinimumStr)],
+      #dns_rrdata_soa{mname=Mname, rname=Rname, serial=Serial, refresh=Refresh, retry=Retry, expire=Expire, minimum=Minimum};
+    _ ->
+      lager:error("~p:SOA record with invalid content: ~p", [?MODULE, Content]),
+      unsupported
+  end;
 
 parse_content(Content, _, ?DNS_TYPE_NS_BSTR) ->
   #dns_rrdata_ns{dname=Content};
