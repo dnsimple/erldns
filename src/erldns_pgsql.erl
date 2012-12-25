@@ -42,7 +42,8 @@ row_to_record(_, {_, _Id, Name, Type, Content, TTL, Priority, _ChangeDate, _Auth
   #db_rr{name=Name, type=Type, content=Content, ttl=TTL, priority=Priority}.
 
 %% Convert an internal DB representation to a dns RR.
-db_to_record(_Qname, Record) when is_record(Record, db_rr) ->
+db_to_record(Qname, Record) when is_record(Record, db_rr) ->
+  lager:debug("Parsing content for ~p", [Qname]),
   case parse_content(Record#db_rr.content, Record#db_rr.priority, Record#db_rr.type) of
     unsupported -> unsupported;
     Data ->
