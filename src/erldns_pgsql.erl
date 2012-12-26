@@ -91,8 +91,15 @@ parse_content(Content, _, ?DNS_TYPE_SPF_BSTR) ->
   #dns_rrdata_spf{spf=binary_to_list(Content)};
 
 parse_content(Content, Priority, ?DNS_TYPE_SRV_BSTR) ->
-  [WeightStr, PortStr, Target] = string:tokens(binary_to_list(Content), " "),
-  #dns_rrdata_srv{priority=erldns_records:default_priority(Priority), weight=to_i(WeightStr), port=to_i(PortStr), target=Target};
+  case string:tokens(binary_to_list(Content), " ") of
+    [WeightStr, PortStr, Target] ->
+      #dns_rrdata_srv{priority=erldns_records:default_priority(Priority), weight=to_i(WeightStr), port=to_i(PortStr), target=Target};
+    [PrioStr, WeightStr, PortStr, Target] ->
+      #dns_rrdata_srv{priority=erldns_records:default_priority(to_i(PrioStr)), weight=to_i(WeightStr), port=to_i(PortStr), target=Target};
+    _ ->
+      lager:error("~p:SRV record with invalid content: ~p", [?MODULE, Content]),
+      unsupported
+  end;
 
 parse_content(Content, _, ?DNS_TYPE_NAPTR_BSTR) ->
   [OrderStr, PreferenceStr, FlagsStr, ServicesStr, RegexpStr, ReplacementStr] = string:tokens(binary_to_list(Content), " "),
