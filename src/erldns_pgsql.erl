@@ -42,8 +42,8 @@ row_to_record(_, {_, _Id, Name, Type, Content, TTL, Priority, _ChangeDate, _Auth
   #db_rr{name=Name, type=Type, content=Content, ttl=TTL, priority=Priority}.
 
 %% Convert an internal DB representation to a dns RR.
-db_to_record(Qname, Record) when is_record(Record, db_rr) ->
-  lager:debug("Parsing content for ~p", [Qname]),
+db_to_record(_Qname, Record) when is_record(Record, db_rr) ->
+  lager:debug("Parsing content for ~p (type: ~p)", [Record#db_rr.name, Record#db_rr.type]),
   case parse_content(Record#db_rr.content, Record#db_rr.priority, Record#db_rr.type) of
     unsupported -> unsupported;
     Data ->
@@ -78,11 +78,19 @@ parse_content(Content, _, ?DNS_TYPE_PTR_BSTR) ->
   #dns_rrdata_ptr{dname=Content};
 
 parse_content(Content, _, ?DNS_TYPE_A_BSTR) ->
-  {ok, Address} = inet_parse:address(binary_to_list(Content)),
-  #dns_rrdata_a{ip=Address};
+  case inet_parse:address(binary_to_list(Content)) of
+    {ok, Address} -> #dns_rrdata_a{ip=Address};
+    {error, Reason} ->
+      lager:error("~p:A record with invalid address: ~p (reason: ~p)", [?MODULE, Content, Reason]),
+      unsupported
+  end;
 parse_content(Content, _, ?DNS_TYPE_AAAA_BSTR) ->
-  {ok, Address} = inet_parse:address(binary_to_list(Content)),
-  #dns_rrdata_aaaa{ip=Address};
+  case inet_parse:address(binary_to_list(Content)) of
+    {ok, Address} -> #dns_rrdata_aaaa{ip=Address};
+    {error, Reason} ->
+      lager:error("~p:A record with invalid address: ~p (reason: ~p)", [?MODULE, Content, Reason]),
+      unsupported
+  end;
 
 parse_content(Content, Priority, ?DNS_TYPE_MX_BSTR) ->
   #dns_rrdata_mx{exchange=Content, preference=erldns_records:default_priority(Priority)};
