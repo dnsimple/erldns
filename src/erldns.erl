@@ -5,5 +5,4 @@
 start() ->
   lager:start(),
   folsom:start(),
-  application:start(erldns),
-  erldns_zone_cache:load_zones().
+  application:start(erldns).

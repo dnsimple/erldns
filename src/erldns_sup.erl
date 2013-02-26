@@ -24,12 +24,6 @@ init(_Args) ->
               ++ PoolConfig,
         poolboy:child_spec(PoolName, Args)
     end, AppPools),
-  {ok, PgsqlPools} = application:get_env(erldns, pg_pool),
-  PgsqlPoolSpecs = lists:map(fun({PoolName, PoolConfig, WorkerArgs}) ->
-        PoolArgs = [{name, {local, PoolName}},
-                    {worker_module, erldns_pgsql_worker}] ++ PoolConfig,
-        poolboy:child_spec(PoolName, PoolArgs, WorkerArgs)
-    end, PgsqlPools),
 
   Procs = [
     ?CHILD(erldns_zone_cache, worker, []),
@@ -46,4 +40,4 @@ init(_Args) ->
     {tcp_inet6, {erldns_tcp_server, start_link, [tcp_inet6, inet6]}, permanent, 5000, worker, [erldns_tcp_server]}
   ],
 
-  {ok, {{one_for_one, 20, 10}, Procs ++ AppPoolSpecs ++ PgsqlPoolSpecs}}.
+  {ok, {{one_for_one, 20, 10}, Procs ++ AppPoolSpecs}}.

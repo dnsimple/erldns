@@ -347,7 +347,7 @@ resolve_best_match_with_wildcard_cname(Message, _Qname, ?DNS_TYPE_CNAME, _Host, 
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
 % It is a CNAME and the Qtype was not CNAME
 resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords) ->
-  CnameRecord = lists:last(CnameRecords), % There should only be one CNAME. Multiple CNAMEs kills unicorns.
+  CnameRecord = lists:last(CnameRecords), % There should only be one CNAME. Multiple CNAMEs kill unicorns.
   resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords, lists:member(CnameRecord, CnameChain)).
 
 % Indicates CNAME loop
