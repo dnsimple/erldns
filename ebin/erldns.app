@@ -1,6 +1,6 @@
 {application,erldns,
              [{description,"Erlang Authoritative DNS Server"},
-              {vsn,"8c8730b"},
+              {vsn,"6dc73ce"},
               {mod,{erldns_app,[]}},
               {applications,[kernel,stdlib]},
               {modules,[erldns,erldns_app,erldns_axfr,erldns_config,

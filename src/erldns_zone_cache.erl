@@ -7,7 +7,7 @@
 
 % API
 -export([start_link/0]).
--export([find_zone/1, find_zone/2, get_zone/1, put_zone/2, get_authority/1, put_authority/2, get_delegations/1, get_records_by_name/1, in_zone/1]).
+-export([find_zone/1, find_zone/2, get_zone/1, put_zone/1, put_zone/2, get_authority/1, put_authority/2, get_delegations/1, get_records_by_name/1, in_zone/1]).
 
 % Internal API
 -export([build_named_index/1]).
@@ -59,6 +59,9 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
 
 get_zone(Name) ->
   gen_server:call(?SERVER, {get, Name}).
+
+put_zone({Name, Records}) ->
+  gen_server:call(?SERVER, {put, Name, build_zone(Name, Records)}).
 
 put_zone(Name, Zone) ->
   gen_server:call(?SERVER, {put, Name, Zone}).
