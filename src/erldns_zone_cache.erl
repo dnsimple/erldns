@@ -7,7 +7,8 @@
 
 % API
 -export([start_link/0]).
--export([find_zone/1, find_zone/2, get_zone/1, put_zone/1, put_zone/2, get_authority/1, put_authority/2, get_delegations/1, get_records_by_name/1, in_zone/1]).
+-export([find_zone/1, find_zone/2, get_zone/1, put_zone/1, put_zone/2, delete_zone/1, get_authority/1, put_authority/2,
+    get_delegations/1, get_records_by_name/1, in_zone/1]).
 
 % Internal API
 -export([build_named_index/1]).
@@ -66,6 +67,9 @@ put_zone({Name, Records}) ->
 put_zone(Name, Zone) ->
   gen_server:call(?SERVER, {put, Name, Zone}).
 
+delete_zone(Name) ->
+  gen_server:call(?SERVER, {delete, Name}).
+
 get_authority(Message) when is_record(Message, dns_message) ->
   case Message#dns_message.questions of
     [] -> [];
@@ -116,6 +120,10 @@ handle_call({get_delegations, Name}, _From, State) ->
 
 handle_call({put, Name, Zone}, _From, State) ->
   Zones = dict:store(normalize_name(Name), Zone, State#state.zones),
+  {reply, ok, State#state{zones = Zones}};
+
+handle_call({delete, Name}, _From, State) ->
+  Zones = dict:erase(normalize_name(Name), State#state.zones),
   {reply, ok, State#state{zones = Zones}};
 
 handle_call({get_authority, Name}, _From, State) ->
