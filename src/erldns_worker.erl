@@ -48,16 +48,16 @@ handle_tcp_dns_query(Socket, Packet) ->
           Response = erldns_metrics:measure(none, erldns_handler, handle, [DecodedMessage, Address]),
           case erldns_encoder:encode_message(Response) of
             {false, EncodedMessage} ->
-              send_tcp_message(EncodedMessage);
+              send_tcp_message(Socket, EncodedMessage);
             {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
               lager:info("Leftover: ~p", [Message]),
-              send_tcp_message(EncodedMessage);
+              send_tcp_message(Socket, EncodedMessage);
             {false, EncodedMessage, TsigMac} ->
               lager:info("TSIG mac: ~p", [TsigMac]),
-              send_tcp_message(EncodedMessage);
+              send_tcp_message(Socket, EncodedMessage);
             {true, EncodedMessage, TsigMac, Message} ->
               lager:info("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
-              send_tcp_message(EncodedMessage)
+              send_tcp_message(Socket, EncodedMessage)
           end
       end
   end,
