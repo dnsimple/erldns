@@ -46,13 +46,28 @@ handle_tcp_dns_query(Socket, Packet) ->
         {truncated, _} -> lager:info("received bad request from ~p", [Address]);
         DecodedMessage ->
           Response = erldns_metrics:measure(none, erldns_handler, handle, [DecodedMessage, Address]),
-          BinReply = erldns_encoder:encode_message(Response),
-          BinLength = byte_size(BinReply),
-          TcpBinReply = <<BinLength:16, BinReply/binary>>,
-          gen_tcp:send(Socket, TcpBinReply)
+          case erldns_encoder:encode_message(Response) of
+            {false, EncodedMessage} ->
+              send_tcp_message(EncodedMessage);
+            {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
+              lager:info("Leftover: ~p", [Message]),
+              send_tcp_message(EncodedMessage);
+            {false, EncodedMessage, TsigMac} ->
+              lager:info("TSIG mac: ~p", [TsigMac]),
+              send_tcp_message(EncodedMessage);
+            {true, EncodedMessage, TsigMac, Message} ->
+              lager:info("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
+              send_tcp_message(EncodedMessage)
+          end
       end
   end,
   gen_tcp:close(Socket).
+
+send_tcp_message(Socket, EncodedMessage) ->
+  BinLength = byte_size(EncodedMessage),
+  TcpEncodedMessage = <<BinLength:16, EncodedMessage/binary>>,
+  gen_tcp:send(Socket, TcpEncodedMessage).
+
 
 %% Handle DNS query that comes in over UDP
 handle_udp_dns_query(Socket, Host, Port, Bin) ->
