@@ -196,7 +196,7 @@ find_zone_in_cache(Qname, State) ->
   end.
 
 build_zone(Qname, Records) ->
-  RecordsByName = erldns_metrics:measure(Qname, ?MODULE, build_named_index, [Records]),
+  RecordsByName = build_named_index(Records),
   Authorities = lists:filter(match_type(?DNS_TYPE_SOA), Records),
   #zone{name = Qname, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
 
