@@ -31,7 +31,7 @@ start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 find_zone(Qname) ->
-  lager:info("Finding zone for name ~p", [Qname]),
+  lager:debug("Finding zone for name ~p", [Qname]),
   Authority = erldns_metrics:measure(none, ?MODULE, get_authority, [Qname]),
   find_zone(normalize_name(Qname), Authority).
 
@@ -114,7 +114,7 @@ handle_call({get_delegations, Name}, _From, State) ->
       Records = lists:filter(fun(R) -> apply(match_type(?DNS_TYPE_NS), [R]) and apply(match_glue(Name), [R]) end, Zone#zone.records),
       {reply, {ok, Records}, State};
     Response ->
-      lager:info("get_delegations, failed to get zone for ~p: ~p", [Name, Response]),
+      lager:debug("get_delegations, failed to get zone for ~p: ~p", [Name, Response]),
       {reply, Response, State}
   end;
 
@@ -141,7 +141,7 @@ handle_call({get_records_by_name, Name}, _From, State) ->
         _ -> {reply, [], State}
       end;
     Response ->
-      lager:info("get_records_by_name, failed to get zone for ~p: ~p", [Name, Response]),
+      lager:debug("get_records_by_name, failed to get zone for ~p: ~p", [Name, Response]),
       {reply, [], State}
   end;
 

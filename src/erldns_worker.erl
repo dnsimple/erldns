@@ -50,13 +50,13 @@ handle_tcp_dns_query(Socket, Packet) ->
             {false, EncodedMessage} ->
               send_tcp_message(Socket, EncodedMessage);
             {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-              lager:info("Leftover: ~p", [Message]),
+              lager:debug("Leftover: ~p", [Message]),
               send_tcp_message(Socket, EncodedMessage);
             {false, EncodedMessage, TsigMac} ->
-              lager:info("TSIG mac: ~p", [TsigMac]),
+              lager:debug("TSIG mac: ~p", [TsigMac]),
               send_tcp_message(Socket, EncodedMessage);
             {true, EncodedMessage, TsigMac, Message} ->
-              lager:info("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
+              lager:debug("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
               send_tcp_message(Socket, EncodedMessage)
           end
       end
@@ -81,13 +81,13 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
       case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
         {false, EncodedMessage} -> gen_udp:send(Socket, Host, Port, EncodedMessage);
         {true, EncodedMessage, Message} when is_record(Message, dns_message)->
-          lager:info("Leftover: ~p", [Message]),
+          lager:debug("Leftover: ~p", [Message]),
           gen_udp:send(Socket, Host, Port, EncodedMessage);
         {false, EncodedMessage, TsigMac} ->
-          lager:info("TSIG mac: ~p", [TsigMac]),
+          lager:debug("TSIG mac: ~p", [TsigMac]),
           gen_udp:send(Socket, Host, Port, EncodedMessage);
         {true, EncodedMessage, TsigMac, Message} ->
-          lager:info("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
+          lager:debug("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
           gen_udp:send(Socket, Host, Port, EncodedMessage)
       end
   end.

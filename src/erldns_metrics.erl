@@ -33,7 +33,7 @@ slowest() ->
 
 measure(_, Module, FunctionName, Args) when is_list(Args) ->
   {T, R} = timer:tc(Module, FunctionName, Args),
-  lager:info("~p:~p took ~p ms", [Module, FunctionName, T / 1000]),
+  lager:debug("~p:~p took ~p ms", [Module, FunctionName, T / 1000]),
   R;
 measure(Name, Module, FunctionName, Arg) -> measure(Name, Module, FunctionName, [Arg]).
 
@@ -65,4 +65,4 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 % Internal API
 
-display_list({Name, T}) -> lager:info("~p: ~p ms", [Name, T / 1000]).
+display_list({Name, T}) -> lager:debug("~p: ~p ms", [Name, T / 1000]).

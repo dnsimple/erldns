@@ -31,7 +31,7 @@ init([]) ->
   {ok, #state{}}.
 
 handle_call({handle, Qname, Qtype, Records}, _From, State) ->
-  lager:info("Received handle message (name=~p, type=~p, records=~p)", [Qname, Qtype, Records]),
+  lager:debug("Received handle message (name=~p, type=~p, records=~p)", [Qname, Qtype, Records]),
   SampleRecords = lists:filter(type_match(), Records),
   NewRecords = lists:flatten(lists:map(convert(), SampleRecords)),
   {reply, NewRecords, State}.
