@@ -11,6 +11,11 @@ start(Type, Args) ->
   erldns_sup:start_link().
 
 start_phase(post_start, _StartType, _PhaseArgs) ->
+  case application:get_env(erldns, custom_zone_parsers) of
+    {ok, Parsers} -> erldns_zone_parser:register_parsers(Parsers);
+    _ -> ok
+  end,
+
   lager:info("Loading zones from local file"),
   erldns_metrics:measure(none, erldns_zone_loader, load_zones, []),
   case application:get_env(erldns, zone_server_host) of

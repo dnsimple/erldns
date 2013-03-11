@@ -1,26 +1,91 @@
 -module(erldns_zone_parser).
 
--export([zones_to_erlang/1, zone_to_erlang/1]).
+-behavior(gen_server).
 
 -include("dns.hrl").
 -include("erldns.hrl").
 
-zones_to_erlang(Zones) -> zones_to_erlang(Zones, []).
+-export([start_link/0, zones_to_erlang/1, zone_to_erlang/1, register_parsers/1, register_parser/1]).
 
-% Internal
-zones_to_erlang([], Zones) -> Zones;
+% Gen server hooks
+-export([init/1,
+	 handle_call/3,
+	 handle_cast/2,
+	 handle_info/2,
+	 terminate/2,
+	 code_change/3
+       ]).
 
-zones_to_erlang([Zone|Rest], Zones) ->
-  ParsedZone = zone_to_erlang(Zone),
-  zones_to_erlang(Rest, Zones ++ [ParsedZone]).
+-define(SERVER, ?MODULE).
+
+-record(state, {parsers}).
+
+%% Public API
+
+start_link() ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+zones_to_erlang(Zones) ->
+  gen_server:call(?SERVER, {parse_zones, Zones}).
 
 %% Takes a JSON zone and turns it into the tuple {Name, Records}.
-zone_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}]) ->
+zone_to_erlang(Zone) ->
+  gen_server:call(?SERVER, {parse_zone, Zone}).
+
+register_parsers(Modules) ->
+  lager:info("Registering custom parsers: ~p", [Modules]),
+  gen_server:call(?SERVER, {register_parsers, Modules}).
+
+register_parser(Module) ->
+  lager:info("Registering custom parser: ~p", [Module]),
+  gen_server:call(?SERVER, {register_parser, Module}).
+
+%% Gen server hooks
+init([]) ->
+  {ok, #state{parsers = []}}.
+
+handle_call({parse_zones, Zones}, _From, State) ->
+  {reply, zones_to_erlang(Zones, State#state.parsers, []), State};
+
+handle_call({parse_zone, Zone}, _From, State) ->
+  {reply, json_to_erlang(Zone, State#state.parsers), State};
+
+handle_call({register_parsers, Modules}, _From, State) ->
+  {reply, ok, State#state{parsers = State#state.parsers ++ Modules}};
+
+handle_call({register_parser, Module}, _From, State) ->
+  {reply, ok, State#state{parsers = State#state.parsers ++ [Module]}}.
+
+handle_cast(_, State) ->
+  {noreply, State}.
+
+handle_info(_, State) ->
+  {noreply, State}.
+
+terminate(_, _State) ->
+  ok.
+
+code_change(_, State, _) ->
+  {ok, State}.
+
+
+
+% Internal API
+zones_to_erlang([], _Parsers, Zones) -> Zones;
+
+zones_to_erlang([Zone|Rest], Parsers, Zones) ->
+  ParsedZone = json_to_erlang(Zone, Parsers),
+  zones_to_erlang(Rest, Parsers, Zones ++ [ParsedZone]).
+
+json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
   Records = lists:map(
     fun(JsonRecord) ->
-        json_record_to_erlang(JsonRecord)
+        case json_record_to_erlang(JsonRecord) of
+          {} ->
+            try_custom_parsers(JsonRecord, Parsers);
+          ParsedRecord -> ParsedRecord
+        end
     end, JsonRecords),
-
   FilteredRecords = lists:filter(
     fun(R) ->
         case R of
@@ -28,8 +93,14 @@ zone_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}]) ->
           _ -> true
         end
     end, Records),
-
   {Name, FilteredRecords}.
+
+try_custom_parsers(_JsonRecord, []) -> {};
+try_custom_parsers(JsonRecord, [Parser|Rest]) ->
+  case Parser:json_record_to_erlang(JsonRecord) of
+    {} -> try_custom_parsers(JsonRecord, Rest);
+    Record -> Record
+  end.
 
 % Internal converters
 json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"SOA">>}, {<<"data">>, [{<<"mname">>, Mname}, {<<"rname">>, Rname}, {<<"serial">>, Serial}, {<<"refresh">>, Refresh}, {<<"retry">>, Retry}, {<<"expire">>, Expire},{<<"minimum">>, Minimum}]}, {<<"ttl">>, Ttl}]) ->
@@ -80,7 +151,5 @@ json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"SRV">>}, {<<"data">>,
 json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"NAPTR">>}, {<<"data">>, [{<<"order">>, Order}, {<<"preference">>, Preference}, {<<"flags">>, Flags}, {<<"services">>, Services}, {<<"regexp">>, Regexp}, {<<"replacement">>, Replacement}]}, {<<"ttl">>, Ttl}]) ->
   #dns_rr{name = Name, type = ?DNS_TYPE_NAPTR, data = #dns_rrdata_naptr{order = Order, preference = Preference, flags = Flags, services = Services, regexp = Regexp, replacement = Replacement}, ttl = Ttl};
 
-json_record_to_erlang(JsonRecord) ->
-  lager:info("Unsupported record ~p", [JsonRecord]),
-  {}.
+json_record_to_erlang(_JsonRecord) -> {}.
 
