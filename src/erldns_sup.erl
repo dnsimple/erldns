@@ -40,4 +40,9 @@ init(_Args) ->
     {tcp_inet6, {erldns_tcp_server, start_link, [tcp_inet6, inet6]}, permanent, 5000, worker, [erldns_tcp_server]}
   ],
 
-  {ok, {{one_for_one, 20, 10}, Procs ++ AppPoolSpecs}}.
+  OptionalProcs = case application:get_env(erldns, zone_server_host) of
+    {ok, _} -> [?CHILD(erldns_zone_client, worker, [])];
+    _ -> []
+  end,
+
+  {ok, {{one_for_one, 20, 10}, Procs ++ OptionalProcs ++ AppPoolSpecs}}.

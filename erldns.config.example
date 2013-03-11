@@ -4,6 +4,8 @@
     {inet4, "127.0.0.1"}},
     {inet6, "::1"},
     {catch_exceptions, false},
+    {credentials, {"indentifier", "token"}},
+    {zone_server_host, "your-zone-server.example.com"}
     {pools, [
       {tcp_worker_pool, [
         {size, 10},
