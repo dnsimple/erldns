@@ -5,20 +5,20 @@
       "name": "example.com",
       "type": "SOA",
       "ttl": 3600,
-      "rdata": {
+      "data": {
         "mname": "ns1.example.com",
         "rname": "admin.example.com",
-        "serial": 1234567,
-        "refresh": 1,
-        "retry": 1,
-        "expire": 1,
-        "minimum": 1
+        "serial": 2013022001,
+        "refresh": 86400,
+        "retry": 7200,
+        "expire": 604800,
+        "minimum": 300
       }
     {
       "name": "example.com",
       "type": "A",
       "ttl": 3600,
-      "rdata": {
+      "data": {
         "ip": "1.2.3.4"
       }
     },
@@ -26,7 +26,7 @@
       "name": "example.com",
       "type": "MX",
       "ttl": 3600,
-      "rdata": {
+      "data": {
         "preference": "10",
         "exchange": "mail.example.com"
       }
