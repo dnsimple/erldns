@@ -30,12 +30,11 @@ handle_call(_Request, _From, State) ->
   {ok, State}.
 handle_cast(_Message, State) ->
   {noreply, State}.
+handle_info(timeout, State) ->
+  lager:info("UDP instance timed out"),
+  {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
-  lager:debug("Received UDP Request ~p ~p ~p", [Socket, Host, Port]),
-  poolboy:transaction(udp_worker_pool, fun(Worker) ->
-    gen_server:call(Worker, {udp_query, Socket, Host, Port, Bin})
-  end),
-  % handle_dns_query(Socket, Host, Port, Bin),
+  do_work(Socket, Host, Port, Bin),
   inet:setopts(State#state.socket, [{active, once}]),
   {noreply, State};
 handle_info(_Message, State) ->
@@ -57,3 +56,11 @@ start(Port, InetFamily) ->
       lager:error("Failed to open UDP socket. Need to run as sudo?"),
       {error, eacces}
   end.
+
+do_work(Socket, Host, Port, Bin) ->
+  lager:debug("Received UDP Request ~p ~p ~p", [Socket, Host, Port]),
+  poolboy:transaction(udp_worker_pool, fun(Worker) ->
+    lager:debug("Processing UDP request with worker ~p ~p ~p", [Socket, Host, Port]),
+    gen_server:call(Worker, {udp_query, Socket, Host, Port, Bin})
+  end),
+  lager:debug("Completed UDP request processing ~p ~p ~p", [Socket, Host, Port]).

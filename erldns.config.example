@@ -3,8 +3,9 @@
     {port, 8053},
     {inet4, "127.0.0.1"}},
     {inet6, "::1"},
-    {debugger, false},
-    {responders, [erldns_pgsql_responder]},
+    {catch_exceptions, false},
+    {credentials, {"indentifier", "token"}},
+    {zone_server_host, "your-zone-server.example.com"}
     {pools, [
       {tcp_worker_pool, [
         {size, 10},
@@ -13,17 +14,6 @@
       {udp_worker_pool, [
         {size, 10},
         {max_overflow, 20}
-      ]}
-    ]},
-    {pg_pool, [
-      {pgsql_pool, [
-        {size, 10},
-        {max_overflow, 20}
-      ],[
-        {hostname, "127.0.0.1"},
-        {database, "dbname"},
-        {username, "dbuser"},
-        {password, "dbpassword"}
       ]}
     ]}
   ]},

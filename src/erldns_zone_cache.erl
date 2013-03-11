@@ -6,8 +6,9 @@
 -include("erldns.hrl").
 
 % API
--export([start_link/0, load_zones/0, register_parser/2]).
--export([find_zone/1, find_zone/2, get_zone/1, put_zone/2, get_authority/1, put_authority/2, get_delegations/1, get_records_by_name/1, in_zone/1]).
+-export([start_link/0]).
+-export([find_zone/1, find_zone/2, get_zone/1, put_zone/1, put_zone/2, delete_zone/1, get_authority/1, put_authority/2,
+    get_delegations/1, get_records_by_name/1, in_zone/1]).
 
 % Internal API
 -export([build_named_index/1]).
@@ -29,14 +30,8 @@
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-load_zones() ->
-  gen_server:cast(?SERVER, {load_zones}).
-
-register_parser(Types, Module) ->
-  gen_server:call(?SERVER, {register_parser, {Types, Module}}).
-
 find_zone(Qname) ->
-  lager:info("Finding zone for name ~p", [Qname]),
+  lager:debug("Finding zone for name ~p", [Qname]),
   Authority = erldns_metrics:measure(none, ?MODULE, get_authority, [Qname]),
   find_zone(normalize_name(Qname), Authority).
 
@@ -57,7 +52,7 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
         {ok, Zone} -> Zone;
         {error, zone_not_found} ->
           case Name =:= Authority#dns_rr.name of
-            true -> make_zone(Name);
+            true -> {error, zone_not_found};
             false -> find_zone(dns:labels_to_dname(Labels), Authority)
           end
       end
@@ -66,8 +61,14 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
 get_zone(Name) ->
   gen_server:call(?SERVER, {get, Name}).
 
+put_zone({Name, Records}) ->
+  gen_server:call(?SERVER, {put, Name, build_zone(Name, Records)}).
+
 put_zone(Name, Zone) ->
   gen_server:call(?SERVER, {put, Name, Zone}).
+
+delete_zone(Name) ->
+  gen_server:call(?SERVER, {delete, Name}).
 
 get_authority(Message) when is_record(Message, dns_message) ->
   case Message#dns_message.questions of
@@ -113,12 +114,16 @@ handle_call({get_delegations, Name}, _From, State) ->
       Records = lists:filter(fun(R) -> apply(match_type(?DNS_TYPE_NS), [R]) and apply(match_glue(Name), [R]) end, Zone#zone.records),
       {reply, {ok, Records}, State};
     Response ->
-      lager:info("get_delegations, failed to get zone for ~p: ~p", [Name, Response]),
+      lager:debug("get_delegations, failed to get zone for ~p: ~p", [Name, Response]),
       {reply, Response, State}
   end;
 
 handle_call({put, Name, Zone}, _From, State) ->
   Zones = dict:store(normalize_name(Name), Zone, State#state.zones),
+  {reply, ok, State#state{zones = Zones}};
+
+handle_call({delete, Name}, _From, State) ->
+  Zones = dict:erase(normalize_name(Name), State#state.zones),
   {reply, ok, State#state{zones = Zones}};
 
 handle_call({get_authority, Name}, _From, State) ->
@@ -136,7 +141,7 @@ handle_call({get_records_by_name, Name}, _From, State) ->
         _ -> {reply, [], State}
       end;
     Response ->
-      lager:info("get_records_by_name, failed to get zone for ~p: ~p", [Name, Response]),
+      lager:debug("get_records_by_name, failed to get zone for ~p: ~p", [Name, Response]),
       {reply, [], State}
   end;
 
@@ -146,16 +151,10 @@ handle_call({in_zone, Name}, _From, State) ->
       {reply, internal_in_zone(Name, Zone), State};
     _ ->
       {reply, false, State}
-  end;
+  end.
 
-handle_call({register_parser, {Types, Module}}, _From, State) ->
-  lager:info("Register parser ~p for types ~p", [Module, Types]), 
-  {reply, ok, State#state{parsers = State#state.parsers ++ [{Types, Module}]}}.
-
-handle_cast({load_zones}, State) ->
-  Zones = load_zones(erldns_pgsql:lookup_records(), State#state.zones, State#state.parsers),
-  lager:info("Zones loaded: ~p", [dict:size(Zones)]),
-  {noreply, State#state{zones = Zones}}.
+handle_cast(_, State) ->
+  {noreply, State}.
 
 handle_info(_Message, State) ->
   {noreply, State}.
@@ -166,34 +165,6 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 % Internal API%
 
-%% Return a function that may use a registered parser
-%% to parse an internal db_rr record into a dns_rr.
-record_parser(Record) ->
-  fun({Types, Module}) ->
-      case lists:member(Record#db_rr.type, Types) of
-        true -> Module:parse(Record);
-        false -> []
-      end
-  end.
-
-%% Return a function that is used to try to parse an internal
-%% representation of a record (i.e. a db_rr) into the dns_rr
-%% format.
-record_parser(Name, Parsers) ->
-  fun(Record) ->
-      case erldns_pgsql:db_to_record(Name, Record) of
-        unsupported -> lists:map(record_parser(Record), Parsers);
-        RR -> [RR]
-      end
-  end.
-
-%% Load the zone by parsing the internal representation of the
-%% resource record for each record and then build a zone object.
-load_zones([], Zones, _Parsers) -> Zones;
-load_zones([{Name,Records}|Rest], Zones, Parsers) ->
-  DnsRecords = lists:flatten(lists:map(record_parser(Name, Parsers), Records)),
-  Zone = build_zone(Name, lists:usort(DnsRecords)),
-  load_zones(Rest, dict:store(Name, Zone, Zones), Parsers).
 
 internal_in_zone(Name, Zone) ->
   case dict:is_key(normalize_name(Name), Zone#zone.records_by_name) of
@@ -224,20 +195,8 @@ find_zone_in_cache(Qname, State) ->
       end
   end.
 
-make_zone(Qname) ->
-  lager:info("Constructing new zone for ~p", [Qname]),
-  DbRecords = erldns_metrics:measure(Qname, erldns_pgsql, lookup_records, [normalize_name(Qname)]),
-  make_zone(Qname, lists:usort(lists:flatten(lists:map(fun(R) -> erldns_pgsql:db_to_record(Qname, R) end, DbRecords)))).
-
-make_zone(Qname, Records) ->
-  RecordsByName = erldns_metrics:measure(Qname, ?MODULE, build_named_index, [Records]),
-  Authorities = lists:filter(match_type(?DNS_TYPE_SOA), Records),
-  Zone = #zone{name = Qname, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName},
-  erldns_zone_cache:put_zone(Qname, Zone),
-  Zone.
-
 build_zone(Qname, Records) ->
-  RecordsByName = erldns_metrics:measure(Qname, ?MODULE, build_named_index, [Records]),
+  RecordsByName = build_named_index(Records),
   Authorities = lists:filter(match_type(?DNS_TYPE_SOA), Records),
   #zone{name = Qname, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
 
@@ -254,5 +213,11 @@ normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
 normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
 
 %% Various matching functions.
-match_type(Type) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.type =:= Type end.
-match_glue(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.data =:= #dns_rrdata_ns{dname=Name} end.
+match_type(Type) ->
+  fun(R) when is_record(R, dns_rr) ->
+      R#dns_rr.type =:= Type
+  end.
+match_glue(Name) ->
+  fun(R) when is_record(R, dns_rr) ->
+      R#dns_rr.data =:= #dns_rrdata_ns{dname=Name}
+  end.

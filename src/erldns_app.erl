@@ -2,13 +2,29 @@
 -behavior(application).
 
 % Application hooks
--export([start/2, stop/1]).
+-export([start/2, start_phase/3, stop/1]).
 
 start(Type, Args) ->
   lager:info("~p:start(~p, ~p)", [?MODULE, Type, Args]),
   random:seed(erlang:now()),
   enable_metrics(),
   erldns_sup:start_link().
+
+start_phase(post_start, _StartType, _PhaseArgs) ->
+  case application:get_env(erldns, custom_zone_parsers) of
+    {ok, Parsers} -> erldns_zone_parser:register_parsers(Parsers);
+    _ -> ok
+  end,
+
+  lager:info("Loading zones from local file"),
+  erldns_metrics:measure(none, erldns_zone_loader, load_zones, []),
+  case application:get_env(erldns, zone_server_host) of
+    {ok, _} ->
+      lager:info("Loading zones from remote server"),
+      erldns_metrics:measure(none, erldns_zone_client, fetch_zones, []);
+    _ -> not_fetching
+  end,
+  ok.
 
 stop(State) ->
   lager:info("~p:stop(~p)~n", [?MODULE, State]),

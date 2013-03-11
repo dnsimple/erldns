@@ -28,24 +28,13 @@ parse(Record) ->
 %% Gen server hooks
 init([]) ->
   erldns_handler:register_handler([?DNS_TYPE_A], ?MODULE),
-  erldns_zone_cache:register_parser([<<"SAMPLE">>], ?MODULE),
   {ok, #state{}}.
 
 handle_call({handle, Qname, Qtype, Records}, _From, State) ->
-  lager:info("Received handle message (name=~p, type=~p, records=~p)", [Qname, Qtype, Records]),
+  lager:debug("Received handle message (name=~p, type=~p, records=~p)", [Qname, Qtype, Records]),
   SampleRecords = lists:filter(type_match(), Records),
   NewRecords = lists:flatten(lists:map(convert(), SampleRecords)),
-  {reply, NewRecords, State};
-
-handle_call({parse, Record}, _From, State) ->
-  lager:info("Received parse message for ~p", [Record]),
-  DnsRecord = #dns_rr{
-    name = Record#db_rr.name,
-    type = ?DNS_SAMPLE_TYPE,
-    data = Record#db_rr.content,
-    ttl  = erldns_records:default_ttl(Record#db_rr.ttl)
-  },
-  {reply, [DnsRecord], State}.
+  {reply, NewRecords, State}.
 
 handle_cast(_Message, State) ->
   {noreply, State}.

@@ -67,13 +67,13 @@ handle(BadMessage, Host) ->
 %% We throttle ANY queries to discourage use of our authoritative name servers
 %% for reflection attacks.
 handle(Message, Host, {throttled, Host, ReqCount}) ->
-  lager:info("Throttled ANY query for ~p. (req count: ~p)", [Host, ReqCount]),
+  lager:debug("Throttled ANY query for ~p. (req count: ~p)", [Host, ReqCount]),
   Message#dns_message{rc = ?DNS_RCODE_REFUSED};
 %% Message was not throttled, so handle it, then do EDNS handling, optionally
 %% append the SOA record if it is a zone transfer and complete the response
 %% by filling out count-related header fields.
 handle(Message, Host, _) ->
-  lager:info("Questions: ~p", [Message#dns_message.questions]),
+  lager:debug("Questions: ~p", [Message#dns_message.questions]),
   NewMessage = erldns_metrics:measure(none, ?MODULE, handle_message, [Message, Host]),
   complete_response(erldns_axfr:optionally_append_soa(erldns_edns:handle(NewMessage))).
 
@@ -347,7 +347,7 @@ resolve_best_match_with_wildcard_cname(Message, _Qname, ?DNS_TYPE_CNAME, _Host, 
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
 % It is a CNAME and the Qtype was not CNAME
 resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords) ->
-  CnameRecord = lists:last(CnameRecords), % There should only be one CNAME. Multiple CNAMEs kills unicorns.
+  CnameRecord = lists:last(CnameRecords), % There should only be one CNAME. Multiple CNAMEs kill unicorns.
   resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords, lists:member(CnameRecord, CnameChain)).
 
 % Indicates CNAME loop

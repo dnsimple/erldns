@@ -3,7 +3,9 @@
 -export([start/0]).
 
 start() ->
+  inets:start(),
+  crypto:start(),
+  ssl:start(),
   lager:start(),
   folsom:start(),
-  application:start(erldns),
-  erldns_zone_cache:load_zones().
+  application:start(erldns).
