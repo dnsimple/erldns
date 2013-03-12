@@ -17,6 +17,7 @@
        ]).
 
 -define(SERVER, ?MODULE).
+-define(MAX_TXT_SIZE, 255).
 
 -record(state, {parsers}).
 
@@ -78,12 +79,15 @@ zones_to_erlang([Zone|Rest], Parsers, Zones) ->
   zones_to_erlang(Rest, Parsers, Zones ++ [ParsedZone]).
 
 json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
+  lager:debug("Parsing zone ~p with ~p records", [Name, length(JsonRecords)]),
   Records = lists:map(
     fun(JsonRecord) ->
-        case json_record_to_erlang(JsonRecord) of
-          {} ->
-            try_custom_parsers(JsonRecord, Parsers);
-          ParsedRecord -> ParsedRecord
+        Data = json_record_to_list(JsonRecord),
+        case json_record_to_erlang(Data) of
+          {} -> try_custom_parsers(Data, Parsers);
+          ParsedRecord ->
+            lager:debug("Parsed record: ~p", [ParsedRecord]),
+            ParsedRecord
         end
     end, JsonRecords),
   FilteredRecords = lists:filter(
@@ -93,23 +97,51 @@ json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
           _ -> true
         end
     end, Records),
+  lager:debug("Parsed ~p records for ~p", [length(FilteredRecords), Name]),
   {Name, FilteredRecords}.
 
-try_custom_parsers(_JsonRecord, []) -> {};
-try_custom_parsers(JsonRecord, [Parser|Rest]) ->
-  case Parser:json_record_to_erlang(JsonRecord) of
-    {} -> try_custom_parsers(JsonRecord, Rest);
+json_record_to_list(JsonRecord) ->
+  [
+    proplists:get_value(<<"name">>, JsonRecord),
+    proplists:get_value(<<"type">>, JsonRecord),
+    proplists:get_value(<<"ttl">>, JsonRecord),
+    proplists:get_value(<<"data">>, JsonRecord)
+  ].
+
+try_custom_parsers(_Data, []) -> {};
+try_custom_parsers(Data, [Parser|Rest]) ->
+  case Parser:json_record_to_erlang(Data) of
+    {} -> try_custom_parsers(Data, Rest);
     Record -> Record
   end.
 
 % Internal converters
-json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"SOA">>}, {<<"data">>, [{<<"mname">>, Mname}, {<<"rname">>, Rname}, {<<"serial">>, Serial}, {<<"refresh">>, Refresh}, {<<"retry">>, Retry}, {<<"expire">>, Expire},{<<"minimum">>, Minimum}]}, {<<"ttl">>, Ttl}]) ->
-  #dns_rr{name = Name, type = ?DNS_TYPE_SOA, data = #dns_rrdata_soa{mname = Mname, rname = Rname, serial = Serial, refresh = Refresh, retry = Retry, expire = Expire, minimum = Minimum}, ttl = Ttl};
+json_record_to_erlang([Name, <<"SOA">>, Ttl, Data]) ->
+  #dns_rr{
+    name = Name,
+    type = ?DNS_TYPE_SOA,
+    data = #dns_rrdata_soa{
+      mname = proplists:get_value(<<"mname">>, Data),
+      rname = proplists:get_value(<<"rname">>, Data),
+      serial = proplists:get_value(<<"serial">>, Data),
+      refresh = proplists:get_value(<<"refresh">>, Data),
+      retry = proplists:get_value(<<"retry">>, Data),
+      expire = proplists:get_value(<<"expire">>, Data),
+      minimum = proplists:get_value(<<"minimum">>, Data)
+    },
+    ttl = Ttl};
 
-json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"NS">>}, {<<"data">>, [{<<"dname">>, Dname}]}, {<<"ttl">>, Ttl}]) ->
-  #dns_rr{name = Name, type = ?DNS_TYPE_NS, data = #dns_rrdata_ns{dname = Dname}, ttl = Ttl};
+json_record_to_erlang([Name, <<"NS">>, Ttl, Data]) ->
+  #dns_rr{
+    name = Name,
+    type = ?DNS_TYPE_NS,
+    data = #dns_rrdata_ns{
+      dname = proplists:get_value(<<"dname">>, Data)
+    },
+    ttl = Ttl};
 
-json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"A">>}, {<<"data">>, [{<<"ip">>, Ip}]}, {<<"ttl">>, Ttl}]) ->
+json_record_to_erlang([Name, <<"A">>, Ttl, Data]) ->
+  Ip = proplists:get_value(<<"ip">>, Data),
   case inet_parse:address(binary_to_list(Ip)) of
     {ok, Address} ->
       #dns_rr{name = Name, type = ?DNS_TYPE_A, data = #dns_rrdata_a{ip = Address}, ttl = Ttl};
@@ -118,7 +150,8 @@ json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"A">>}, {<<"data">>, [
       {}
   end;
 
-json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"AAAA">>}, {<<"data">>, [{<<"ip">>, Ip}]}, {<<"ttl">>, Ttl}]) ->
+json_record_to_erlang([Name, <<"AAAA">>, Ttl, Data]) ->
+  Ip = proplists:get_value(<<"ip">>, Data),
   case inet_parse:address(binary_to_list(Ip)) of
     {ok, Address} ->
       #dns_rr{name = Name, type = ?DNS_TYPE_AAAA, data = #dns_rrdata_aaaa{ip = Address}, ttl = Ttl};
@@ -127,29 +160,110 @@ json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"AAAA">>}, {<<"data">>
       {}
   end;
 
-json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"CNAME">>}, {<<"data">>, [{<<"dname">>, Dname}]}, {<<"ttl">>, Ttl}]) ->
-  #dns_rr{name = Name, type = ?DNS_TYPE_CNAME, data = #dns_rrdata_cname{dname = Dname}, ttl = Ttl};
+json_record_to_erlang([Name, <<"CNAME">>, Ttl, Data]) ->
+  #dns_rr{
+    name = Name,
+    type = ?DNS_TYPE_CNAME,
+    data = #dns_rrdata_cname{dname = proplists:get_value(<<"dname">>, Data)},
+    ttl = Ttl};
 
-json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"MX">>}, {<<"data">>, [{<<"preference">>, Preference}, {<<"exchange">>, Exchange}]}, {<<"ttl">>, Ttl}]) ->
-  #dns_rr{name = Name, type = ?DNS_TYPE_MX, data = #dns_rrdata_mx{exchange = Exchange, preference = Preference}, ttl = Ttl};
+json_record_to_erlang([Name, <<"MX">>, Ttl, Data]) ->
+  #dns_rr{
+    name = Name,
+    type = ?DNS_TYPE_MX,
+    data = #dns_rrdata_mx{
+      exchange = proplists:get_value(<<"exchange">>, Data),
+      preference = proplists:get_value(<<"preference">>, Data)
+    },
+    ttl = Ttl};
 
-json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"TXT">>}, {<<"data">>, [{<<"txt">>, Text}]}, {<<"ttl">>, Ttl}]) ->
-  #dns_rr{name = Name, type = ?DNS_TYPE_TXT, data = #dns_rrdata_txt{txt = [Text]}, ttl = Ttl};
+json_record_to_erlang([Name, <<"TXT">>, Ttl, Data]) ->
+  #dns_rr{
+    name = Name,
+    type = ?DNS_TYPE_TXT,
+    data = #dns_rrdata_txt{txt = lists:flatten(parse_txt(proplists:get_value(<<"txt">>, Data)))},
+    ttl = Ttl};
 
-json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"SPF">>}, {<<"data">>, [{<<"spf">>, Spf}]}, {<<"ttl">>, Ttl}]) ->
-  #dns_rr{name = Name, type = ?DNS_TYPE_SPF, data = #dns_rrdata_spf{spf = [Spf]}, ttl = Ttl};
+json_record_to_erlang([Name, <<"SPF">>, Ttl, Data]) ->
+  #dns_rr{
+    name = Name,
+    type = ?DNS_TYPE_SPF,
+    data = #dns_rrdata_spf{spf = [proplists:get_value(<<"spf">>, Data)]},
+    ttl = Ttl};
 
-json_record_to_erlang([{<<"name">>,Name},{<<"type">>,<<"PTR">>},{<<"data">>,[{<<"dname">>, Dname}]},{<<"ttl">>, Ttl}]) ->
-  #dns_rr{name = Name, type = ?DNS_TYPE_PTR, data = #dns_rrdata_ptr{dname = Dname}, ttl = Ttl};
+json_record_to_erlang([Name, <<"PTR">>, Ttl, Data]) ->
+  #dns_rr{
+    name = Name,
+    type = ?DNS_TYPE_PTR,
+    data = #dns_rrdata_ptr{dname = proplists:get_value(<<"dname">>, Data)},
+    ttl = Ttl};
 
-json_record_to_erlang([{<<"name">>,Name},{<<"type">>,<<"SSHFP">>},{<<"data">>,[{<<"alg">>,Alg},{<<"fptype">>,Fptype},{<<"fp">>,Fp}]},{<<"ttl">>,Ttl}]) ->
-  #dns_rr{name = Name, type = ?DNS_TYPE_SSHFP, data = #dns_rrdata_sshfp{alg = Alg, fp_type = Fptype, fp = Fp}, ttl = Ttl};
+json_record_to_erlang([Name, <<"SSHFP">>, Ttl, Data]) ->
+  #dns_rr{
+    name = Name,
+    type = ?DNS_TYPE_SSHFP,
+    data = #dns_rrdata_sshfp{
+      alg = proplists:get_value(<<"alg">>, Data),
+      fp_type = proplists:get_value(<<"fptype">>, Data),
+      fp = proplists:get_value(<<"fp">>, Data)
+    },
+    ttl = Ttl};
 
-json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"SRV">>}, {<<"data">>, [{<<"priority">>, Priority}, {<<"weight">>, Weight}, {<<"port">>, Port}, {<<"target">>, Target}]}, {<<"ttl">>, Ttl}]) ->
-  #dns_rr{name = Name, type = ?DNS_TYPE_SRV, data = #dns_rrdata_srv{priority = Priority, weight = Weight, port = Port, target = Target}, ttl = Ttl};
+json_record_to_erlang([Name, <<"SRV">>, Ttl, Data]) ->
+  #dns_rr{
+    name = Name,
+    type = ?DNS_TYPE_SRV,
+    data = #dns_rrdata_srv{
+      priority = proplists:get_value(<<"priority">>, Data),
+      weight = proplists:get_value(<<"weight">>, Data),
+      port = proplists:get_value(<<"port">>, Data),
+      target = proplists:get_value(<<"target">>, Data)
+    },
+    ttl = Ttl};
 
-json_record_to_erlang([{<<"name">>, Name}, {<<"type">>, <<"NAPTR">>}, {<<"data">>, [{<<"order">>, Order}, {<<"preference">>, Preference}, {<<"flags">>, Flags}, {<<"services">>, Services}, {<<"regexp">>, Regexp}, {<<"replacement">>, Replacement}]}, {<<"ttl">>, Ttl}]) ->
-  #dns_rr{name = Name, type = ?DNS_TYPE_NAPTR, data = #dns_rrdata_naptr{order = Order, preference = Preference, flags = Flags, services = Services, regexp = Regexp, replacement = Replacement}, ttl = Ttl};
+json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data]) ->
+  #dns_rr{
+    name = Name,
+    type = ?DNS_TYPE_NAPTR,
+    data = #dns_rrdata_naptr{
+      order = proplists:get_value(<<"order">>, Data),
+      preference = proplists:get_value(<<"preference">>, Data),
+      flags = proplists:get_value(<<"flags">>, Data),
+      services = proplists:get_value(<<"services">>, Data),
+      regexp = proplists:get_value(<<"regexp">>, Data),
+      replacement = proplists:get_value(<<"replacement">>, Data)
+    },
+    ttl = Ttl};
 
-json_record_to_erlang(_JsonRecord) -> {}.
+json_record_to_erlang([Name, Type, Ttl, Data]) ->
+  lager:debug("~p could not parse ~p ~p ~p ~p", [?MODULE, Name, Type, Ttl, Data]),
+  {}.
 
+
+parse_txt(Binary) when is_binary(Binary) -> parse_txt(binary_to_list(Binary));
+parse_txt([C|Rest]) -> parse_txt_char([C|Rest], C, Rest, [], false).
+parse_txt(String, [], [], _) -> [split_txt(String)];
+parse_txt(_, [], Tokens, _) -> Tokens;
+parse_txt(String, [C|Rest], Tokens, Escaped) -> parse_txt_char(String, C, Rest, Tokens, Escaped).
+parse_txt(String, [C|Rest], Tokens, CurrentToken, Escaped) -> parse_txt_char(String, C, Rest, Tokens, CurrentToken, Escaped).
+parse_txt_char(String, $", Rest, Tokens, _) -> parse_txt(String, Rest, Tokens, [], false);
+parse_txt_char(String, _, Rest, Tokens, _) -> parse_txt(String, Rest, Tokens, false).
+parse_txt_char(String, $", Rest, Tokens, CurrentToken, false) -> parse_txt(String, Rest, Tokens ++ [split_txt(CurrentToken)], false);
+parse_txt_char(String, $", Rest, Tokens, CurrentToken, true) -> parse_txt(String, Rest, Tokens, CurrentToken ++ [$"], false);
+parse_txt_char(String, $\\, Rest, Tokens, CurrentToken, false) -> parse_txt(String, Rest, Tokens, CurrentToken, true);
+parse_txt_char(String, $\\, Rest, Tokens, CurrentToken, true) -> parse_txt(String, Rest, Tokens, CurrentToken ++ [$\\], false);
+parse_txt_char(String, C, Rest, Tokens, CurrentToken, _) -> parse_txt(String, Rest, Tokens, CurrentToken ++ [C], false).
+
+split_txt(Data) -> split_txt(Data, []).
+split_txt(Data, Parts) ->
+  case byte_size(list_to_binary(Data)) > ?MAX_TXT_SIZE of
+    true ->
+      First = list_to_binary(string:substr(Data, 1, ?MAX_TXT_SIZE)),
+      Rest = string:substr(Data, ?MAX_TXT_SIZE + 1),
+      case Rest of
+        [] -> Parts ++ [First];
+        _ -> split_txt(Rest, Parts ++ [First])
+      end;
+    false ->
+      Parts ++ [list_to_binary(Data)]
+  end.
