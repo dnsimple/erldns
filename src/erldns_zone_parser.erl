@@ -177,6 +177,16 @@ json_record_to_erlang([Name, <<"MX">>, Ttl, Data]) ->
     },
     ttl = Ttl};
 
+json_record_to_erlang([Name, <<"HINFO">>, Ttl, Data]) ->
+  #dns_rr{
+    name = Name,
+    type = ?DNS_TYPE_HINFO,
+    data = #dns_rrdata_hinfo{
+      cpu = proplists:get_value(<<"cpu">>, Data),
+      os = proplists:get_value(<<"os">>, Data)
+    },
+    ttl = Ttl};
+
 json_record_to_erlang([Name, <<"TXT">>, Ttl, Data]) ->
   #dns_rr{
     name = Name,
