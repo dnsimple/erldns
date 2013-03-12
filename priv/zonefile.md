@@ -1,9 +1,10 @@
 erl-dns reads JSON zone files.
 
-A JSON zone file contains an array of 1 or more zones. Each zone has a name and an array of records. Each record has a name, type, ttl and rdata field.
+A JSON zone file contains an array of 1 or more zones. Each zone has a name and an array of records. Each record has a name, type, ttl and data field.
 
 An example:
 
+'''json
     [{
       "name": "example.com",
       "records": [
@@ -11,7 +12,7 @@ An example:
           "name": "example.com",
           "type": "SOA",
           "ttl": 3600,
-          "rdata": {
+          "data": {
             "mname": "ns1.example.com",
             "rname": "admin.example.com",
             "serial": 1234567,
@@ -24,7 +25,7 @@ An example:
           "name": "example.com",
           "type": "A",
           "ttl": 3600,
-          "rdata": {
+          "data": {
             "ip": "1.2.3.4"
           }
         },
@@ -32,10 +33,11 @@ An example:
           "name": "example.com",
           "type": "MX",
           "ttl": 3600,
-          "rdata": {
+          "data": {
             "preference": "10",
             "exchange": "mail.example.com"
           }
         }
       ]
     }]
+'''

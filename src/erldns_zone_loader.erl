@@ -5,7 +5,7 @@
 -define(FILENAME, "zones.json").
 
 load_zones() ->
-  case file:read_file(?FILENAME) of
+  case file:read_file(filename()) of
     {ok, Binary} ->
       Zones = erldns_zone_parser:zones_to_erlang(jsx:decode(Binary)),
       lists:foreach(
@@ -17,4 +17,10 @@ load_zones() ->
     {error, Reason} ->
       lager:error("Failed to load zones: ~p", [Reason]),
       {err, Reason}
+  end.
+
+filename() ->
+  case application:get_env(erldns, zones) of
+    {ok, Filename} -> Filename;
+    _ -> ?FILENAME
   end.
