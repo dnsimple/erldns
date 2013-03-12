@@ -14,6 +14,7 @@
         "expire": 604800,
         "minimum": 300
       }
+    },
     {
       "name": "example.com",
       "type": "A",
