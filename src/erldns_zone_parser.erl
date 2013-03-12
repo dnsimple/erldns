@@ -97,8 +97,9 @@ json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
           _ -> true
         end
     end, Records),
-  lager:debug("Parsed ~p records for ~p", [length(FilteredRecords), Name]),
-  {Name, FilteredRecords}.
+  DistinctRecords = lists:usort(FilteredRecords),
+  lager:debug("Parsed ~p records for ~p", [length(DistinctRecords), Name]),
+  {Name, DistinctRecords}.
 
 json_record_to_list(JsonRecord) ->
   [
