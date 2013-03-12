@@ -71,7 +71,7 @@
                 "type": "A",
                 "ttl": 120,
                 "data": {
-                    "ip": "129.168.5.1"
+                    "ip": "192.168.5.1"
                 }
             },
             {
@@ -312,7 +312,7 @@
             },
             {
                 "name": "usa.example.com",
-                "type": "CNAME",
+                "type": "NS",
                 "ttl": 120,
                 "data": {
                     "dname": "usa-ns1.usa.example.com"
@@ -320,7 +320,7 @@
             },
             {
                 "name": "usa.example.com",
-                "type": "CNAME",
+                "type": "NS",
                 "ttl": 120,
                 "data": {
                     "dname": "usa-ns2.usa.example.com"
@@ -1181,7 +1181,7 @@
                 }
             },
             {
-                "name": "test.com",
+                "name": "server1.test.com",
                 "type": "RP",
                 "ttl": 3600,
                 "data": {
