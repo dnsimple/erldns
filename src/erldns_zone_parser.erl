@@ -188,6 +188,16 @@ json_record_to_erlang([Name, <<"HINFO">>, Ttl, Data]) ->
     },
     ttl = Ttl};
 
+json_record_to_erlang([Name, <<"RP">>, Ttl, Data]) ->
+  #dns_rr{
+    name = Name,
+    type = ?DNS_TYPE_RP,
+    data = #dns_rrdata_rp{
+      mbox = proplists:get_value(<<"mbox">>, Data),
+      txt = proplists:get_value(<<"txt">>, Data)
+    },
+    ttl = Ttl};
+
 json_record_to_erlang([Name, <<"TXT">>, Ttl, Data]) ->
   #dns_rr{
     name = Name,
