@@ -1190,7 +1190,7 @@
                 }
             },
             {
-                "name": "*.test.com",
+                "name": "*.test.test.com",
                 "type": "CNAME",
                 "ttl": 3600,
                 "data": {
