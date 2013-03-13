@@ -117,6 +117,10 @@ try_custom_parsers(Data, [Parser|Rest]) ->
   end.
 
 % Internal converters
+json_record_to_erlang([Name, Type, _Ttl, null]) ->
+  lager:error("record name=~p type=~p has null data", [Name, Type]),
+  {};
+
 json_record_to_erlang([Name, <<"SOA">>, Ttl, Data]) ->
   #dns_rr{
     name = Name,
