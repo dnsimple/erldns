@@ -5,7 +5,7 @@
 -include("dns.hrl").
 -include("erldns.hrl").
 
--export([start_link/0, zones_to_erlang/1, zone_to_erlang/1, register_parsers/1, register_parser/1]).
+-export([start_link/0, zone_to_erlang/1, register_parsers/1, register_parser/1]).
 
 % Gen server hooks
 -export([init/1,
@@ -26,9 +26,6 @@
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-zones_to_erlang(Zones) ->
-  gen_server:call(?SERVER, {parse_zones, Zones}).
-
 %% Takes a JSON zone and turns it into the tuple {Name, Records}.
 zone_to_erlang(Zone) ->
   gen_server:call(?SERVER, {parse_zone, Zone}).
@@ -44,9 +41,6 @@ register_parser(Module) ->
 %% Gen server hooks
 init([]) ->
   {ok, #state{parsers = []}}.
-
-handle_call({parse_zones, Zones}, _From, State) ->
-  {reply, zones_to_erlang(Zones, State#state.parsers, []), State};
 
 handle_call({parse_zone, Zone}, _From, State) ->
   {reply, json_to_erlang(Zone, State#state.parsers), State};
@@ -72,12 +66,6 @@ code_change(_, State, _) ->
 
 
 % Internal API
-zones_to_erlang([], _Parsers, Zones) -> Zones;
-
-zones_to_erlang([Zone|Rest], Parsers, Zones) ->
-  ParsedZone = json_to_erlang(Zone, Parsers),
-  zones_to_erlang(Rest, Parsers, Zones ++ [ParsedZone]).
-
 json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
   lager:debug("Parsing zone ~p with ~p records", [Name, length(JsonRecords)]),
   Records = lists:map(
