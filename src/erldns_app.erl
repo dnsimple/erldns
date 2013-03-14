@@ -24,6 +24,10 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
       erldns_metrics:measure(none, erldns_zone_client, fetch_zones, []);
     _ -> not_fetching
   end,
+
+  % Start up the UDP and TCP servers now
+  erldns_server_sup:start_link(),
+
   ok.
 
 stop(State) ->

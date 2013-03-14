@@ -25,7 +25,7 @@ init(_Args) ->
         poolboy:child_spec(PoolName, Args)
     end, AppPools),
 
-  Procs = [
+  SysProcs = [
     ?CHILD(erldns_zone_cache, worker, []),
     ?CHILD(erldns_zone_parser, worker, []),
     ?CHILD(erldns_packet_cache, worker, []),
@@ -33,12 +33,7 @@ init(_Args) ->
     ?CHILD(erldns_metrics, worker, []),
     ?CHILD(erldns_handler, worker, []),
 
-    ?CHILD(sample_custom_handler, worker, []),
-
-    {udp_inet, {erldns_udp_server, start_link, [udp_inet, inet]}, permanent, 5000, worker, [erldns_udp_server]},
-    {udp_inet6, {erldns_udp_server, start_link, [udp_inet6, inet6]}, permanent, 5000, worker, [erldns_udp_server]},
-    {tcp_inet, {erldns_tcp_server, start_link, [tcp_inet, inet]}, permanent, 5000, worker, [erldns_tcp_server]},
-    {tcp_inet6, {erldns_tcp_server, start_link, [tcp_inet6, inet6]}, permanent, 5000, worker, [erldns_tcp_server]}
+    ?CHILD(sample_custom_handler, worker, [])
   ],
 
   OptionalProcs = case application:get_env(erldns, zone_server_host) of
@@ -46,4 +41,4 @@ init(_Args) ->
     _ -> []
   end,
 
-  {ok, {{one_for_one, 20, 10}, Procs ++ OptionalProcs ++ AppPoolSpecs}}.
+  {ok, {{one_for_one, 20, 10}, SysProcs ++ OptionalProcs ++ AppPoolSpecs}}.
