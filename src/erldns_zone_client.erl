@@ -25,13 +25,15 @@ fetch_zones() ->
   case httpc:request(get, {zones_url(), [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
       lager:info("Parsing zones JSON"),
-      Zones = erldns_zone_parser:zones_to_erlang(jsx:decode(Body)),
+      JsonZones = jsx:decode(Body),
+      lager:info("Putting zones into cache"),
       lists:foreach(
-        fun(Zone) ->
+        fun(JsonZone) ->
+            Zone = erldns_zone_parser:zones_to_erlang(JsonZone),
             erldns_zone_cache:put_zone(Zone)
-        end, Zones),
-      lager:info("Put ~p zones into cache", [length(Zones)]),
-      {ok, length(Zones)};
+        end, JsonZones),
+      lager:info("Put ~p zones into cache", [length(JsonZones)]),
+      {ok, length(JsonZones)};
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
       lager:error("Failed to load zones: ~p (status: ~p)", [ReasonPhrase, Status]),
       {err, Status, ReasonPhrase}
