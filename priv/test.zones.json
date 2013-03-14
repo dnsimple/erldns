@@ -51,6 +51,22 @@
                 }
             },
             {
+                "name": "rns.example.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                  "ip": "1.2.3.4"
+                }
+            },
+            {
+                "name": "rns.example.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                  "dname": "rns.example.com"
+                }
+            },
+            {
                 "name": "ns1.example.com",
                 "type": "A",
                 "ttl": 120,
