@@ -61,6 +61,7 @@ do_work(Socket, Host, Port, Bin) ->
   lager:debug("Received UDP Request ~p ~p ~p", [Socket, Host, Port]),
   poolboy:transaction(udp_worker_pool, fun(Worker) ->
     lager:debug("Processing UDP request with worker ~p ~p ~p", [Socket, Host, Port]),
-    gen_server:call(Worker, {udp_query, Socket, Host, Port, Bin})
-  end),
-  lager:debug("Completed UDP request processing ~p ~p ~p", [Socket, Host, Port]).
+    gen_server:call(Worker, {udp_query, Socket, Host, Port, Bin}),
+    lager:debug("Completed UDP request processing ~p ~p ~p", [Socket, Host, Port])
+  end).
+
