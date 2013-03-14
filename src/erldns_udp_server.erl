@@ -14,6 +14,7 @@
   ]).
 
 -define(SERVER, ?MODULE).
+-define(WORKER_TIMEOUT, 1000).
 
 -record(state, {port, socket}).
 
@@ -63,5 +64,5 @@ do_work(Socket, Host, Port, Bin) ->
     lager:debug("Processing UDP request with worker ~p ~p ~p", [Socket, Host, Port]),
     gen_server:call(Worker, {udp_query, Socket, Host, Port, Bin}),
     lager:debug("Completed UDP request processing ~p ~p ~p", [Socket, Host, Port])
-  end).
+  end, ?WORKER_TIMEOUT).
 
