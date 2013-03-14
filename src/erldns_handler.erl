@@ -212,8 +212,8 @@ resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone,
   Name = NSRecord#dns_rr.name,
   case Name =:= Answer#dns_rr.name of
     true ->
-      lager:info("Name matches an existing answer name"),
-      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ NSRecords};
+      lager:debug("Name matches an existing answer name so this is an authority"),
+      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Message#dns_message.authority ++ NSRecords};
     false ->
       lager:debug("Restarting query with delegated name ~p", [Name]),
       restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, in_zone(Name, Zone))
