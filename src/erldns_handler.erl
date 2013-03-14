@@ -206,11 +206,18 @@ resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone,
 resolve_exact_type_match(Message, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, []) ->
   lager:debug("Returning authoritative answer with ~p appended answers", [length(MatchedRecords)]),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
-resolve_exact_type_match(Message, Qtype, Host, CnameChain, _MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
+resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
+  Answer = lists:last(MatchedRecords),
   NSRecord = lists:last(NSRecords),
   Name = NSRecord#dns_rr.name,
-  lager:debug("Restarting query with delegated name ~p", [Name]),
-  restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, in_zone(Name, Zone)).
+  case Name =:= Answer#dns_rr.name of
+    true ->
+      lager:info("Name matches an existing answer name"),
+      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ NSRecords};
+    false ->
+      lager:debug("Restarting query with delegated name ~p", [Name]),
+      restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, in_zone(Name, Zone))
+  end.
 
 restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
   resolve(Message, Name, Qtype, Zone, Host, CnameChain);
