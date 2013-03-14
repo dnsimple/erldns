@@ -12,7 +12,7 @@ load_zones() ->
       lager:info("Putting zones into cache"),
       lists:foreach(
         fun(JsonZone) ->
-            Zone = erldns_zone_parser:zones_to_erlang(JsonZone),
+            Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
             erldns_zone_cache:put_zone(Zone)
         end, JsonZones),
       lager:info("Loaded ~p zones", [length(JsonZones)]),
