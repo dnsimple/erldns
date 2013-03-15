@@ -10,8 +10,11 @@
 -export([requires_additional_processing/2, additional_processing/3, additional_processing/4]).
 
 %% Resolve the first question inside the given message.
-resolve(Message, AuthorityRecords, Host) -> 
-  resolve(Message, AuthorityRecords, Host, Message#dns_message.questions).
+resolve(Message, AuthorityRecords, Host) ->
+  lager:debug("Starting resolve for ~p", [Host]),
+  ResolvedMessage = resolve(Message, AuthorityRecords, Host, Message#dns_message.questions),
+  lager:debug("Finished resolver for ~p", [Host]),
+  ResolvedMessage.
 
 %% There were no questions in the message so just return it.
 resolve(Message, _AuthorityRecords, _Host, []) -> Message;
