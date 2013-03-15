@@ -56,7 +56,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 %% Start a UDP server.
 start(Port, InetFamily) ->
   lager:info("Starting UDP server for ~p on port ~p~n", [InetFamily, Port]),
-  case gen_udp:open(Port, [binary, {active, once}, {read_packets, 10}, {ip, erldns_config:get_address(InetFamily)}, InetFamily]) of
+  case gen_udp:open(Port, [binary, {active, once}, {read_packets, 1000}, {ip, erldns_config:get_address(InetFamily)}, InetFamily]) of
     {ok, Socket} -> 
       lager:info("UDP server (~p) opened socket: ~p~n", [InetFamily, Socket]),
       {ok, Socket};
