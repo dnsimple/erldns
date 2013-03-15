@@ -31,9 +31,9 @@ display() ->
 slowest() ->
   gen_server:cast(?SERVER, {display, slowest}).
 
-measure(_, Module, FunctionName, Args) when is_list(Args) ->
+measure(Name, Module, FunctionName, Args) when is_list(Args) ->
   {T, R} = timer:tc(Module, FunctionName, Args),
-  lager:debug([{tag, timer_result}], "~p:~p took ~p ms", [Module, FunctionName, T / 1000]),
+  lager:debug([{tag, timer_result}], "~p:~p (~p) took ~p ms", [Module, FunctionName, Name, T / 1000]),
   R;
 measure(Name, Module, FunctionName, Arg) -> measure(Name, Module, FunctionName, [Arg]).
 

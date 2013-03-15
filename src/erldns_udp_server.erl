@@ -13,6 +13,9 @@
     code_change/3
   ]).
 
+% Internal API
+-export([do_work/4, execute_transaction/5]).
+
 -define(SERVER, ?MODULE).
 -define(WORKER_TIMEOUT, 1000).
 
@@ -35,10 +38,13 @@ handle_info(timeout, State) ->
   lager:info("UDP instance timed out"),
   {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
-  do_work(Socket, Host, Port, Bin),
+  lager:debug("Received UDP request ~p ~p ~p", [Socket, Host, Port]),
+  erldns_metrics:measure(Host, ?MODULE, do_work, [Socket, Host, Port, Bin]),
   inet:setopts(State#state.socket, [{active, once}]),
+  lager:debug("Set active: once"),
   {noreply, State};
-handle_info(_Message, State) ->
+handle_info(Message, State) ->
+  lager:debug("Received unknown message: ~p", [Message]),
   {noreply, State}.
 terminate(_Reason, _State) ->
   ok.
@@ -59,10 +65,14 @@ start(Port, InetFamily) ->
   end.
 
 do_work(Socket, Host, Port, Bin) ->
-  lager:debug("Received UDP request ~p ~p ~p", [Socket, Host, Port]),
-  poolboy:transaction(udp_worker_pool, fun(Worker) ->
-    lager:debug("Processing UDP request with worker ~p ~p ~p", [Socket, Host, Port]),
-    gen_server:call(Worker, {udp_query, Socket, Host, Port, Bin}),
-    lager:debug("Completed UDP request processing ~p ~p ~p", [Socket, Host, Port])
-  end, ?WORKER_TIMEOUT).
+  poolboy:transaction(udp_worker_pool, worker_function(Socket, Host, Port, Bin), ?WORKER_TIMEOUT).
 
+worker_function(Socket, Host, Port, Bin) ->
+  fun(Worker) ->
+    erldns_metrics:measure(Host, ?MODULE, execute_transaction, [Worker, Socket, Host, Port, Bin])
+  end.
+
+execute_transaction(Worker, Socket, Host, Port, Bin) ->
+  lager:debug("Processing UDP with worker ~p ~p ~p", [Socket, Host, Port]),
+  gen_server:call(Worker, {udp_query, Socket, Host, Port, Bin}),
+  lager:debug("Completed UDP with worker ~p ~p ~p", [Socket, Host, Port]).

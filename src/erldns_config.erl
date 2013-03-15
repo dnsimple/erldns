@@ -25,5 +25,6 @@ get_port() ->
   end.
 
 parse_address(Address) when is_list(Address) ->
-  {ok, Tuple} = inet_parse:address(Address), Tuple;
+  {ok, Tuple} = inet_parse:address(Address),
+  Tuple;
 parse_address(Address) -> Address.
