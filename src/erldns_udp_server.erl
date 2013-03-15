@@ -59,7 +59,7 @@ start(Port, InetFamily) ->
   end.
 
 do_work(Socket, Host, Port, Bin) ->
-  lager:debug("Received UDP Request ~p ~p ~p", [Socket, Host, Port]),
+  lager:debug("Received UDP request ~p ~p ~p", [Socket, Host, Port]),
   poolboy:transaction(udp_worker_pool, fun(Worker) ->
     lager:debug("Processing UDP request with worker ~p ~p ~p", [Socket, Host, Port]),
     gen_server:call(Worker, {udp_query, Socket, Host, Port, Bin}),
