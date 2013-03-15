@@ -97,7 +97,7 @@ json_record_to_list(JsonRecord) ->
     proplists:get_value(<<"data">>, JsonRecord)
   ].
 
-try_custom_parsers([Name, Type, Ttl, Rdata] = Data, []) ->
+try_custom_parsers([Name, Type, Ttl, Rdata], []) ->
   lager:debug("~p could not parse ~p ~p ~p ~p", [?MODULE, Name, Type, Ttl, Rdata]),
   {};
 try_custom_parsers(Data, [Parser|Rest]) ->
@@ -250,7 +250,7 @@ json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data]) ->
     },
     ttl = Ttl};
 
-json_record_to_erlang([Name, Type, Ttl, Data]) ->
+json_record_to_erlang(_) ->
   {}.
 
 
