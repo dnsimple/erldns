@@ -38,7 +38,8 @@ handle_info(timeout, State) ->
   lager:info("UDP instance timed out"),
   {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
-  lager:debug("Received UDP request ~p ~p ~p", [Socket, Host, Port]),
+  [{message_queue_len, MailboxSize}] = erlang:process_info(self(),[message_queue_len]),
+  lager:debug("Received UDP request ~p ~p ~p (mbsize: ~p)", [Socket, Host, Port, MailboxSize]),
   erldns_metrics:measure(Host, ?MODULE, do_work, [Socket, Host, Port, Bin]),
   inet:setopts(State#state.socket, [{active, once}]),
   lager:debug("Set active: once ~p ~p ~p", [Socket, Host, Port]),
