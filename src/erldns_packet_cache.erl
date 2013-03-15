@@ -3,7 +3,7 @@
 -behavior(gen_server).
 
 % API
--export([start_link/0, get/1, put/2, sweep/0, clear/0]).
+-export([start_link/0, get/1, get/2, put/2, sweep/0, clear/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -24,7 +24,9 @@ start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 get(Question) ->
-  gen_server:call(?SERVER, {get_packet, Question}).
+  get(Question, unknown).
+get(Question, Host) ->
+  gen_server:call(?SERVER, {get_packet, Question, Host}).
 put(Question, Response) ->
   gen_server:call(?SERVER, {set_packet, [Question, Response]}).
 sweep() ->
@@ -39,7 +41,8 @@ init([TTL]) ->
   ets:new(packet_cache, [set, named_table]),
   {ok, Tref} = timer:apply_interval(?SWEEP_INTERVAL, ?MODULE, sweep, []),
   {ok, #state{ttl = TTL, tref = Tref}}.
-handle_call({get_packet, Question}, _From, State) ->
+handle_call({get_packet, Question, Host}, _From, State) ->
+  lager:debug("get_packet from packet cache for ~p", [Host]),
   case ets:lookup(packet_cache, Question) of
     [{Question, {Response, ExpiresAt}}] ->
       {_,T,_} = erlang:now(),
