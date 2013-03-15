@@ -41,7 +41,7 @@ handle_info({udp, Socket, Host, Port, Bin}, State) ->
   lager:debug("Received UDP request ~p ~p ~p", [Socket, Host, Port]),
   erldns_metrics:measure(Host, ?MODULE, do_work, [Socket, Host, Port, Bin]),
   inet:setopts(State#state.socket, [{active, once}]),
-  lager:debug("Set active: once"),
+  lager:debug("Set active: once ~p ~p ~p", [Socket, Host, Port]),
   {noreply, State};
 handle_info(Message, State) ->
   lager:debug("Received unknown message: ~p", [Message]),
