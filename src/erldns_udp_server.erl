@@ -14,12 +14,12 @@
   ]).
 
 % Internal API
--export([do_work/4, execute_transaction/5]).
+-export([do_work/5]).
 
 -define(SERVER, ?MODULE).
--define(WORKER_TIMEOUT, 1000).
+-define(NUM_WORKERS, 10000).
 
--record(state, {port, socket}).
+-record(state, {port, socket, workers}).
 
 %% Public API
 start_link(Name, InetFamily) ->
@@ -29,7 +29,7 @@ start_link(Name, InetFamily) ->
 init([InetFamily]) ->
   Port = erldns_config:get_port(),
   {ok, Socket} = start(Port, InetFamily),
-  {ok, #state{port = Port, socket = Socket}}.
+  {ok, #state{port = Port, socket = Socket, workers = make_workers(queue:new())}}.
 handle_call(_Request, _From, State) ->
   {ok, State}.
 handle_cast(_Message, State) ->
@@ -40,10 +40,16 @@ handle_info(timeout, State) ->
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
   [{message_queue_len, MailboxSize}] = erlang:process_info(self(),[message_queue_len]),
   lager:debug("Received UDP request ~p ~p ~p (mbsize: ~p)", [Socket, Host, Port, MailboxSize]),
-  erldns_metrics:measure(Host, ?MODULE, do_work, [Socket, Host, Port, Bin]),
-  inet:setopts(State#state.socket, [{active, once}]),
-  lager:debug("Set active: once ~p ~p ~p", [Socket, Host, Port]),
-  {noreply, State};
+  case queue:out(State#state.workers) of
+    {{value, Worker}, Queue} ->
+      erldns_metrics:measure(Host, ?MODULE, do_work, [Worker, Socket, Host, Port, Bin]),
+      inet:setopts(State#state.socket, [{active, once}]),
+      lager:debug("Processing UDP request ~p ~p ~p", [Socket, Host, Port]),
+      {noreply, State#state{workers = queue:in(Worker, Queue)}};
+    {empty, _Queue} ->
+      lager:info("Queue is empty, dropping packet"),
+      {noreply, State}
+  end;
 handle_info(Message, State) ->
   lager:debug("Received unknown message: ~p", [Message]),
   {noreply, State}.
@@ -65,15 +71,15 @@ start(Port, InetFamily) ->
       {error, eacces}
   end.
 
-do_work(Socket, Host, Port, Bin) ->
-  poolboy:transaction(udp_worker_pool, worker_function(Socket, Host, Port, Bin), ?WORKER_TIMEOUT).
+do_work(Worker, Socket, Host, Port, Bin) ->
+  lager:debug("Casting udp query to worker ~p", [Worker]),
+  gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin}).
 
-worker_function(Socket, Host, Port, Bin) ->
-  fun(Worker) ->
-    erldns_metrics:measure(Host, ?MODULE, execute_transaction, [Worker, Socket, Host, Port, Bin])
-  end.
 
-execute_transaction(Worker, Socket, Host, Port, Bin) ->
-  lager:debug("Processing UDP with worker ~p ~p ~p", [Socket, Host, Port]),
-  gen_server:call(Worker, {udp_query, Socket, Host, Port, Bin}),
-  lager:debug("Completed UDP with worker ~p ~p ~p", [Socket, Host, Port]).
+make_workers(Queue) ->
+  make_workers(Queue, 1).
+make_workers(Queue, N) when N < ?NUM_WORKERS ->
+  {ok, WorkerPid} = erldns_worker:start_link([]),
+  make_workers(queue:in(WorkerPid, Queue), N + 1);
+make_workers(Queue, _) ->
+  Queue.
