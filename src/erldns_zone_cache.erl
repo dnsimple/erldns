@@ -24,7 +24,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {zones, authorities, parsers}).
+-record(state, {parsers}).
 
 %% Public API
 start_link() ->
@@ -80,8 +80,9 @@ get_authority(Message) when is_record(Message, dns_message) ->
 get_authority(Name) ->
   gen_server:call(?SERVER, {get_authority, Name}).
 
-put_authority(Name, Authority) ->
-  gen_server:call(?SERVER, {put_authority, Name, Authority}).
+%% Deprecated. Remove me
+put_authority(_Name, _Authority) ->
+  ok.
 
 get_delegations(Name) ->
   Result = gen_server:call(?SERVER, {get_delegations, Name}),
@@ -98,13 +99,14 @@ in_zone(Name) ->
 
 %% Gen server hooks
 init([]) ->
-  Zones = dict:new(),
-  Authorities = dict:new(),
-  {ok, #state{zones = Zones, authorities = Authorities, parsers = []}}.
+  ets:new(zones, [set, named_table]),
+  ets:new(authorities, [set, named_table]),
+  {ok, #state{parsers = []}}.
 
 handle_call({get, Name}, _From, State) ->
-  case dict:find(normalize_name(Name), State#state.zones) of
-    {ok, Zone} -> {reply, {ok, Zone#zone{name = normalize_name(Name), records = [], records_by_name=trimmed}}, State};
+  NormalizedName = normalize_name(Name),
+  case ets:lookup(zones, NormalizedName) of
+    [{NormalizedName, Zone}] -> {reply, {ok, Zone#zone{name = NormalizedName, records = [], records_by_name=trimmed}}, State};
     _ -> {reply, {error, zone_not_found}, State}
   end;
 
@@ -119,19 +121,19 @@ handle_call({get_delegations, Name}, _From, State) ->
   end;
 
 handle_call({put, Name, Zone}, _From, State) ->
-  Zones = dict:store(normalize_name(Name), Zone, State#state.zones),
-  {reply, ok, State#state{zones = Zones}};
+  ets:insert(zones, {normalize_name(Name), Zone}),
+  {reply, ok, State};
 
 handle_call({delete, Name}, _From, State) ->
-  Zones = dict:erase(normalize_name(Name), State#state.zones),
-  {reply, ok, State#state{zones = Zones}};
+  ets:delete(zones, normalize_name(Name)),
+  {reply, ok, State};
 
 handle_call({get_authority, Name}, _From, State) ->
   find_authority(normalize_name(Name), State);
 
 handle_call({put_authority, Name, Authority}, _From, State) ->
-  Authorities = dict:store(normalize_name(Name), Authority, State#state.authorities),
-  {reply, ok, State#state{authorities = Authorities}};
+  ets:insert(authorities, {normalize_name(Name), Authority}),
+  {reply, ok, State};
 
 handle_call({get_records_by_name, Name}, _From, State) ->
   case find_zone_in_cache(Name, State) of
@@ -189,9 +191,9 @@ find_zone_in_cache(Qname, State) ->
     [] -> {error, zone_not_found};
     [_] -> {error, zone_not_found};
     [_|Labels] ->
-      case dict:find(Name, State#state.zones) of
-        {ok, Zone} -> {ok, Zone};
-        error -> find_zone_in_cache(dns:labels_to_dname(Labels), State)
+      case ets:lookup(zones, Name) of
+        [{Name, Zone}] -> {ok, Zone};
+        _ -> find_zone_in_cache(dns:labels_to_dname(Labels), State)
       end
   end.
 
