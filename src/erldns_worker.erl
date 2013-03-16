@@ -3,7 +3,6 @@
 -include("dns.hrl").
 
 -behaviour(gen_server).
--behaviour(poolboy_worker).
 
 -export([start_link/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -18,12 +17,15 @@ start_link(Args) ->
 init(_Args) ->
   {ok, #state{}}.
 
-handle_call({tcp_query, Socket, Bin}, _From, State) ->
-  {reply, handle_tcp_dns_query(Socket, Bin), State};
-handle_call({udp_query, Socket, Host, Port, Bin}, _From, State) ->
-  {reply, handle_udp_dns_query(Socket, Host, Port, Bin), State};
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
+
+handle_cast({tcp_query, Socket, Bin}, State) ->
+  handle_tcp_dns_query(Socket, Bin),
+  {noreply, State};
+handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
+  handle_udp_dns_query(Socket, Host, Port, Bin),
+  {noreply, State};
 handle_cast(_Msg, State) ->
   {noreply, State}.
 handle_info(_Info, State) ->
