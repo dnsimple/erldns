@@ -20,8 +20,10 @@
 -record(state, {port, socket}).
 
 %% Public API
-start_link(_Name, Family) ->
-  gen_nb_server:start_link(?MODULE, erldns_config:get_address(Family), erldns_config:get_port(), []).
+start_link(Name, Family) ->
+  Port = erldns_config:get_port(),
+  lager:info("Starting TCP server for ~p on port ~p", [Family, Port]),
+  gen_nb_server:start_link(?MODULE, erldns_config:get_address(Family), Port, []).
 
 %% gen_server hooks
 init([]) ->
