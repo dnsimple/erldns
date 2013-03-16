@@ -6,15 +6,23 @@ Serve DNS authoritative responses...with Erlang.
 
 To build clean:
 
-   ./build.sh
+    ./build.sh
 
 If you've already built once and just want to recompile the erl-dns source:
 
     ./rebar compile
 
-## Database
+## Zones
 
-Currently the PostgreSQL responder uses the PowerDNS schema. See "http://doc.powerdns.com/generic-mypgsql-backends.html#idp9091088"
+Zones are loaded in from JSON, either locally or through a zone server (more info coming on this).
+
+Example JSON files are in the priv/ directory.
+
+## Configuration
+
+An example configuration file can be found in erldns.config.example.
+
+Copy it to erldns.config and modify as needed.
 
 ## Running
 
@@ -42,19 +50,8 @@ Here are some queries to try:
 
     dig -p8053 @127.0.0.1 -x 127.0.0.1 ptr
 
-## Custom Responders
+## Performance
 
-Responders follow a simple API of the following functions:
+Currently this system is able to handle around 1k QPS of real traffic.
 
-* answer/2. The arguments passed in are Qname and Qtype.
-* get_soa/1. The argument is Qname.
-* get_metadata/1. The argument is Qname.
-
-To implement your own responder:
-
-* Implement the answer/2, get_soa/1 and get_metadata/1 functions and export them.
-* Add your module name to the responders list in erldns.config.
-
-The erldns_pgsql_responder is provided to answer queries using data in a PostgreSQL database.
-
-Responders in the erldns.config are processed in order. The first responder to answer with at least one answer will short-circuit responder processing and will return the answers it has.
+The goal is 10k QPS.

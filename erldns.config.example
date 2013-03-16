@@ -5,13 +5,10 @@
     {inet6, "::1"},
     {catch_exceptions, false},
     {credentials, {"indentifier", "token"}},
-    {zone_server_host, "your-zone-server.example.com"}
+    {zone_server_host, "your-zone-server.example.com"},
+    {zones, "zones.json"},
     {pools, [
       {tcp_worker_pool, [
-        {size, 10},
-        {max_overflow, 20}
-      ]},
-      {udp_worker_pool, [
         {size, 10},
         {max_overflow, 20}
       ]}
