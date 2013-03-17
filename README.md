@@ -55,3 +55,15 @@ Here are some queries to try:
 Currently this system is able to handle around 1k QPS of real traffic.
 
 The goal is 10k QPS.
+
+## Design
+
+The erldns_resolver module will attempt to find zone data in the zone cache. If you're embedding erl-dns in your application the easiest thing to do is to load the zone cache once the zone cache gen_server starts push an updated zone into the cache each time data changes.
+
+To insert a zone, use erldns_zone_cache:put_zone({Name, Records}) where Name is a binary term such as <<"example.com">> and Records is a list of dns_rr records (whose definitions can be found in deps/dns/include/dns_records.hrl). The name of each record must be the fully qualified domain name (including the zone part).
+
+Here's an example:
+
+```erlang
+erldns_zone_cache:put_zone({<<"example.com">>, #dns_rr{name = <<"www.example.com">>, type = ?DNS_TYPE_A, ttl = 3600, data = #dns_rrdata_a{ip = {1,2,3,4}}}).
+```

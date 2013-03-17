@@ -18,10 +18,13 @@ resolve(Message, AuthorityRecords, Host) ->
 
 %% There were no questions in the message so just return it.
 resolve(Message, _AuthorityRecords, _Host, []) -> Message;
+
 %% Resolve the question.
 resolve(Message, AuthorityRecords, Host, [Question]) -> resolve(Message, AuthorityRecords, Host, Question);
+
 %% Resolve the first question. Additional questions will be thrown away for now.
 resolve(Message, AuthorityRecords, Host, [Question|_]) -> resolve(Message, AuthorityRecords, Host, Question);
+
 %% Start the resolution process on the given question.
 resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
   % Step 1: Set the RA bit to false
@@ -37,6 +40,7 @@ resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
 resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain) ->
   {Authority, Additional} = erldns_records:root_hints(),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
+
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
   % Step 3: Match records
   resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone). % Query Zone for name
@@ -44,6 +48,7 @@ resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
 %% There were no exact matches on name, so move to the best-match resolution.
 resolve(Message, Qname, Qtype, [], Host, CnameChain, Zone) ->
   best_match_resolution(Message, Qname, Qtype, Host, CnameChain, best_match(Qname, Zone), Zone); % Query Zone for best match name
+
 %% There was at least one exact match on name.
 resolve(Message, Qname, Qtype, MatchedRecords, Host, CnameChain, Zone) ->
   lager:debug("Exect match on name ~p (records: ~p)", [Qname, MatchedRecords]),
@@ -53,9 +58,11 @@ resolve(Message, Qname, Qtype, MatchedRecords, Host, CnameChain, Zone) ->
 exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
   CnameRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), MatchedRecords), % Query record set for CNAME type
   exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords).
+
 %% No CNAME records found in the records with the Qname
 exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, []) ->
   resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone);
+
 %% CNAME records found in the records for the Qname
 exact_match_resolution(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords) ->
   resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords).
