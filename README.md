@@ -65,5 +65,19 @@ To insert a zone, use erldns_zone_cache:put_zone({Name, Records}) where Name is 
 Here's an example:
 
 ```erlang
-erldns_zone_cache:put_zone({<<"example.com">>, [#dns_rr{name = <<"www.example.com">>, type = ?DNS_TYPE_A, ttl = 3600, data = #dns_rrdata_a{ip = {1,2,3,4}}]}).
+erldns_zone_cache:put_zone({
+  <<"example.com">>, [
+    #dns_rr{
+      name = <<"example.com">>,
+      type = ?DNS_TYPE_A,
+      ttl = 3600,
+      data = #dns_rrdata_a{ip = {1,2,3,4}
+    },
+    #dns_rr{
+      name = <<"www.example.com">>,
+      type = ?DNS_TYPE_CNAME,
+      ttl = 3600,
+      data = #dns_rrdata_cname{dname = <<"example.com">>}
+    }
+  ]}).
 ```
