@@ -71,7 +71,7 @@ erldns_zone_cache:put_zone({
       name = <<"example.com">>,
       type = ?DNS_TYPE_A,
       ttl = 3600,
-      data = #dns_rrdata_a{ip = {1,2,3,4}
+      data = #dns_rrdata_a{ip = {1,2,3,4}}
     },
     #dns_rr{
       name = <<"www.example.com">>,

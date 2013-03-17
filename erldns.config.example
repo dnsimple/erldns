@@ -1,7 +1,7 @@
 [
   {erldns,[
     {port, 8053},
-    {inet4, "127.0.0.1"}},
+    {inet4, "127.0.0.1"},
     {inet6, "::1"},
     {catch_exceptions, false},
     {credentials, {"indentifier", "token"}},
