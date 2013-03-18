@@ -18,7 +18,7 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
 
   lager:info("Loading zones from local file"),
   erldns_metrics:measure(none, erldns_zone_loader, load_zones, []),
-  case application:get_env(erldns, zone_server_host) of
+  case application:get_env(erldns, zone_server) of
     {ok, _} ->
       lager:info("Loading zones from remote server"),
       erldns_metrics:measure(none, erldns_zone_client, fetch_zones, []);

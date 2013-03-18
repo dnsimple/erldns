@@ -36,7 +36,7 @@ init(_Args) ->
     ?CHILD(sample_custom_handler, worker, [])
   ],
 
-  OptionalProcs = case application:get_env(erldns, zone_server_host) of
+  OptionalProcs = case application:get_env(erldns, zone_server) of
     {ok, _} -> [?CHILD(erldns_zone_client, worker, [])];
     _ -> []
   end,

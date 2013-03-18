@@ -5,7 +5,9 @@
     {inet6, "::1"},
     {catch_exceptions, false},
     {credentials, {"indentifier", "token"}},
-    {zone_server_host, "your-zone-server.example.com"},
+    {zone_server, [
+      {host, "your-zone-server.example.com"}
+    ]},
     {zones, "zones.json"},
     {pools, [
       {tcp_worker_pool, [

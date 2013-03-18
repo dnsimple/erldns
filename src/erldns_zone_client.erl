@@ -17,8 +17,12 @@
 
 % Public API
 start_link() ->
-  lager:info("Starting websocket client"),
-  StartLinkResult = websocket_client:start_link(?MODULE, wss, zone_server_host(), 443, "/ws", []),
+  WsProtocol = websocket_protocol(),
+  WsHost = websocket_host(),
+  WsPort = websocket_port(),
+  WsPath = websocket_path(),
+  lager:info("Starting websocket client (protocol=~p, host=~p, port=~p, path=~p)", [WsProtocol, WsHost, WsPort, WsPath]),
+  StartLinkResult = websocket_client:start_link(?MODULE, WsProtocol, WsHost, WsPort, WsPath, []),
   {ok, StartLinkResult}.
 
 fetch_zones() ->
@@ -98,12 +102,37 @@ websocket_terminate(Message, State) ->
   ok.
 
 %% Internal functions
+
+zone_server_env() ->
+  {ok, ZoneServerEnv} = application:get_env(erldns, zone_server),
+  ZoneServerEnv.
+
+zone_server_protocol() ->
+  proplists:get_value(protocol, zone_server_env(), "https").
+
 zone_server_host() ->
-  {ok, ZoneServerHost} = application:get_env(erldns, zone_server_host),
-  ZoneServerHost.
+  proplists:get_value(host, zone_server_env(), "localhost").
+
+zone_server_port() ->
+  proplists:get_value(port, zone_server_env(), 433).
+
+websocket_env() ->
+  proplists:get_value(websocket, zone_server_env(), []).
+
+websocket_protocol() ->
+  proplists:get_value(protocol, websocket_env(), "wss").
+
+websocket_host() ->
+  proplists:get_value(host, websocket_env(), zone_server_host()).
+
+websocket_port() ->
+  proplists:get_value(port, websocket_env(), zone_server_port()).
+
+websocket_path() ->
+  proplists:get_value(path, websocket_env(), "/ws").
 
 zones_url() ->
-  "https://" ++ zone_server_host() ++ "/zones/".
+  zone_server_protocol() ++ "://" ++ zone_server_host() ++ ":" ++ integer_to_list(zone_server_port()) ++ "/zones/".
 
 encoded_credentials() ->
   case application:get_env(erldns, credentials) of
