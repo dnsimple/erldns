@@ -120,7 +120,7 @@ websocket_env() ->
   proplists:get_value(websocket, zone_server_env(), []).
 
 websocket_protocol() ->
-  proplists:get_value(protocol, websocket_env(), "wss").
+  proplists:get_value(protocol, websocket_env(), wss).
 
 websocket_host() ->
   proplists:get_value(host, websocket_env(), zone_server_host()).
