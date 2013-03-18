@@ -15,6 +15,9 @@
          websocket_terminate/2
         ]).
 
+-define(DEFAULT_ZONE_SERVER_PORT, 443).
+-define(DEFAULT_WEBSOCKET_PATH, "/ws").
+
 % Public API
 start_link() ->
   WsProtocol = websocket_protocol(),
@@ -114,7 +117,7 @@ zone_server_host() ->
   proplists:get_value(host, zone_server_env(), "localhost").
 
 zone_server_port() ->
-  proplists:get_value(port, zone_server_env(), 433).
+  proplists:get_value(port, zone_server_env(), ?DEFAULT_ZONE_SERVER_PORT).
 
 websocket_env() ->
   proplists:get_value(websocket, zone_server_env(), []).
@@ -129,7 +132,7 @@ websocket_port() ->
   proplists:get_value(port, websocket_env(), zone_server_port()).
 
 websocket_path() ->
-  proplists:get_value(path, websocket_env(), "/ws").
+  proplists:get_value(path, websocket_env(), ?DEFAULT_WEBSOCKET_PATH).
 
 zones_url() ->
   zone_server_protocol() ++ "://" ++ zone_server_host() ++ ":" ++ integer_to_list(zone_server_port()) ++ "/zones/".
