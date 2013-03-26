@@ -20,13 +20,9 @@
 
 % Public API
 start_link() ->
-  WsProtocol = websocket_protocol(),
-  WsHost = websocket_host(),
-  WsPort = websocket_port(),
-  WsPath = websocket_path(),
-  lager:info("Starting websocket client (protocol=~p, host=~p, port=~p, path=~p)", [WsProtocol, WsHost, WsPort, WsPath]),
-  StartLinkResult = websocket_client:start_link(?MODULE, WsProtocol, WsHost, WsPort, WsPath, []),
-  {ok, StartLinkResult}.
+  WebsocketUrl = websocket_url(),
+  lager:info("Starting websocket client (url=~p)", [WebsocketUrl]),
+  websocket_client:start_link(WebsocketUrl, ?MODULE, []).
 
 fetch_zones() ->
   case httpc:request(get, {zones_url(), [auth_header()]}, [], [{body_format, binary}]) of
@@ -136,6 +132,9 @@ websocket_path() ->
 
 zones_url() ->
   zone_server_protocol() ++ "://" ++ zone_server_host() ++ ":" ++ integer_to_list(zone_server_port()) ++ "/zones/".
+
+websocket_url() ->
+  atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
 
 encoded_credentials() ->
   case application:get_env(erldns, credentials) of
