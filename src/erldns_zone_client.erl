@@ -52,6 +52,9 @@ fetch_zone(Name, Url) ->
       Zone = erldns_zone_parser:zone_to_erlang(jsx:decode(Body)),
       lager:info("Putting ~p into zone cache", [Name]),
       erldns_zone_cache:put_zone(Zone);
+    {_, {{_Version, Status = 404, ReasonPhrase}, _Headers, _Body}} ->
+      lager:debug("Zone not found in zone server: ~p", [Name]),
+      {err, Status, ReasonPhrase};
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
       lager:error("Failed to load zone: ~p (status: ~p)", [ReasonPhrase, Status]),
       {err, Status, ReasonPhrase}
