@@ -14,7 +14,7 @@
   ]).
 
 % Internal API
--export([do_work/5]).
+-export([do_work/5, handle_request/5]).
 
 -define(SERVER, ?MODULE).
 -define(NUM_WORKERS, 10000).
@@ -38,18 +38,9 @@ handle_info(timeout, State) ->
   lager:info("UDP instance timed out"),
   {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
-  [{message_queue_len, MailboxSize}] = erlang:process_info(self(),[message_queue_len]),
-  lager:debug("Received UDP request ~p ~p ~p (mbsize: ~p)", [Socket, Host, Port, MailboxSize]),
-  case queue:out(State#state.workers) of
-    {{value, Worker}, Queue} ->
-      erldns_metrics:measure(Host, ?MODULE, do_work, [Worker, Socket, Host, Port, Bin]),
-      inet:setopts(State#state.socket, [{active, once}]),
-      lager:debug("Processing UDP request ~p ~p ~p", [Socket, Host, Port]),
-      {noreply, State#state{workers = queue:in(Worker, Queue)}};
-    {empty, _Queue} ->
-      lager:info("Queue is empty, dropping packet"),
-      {noreply, State}
-  end;
+  Response = erldns_metrics:measure(Host, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]),
+  inet:setopts(State#state.socket, [{active, once}]),
+  Response;
 handle_info(Message, State) ->
   lager:debug("Received unknown message: ~p", [Message]),
   {noreply, State}.
@@ -75,6 +66,17 @@ do_work(Worker, Socket, Host, Port, Bin) ->
   lager:debug("Casting udp query to worker ~p", [Worker]),
   gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin}).
 
+handle_request(Socket, Host, Port, Bin, State) ->
+  % lager:debug("Received UDP request ~p ~p ~p", [Socket, Host, Port]),
+  case erldns_metrics:measure(Host, queue, out, [State#state.workers]) of
+    {{value, Worker}, Queue} ->
+      erldns_metrics:measure(Host, ?MODULE, do_work, [Worker, Socket, Host, Port, Bin]),
+      % lager:debug("Processing UDP request ~p ~p ~p", [Socket, Host, Port]),
+      {noreply, State#state{workers = queue:in(Worker, Queue)}};
+    {empty, _Queue} ->
+      lager:info("Queue is empty, dropping packet"),
+      {noreply, State}
+  end.
 
 make_workers(Queue) ->
   make_workers(Queue, 1).
