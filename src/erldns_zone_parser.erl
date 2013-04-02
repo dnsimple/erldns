@@ -18,6 +18,7 @@
 
 -define(SERVER, ?MODULE).
 -define(MAX_TXT_SIZE, 255).
+-define(PARSE_TIMEOUT, 30 * 1000).
 
 -record(state, {parsers}).
 
@@ -28,7 +29,7 @@ start_link() ->
 
 %% Takes a JSON zone and turns it into the tuple {Name, Records}.
 zone_to_erlang(Zone) ->
-  gen_server:call(?SERVER, {parse_zone, Zone}).
+  gen_server:call(?SERVER, {parse_zone, Zone}, ?PARSE_TIMEOUT).
 
 register_parsers(Modules) ->
   lager:info("Registering custom parsers: ~p", [Modules]),
