@@ -5,7 +5,7 @@
 -include("dns.hrl").
 -include("erldns.hrl").
 
--export([start_link/0, zone_to_erlang/1, register_parsers/1, register_parser/1]).
+-export([start_link/0, zone_to_erlang/1, zone_to_cache/1, register_parsers/1, register_parser/1]).
 
 % Gen server hooks
 -export([init/1,
@@ -30,6 +30,9 @@ start_link() ->
 zone_to_erlang(Zone) ->
   gen_server:call(?SERVER, {parse_zone, Zone}).
 
+zone_to_cache(Zone) ->
+  gen_server:cast(?SERVER, {zone_to_cache, Zone}).
+
 register_parsers(Modules) ->
   lager:info("Registering custom parsers: ~p", [Modules]),
   gen_server:call(?SERVER, {register_parsers, Modules}).
@@ -50,6 +53,10 @@ handle_call({register_parsers, Modules}, _From, State) ->
 
 handle_call({register_parser, Module}, _From, State) ->
   {reply, ok, State#state{parsers = State#state.parsers ++ [Module]}}.
+
+handle_cast({zone_to_cache, Zone}, State) ->
+  erldns_zone_cache:put_zone(json_to_erlang(Zone, State#state.parsers)),
+  {noreply, State};
 
 handle_cast(_, State) ->
   {noreply, State}.
