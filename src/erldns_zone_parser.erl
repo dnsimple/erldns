@@ -260,7 +260,9 @@ parse_txt([C|Rest]) -> parse_txt_char([C|Rest], C, Rest, [], false).
 parse_txt(String, [], [], _) -> [split_txt(String)];
 parse_txt(_, [], Tokens, _) -> Tokens;
 parse_txt(String, [C|Rest], Tokens, Escaped) -> parse_txt_char(String, C, Rest, Tokens, Escaped).
+parse_txt(_, [], Tokens, CurrentToken, true) -> Tokens ++ [CurrentToken]; % Last character is escaped
 parse_txt(String, [C|Rest], Tokens, CurrentToken, Escaped) -> parse_txt_char(String, C, Rest, Tokens, CurrentToken, Escaped).
+
 parse_txt_char(String, $", Rest, Tokens, _) -> parse_txt(String, Rest, Tokens, [], false);
 parse_txt_char(String, _, Rest, Tokens, _) -> parse_txt(String, Rest, Tokens, false).
 parse_txt_char(String, $", Rest, Tokens, CurrentToken, false) -> parse_txt(String, Rest, Tokens ++ [split_txt(CurrentToken)], false);
