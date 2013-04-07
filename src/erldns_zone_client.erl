@@ -63,7 +63,7 @@ fetch_zone(Name, Url) ->
 % Websocket Callbacks
 
 init([]) ->
-  lager:info("init() websocket client"),
+  lager:debug("init() websocket client"),
   self() ! authenticate,
   {ok, 2}.
 

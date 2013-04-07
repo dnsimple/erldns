@@ -21,7 +21,8 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
   case application:get_env(erldns, zone_server) of
     {ok, _} ->
       lager:info("Loading zones from remote server"),
-      erldns_metrics:measure(none, erldns_zone_client, fetch_zones, []);
+      erldns_metrics:measure(none, erldns_zone_client, fetch_zones, []),
+      lager:info("Zone loading complete");
     _ -> not_fetching
   end,
 
