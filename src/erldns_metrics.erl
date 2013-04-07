@@ -33,6 +33,7 @@ slowest() ->
 
 measure(Name, Module, FunctionName, Args) when is_list(Args) ->
   {T, R} = timer:tc(Module, FunctionName, Args),
+  record_timing_stat(Module, FunctionName, Name, T/1000),
   lager:debug([{tag, timer_result}], "~p:~p (~p) took ~p ms", [Module, FunctionName, Name, T / 1000]),
   R;
 measure(Name, Module, FunctionName, Arg) -> measure(Name, Module, FunctionName, [Arg]).
@@ -66,3 +67,11 @@ code_change(_PreviousVersion, State, _Extra) ->
 % Internal API
 
 display_list({Name, T}) -> lager:debug([{tag, timer_result}], "~p: ~p ms", [Name, T / 1000]).
+
+record_timing_stat(Module, FunctionName, Name, Value) ->
+  case application:get_env(erldns, stathat_email) of
+    {ok, Email} ->
+      stathat:ez_value(Email, io_lib:format("~p:~p (~p)", [Module, FunctionName, Name]), Value);
+    _ ->
+      lager:debug("stathat email is not set")
+  end.

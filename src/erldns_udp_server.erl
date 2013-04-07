@@ -72,7 +72,7 @@ handle_request(Socket, Host, Port, Bin, State) ->
     {{value, Worker}, Queue} ->
       erldns_metrics:measure(Host, ?MODULE, do_work, [Worker, Socket, Host, Port, Bin]),
       % lager:debug("Processing UDP request ~p ~p ~p", [Socket, Host, Port]),
-      {noreply, State#state{workers = queue:in(Worker, Queue)}};
+      {noreply, State#state{workers = erldns_metrics:measure(Host, queue, in, [Worker, Queue])}};
     {empty, _Queue} ->
       lager:info("Queue is empty, dropping packet"),
       {noreply, State}

@@ -1,6 +1,6 @@
 {application,erldns,
              [{description,"Erlang Authoritative DNS Server"},
-              {vsn,"26b92fc"},
+              {vsn,"a6a0ac9"},
               {mod,{erldns_app,[]}},
               {applications,[kernel,stdlib,inets,crypto,ssl]},
               {start_phases,[{post_start,[]}]},
@@ -12,4 +12,5 @@
                         erldns_tcp_worker,erldns_udp_server,erldns_udp_worker,
                         erldns_worker,erldns_zone_cache,erldns_zone_client,
                         erldns_zone_loader,erldns_zone_parser,gen_nb_server,
-                        sample_custom_handler,sample_custom_zone_parser]}]}.
+                        sample_custom_handler,sample_custom_zone_parser,
+                        stathat]}]}.

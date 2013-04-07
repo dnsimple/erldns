@@ -7,5 +7,4 @@ start() ->
   crypto:start(),
   ssl:start(),
   lager:start(),
-  folsom:start(),
   application:start(erldns).
