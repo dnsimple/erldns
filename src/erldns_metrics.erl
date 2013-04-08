@@ -68,10 +68,10 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 display_list({Name, T}) -> lager:debug([{tag, timer_result}], "~p: ~p ms", [Name, T / 1000]).
 
-record_timing_stat(Module, FunctionName, Name, Value) ->
+record_timing_stat(Module, FunctionName, _Name, Value) ->
   case application:get_env(erldns, stathat_email) of
     {ok, Email} ->
-      stathat:ez_value(Email, lists:flatten(io_lib:format("~p:~p (~p)", [Module, FunctionName, Name])), Value);
+      stathat:ez_value(Email, lists:flatten(io_lib:format("~p ~p", [Module, FunctionName])), Value);
     _ ->
       lager:debug("stathat email is not set")
   end.
