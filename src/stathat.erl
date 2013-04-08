@@ -41,7 +41,7 @@
         ]).
 
 
--define(SH_BASE_URL(X), "http://www.stathat.com/" ++ X).
+-define(SH_BASE_URL(X), "http://api.stathat.com/" ++ X).
 
 %% Public API
 
