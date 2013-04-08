@@ -88,9 +88,7 @@ handle_cast({ez_count, Ezkey, Stat, Count}, State) ->
 
 handle_cast({ez_value, Ezkey, Stat, Value}, State) ->
     Url = build_url("ez", [{"ezkey", Ezkey}, {"stat", Stat}, {"value", ntoa(Value)}]),
-    lager:debug("Calling ~p", [Url]),
-    HttpResult = httpc:request(get, {?SH_BASE_URL(Url), []}, [], []),
-    lager:debug("Result: ~p", [HttpResult]),
+    HttpResult = httpc:request(get, {?SH_BASE_URL(Url), []}, [], [{sync, false}]),
     {noreply, State};
 
 handle_cast({cl_count, UserKey, StatKey, Count}, State) ->
