@@ -3,7 +3,7 @@
 -behavior(gen_server).
 
 % Public API
--export([start_link/0, measure/4, insert/2, display/0, slowest/0]).
+-export([start_link/0, measure/4]).
 
 % Gen server hooks
 -export([init/1,
@@ -16,43 +16,40 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {data=[]}).
+-record(state, {stathat_ezid}).
 
 % Public API
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-insert(Name, Time) ->
-  gen_server:cast(?SERVER, {insert, Name, Time}).
-
-display() ->
-  gen_server:cast(?SERVER, {display}).
-
-slowest() ->
-  gen_server:cast(?SERVER, {display, slowest}).
-
 measure(Name, Module, FunctionName, Args) when is_list(Args) ->
   {T, R} = timer:tc(Module, FunctionName, Args),
-  record_timing_stat(Module, FunctionName, Name, T/1000),
+  record_timing_stat(Module, FunctionName, T/1000),
   lager:debug([{tag, timer_result}], "~p:~p (~p) took ~p ms", [Module, FunctionName, Name, T / 1000]),
   R;
 measure(Name, Module, FunctionName, Arg) -> measure(Name, Module, FunctionName, [Arg]).
 
+% Private API
+record_timing_stat(Module, FunctionName, Value) ->
+  gen_server:cast(?SERVER, {record_timing, Module, FunctionName, Value}).
+
 % Gen server functions
 init(_) ->
-  {ok, #state{}}.
+  case application:get_env(erldns, stathat_email) of
+    {ok, EzId} -> {ok, #state{stathat_ezid = EzId}};
+    _ -> {ok, #state{stathat_ezid = inactive}}
+  end.
 
-handle_call({insert, Name, Time}, _From, State) -> 
-  {reply, ok, State#state{data = State#state.data ++ [{Name, Time}]}}.
+handle_call(_Message, _From, State) ->
+  {reply, ok, State}.
 
-handle_cast({insert, Name, Time}, State) ->
-  {noreply, State#state{data = State#state.data ++ [{Name, Time}]}};
-handle_cast({display}, State) ->
-  display_list(State#state.data),
-  {noreply, State};
-handle_cast({display, slowest}, State) ->
-  Sorted = lists:sort(fun({_, A}, {_, B}) -> A > B end, State#state.data),
-  display_list(Sorted),
+handle_cast({record_timing, Module, FunctionName, Value}, State) ->
+  case State#state.stathat_ezid of
+    inactive ->
+      lager:debug("stathat is not active");
+    EzId ->
+      stathat:ez_value(EzId, lists:flatten(io_lib:format("~p ~p", [Module, FunctionName])), Value)
+  end,
   {noreply, State}.
 
 handle_info(_Message, State) ->
@@ -63,15 +60,3 @@ terminate(_Reason, _State) ->
 
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
-
-% Internal API
-
-display_list({Name, T}) -> lager:debug([{tag, timer_result}], "~p: ~p ms", [Name, T / 1000]).
-
-record_timing_stat(Module, FunctionName, _Name, Value) ->
-  case application:get_env(erldns, stathat_email) of
-    {ok, Email} ->
-      stathat:ez_value(Email, lists:flatten(io_lib:format("~p ~p", [Module, FunctionName])), Value);
-    _ ->
-      lager:debug("stathat email is not set")
-  end.
