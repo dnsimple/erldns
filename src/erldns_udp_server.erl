@@ -17,7 +17,7 @@
 -export([do_work/5, handle_request/5]).
 
 -define(SERVER, ?MODULE).
--define(NUM_WORKERS, 1000).
+-define(NUM_WORKERS, 10).
 
 -record(state, {port, socket, workers}).
 
