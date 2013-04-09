@@ -17,7 +17,6 @@
 -export([do_work/5, handle_request/5]).
 
 -define(SERVER, ?MODULE).
--define(NUM_WORKERS, 10).
 
 -record(state, {port, socket, workers}).
 
@@ -79,9 +78,14 @@ handle_request(Socket, Host, Port, Bin, State) ->
   end.
 
 make_workers(Queue) ->
-  make_workers(Queue, 1).
-make_workers(Queue, N) when N < ?NUM_WORKERS ->
-  {ok, WorkerPid} = erldns_worker:start_link([]),
-  make_workers(queue:in(WorkerPid, Queue), N + 1);
-make_workers(Queue, _) ->
-  Queue.
+  make_workers(Queue, erldns_config:get_num_workers()).
+make_workers(Queue, NumWorkers) ->
+  make_workers(Queue, NumWorkers, 1).
+make_workers(Queue, NumWorkers, N) ->
+  case N < NumWorkers of
+    true ->
+      {ok, WorkerPid} = erldns_worker:start_link([]),
+      make_workers(queue:in(WorkerPid, Queue), NumWorkers, N + 1);
+    false ->
+      Queue
+  end.
