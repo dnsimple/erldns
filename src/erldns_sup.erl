@@ -32,7 +32,7 @@ init(_Args) ->
     ?CHILD(erldns_query_throttle, worker, []),
     ?CHILD(erldns_metrics, worker, []),
     ?CHILD(erldns_handler, worker, []),
-    ?CHILD(stathat, worker, []),
+    %?CHILD(stathat, worker, []),
 
     ?CHILD(sample_custom_handler, worker, [])
   ],
