@@ -24,7 +24,7 @@ start_link() ->
 
 measure(Name, Module, FunctionName, Args) when is_list(Args) ->
   {T, R} = timer:tc(Module, FunctionName, Args),
-  %record_timing_stat(Module, FunctionName, T/1000),
+  record_timing_stat(Module, FunctionName, T/1000),
   lager:debug([{tag, timer_result}], "~p:~p (~p) took ~p ms", [Module, FunctionName, Name, T / 1000]),
   R;
 measure(Name, Module, FunctionName, Arg) -> measure(Name, Module, FunctionName, [Arg]).
