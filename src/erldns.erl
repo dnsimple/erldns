@@ -6,5 +6,5 @@ start() ->
   inets:start(),
   crypto:start(),
   ssl:start(),
-  %lager:start(),
+  lager:start(),
   application:start(erldns).
