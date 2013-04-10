@@ -22,10 +22,10 @@
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-measure(Name, Module, FunctionName, Args) when is_list(Args) ->
-  {T, R} = timer:tc(Module, FunctionName, Args),
+measure(_Name, Module, FunctionName, Args) when is_list(Args) ->
+  {_T, R} = timer:tc(Module, FunctionName, Args),
   %gen_server:cast(?SERVER, {record_timing, Module, FunctionName, T/1000}),
-  lager:debug([{tag, timer_result}], "~p:~p (~p) took ~p ms", [Module, FunctionName, Name, T / 1000]),
+  %lager:debug([{tag, timer_result}], "~p:~p (~p) took ~p ms", [Module, FunctionName, Name, T / 1000]),
   R;
 measure(Name, Module, FunctionName, Arg) -> measure(Name, Module, FunctionName, [Arg]).
 
