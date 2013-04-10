@@ -32,10 +32,10 @@ resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_
 
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   % Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
-  Zone = erldns_metrics:measure(none, erldns_zone_cache, find_zone, [Qname, lists:last(AuthorityRecords)]), % Zone lookup
-  Records = erldns_metrics:measure(none, ?MODULE, resolve, [Message, Qname, Qtype, Zone, Host, []]),
+  Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), % Zone lookup
+  Records = resolve(Message, Qname, Qtype, Zone, Host, []),
   RewrittenRecords = rewrite_soa_ttl(Records),
-  erldns_metrics:measure(none, ?MODULE, additional_processing, [RewrittenRecords, Host, Zone]).
+  additional_processing(RewrittenRecords, Host, Zone).
 
 resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain) ->
   {Authority, Additional} = erldns_records:root_hints(),
@@ -335,7 +335,7 @@ additional_processing(Message, _Host, {error, _}) ->
   Message;
 additional_processing(Message, Host, Zone) ->
   RequiresAdditionalProcessing = requires_additional_processing(Message#dns_message.answers ++ Message#dns_message.authority, []),
-  erldns_metrics:measure(none, ?MODULE, additional_processing, [Message, Host, Zone, lists:flatten(RequiresAdditionalProcessing)]).
+  additional_processing(Message, Host, Zone, lists:flatten(RequiresAdditionalProcessing)).
 %% No records require additional processing.
 additional_processing(Message, _Host, _Zone, []) ->
   Message;

@@ -31,9 +31,7 @@ start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 find_zone(Qname) ->
-  %lager:debug("Finding zone for name ~p", [Qname]),
-  Authority = erldns_metrics:measure(none, ?MODULE, get_authority, [Qname]),
-  find_zone(normalize_name(Qname), Authority).
+  find_zone(normalize_name(Qname), get_authority(Qname)).
 
 find_zone(Qname, {error, _}) -> find_zone(Qname, []);
 find_zone(Qname, {ok, Authority}) -> find_zone(Qname, Authority);
@@ -48,7 +46,7 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
     [] -> {error, zone_not_found};
     [_] -> {error, zone_not_found};
     [_|Labels] ->
-      case erldns_metrics:measure(none, erldns_zone_cache, get_zone, [Name]) of
+      case get_zone(Name) of
         {ok, Zone} -> Zone;
         {error, zone_not_found} ->
           case Name =:= Authority#dns_rr.name of

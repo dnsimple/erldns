@@ -72,7 +72,7 @@ handle(Message, Host, {throttled, Host, _ReqCount}) ->
 %% by filling out count-related header fields.
 handle(Message, Host, _) ->
   %lager:debug("Questions: ~p", [Message#dns_message.questions]),
-  NewMessage = erldns_metrics:measure(Host, ?MODULE, handle_message, [Message, Host]),
+  NewMessage = handle_message(Message, Host),
   complete_response(erldns_axfr:optionally_append_soa(erldns_edns:handle(NewMessage))).
 
 %% Handle the message by hitting the packet cache and either
