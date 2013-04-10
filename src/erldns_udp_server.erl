@@ -14,7 +14,7 @@
   ]).
 
 % Internal API
--export([do_work/5, handle_request/5]).
+-export([handle_request/5]).
 
 -define(SERVER, ?MODULE).
 
@@ -37,7 +37,7 @@ handle_info(timeout, State) ->
   %lager:info("UDP instance timed out"),
   {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
-  Response = erldns_metrics:measure(Host, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]),
+  Response = handle_request(Socket, Host, Port, Bin, State),
   inet:setopts(State#state.socket, [{active, once}]),
   Response;
 handle_info(_Message, State) ->
@@ -63,15 +63,12 @@ start(Port, InetFamily) ->
 handle_request(Socket, Host, Port, Bin, State) ->
   case queue:out(State#state.workers) of
     {{value, Worker}, Queue} ->
-      erldns_metrics:measure(Host, ?MODULE, do_work, [Worker, Socket, Host, Port, Bin]),
+      gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin}),
       {noreply, State#state{workers = queue:in(Worker, Queue)}};
     {empty, _Queue} ->
       lager:info("Queue is empty, dropping packet"),
       {noreply, State}
   end.
-
-do_work(Worker, Socket, Host, Port, Bin) ->
-  gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin}).
 
 make_workers(Queue) ->
   make_workers(Queue, erldns_config:get_num_workers()).
