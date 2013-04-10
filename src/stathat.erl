@@ -83,22 +83,22 @@ handle_call(_Request, _From, State) ->
 
 handle_cast({ez_count, Ezkey, Stat, Count}, State) ->
   Url = build_url("ez", [{"ezkey", Ezkey}, {"stat", Stat}, {"count", ntoa(Count)}]),
-  httpc:request(get, {?SH_BASE_URL(Url), []}, [], []),
+  httpc:request(get, {?SH_BASE_URL(Url), []}, [], [{sync, false}]),
   {noreply, State};
 
 handle_cast({ez_value, Ezkey, Stat, Value}, State) ->
   Url = build_url("ez", [{"ezkey", Ezkey}, {"stat", Stat}, {"value", ntoa(Value)}]),
-  httpc:request(get, {?SH_BASE_URL(Url), []}, [], []),
+  httpc:request(get, {?SH_BASE_URL(Url), []}, [], [{sync, false}]),
   {noreply, State};
 
 handle_cast({cl_count, UserKey, StatKey, Count}, State) ->
   Url = build_url("c", [{"ukey", UserKey}, {"key", StatKey}, {"count", ntoa(Count)}]),
-  httpc:request(get, {?SH_BASE_URL(Url), []}, [], []),
+  httpc:request(get, {?SH_BASE_URL(Url), []}, [], [{sync, false}]),
   {noreply, State};
 
 handle_cast({cl_value, UserKey, StatKey, Value}, State) ->
   Url = build_url("v", [{"ukey", UserKey}, {"key", StatKey}, {"value", ntoa(Value)}]),
-  httpc:request(get, {?SH_BASE_URL(Url), []}, [], []),
+  httpc:request(get, {?SH_BASE_URL(Url), []}, [], [{sync, false}]),
   {noreply, State};
 
 handle_cast(_Request, State) ->
