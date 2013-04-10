@@ -37,7 +37,6 @@ code_change(_OldVsn, State, _Extra) ->
 
   %% Handle DNS query that comes in over TCP
 handle_tcp_dns_query(Socket, Packet) ->
-  lager:debug("handle_tcp_dns_query(~p)", [Socket]),
   %% TODO: measure 
   <<_Len:16, Bin/binary>> = Packet,
   {ok, {Address, _Port}} = inet:peername(Socket),
@@ -45,20 +44,22 @@ handle_tcp_dns_query(Socket, Packet) ->
     <<>> -> ok;
     _ ->
       case dns:decode_message(Bin) of
-        {truncated, _} -> lager:info("received bad request from ~p", [Address]);
+        {truncated, _} -> 
+          %lager:info("received bad request from ~p", [Address]);
+          ok;
         DecodedMessage ->
           Response = erldns_metrics:measure(none, erldns_handler, handle, [DecodedMessage, Address]),
           case erldns_encoder:encode_message(Response) of
             {false, EncodedMessage} ->
               send_tcp_message(Socket, EncodedMessage);
             {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-              lager:debug("Leftover: ~p", [Message]),
+              %lager:debug("Leftover: ~p", [Message]),
               send_tcp_message(Socket, EncodedMessage);
-            {false, EncodedMessage, TsigMac} ->
-              lager:debug("TSIG mac: ~p", [TsigMac]),
+            {false, EncodedMessage, _TsigMac} ->
+              %lager:debug("TSIG mac: ~p", [TsigMac]),
               send_tcp_message(Socket, EncodedMessage);
-            {true, EncodedMessage, TsigMac, Message} ->
-              lager:debug("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
+            {true, EncodedMessage, _TsigMac, _Message} ->
+              %lager:debug("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
               send_tcp_message(Socket, EncodedMessage)
           end
       end
@@ -73,23 +74,27 @@ send_tcp_message(Socket, EncodedMessage) ->
 
 %% Handle DNS query that comes in over UDP
 handle_udp_dns_query(Socket, Host, Port, Bin) ->
-  lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
+  %lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
   %% TODO: measure
   case dns:decode_message(Bin) of
-    {truncated, _} -> lager:debug("received bad request from ~p", [Host]);
-    {formerr, _, _} -> lager:debug("formerr bad request from ~p", [Host]);
+    {truncated, _} -> 
+      %lager:debug("received bad request from ~p", [Host]);
+      ok;
+    {formerr, _, _} -> 
+      %lager:debug("formerr bad request from ~p", [Host]);
+      ok;
     DecodedMessage ->
       Response = erldns_metrics:measure(none, erldns_handler, handle, [DecodedMessage, Host]),
       case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
         {false, EncodedMessage} -> gen_udp:send(Socket, Host, Port, EncodedMessage);
         {true, EncodedMessage, Message} when is_record(Message, dns_message)->
-          lager:debug("Leftover: ~p", [Message]),
+          %lager:debug("Leftover: ~p", [Message]),
           gen_udp:send(Socket, Host, Port, EncodedMessage);
-        {false, EncodedMessage, TsigMac} ->
-          lager:debug("TSIG mac: ~p", [TsigMac]),
+        {false, EncodedMessage, _TsigMac} ->
+          %lager:debug("TSIG mac: ~p", [TsigMac]),
           gen_udp:send(Socket, Host, Port, EncodedMessage);
-        {true, EncodedMessage, TsigMac, Message} ->
-          lager:debug("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
+        {true, EncodedMessage, _TsigMac, _Message} ->
+          %lager:debug("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
           gen_udp:send(Socket, Host, Port, EncodedMessage)
       end
   end.

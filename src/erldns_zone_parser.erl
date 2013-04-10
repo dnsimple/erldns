@@ -68,15 +68,12 @@ code_change(_, State, _) ->
 
 % Internal API
 json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
-  lager:debug("Parsing zone ~p with ~p records", [Name, length(JsonRecords)]),
   Records = lists:map(
     fun(JsonRecord) ->
         Data = json_record_to_list(JsonRecord),
         case json_record_to_erlang(Data) of
           {} -> try_custom_parsers(Data, Parsers);
-          ParsedRecord ->
-            lager:debug("Parsed record: ~p", [ParsedRecord]),
-            ParsedRecord
+          ParsedRecord -> ParsedRecord
         end
     end, JsonRecords),
   FilteredRecords = lists:filter(
@@ -87,7 +84,6 @@ json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
         end
     end, Records),
   DistinctRecords = lists:usort(FilteredRecords),
-  lager:debug("Parsed ~p records for ~p", [length(DistinctRecords), Name]),
   {Name, DistinctRecords}.
 
 json_record_to_list(JsonRecord) ->
@@ -98,8 +94,7 @@ json_record_to_list(JsonRecord) ->
     proplists:get_value(<<"data">>, JsonRecord)
   ].
 
-try_custom_parsers([Name, Type, Ttl, Rdata], []) ->
-  lager:debug("~p could not parse ~p ~p ~p ~p", [?MODULE, Name, Type, Ttl, Rdata]),
+try_custom_parsers([_Name, _Type, _Ttl, _Rdata], []) ->
   {};
 try_custom_parsers(Data, [Parser|Rest]) ->
   case Parser:json_record_to_erlang(Data) of

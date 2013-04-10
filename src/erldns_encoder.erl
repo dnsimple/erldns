@@ -6,7 +6,6 @@
 
 encode_message(Response) -> encode_message(Response, []).
 encode_message(Response, Opts) ->
-  lager:debug("Encode ~p", [Response]),
   case application:get_env(erldns, catch_exceptions) of
     {ok, false} -> erldns_metrics:measure(none, dns, encode_message, [Response, Opts]);
     _ ->

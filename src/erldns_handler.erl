@@ -30,11 +30,11 @@ get_handlers() ->
   gen_server:call(?MODULE, {get_handlers}).
 
 init([]) ->
-  lager:info("Initialized the handler_registry"),
+  %lager:info("Initialized the handler_registry"),
   {ok, #state{handlers=[]}}.
 
 handle_call({register_handler, RecordTypes, Module}, _, State) ->
-  lager:info("Registered handler ~p for types ~p", [Module, RecordTypes]),
+  %lager:info("Registered handler ~p for types ~p", [Module, RecordTypes]),
   {reply, ok, State#state{handlers = State#state.handlers ++ [{Module, RecordTypes}]}};
 handle_call({get_handlers}, _, State) ->
   {reply, State#state.handlers, State}.
@@ -64,14 +64,14 @@ handle(BadMessage, Host) ->
 
 %% We throttle ANY queries to discourage use of our authoritative name servers
 %% for reflection attacks.
-handle(Message, Host, {throttled, Host, ReqCount}) ->
-  lager:debug("Throttled ANY query for ~p. (req count: ~p)", [Host, ReqCount]),
+handle(Message, Host, {throttled, Host, _ReqCount}) ->
+  %lager:debug("Throttled ANY query for ~p. (req count: ~p)", [Host, ReqCount]),
   Message#dns_message{rc = ?DNS_RCODE_REFUSED};
 %% Message was not throttled, so handle it, then do EDNS handling, optionally
 %% append the SOA record if it is a zone transfer and complete the response
 %% by filling out count-related header fields.
 handle(Message, Host, _) ->
-  lager:debug("Questions: ~p", [Message#dns_message.questions]),
+  %lager:debug("Questions: ~p", [Message#dns_message.questions]),
   NewMessage = erldns_metrics:measure(Host, ?MODULE, handle_message, [Message, Host]),
   complete_response(erldns_axfr:optionally_append_soa(erldns_edns:handle(NewMessage))).
 

@@ -4,8 +4,7 @@
 % Application hooks
 -export([start/2, start_phase/3, stop/1]).
 
-start(Type, Args) ->
-  lager:info("~p:start(~p, ~p)", [?MODULE, Type, Args]),
+start(_Type, _Args) ->
   random:seed(erlang:now()),
   erldns_sup:start_link().
 
@@ -16,12 +15,13 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
   end,
 
   lager:info("Loading zones from local file"),
-  erldns_metrics:measure(none, erldns_zone_loader, load_zones, []),
+  erldns_zone_loader:load_zones(),
   case application:get_env(erldns, zone_server) of
     {ok, _} ->
       lager:info("Loading zones from remote server"),
-      erldns_metrics:measure(none, erldns_zone_client, fetch_zones, []),
-      lager:info("Zone loading complete");
+      erldns_zone_client:fetch_zones(),
+      lager:info("Zone loading complete"),
+      ok;
     _ -> not_fetching
   end,
 
@@ -30,6 +30,6 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
 
   ok.
 
-stop(State) ->
-  lager:info("~p:stop(~p)~n", [?MODULE, State]),
+stop(_State) ->
+  lager:info("Stop erldns application"),
   ok.

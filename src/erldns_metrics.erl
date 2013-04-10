@@ -22,16 +22,12 @@
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-measure(Name, Module, FunctionName, Args) when is_list(Args) ->
-  {T, R} = timer:tc(Module, FunctionName, Args),
-  %record_timing_stat(Module, FunctionName, T/1000),
-  lager:debug([{tag, timer_result}], "~p:~p (~p) took ~p ms", [Module, FunctionName, Name, T / 1000]),
+measure(_Name, Module, FunctionName, Args) when is_list(Args) ->
+  {_T, R} = timer:tc(Module, FunctionName, Args),
+  %gen_server:cast(?SERVER, {record_timing, Module, FunctionName, T/1000})
+  %lager:debug([{tag, timer_result}], "~p:~p (~p) took ~p ms", [Module, FunctionName, Name, T / 1000]),
   R;
 measure(Name, Module, FunctionName, Arg) -> measure(Name, Module, FunctionName, [Arg]).
-
-% Private API
-record_timing_stat(Module, FunctionName, Value) ->
-  gen_server:cast(?SERVER, {record_timing, Module, FunctionName, Value}).
 
 % Gen server functions
 init(_) ->
@@ -45,10 +41,8 @@ handle_call(_Message, _From, State) ->
 
 handle_cast({record_timing, Module, FunctionName, Value}, State) ->
   case State#state.stathat_ezid of
-    inactive ->
-      lager:debug("stathat is not active");
-    EzId ->
-      stathat:ez_value(EzId, lists:flatten(io_lib:format("~p ~p", [Module, FunctionName])), Value)
+    inactive -> ok;
+    EzId -> stathat:ez_value(EzId, lists:flatten(io_lib:format("~p ~p", [Module, FunctionName])), Value)
   end,
   {noreply, State}.
 

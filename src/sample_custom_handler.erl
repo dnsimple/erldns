@@ -30,8 +30,7 @@ init([]) ->
   erldns_handler:register_handler([?DNS_TYPE_A], ?MODULE),
   {ok, #state{}}.
 
-handle_call({handle, Qname, Qtype, Records}, _From, State) ->
-  lager:debug("Received handle message (name=~p, type=~p, records=~p)", [Qname, Qtype, Records]),
+handle_call({handle, _Qname, _Qtype, Records}, _From, State) ->
   SampleRecords = lists:filter(type_match(), Records),
   NewRecords = lists:flatten(lists:map(convert(), SampleRecords)),
   {reply, NewRecords, State}.

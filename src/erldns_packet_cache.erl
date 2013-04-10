@@ -41,17 +41,15 @@ init([TTL]) ->
   ets:new(packet_cache, [set, named_table]),
   {ok, Tref} = timer:apply_interval(?SWEEP_INTERVAL, ?MODULE, sweep, []),
   {ok, #state{ttl = TTL, tref = Tref}}.
-handle_call({get_packet, Question, Host}, _From, State) ->
-  lager:debug("get_packet from packet cache for ~p", [Host]),
+
+handle_call({get_packet, Question, _Host}, _From, State) ->
   case ets:lookup(packet_cache, Question) of
     [{Question, {Response, ExpiresAt}}] ->
       {_,T,_} = erlang:now(),
       case T > ExpiresAt of
         true -> 
-          lager:debug("Cache hit but expired"),
           {reply, {error, cache_expired}, State};
         false ->
-          lager:debug("Time is ~p. Packet hit expires at ~p.", [T, ExpiresAt]),
           {reply, {ok, Response}, State}
       end;
     _ -> {reply, {error, cache_miss}, State}
@@ -60,20 +58,22 @@ handle_call({set_packet, [Question, Response]}, _From, State) ->
   {_,T,_} = erlang:now(),
   ets:insert(packet_cache, {Question, {Response, T + State#state.ttl}}),
   {reply, ok, State}.
+
 handle_cast({sweep, []}, State) ->
-  lager:debug("Sweeping packet cache"),
   {_, T, _} = erlang:now(),
   Keys = ets:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', T - 10}], ['$1']}]),
-  lager:debug("Found keys: ~p", [Keys]),
   lists:foreach(fun(K) -> ets:delete(packet_cache, K) end, Keys),
   {noreply, State};
 handle_cast({clear}, State) ->
   ets:delete_all_objects(packet_cache),
   {noreply, State}.
+
 handle_info(_Message, State) ->
   {noreply, State}.
+
 terminate(_Reason, _State) ->
   ets:delete(packet_cache),
   ok.
+
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.

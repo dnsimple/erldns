@@ -5,5 +5,4 @@
 -export([handle/1]).
 
 handle(Message) ->
-  lager:debug("Client wants DNSSEC"),
   Message.

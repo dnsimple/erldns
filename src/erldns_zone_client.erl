@@ -27,7 +27,7 @@ start_link() ->
 fetch_zones() ->
   case httpc:request(get, {zones_url(), [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
-      lager:debug("Parsing zones JSON"),
+      %lager:debug("Parsing zones JSON"),
       JsonZones = jsx:decode(Body),
       lager:info("Putting zones into cache"),
       lists:foreach(
@@ -48,12 +48,12 @@ fetch_zone(Name) ->
 fetch_zone(Name, Url) ->
   case httpc:request(get, {Url, [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
-      lager:debug("Parsing zone JSON"),
+      %lager:debug("Parsing zone JSON"),
       Zone = erldns_zone_parser:zone_to_erlang(jsx:decode(Body)),
       lager:info("Putting ~p into zone cache", [Name]),
       erldns_zone_cache:put_zone(Zone);
     {_, {{_Version, Status = 404, ReasonPhrase}, _Headers, _Body}} ->
-      lager:debug("Zone not found in zone server: ~p", [Name]),
+      %lager:debug("Zone not found in zone server: ~p", [Name]),
       {err, Status, ReasonPhrase};
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
       lager:error("Failed to load zone: ~p (status: ~p)", [ReasonPhrase, Status]),
@@ -63,25 +63,25 @@ fetch_zone(Name, Url) ->
 % Websocket Callbacks
 
 init([]) ->
-  lager:debug("init() websocket client"),
+  %lager:debug("init() websocket client"),
   self() ! authenticate,
   {ok, 2}.
 
 websocket_handle({_Type, Msg}, State) ->
   ZoneNotification = jsx:decode(Msg),
-  lager:debug("Zone notification received: ~p", [ZoneNotification]),
+  lager:info("Zone notification received: ~p", [ZoneNotification]),
   case ZoneNotification of
     [{<<"name">>, Name}, {<<"url">>, Url}, {<<"action">>, Action}] ->
       case Action of
         <<"create">> ->
-          lager:debug("Creating zone ~p", [Name]),
+          %lager:debug("Creating zone ~p", [Name]),
           fetch_zone(Name, binary_to_list(Url));
         <<"update">> ->
-          lager:debug("Updating zone ~p", [Name]),
+          %lager:debug("Updating zone ~p", [Name]),
           fetch_zone(Name, binary_to_list(Url));
         <<"delete">> ->
-          erldns_zone_cache:delete_zone(Name),
-          lager:debug("Deleting zone ~p", [Name]);
+          %lager:debug("Deleting zone ~p", [Name]),
+          erldns_zone_cache:delete_zone(Name);
         _ ->
           lager:error("Unsupported action: ~p", [Action])
       end;
@@ -92,15 +92,13 @@ websocket_handle({_Type, Msg}, State) ->
 
 websocket_info(authenticate, State) ->
   EncodedCredentials = encoded_credentials(),
-  lager:debug("Authenticating with ~p", [EncodedCredentials]),
+  %lager:debug("Authenticating with ~p", [EncodedCredentials]),
   {reply, {text, list_to_binary("Authorization: " ++ EncodedCredentials)}, State};
 
-websocket_info(Atom, State) ->
-  lager:debug("websocket_info(~p, ~p)", [Atom, State]),
+websocket_info(_Atom, State) ->
   {ok, State}.
 
-websocket_terminate(Message, State) ->
-  lager:debug("websocket_terminate(~p, ~p)", [Message, State]),
+websocket_terminate(_Message, _State) ->
   ok.
 
 %% Internal functions
@@ -142,7 +140,7 @@ websocket_url() ->
 encoded_credentials() ->
   case application:get_env(erldns, credentials) of
     {ok, {Username, Password}} ->
-      lager:debug("Sending ~p:~p for authentication", [Username, Password]),
+      %lager:debug("Sending ~p:~p for authentication", [Username, Password]),
       base64:encode_to_string(lists:append([Username,":",Password]))
   end.
 

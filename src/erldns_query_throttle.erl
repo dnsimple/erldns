@@ -44,10 +44,10 @@ handle_call({throttle, Message, Host}, _From, State) ->
   end.
 
 handle_cast({sweep}, State) ->
-  lager:debug("Sweeping host throttle"),
+  %lager:debug("Sweeping host throttle"),
   {_, T, _} = erlang:now(),
   Keys = ets:select(host_throttle, [{{'$1', {'_', '$2'}}, [{'<', '$2', T - ?EXPIRATION}], ['$1']}]),
-  lager:debug("Found keys: ~p", [Keys]),
+  %lager:debug("Found keys: ~p", [Keys]),
   lists:foreach(fun(K) -> ets:delete(host_throttle, K) end, Keys),
   {noreply, State}.
 
@@ -63,22 +63,18 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 % Internal API
 maybe_throttle(Host) ->
-  lager:debug("maybe_throttle(~p)", [Host]),
   case ets:lookup(host_throttle, Host) of
     [{_, {ReqCount, LastRequestAt}}] -> 
-      lager:debug("Throttle record found: ReqCount: ~p, LastRequestAt: ~p", [ReqCount, LastRequestAt]),
       case is_throttled(Host, ReqCount, LastRequestAt) of
         {true, NewReqCount} -> {throttled, Host, NewReqCount};
         {false, NewReqCount} -> {ok, Host, NewReqCount}
       end;
     [] -> 
-      lager:debug("No throttle record found."),
       {ok, Host, 1}
   end.
 
 record_request({ThrottleResponse, Host, ReqCount}) ->
   {_, T, _} = erlang:now(),
-  lager:debug("Recording request for ~p {~p, ~p}", [Host, ReqCount, T]),
   ets:insert(host_throttle, {Host, {ReqCount, T}}),
   {ThrottleResponse, Host, ReqCount}.
 
@@ -87,13 +83,9 @@ is_throttled(Host, ReqCount, LastRequestAt) ->
    {_,T,_} = erlang:now(),
    ExceedsLimit = ReqCount >= ?LIMIT,
    Expired = T - LastRequestAt > ?EXPIRATION,
-   lager:debug("exceeds limit? ~p expired? ~p", [ExceedsLimit, Expired]),
-   lager:debug("is throttled? ~p", [(not Expired) and ExceedsLimit]),
-   lager:debug("expires at: ~p", [LastRequestAt + ?EXPIRATION]),
    case Expired of
      true -> 
        ets:delete(host_throttle, Host),
-       lager:debug("after delete: ~p", [ets:lookup(host_throttle, Host)]),
        {false, 1};
      false -> 
        {ExceedsLimit, ReqCount + 1}
