@@ -91,15 +91,12 @@ websocket_handle({_Type, Msg}, _ConnState, State) ->
     _ ->
       lager:error("Unsupported zone notification message: ~p", [ZoneNotification])
   end,
-  {ok, State};
+  {ok, State}.
 
-websocket_handle(authenticate, _ConnState, State) ->
+websocket_info(authenticate, _ConnState, State) ->
   EncodedCredentials = encoded_credentials(),
   %lager:debug("Authenticating with ~p", [EncodedCredentials]),
   {reply, {text, list_to_binary("Authorization: " ++ EncodedCredentials)}, State}.
-
-websocket_info(_Atom, _ConnState, State) ->
-  {ok, State}.
 
 websocket_terminate(_Message, _ConnState, _State) ->
   ok.
