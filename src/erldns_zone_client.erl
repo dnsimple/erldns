@@ -5,15 +5,18 @@
 -include("dns.hrl").
 -include("erldns.hrl").
 
+% Public API
 -export([
-         start_link/0,
-         fetch_zones/0,
-         fetch_zone/1,
-         init/1,
-         websocket_handle/2,
-         websocket_info/2,
-         websocket_terminate/2
-        ]).
+    start_link/0,
+    fetch_zones/0,
+    fetch_zone/1]).
+
+% Websocket callbacks
+-export([
+    init/2,
+    websocket_handle/3,
+    websocket_info/3,
+    websocket_terminate/3]).
 
 -define(DEFAULT_ZONE_SERVER_PORT, 443).
 -define(DEFAULT_WEBSOCKET_PATH, "/ws").
@@ -62,12 +65,12 @@ fetch_zone(Name, Url) ->
 
 % Websocket Callbacks
 
-init([]) ->
+init([], _ConnState) ->
   %lager:debug("init() websocket client"),
-  self() ! authenticate,
+  websocket_client:cast(self(), authenticate),
   {ok, 2}.
 
-websocket_handle({_Type, Msg}, State) ->
+websocket_handle({_Type, Msg}, _ConnState, State) ->
   ZoneNotification = jsx:decode(Msg),
   lager:info("Zone notification received: ~p", [ZoneNotification]),
   case ZoneNotification of
@@ -88,17 +91,17 @@ websocket_handle({_Type, Msg}, State) ->
     _ ->
       lager:error("Unsupported zone notification message: ~p", [ZoneNotification])
   end,
-  {ok, State}.
+  {ok, State};
 
-websocket_info(authenticate, State) ->
+websocket_handle(authenticate, _ConnState, State) ->
   EncodedCredentials = encoded_credentials(),
   %lager:debug("Authenticating with ~p", [EncodedCredentials]),
-  {reply, {text, list_to_binary("Authorization: " ++ EncodedCredentials)}, State};
+  {reply, {text, list_to_binary("Authorization: " ++ EncodedCredentials)}, State}.
 
-websocket_info(_Atom, State) ->
+websocket_info(_Atom, _ConnState, State) ->
   {ok, State}.
 
-websocket_terminate(_Message, _State) ->
+websocket_terminate(_Message, _ConnState, _State) ->
   ok.
 
 %% Internal functions
