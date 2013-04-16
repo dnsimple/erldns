@@ -67,7 +67,7 @@ fetch_zone(Name, Url) ->
 
 init([], _ConnState) ->
   %lager:debug("init() websocket client"),
-  websocket_client:cast(self(), authenticate),
+  self() ! authenticate,
   {ok, 2}.
 
 websocket_handle({_Type, Msg}, _ConnState, State) ->
