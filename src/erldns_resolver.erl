@@ -342,7 +342,7 @@ additional_processing(Message, _Host, _Zone, []) ->
 %% There are records with names that require additional processing.
 additional_processing(Message, Host, Zone, Names) ->
   RRs = lists:flatten(lists:map(fun(Name) -> erldns_zone_cache:get_records_by_name(Name) end, Names)),
-  Records = lists:filter(erldns_records:match_type(?DNS_TYPE_A), RRs),
+  Records = lists:filter(erldns_records:match_types([?DNS_TYPE_A, ?DNS_TYPE_AAAA]), RRs),
   additional_processing(Message, Host, Zone, Names, Records).
 
 %% No additional A records were found, so just return the message.
