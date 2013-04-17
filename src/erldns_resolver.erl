@@ -227,7 +227,7 @@ resolve_best_match_not_wildcard(Message, Zone, true) ->
 
 % It's not a wildcard CNAME
 resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, []) ->
-  %lager:debug("Wildcard is not CNAME"),
+  lager:debug("Resolving best match with wildcard"),
   TypeMatchedRecords = case Qtype of
     ?DNS_TYPE_ANY -> MatchedRecords;
     _ -> lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
@@ -236,7 +236,9 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, Matche
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
+      lager:debug("No type matches found, using custom handlers"),
       NewRecords = lists:map(erldns_records:replace_name(Qname), lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers()))),
+      lager:debug("Records from custom handlers: ~p", [NewRecords]),
       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], NewRecords);
     _ ->
        resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], TypeMatches)
