@@ -324,7 +324,11 @@ custom_lookup(Qname, Qtype, Records) ->
   fun({Module, Types}) ->
       case lists:member(Qtype, Types) of
         true -> Module:handle(Qname, Qtype, Records);
-        false -> []
+        false ->
+          case Qtype =:= ?DNS_TYPE_ANY of
+            true -> Module:handle(Qname, Qtype, Records);
+            false -> []
+          end
       end
   end.
 
