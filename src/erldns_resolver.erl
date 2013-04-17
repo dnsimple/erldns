@@ -229,8 +229,11 @@ resolve_best_match_not_wildcard(Message, Zone, true) ->
 resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, []) ->
   lager:debug("Resolving best match with wildcard"),
   TypeMatchedRecords = case Qtype of
-    ?DNS_TYPE_ANY -> MatchedRecords;
-    _ -> lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
+    ?DNS_TYPE_ANY ->
+      lager:debug("Qtype is ANY, using records ~p", [MatchedRecords]),
+      MatchedRecords;
+    _ ->
+      lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
   end,
   TypeMatches = lists:map(erldns_records:replace_name(Qname), TypeMatchedRecords),
   case TypeMatches of
@@ -251,6 +254,7 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMa
 % It is not a CNAME and there were no exact type matches
 resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, [], []) ->
   Message#dns_message{aa = true, authority=Zone#zone.authority};
+
 % It is not a CNAME and there were exact type matches
 resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _Zone, [], TypeMatches) ->
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}.
@@ -259,6 +263,7 @@ resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _B
 % It is a CNAME and the Qtype was CNAME
 resolve_best_match_with_wildcard_cname(Message, _Qname, ?DNS_TYPE_CNAME, _Host, _CnameChain, _BestMatchRecords, _Zone, CnameRecords) ->
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
+
 % It is a CNAME and the Qtype was not CNAME
 resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords) ->
   CnameRecord = lists:last(CnameRecords), % There should only be one CNAME. Multiple CNAMEs kill unicorns.
