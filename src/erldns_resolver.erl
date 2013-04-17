@@ -230,8 +230,8 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, Matche
   lager:debug("Resolving best match with wildcard"),
   TypeMatchedRecords = case Qtype of
     ?DNS_TYPE_ANY ->
-      lager:debug("Qtype is ANY, using records ~p", [MatchedRecords]),
-      MatchedRecords;
+      lager:debug("Qtype is ANY, using records ~p", [lists:flatten(lists:map(custom_filter(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers()))]),
+      lists:flatten(lists:map(custom_filter(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers()));
     _ ->
       lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
   end,
@@ -339,6 +339,11 @@ custom_lookup(Qname, Qtype, Records) ->
             false -> []
           end
       end
+  end.
+
+custom_filter(Qname, Qtype, Records) ->
+  fun({Module, _Types}) ->
+      Module:filter(Qname, Qtype, Records)
   end.
 
 
