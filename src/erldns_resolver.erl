@@ -11,7 +11,7 @@
 
 %% Resolve the first question inside the given message.
 resolve(Message, AuthorityRecords, Host) ->
-  %lager:debug("Starting resolve for ~p", [Host]),
+  lager:debug("Starting resolve for ~p", [Host]),
   ResolvedMessage = resolve(Message, AuthorityRecords, Host, Message#dns_message.questions),
   %lager:debug("Finished resolver for ~p", [Host]),
   ResolvedMessage.
@@ -47,6 +47,7 @@ resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
 
 %% There were no exact matches on name, so move to the best-match resolution.
 resolve(Message, Qname, Qtype, [], Host, CnameChain, Zone) ->
+  lager:debug("No exact matches, using best-match resolution"),
   best_match_resolution(Message, Qname, Qtype, Host, CnameChain, best_match(Qname, Zone), Zone);
 
 %% There was at least one exact match on name.
@@ -101,6 +102,7 @@ resolve_exact_type_match(Message, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords
 resolve_exact_type_match(Message, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords) ->
   %lager:debug("Authoritative for record, returning answers"),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
+
 resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
   Answer = lists:last(MatchedRecords),
   NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name), % NS lookup
