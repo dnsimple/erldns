@@ -126,6 +126,7 @@ resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone,
   Answer = lists:last(MatchedRecords),
   NSRecord = lists:last(NSRecords),
   Name = NSRecord#dns_rr.name,
+  lager:debug("Name: ~p; answer name: ~p", [Name, Answer#dns_rr.name]),
   case Name =:= Answer#dns_rr.name of
     true ->
       lager:debug("Name matches an existing answer name so this is an authority"),
