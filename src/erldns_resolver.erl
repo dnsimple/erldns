@@ -113,9 +113,9 @@ resolve_exact_type_match(Message, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecor
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
 
 resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
-  lager:debug("Exact type match for ~p, matched records: ~p getting NS records", [dns:type_name(Qtype), MatchedRecords]),
   Answer = lists:last(MatchedRecords),
   NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name), % NS lookup
+  lager:debug("Exact type match for ~p, matched records: ~p, NS records: ~p", [dns:type_name(Qtype), MatchedRecords, NSRecords]),
   resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords).
 
 resolve_exact_type_match(Message, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, []) ->
