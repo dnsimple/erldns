@@ -77,6 +77,7 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
+      lager:debug("Exact match, custom lookup"),
       NewRecords = lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers())),
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, NewRecords, AuthorityRecords);
     _ ->
@@ -147,6 +148,7 @@ resolve_exact_match_referral(Message, _Qtype, _MatchedRecords, ReferralRecords, 
 
 % Given an exact name match and the type of ANY, return all of the matched records.
 resolve_exact_match_referral(Message, ?DNS_TYPE_ANY, MatchedRecords, _ReferralRecords, _AuthorityRecords) ->
+  lager:debug("Exact match ANY"),
   Message#dns_message{aa = true, answers = MatchedRecords};
 % Given an exact name match and the type NS, where the NS records are not found in record set
 % return the NS records in the answers section of the message.
