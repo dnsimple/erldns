@@ -87,10 +87,13 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
 %% There were no matches for exact name and type, so now we are looking for NS records
 %% in the exact name matches.
 resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], AuthorityRecords) ->
+  lager:debug("No exact matches for name and type"),
   ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), MatchedRecords), % Query matched records for NS type
   resolve_no_exact_type_match(Message, Qtype, Host, CnameChain, [], Zone, MatchedRecords, ReferralRecords, AuthorityRecords);
+
 %% There were exact matches of name and type.
 resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, _MatchedRecords, Zone, ExactTypeMatches, AuthorityRecords) ->
+  lager:debug("Found exact matches of name and type"),
   resolve_exact_type_match(Message, Qtype, Host, CnameChain, ExactTypeMatches, Zone, AuthorityRecords).
 
 resolve_exact_type_match(Message, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords, Zone, []) ->
@@ -110,18 +113,19 @@ resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone,
   resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords).
 
 resolve_exact_type_match(Message, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, []) ->
-  %lager:debug("Returning authoritative answer with ~p appended answers", [length(MatchedRecords)]),
+  lager:debug("Returning authoritative answer with ~p appended answers", [length(MatchedRecords)]),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
+
 resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
   Answer = lists:last(MatchedRecords),
   NSRecord = lists:last(NSRecords),
   Name = NSRecord#dns_rr.name,
   case Name =:= Answer#dns_rr.name of
     true ->
-      %lager:debug("Name matches an existing answer name so this is an authority"),
+      lager:debug("Name matches an existing answer name so this is an authority"),
       Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Message#dns_message.authority ++ NSRecords};
     false ->
-      %lager:debug("Restarting query with delegated name ~p", [Name]),
+      lager:debug("Restarting query with delegated name ~p", [Name]),
       restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name))
   end.
 
