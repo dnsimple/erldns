@@ -71,9 +71,13 @@ exact_match_resolution(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords,
 %% There were no CNAMEs found in the exact name matches, so now we grab the authority
 %% records and find any type matches on QTYPE and continue on.
 resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
-  %lager:debug("Resolving exact match on type ~p", [Qtype]),
   AuthorityRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), MatchedRecords), % Query matched records for SOA type
-  TypeMatches = lists:filter(erldns_records:match_type(Qtype), MatchedRecords), % Query matched records for Qtype
+  TypeMatches = case Qtype of
+    ?DNS_TYPE_ANY ->
+      filter_records(MatchedRecords, erldns_handler:get_handlers());
+    _ ->
+      lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
+  end,
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
