@@ -85,6 +85,7 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
       NewRecords = lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers())),
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, NewRecords, AuthorityRecords);
     _ ->
+      lager:debug("Found exact matches and type matches"),
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, TypeMatches, AuthorityRecords)
   end.
 
@@ -97,7 +98,7 @@ resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zo
 
 %% There were exact matches of name and type.
 resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, _MatchedRecords, Zone, ExactTypeMatches, AuthorityRecords) ->
-  lager:debug("Found exact matches of name and type"),
+  lager:debug("Found exact matches of name and type. Authority records: ~p", [AuthorityRecords]),
   resolve_exact_type_match(Message, Qtype, Host, CnameChain, ExactTypeMatches, Zone, AuthorityRecords).
 
 resolve_exact_type_match(Message, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords, Zone, []) ->
