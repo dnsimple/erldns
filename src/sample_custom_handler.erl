@@ -5,7 +5,7 @@
 
 -behavior(gen_server).
 
--export([start_link/0, handle/3, filter/3]).
+-export([start_link/0, handle/3, filter/1]).
 
 % Gen server hooks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -22,8 +22,8 @@ start_link() ->
 handle(Qname, Qtype, Records) ->
   gen_server:call(?MODULE, {handle, Qname, Qtype, Records}).
 
-filter(Qname, Qtype, Records) ->
-  gen_server:call(?MODULE, {filter, Qname, Qtype, Records}).
+filter(Records) ->
+  gen_server:call(?MODULE, {filter, Records}).
 
 %% Gen server hooks
 init([]) ->
@@ -35,14 +35,14 @@ handle_call({handle, _Qname, _Qtype, Records}, _From, State) ->
   NewRecords = lists:flatten(lists:map(convert(), SampleRecords)),
   {reply, NewRecords, State};
 
-handle_call({filter, _Qname, _Qtype, Records}, _From, State) ->
+handle_call({filter, Records}, _From, State) ->
   TypeMatchFunction = type_match(),
   ConvertFunction = convert(),
   NewRecords = lists:flatten(lists:map(
       fun(R) ->
           case TypeMatchFunction(R) of
             true -> ConvertFunction(R);
-            false -> []
+            false -> R
           end
       end, Records)),
   {reply, NewRecords, State}.

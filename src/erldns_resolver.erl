@@ -230,8 +230,9 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, Matche
   lager:debug("Resolving best match with wildcard"),
   TypeMatchedRecords = case Qtype of
     ?DNS_TYPE_ANY ->
-      lager:debug("Qtype is ANY, original records: ~p; using records ~p", [MatchedRecords, lists:flatten(lists:map(custom_filter(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers()))]),
-      lists:flatten(lists:map(custom_filter(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers()));
+      FilteredMatchedRecords = filter_records(MatchedRecords, erldns_handler:get_handlers()),
+      lager:debug("Qtype is ANY, original records: ~p; using records ~p", [MatchedRecords, FilteredMatchedRecords]),
+      FilteredMatchedRecords;
     _ ->
       lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
   end,
@@ -273,6 +274,7 @@ resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, 
 resolve_best_match_with_wildcard_cname(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _Zone, _CnameRecords, true) ->
   %lager:debug("CNAME loop detected (best match)"),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_SERVFAIL};
+
 % We should follow the CNAME
 resolve_best_match_with_wildcard_cname(Message, _Qname, Qtype, Host, CnameChain, _BestMatchRecords, Zone, CnameRecords, false) ->
   %lager:debug("Follow CNAME (best match)"),
@@ -341,12 +343,9 @@ custom_lookup(Qname, Qtype, Records) ->
       end
   end.
 
-custom_filter(Qname, Qtype, Records) ->
-  fun({Module, _Types}) ->
-      Module:filter(Qname, Qtype, Records)
-  end.
-
-
+filter_records(Records, []) -> Records;
+filter_records(Records, [Handler|Rest]) ->
+  filter_records(Handler:custom_filter(Records), Rest).
 
 %% See if additional processing is necessary.
 additional_processing(Message, _Host, {error, _}) ->
