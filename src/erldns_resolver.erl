@@ -344,8 +344,8 @@ custom_lookup(Qname, Qtype, Records) ->
   end.
 
 filter_records(Records, []) -> Records;
-filter_records(Records, [Handler|Rest]) ->
-  filter_records(Handler:custom_filter(Records), Rest).
+filter_records(Records, [{Handler,_}|Rest]) ->
+  filter_records(Handler:filter(Records), Rest).
 
 %% See if additional processing is necessary.
 additional_processing(Message, _Host, {error, _}) ->
