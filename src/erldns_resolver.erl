@@ -31,6 +31,7 @@ resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_
   resolve(Message#dns_message{ra = false}, AuthorityRecords, Question#dns_query.name, Question#dns_query.type, Host).
 
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
+  lager:debug("Resolve qname: ~p qtype: ~p", [Qname, Qtype]),
   % Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
   Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), % Zone lookup
   Records = resolve(Message, Qname, Qtype, Zone, Host, []),
@@ -97,32 +98,49 @@ resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zo
   resolve_no_exact_type_match(Message, Qtype, Host, CnameChain, [], Zone, MatchedRecords, ReferralRecords, AuthorityRecords);
 
 %% There were exact matches of name and type.
-resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, _MatchedRecords, Zone, ExactTypeMatches, AuthorityRecords) ->
+resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, _MatchedRecords, Zone, ExactTypeMatches, AuthorityRecords) ->
   lager:debug("Found exact matches of name and type. Authority records: ~p", [AuthorityRecords]),
-  resolve_exact_type_match(Message, Qtype, Host, CnameChain, ExactTypeMatches, Zone, AuthorityRecords).
+  resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, ExactTypeMatches, Zone, AuthorityRecords).
 
-resolve_exact_type_match(Message, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords, Zone, []) ->
+resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords, Zone, []) ->
   Answer = lists:last(MatchedRecords),
   Name = Answer#dns_rr.name,
   lager:debug("Exact match type was NS, restarting query with delegated name ~p", [Name]),
   % It isn't clear what the QTYPE should be on a delegated restart. I assume an A record.
   restart_delegated_query(Message, Name, ?DNS_TYPE_A, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name));
 
-resolve_exact_type_match(Message, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords) ->
+resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords) ->
   lager:debug("Authoritative for record, returning answers"),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
 
-resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
+resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
   Answer = lists:last(MatchedRecords),
+  SoaRecordResult = erldns_zone_cache:get_authority(Qname),
   NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name), % NS lookup
-  lager:debug("Exact type match for ~p, matched records: ~p, NS records: ~p", [dns:type_name(Qtype), MatchedRecords, NSRecords]),
-  resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords).
+  lager:debug("Exact type match for ~p, matched records: ~p, NS records: ~p", [dns:type_name(Qtype), MatchedRecords, NSRecords]), 
 
-resolve_exact_type_match(Message, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, []) ->
+  case SoaRecordResult of
+    {ok, [SoaRecord]} ->
+      case SoaRecord#dns_rr.name =:= Answer#dns_rr.name of
+        true ->
+          Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
+        false ->
+          resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords)
+      end;
+    {error, authority_not_found} ->
+      resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords)
+  end.
+
+  %resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords).
+
+
+
+
+resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, []) ->
   lager:debug("Returning authoritative answer with ~p appended answers", [length(MatchedRecords)]),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
 
-resolve_exact_type_match(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
+resolve_exact_type_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
   Answer = lists:last(MatchedRecords),
   NSRecord = lists:last(NSRecords),
   Name = NSRecord#dns_rr.name,
