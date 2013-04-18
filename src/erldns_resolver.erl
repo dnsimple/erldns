@@ -119,21 +119,23 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
   NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name), % NS lookup
   lager:debug("Exact type match for ~p, matched records: ~p, NS records: ~p", [dns:type_name(Qtype), MatchedRecords, NSRecords]), 
 
-  case SoaRecordResult of
-    {ok, [SoaRecord]} ->
-      case SoaRecord#dns_rr.name =:= Answer#dns_rr.name of
-        true ->
-          Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
-        false ->
+  case length(NSRecords) of
+    0 ->
+      resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords);
+    _ ->
+      NSRecord = lists:last(NSRecords),
+      case SoaRecordResult of
+        {ok, [SoaRecord]} ->
+          case SoaRecord#dns_rr.name =:= NSRecord#dns_rr.name of
+            true ->
+              Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
+            false ->
+              resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords)
+          end;
+        {error, authority_not_found} ->
           resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords)
-      end;
-    {error, authority_not_found} ->
-      resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords)
+      end
   end.
-
-  %resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords).
-
-
 
 
 resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, []) ->

@@ -75,6 +75,14 @@
                 }
             },
             {
+                "name": "ns1.example.com",
+                "type": "AAAA",
+                "ttl": 120,
+                "data": {
+                    "ip": "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+                }
+            },
+            {
                 "name": "ns2.example.com",
                 "type": "A",
                 "ttl": 120,
