@@ -3,7 +3,7 @@
 -export([optionally_convert_wildcard/2, wildcard_qname/1]).
 -export([default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
 -export([minimum_soa_ttl/2]).
--export([match_type/1, match_types/1, match_wildcard/0]).
+-export([match_type/1, match_types/1, match_wildcard/0, match_glue/1]).
 -export([replace_name/1]).
 
 %% If the name returned from the DB is a wildcard name then the
@@ -39,10 +39,33 @@ default_priority(Priority) ->
 minimum_soa_ttl(Record, Data) when is_record(Data, dns_rrdata_soa) -> Record#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, Record#dns_rr.ttl)};
 minimum_soa_ttl(Record, _) -> Record.
 
+
+
 %% Various matching functions.
-match_type(Type) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr.type =:= Type end.
-match_types(Types) -> fun(R) when is_record(R, dns_rr) -> lists:any(fun(T) -> R#dns_rr.type =:= T end, Types) end.
-match_wildcard() -> fun(R) when is_record(R, dns_rr) -> lists:any(fun(L) -> L =:= <<"*">> end, dns:dname_to_labels(R#dns_rr.name)) end.
+match_type(Type) ->
+  fun(R) when is_record(R, dns_rr) ->
+      R#dns_rr.type =:= Type
+  end.
+
+match_types(Types) ->
+  fun(R) when is_record(R, dns_rr) ->
+      lists:any(fun(T) -> R#dns_rr.type =:= T end, Types)
+  end.
+
+match_wildcard() ->
+  fun(R) when is_record(R, dns_rr) ->
+      lists:any(
+        fun(L) ->
+            L =:= <<"*">>
+        end, dns:dname_to_labels(R#dns_rr.name))
+  end.
+
+match_glue(Name) ->
+  fun(R) when is_record(R, dns_rr) ->
+      R#dns_rr.data =:= #dns_rrdata_ns{dname=Name}
+  end.
+
+
 
 %% Replacement functions.
 replace_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} end.

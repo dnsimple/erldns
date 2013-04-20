@@ -7,11 +7,18 @@
 
 % API
 -export([start_link/0]).
--export([find_zone/1, find_zone/2, get_zone/1, put_zone/1, put_zone/2, delete_zone/1, get_authority/1, put_authority/2,
-    get_delegations/1, get_records_by_name/1, in_zone/1]).
-
-% Internal API
--export([build_named_index/1]).
+-export([find_zone/1, find_zone/2]).
+-export(
+  [
+    get_zone/1,
+    put_zone/1,
+    put_zone/2,
+    delete_zone/1,
+    get_authority/1,
+    get_delegations/1,
+    get_records_by_name/1,
+    in_zone/1
+  ]).
 
 % Gen server hooks
 -export([init/1,
@@ -78,10 +85,6 @@ get_authority(Message) when is_record(Message, dns_message) ->
 get_authority(Name) ->
   gen_server:call(?SERVER, {get_authority, Name}).
 
-%% Deprecated. Remove me
-put_authority(_Name, _Authority) ->
-  ok.
-
 get_delegations(Name) ->
   Result = gen_server:call(?SERVER, {get_delegations, Name}),
   case Result of
@@ -111,7 +114,7 @@ handle_call({get, Name}, _From, State) ->
 handle_call({get_delegations, Name}, _From, State) ->
   case find_zone_in_cache(Name, State) of
     {ok, Zone} ->
-      Records = lists:filter(fun(R) -> apply(match_type(?DNS_TYPE_NS), [R]) and apply(match_glue(Name), [R]) end, Zone#zone.records),
+      Records = lists:filter(fun(R) -> apply(erldns_records:match_type(?DNS_TYPE_NS), [R]) and apply(erldns_records:match_glue(Name), [R]) end, Zone#zone.records),
       {reply, {ok, Records}, State};
     Response ->
       %lager:debug("get_delegations, failed to get zone for ~p: ~p", [Name, Response]),
@@ -128,10 +131,6 @@ handle_call({delete, Name}, _From, State) ->
 
 handle_call({get_authority, Name}, _From, State) ->
   find_authority(normalize_name(Name), State);
-
-handle_call({put_authority, Name, Authority}, _From, State) ->
-  ets:insert(authorities, {normalize_name(Name), Authority}),
-  {reply, ok, State};
 
 handle_call({get_records_by_name, Name}, _From, State) ->
   case find_zone_in_cache(Name, State) of
@@ -155,7 +154,6 @@ handle_call({in_zone, Name}, _From, State) ->
 
 handle_cast(_, State) ->
   {noreply, State}.
-
 handle_info(_Message, State) ->
   {noreply, State}.
 terminate(_Reason, _State) ->
@@ -163,9 +161,8 @@ terminate(_Reason, _State) ->
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
-% Internal API%
 
-
+% Internal API
 internal_in_zone(Name, Zone) ->
   case dict:is_key(normalize_name(Name), Zone#zone.records_by_name) of
     true -> true;
@@ -197,7 +194,7 @@ find_zone_in_cache(Qname, State) ->
 
 build_zone(Qname, Records) ->
   RecordsByName = build_named_index(Records),
-  Authorities = lists:filter(match_type(?DNS_TYPE_SOA), Records),
+  Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
   #zone{name = Qname, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
@@ -213,11 +210,5 @@ normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
 normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
 
 %% Various matching functions.
-match_type(Type) ->
-  fun(R) when is_record(R, dns_rr) ->
-      R#dns_rr.type =:= Type
-  end.
-match_glue(Name) ->
-  fun(R) when is_record(R, dns_rr) ->
-      R#dns_rr.data =:= #dns_rrdata_ns{dname=Name}
-  end.
+
+
