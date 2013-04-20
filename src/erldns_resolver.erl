@@ -9,41 +9,41 @@
 -export([resolve/6]).
 -export([requires_additional_processing/2, additional_processing/3, additional_processing/4]).
 
-%% Resolve the first question inside the given message.
+
+%% Resolve the questions in the message.
 resolve(Message, AuthorityRecords, Host) ->
-  lager:debug("Starting resolve for ~p", [Host]),
-  ResolvedMessage = resolve(Message, AuthorityRecords, Host, Message#dns_message.questions),
-  %lager:debug("Finished resolver for ~p", [Host]),
-  ResolvedMessage.
+  resolve(Message, AuthorityRecords, Host, Message#dns_message.questions).
+
 
 %% There were no questions in the message so just return it.
 resolve(Message, _AuthorityRecords, _Host, []) -> Message;
-
-%% Resolve the question.
+%% There is one question in the message; resolve it.
 resolve(Message, AuthorityRecords, Host, [Question]) -> resolve(Message, AuthorityRecords, Host, Question);
-
 %% Resolve the first question. Additional questions will be thrown away for now.
 resolve(Message, AuthorityRecords, Host, [Question|_]) -> resolve(Message, AuthorityRecords, Host, Question);
 
+
 %% Start the resolution process on the given question.
+%% Step 1: Set the RA bit to false
 resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
-  % Step 1: Set the RA bit to false
   resolve(Message#dns_message{ra = false}, AuthorityRecords, Question#dns_query.name, Question#dns_query.type, Host).
 
+%% With the extracted Qname and Qtype in hand, find the nearest zone
+%% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
-  lager:debug("Resolve qname: ~p qtype: ~p", [Qname, Qtype]),
-  % Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
   Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), % Zone lookup
   Records = resolve(Message, Qname, Qtype, Zone, Host, []),
-  RewrittenRecords = rewrite_soa_ttl(Records),
-  additional_processing(RewrittenRecords, Host, Zone).
+  additional_processing(rewrite_soa_ttl(Records), Host, Zone).
 
+%% No SOA was found for the Qname so we return the root hints
+%% Note: it seems odd that we are indicating we are authoritative here.
 resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain) ->
   {Authority, Additional} = erldns_records:root_hints(),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
 
+%% An SOA was found, thus we are authoritative and have the zone.
+%% Step 3: Match records
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
-  % Step 3: Match records
   resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone).
 
 %% There were no exact matches on name, so move to the best-match resolution.
@@ -55,6 +55,8 @@ resolve(Message, Qname, Qtype, [], Host, CnameChain, Zone) ->
 resolve(Message, Qname, Qtype, MatchedRecords, Host, CnameChain, Zone) ->
   %lager:debug("Exect match on name ~p (records: ~p)", [Qname, MatchedRecords]),
   exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone).
+
+
 
 %% Determine if there is a CNAME anywhere in the records with the given Qname.
 exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
@@ -68,6 +70,9 @@ exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, 
 %% CNAME records found in the records for the Qname
 exact_match_resolution(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords) ->
   resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords).
+
+
+
 
 %% There were no CNAMEs found in the exact name matches, so now we grab the authority
 %% records and find any type matches on QTYPE and continue on.
@@ -102,6 +107,9 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, _MatchedRecords, Zo
   %lager:debug("Found exact matches of name and type. Authority records: ~p", [AuthorityRecords]),
   resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, ExactTypeMatches, Zone, AuthorityRecords).
 
+
+
+%% There was an exact type match for an NS query, however there is no SOA record for the zone.
 resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords, Zone, []) ->
   Answer = lists:last(MatchedRecords),
   Name = Answer#dns_rr.name,
@@ -116,11 +124,8 @@ resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, Matc
 resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
   Answer = lists:last(MatchedRecords),
   SoaRecordResult = erldns_zone_cache:get_authority(Qname),
-  NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name), % NS lookup
-  %lager:debug("Exact type match for ~p, matched records: ~p, NS records: ~p", [dns:type_name(Qtype), MatchedRecords, NSRecords]), 
-
-  case length(NSRecords) of
-    0 ->
+  case NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
+    [] ->
       resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords);
     _ ->
       NSRecord = lists:last(NSRecords),
@@ -156,10 +161,7 @@ resolve_exact_type_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecord
       restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name))
   end.
 
-restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
-  resolve(Message, Name, Qtype, Zone, Host, CnameChain);
-restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, false) ->
-  resolve(Message, Name, Qtype, erldns_zone_cache:find_zone(Name, Zone#zone.authority), Host, CnameChain). % Zone lookup
+
 
 %% There were no exact type matches, but there were other name matches and there are NS records.
 %% Since the Qtype is ANY we indicate we are authoritative and include the NS records.
@@ -171,6 +173,8 @@ resolve_no_exact_type_match(Message, _Qtype, _Host, _CnameChain, ExactTypeMatche
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ ExactTypeMatches};
 resolve_no_exact_type_match(Message, Qtype, _Host, _CnameChain, _ExactTypeMatches, _Zone, MatchedRecords, ReferralRecords, AuthorityRecords) ->
   resolve_exact_match_referral(Message, Qtype, MatchedRecords, ReferralRecords, AuthorityRecords).
+
+
 
 % Given an exact name match where the Qtype is not found in the record set and we are not authoritative,
 % add the NS records to the authority section of the message.
@@ -195,6 +199,8 @@ resolve_exact_match_referral(Message, ?DNS_TYPE_SOA, _MatchedRecords, _ReferralR
 resolve_exact_match_referral(Message, _, _MatchedRecords, _ReferralRecords, AuthorityRecords) ->
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = AuthorityRecords}.
 
+
+
 % There is a CNAME record and the request was for a CNAME record so append the CNAME records to
 % the answers section..
 resolve_exact_match_with_cname(Message, ?DNS_TYPE_CNAME, _Host, _CnameChain, _MatchedRecords, _Zone, CnameRecords) ->
@@ -214,6 +220,8 @@ resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, _MatchedRecords
   %lager:debug("Restarting query with CNAME name ~p (exact match)", [Name]),
   restart_query(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords}, Name, Qtype, Host, CnameChain ++ CnameRecords, Zone, erldns_zone_cache:in_zone(Name)).
 
+
+
 % The CNAME is in the zone so we do not need to look it up again.
 restart_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
   resolve(Message, Name, Qtype, Zone, Host, CnameChain);
@@ -221,6 +229,13 @@ restart_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
 % CNAME content.
 restart_query(Message, Name, Qtype, Host, CnameChain, _Zone, false) ->
   resolve(Message, Name, Qtype, erldns_zone_cache:find_zone(Name), Host, CnameChain).
+
+restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
+  resolve(Message, Name, Qtype, Zone, Host, CnameChain);
+restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, false) ->
+  resolve(Message, Name, Qtype, erldns_zone_cache:find_zone(Name, Zone#zone.authority), Host, CnameChain). % Zone lookup
+
+
 
 % There was no exact match for the Qname, so we use the best matches that were
 % returned by the best_match() function.
@@ -236,6 +251,8 @@ best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords,
 best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, ReferralRecords) ->
   resolve_best_match_referral(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, ReferralRecords).
 
+
+
 resolve_best_match(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone) ->
   %lager:debug("No referrals found"),
   resolve_best_match(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, lists:any(erldns_records:match_wildcard(), BestMatchRecords)).
@@ -249,6 +266,8 @@ resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords
   %lager:debug("Matched records are not wildcard."),
   [Question|_] = Message#dns_message.questions,
   resolve_best_match_not_wildcard(Message, Zone, Qname =:= Question#dns_query.name).
+
+
 
 resolve_best_match_not_wildcard(Message, _Zone, false) ->
   %lager:debug("Qname did not match query name"),
@@ -294,6 +313,8 @@ resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _B
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}.
 
 
+
+
 % It is a CNAME and the Qtype was CNAME
 resolve_best_match_with_wildcard_cname(Message, _Qname, ?DNS_TYPE_CNAME, _Host, _CnameChain, _BestMatchRecords, _Zone, CnameRecords) ->
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
@@ -314,6 +335,9 @@ resolve_best_match_with_wildcard_cname(Message, _Qname, Qtype, Host, CnameChain,
   CnameRecord = lists:last(CnameRecords),
   Name = CnameRecord#dns_rr.data#dns_rrdata_cname.dname,
   restart_query(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords}, Name, Qtype, Host, CnameChain ++ CnameRecords, Zone, erldns_zone_cache:in_zone(Name)).
+
+
+
 
 % There are referral records
 resolve_best_match_referral(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, ReferralRecords) ->
@@ -337,6 +361,9 @@ resolve_best_match_referral(Message, _Qname, ?DNS_TYPE_ANY, _Host, _CnameChain, 
 resolve_best_match_referral(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _Zone, _ReferralRecords, Authority) ->
   Message#dns_message{authority = Authority}.
 
+
+
+
 % Find the best match records for the given Qname in the
 % given zone. This will attempt to walk through the
 % domain hierarchy in the Qname looking for both exact and
@@ -357,11 +384,7 @@ best_match(Qname, Labels, Zone, []) ->
   end;
 best_match(_Qname, _Labels, _Zone, WildcardMatches) -> WildcardMatches.
 
-%% According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
-%% must be set to the value of the minimum field in the SOA content.
-rewrite_soa_ttl(Message) -> rewrite_soa_ttl(Message, Message#dns_message.authority, []).
-rewrite_soa_ttl(Message, [], NewAuthority) -> Message#dns_message{authority = NewAuthority};
-rewrite_soa_ttl(Message, [R|Rest], NewAuthority) -> rewrite_soa_ttl(Message, Rest, NewAuthority ++ [erldns_records:minimum_soa_ttl(R, R#dns_rr.data)]).
+
 
 %% Function for executing custom lookups by registered handlers.
 custom_lookup(Qname, Qtype, Records) ->
@@ -376,9 +399,20 @@ custom_lookup(Qname, Qtype, Records) ->
       end
   end.
 
+% Function for filtering out custom records and replcing them with
+% records which content from the custom handler.
 filter_records(Records, []) -> Records;
 filter_records(Records, [{Handler,_}|Rest]) ->
   filter_records(Handler:filter(Records), Rest).
+
+
+
+%% According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
+%% must be set to the value of the minimum field in the SOA content.
+rewrite_soa_ttl(Message) -> rewrite_soa_ttl(Message, Message#dns_message.authority, []).
+rewrite_soa_ttl(Message, [], NewAuthority) -> Message#dns_message{authority = NewAuthority};
+rewrite_soa_ttl(Message, [R|Rest], NewAuthority) -> rewrite_soa_ttl(Message, Rest, NewAuthority ++ [erldns_records:minimum_soa_ttl(R, R#dns_rr.data)]).
+
 
 %% See if additional processing is necessary.
 additional_processing(Message, _Host, {error, _}) ->
@@ -401,6 +435,8 @@ additional_processing(Message, _Host, _Zone, _Names, []) ->
 %% Additional A records were found, so we add them to the additional section.
 additional_processing(Message, _Host, _Zone, _Names, Records) ->
   Message#dns_message{additional=Message#dns_message.additional ++ Records}.
+
+
 
 %% Given a list of answers find the names that require additional processing.
 requires_additional_processing([], RequiresAdditional) -> RequiresAdditional;
