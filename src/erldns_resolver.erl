@@ -5,11 +5,6 @@
 
 -export([resolve/3]).
 
-%% Internal API
--export([resolve/6]).
--export([requires_additional_processing/2, additional_processing/3, additional_processing/4]).
-
-
 %% Resolve the questions in the message.
 resolve(Message, AuthorityRecords, Host) ->
   resolve(Message, AuthorityRecords, Host, Message#dns_message.questions).
@@ -117,11 +112,14 @@ resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, Host, CnameChain, Matche
   % It isn't clear what the QTYPE should be on a delegated restart. I assume an A record.
   restart_delegated_query(Message, Name, ?DNS_TYPE_A, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name));
 
+%% There was an exact type match for an NS query and an SOA record.
 resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords) ->
   %lager:debug("Authoritative for record, returning answers"),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
 
+%% There was an exact type match for something other than an NS record and we are authoritative because there is an SOA record.
 resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
+  % NOTE: this is a potential bug because it assumes the last record is the one to examine.
   Answer = lists:last(MatchedRecords),
   SoaRecordResult = erldns_zone_cache:get_authority(Qname),
   case NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
@@ -142,22 +140,19 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
       end
   end.
 
-
+%% We are authoritative and there were no NS records here.
 resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, []) ->
-  %lager:debug("Returning authoritative answer with ~p appended answers", [length(MatchedRecords)]),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
 
+%% We are authoritative and there are NS records here.
 resolve_exact_type_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
   Answer = lists:last(MatchedRecords),
   NSRecord = lists:last(NSRecords),
   Name = NSRecord#dns_rr.name,
-  %lager:debug("Name: ~p; answer name: ~p", [Name, Answer#dns_rr.name]),
   case Name =:= Answer#dns_rr.name of
     true ->
-      %lager:debug("Name matches an existing answer name so this is an authority"),
       Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Message#dns_message.authority ++ NSRecords};
     false ->
-      %lager:debug("Restarting query with delegated name ~p", [Name]),
       restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name))
   end.
 
@@ -230,8 +225,10 @@ restart_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
 restart_query(Message, Name, Qtype, Host, CnameChain, _Zone, false) ->
   resolve(Message, Name, Qtype, erldns_zone_cache:find_zone(Name), Host, CnameChain).
 
+% Delegated, but in the same zone.
 restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
   resolve(Message, Name, Qtype, Zone, Host, CnameChain);
+% Delegated to a different zone.
 restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, false) ->
   resolve(Message, Name, Qtype, erldns_zone_cache:find_zone(Name, Zone#zone.authority), Host, CnameChain). % Zone lookup
 
@@ -252,7 +249,7 @@ best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords,
   resolve_best_match_referral(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, ReferralRecords).
 
 
-
+% There is no referral, so check to see if there is a wildcard.
 resolve_best_match(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone) ->
   %lager:debug("No referrals found"),
   resolve_best_match(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, lists:any(erldns_records:match_wildcard(), BestMatchRecords)).
@@ -262,22 +259,22 @@ resolve_best_match(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zo
   %lager:debug("Matched records are wildcard."),
   CnameRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), lists:map(erldns_records:replace_name(Qname), BestMatchRecords)),
   resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords);
+%% It is not a wildcard.
 resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, false) ->
   %lager:debug("Matched records are not wildcard."),
   [Question|_] = Message#dns_message.questions,
-  resolve_best_match_not_wildcard(Message, Zone, Qname =:= Question#dns_query.name).
+  case Qname =:= Question#dns_query.name of
+    true ->
+      Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN, authority = Zone#zone.authority, aa = true};
+    false ->
+      % TODO: this case does not appear to have any tests in the dnstest suite.
+      % Why is it here?
+      {Authority, Additional} = erldns_records:root_hints(),
+      Message#dns_message{authority=Authority, additional=Additional}
+  end.
 
 
-
-resolve_best_match_not_wildcard(Message, _Zone, false) ->
-  %lager:debug("Qname did not match query name"),
-  {Authority, Additional} = erldns_records:root_hints(),
-  Message#dns_message{authority=Authority, additional=Additional};
-resolve_best_match_not_wildcard(Message, Zone, true) ->
-  %lager:debug("Qname matched query name"),
-  Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN, authority = Zone#zone.authority, aa = true}.
-
-% It's not a wildcard CNAME
+% It's a wildcard CNAME
 resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, []) ->
   %lager:debug("Resolving best match with wildcard"),
   TypeMatchedRecords = case Qtype of
