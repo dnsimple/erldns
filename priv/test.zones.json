@@ -1354,6 +1354,14 @@
                 "data": {
                     "ip": "8.7.6.5"
                 }
+            },
+            {
+                "name": "aland.test.com",
+                "type": "TXT",
+                "ttl": 3600,
+                "data": {
+                    "txt": "\u00c5LAND ISLANDS"
+                }
             }
         ]
     },
