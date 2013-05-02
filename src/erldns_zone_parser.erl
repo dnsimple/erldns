@@ -17,7 +17,6 @@
        ]).
 
 -define(SERVER, ?MODULE).
--define(MAX_TXT_SIZE, 255).
 -define(PARSE_TIMEOUT, 30 * 1000).
 
 -record(state, {parsers}).
@@ -192,7 +191,7 @@ json_record_to_erlang([Name, <<"TXT">>, Ttl, Data]) ->
   #dns_rr{
     name = Name,
     type = ?DNS_TYPE_TXT,
-    data = #dns_rrdata_txt{txt = lists:flatten(parse_txt(proplists:get_value(<<"txt">>, Data)))},
+    data = #dns_rrdata_txt{txt = lists:flatten(erldns_txt:parse(proplists:get_value(<<"txt">>, Data)))},
     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"SPF">>, Ttl, Data]) ->
@@ -248,34 +247,3 @@ json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data]) ->
 
 json_record_to_erlang(_) ->
   {}.
-
-
-parse_txt(Binary) when is_binary(Binary) -> parse_txt(binary_to_list(Binary));
-parse_txt([C|Rest]) -> parse_txt_char([C|Rest], C, Rest, [], false).
-parse_txt(String, [], [], _) -> [split_txt(String)];
-parse_txt(_, [], Tokens, _) -> Tokens;
-parse_txt(String, [C|Rest], Tokens, Escaped) -> parse_txt_char(String, C, Rest, Tokens, Escaped).
-parse_txt(_, [], Tokens, CurrentToken, true) -> Tokens ++ [CurrentToken]; % Last character is escaped
-parse_txt(String, [C|Rest], Tokens, CurrentToken, Escaped) -> parse_txt_char(String, C, Rest, Tokens, CurrentToken, Escaped).
-
-parse_txt_char(String, $", Rest, Tokens, _) -> parse_txt(String, Rest, Tokens, [], false);
-parse_txt_char(String, _, Rest, Tokens, _) -> parse_txt(String, Rest, Tokens, false).
-parse_txt_char(String, $", Rest, Tokens, CurrentToken, false) -> parse_txt(String, Rest, Tokens ++ [split_txt(CurrentToken)], false);
-parse_txt_char(String, $", Rest, Tokens, CurrentToken, true) -> parse_txt(String, Rest, Tokens, CurrentToken ++ [$"], false);
-parse_txt_char(String, $\\, Rest, Tokens, CurrentToken, false) -> parse_txt(String, Rest, Tokens, CurrentToken, true);
-parse_txt_char(String, $\\, Rest, Tokens, CurrentToken, true) -> parse_txt(String, Rest, Tokens, CurrentToken ++ [$\\], false);
-parse_txt_char(String, C, Rest, Tokens, CurrentToken, _) -> parse_txt(String, Rest, Tokens, CurrentToken ++ [C], false).
-
-split_txt(Data) -> split_txt(Data, []).
-split_txt(Data, Parts) ->
-  case byte_size(list_to_binary(Data)) > ?MAX_TXT_SIZE of
-    true ->
-      First = list_to_binary(string:substr(Data, 1, ?MAX_TXT_SIZE)),
-      Rest = string:substr(Data, ?MAX_TXT_SIZE + 1),
-      case Rest of
-        [] -> Parts ++ [First];
-        _ -> split_txt(Rest, Parts ++ [First])
-      end;
-    false ->
-      Parts ++ [list_to_binary(Data)]
-  end.
