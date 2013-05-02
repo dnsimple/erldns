@@ -6,3 +6,4 @@ ebin/
 deps/*
 rel/erl-dns
 zones.json
+.eunit/
