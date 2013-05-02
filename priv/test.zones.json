@@ -448,6 +448,40 @@
                     "txt": "\"begin\" \"the \\\"middle\\\" p\\\\art\" \"the end\""
                 }
             },
+
+            {
+                "name": "text0.example.com",
+                "type": "TXT",
+                "ttl": 120,
+                "data": {
+                    "txt": "k=rsa; p=one"
+                }
+            },
+            {
+                "name": "text1.example.com",
+                "type": "TXT",
+                "ttl": 120,
+                "data": {
+                    "txt": "k=rsa\\; p=one"
+                }
+            },
+            {
+                "name": "text2.example.com",
+                "type": "TXT",
+                "ttl": 120,
+                "data": {
+                    "txt": "k=rsa\\\\; p=one"
+                }
+            },
+            {
+                "name": "text3.example.com",
+                "type": "TXT",
+                "ttl": 120,
+                "data": {
+                    "txt": "k=rsa\\\\\\; p=one"
+                }
+            },
+
             {
                 "name": "ipv6.example.com",
                 "type": "AAAA",
