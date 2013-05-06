@@ -2,6 +2,8 @@
 
 Serve DNS authoritative responses...with Erlang.
 
+[![Build Status](https://travis-ci.org/aetrion/erl-dns.png?branch=master)](https://travis-ci.org/aetrion/erl-dns)
+
 ## Building
 
 To build clean:
