@@ -17,7 +17,8 @@
     get_authority/1,
     get_delegations/1,
     get_records_by_name/1,
-    in_zone/1
+    in_zone/1,
+    zone_names/0
   ]).
 
 % Gen server hooks
@@ -98,6 +99,9 @@ get_records_by_name(Name) ->
 in_zone(Name) ->
   gen_server:call(?SERVER, {in_zone, Name}).
 
+zone_names() ->
+  gen_server:call(?SERVER, {zone_names}).
+
 %% Gen server hooks
 init([]) ->
   ets:new(zones, [set, named_table]),
@@ -150,7 +154,10 @@ handle_call({in_zone, Name}, _From, State) ->
       {reply, internal_in_zone(Name, Zone), State};
     _ ->
       {reply, false, State}
-  end.
+  end;
+
+handle_call({zone_names}, _From, State) ->
+  {reply, ets:foldl(fun({Name, _Zone}, Names) -> Names ++ [Name] end, [], zones), State}.
 
 handle_cast(_, State) ->
   {noreply, State}.

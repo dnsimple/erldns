@@ -28,6 +28,7 @@ init(_Args) ->
   SysProcs = [
     ?CHILD(erldns_zone_cache, worker, []),
     ?CHILD(erldns_zone_parser, worker, []),
+    ?CHILD(erldns_zone_checker, worker, []),
     ?CHILD(erldns_packet_cache, worker, []),
     ?CHILD(erldns_query_throttle, worker, []),
     ?CHILD(erldns_metrics, worker, []),
