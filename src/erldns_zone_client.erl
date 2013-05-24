@@ -9,7 +9,9 @@
 -export([
     start_link/0,
     fetch_zones/0,
-    fetch_zone/1]).
+    fetch_zone/1,
+    check_zone/2
+  ]).
 
 % Websocket callbacks
 -export([
@@ -30,12 +32,12 @@ start_link() ->
 fetch_zones() ->
   case httpc:request(get, {zones_url(), [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
-      %lager:debug("Parsing zones JSON"),
       JsonZones = jsx:decode(Body),
       lager:info("Putting zones into cache"),
       lists:foreach(
         fun(JsonZone) ->
             Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
+            lager:info("Zone: ~p", [Zone]),
             erldns_zone_cache:put_zone(Zone)
         end, JsonZones),
       lager:info("Put ~p zones into cache", [length(JsonZones)]),
@@ -46,27 +48,44 @@ fetch_zones() ->
   end.
 
 fetch_zone(Name) ->
-  fetch_zone(Name,  zones_url() ++ binary_to_list(Name)).
+  fetch_zone(Name,  zone_url(Name)).
 
 fetch_zone(Name, Url) ->
   case httpc:request(get, {Url, [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
-      %lager:debug("Parsing zone JSON"),
       Zone = erldns_zone_parser:zone_to_erlang(jsx:decode(Body)),
       lager:info("Putting ~p into zone cache", [Name]),
+      lager:debug("Zone: ~p", [Zone]),
       erldns_zone_cache:put_zone(Zone);
     {_, {{_Version, Status = 404, ReasonPhrase}, _Headers, _Body}} ->
-      %lager:debug("Zone not found in zone server: ~p", [Name]),
       {err, Status, ReasonPhrase};
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
       lager:error("Failed to load zone: ~p (status: ~p)", [ReasonPhrase, Status]),
       {err, Status, ReasonPhrase}
   end.
 
+check_zone(_Name, []) ->
+  ok;
+check_zone(Name, Sha) ->
+  check_zone(Name, Sha, zone_check_url(Name, Sha)).
+
+check_zone(Name, _Sha, Url) ->
+  lager:info("check_zone(~p) (url: ~p)", [Name, Url]),
+  case httpc:request(head, {Url, [auth_header()]}, [], [{body_format, binary}]) of
+    {ok, {{_Version, 200, _ReasonPhrase}, _Headers, _Body}} ->
+      lager:info("Sent zone check for ~p", [Name]),
+      ok;
+    {ok, {{_Version, 304, _ReasonPhrase}, _Headers, _Body}} ->
+      lager:info("Zone has not changed for ~p", [Name]),
+      ok;
+    {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
+      lager:error("Failed to send zone check for ~p: ~p (status: ~p)", [Name, ReasonPhrase, Status]),
+      {err, Status, ReasonPhrase}
+  end.
+
 % Websocket Callbacks
 
 init([], _ConnState) ->
-  %lager:debug("init() websocket client"),
   self() ! authenticate,
   {ok, 2}.
 
@@ -74,7 +93,7 @@ websocket_handle({_Type, Msg}, _ConnState, State) ->
   ZoneNotification = jsx:decode(Msg),
   lager:info("Zone notification received: ~p", [ZoneNotification]),
   case ZoneNotification of
-    [{<<"name">>, Name}, {<<"url">>, Url}, {<<"action">>, Action}] ->
+    [{<<"name">>, Name}, {<<"sha">>, _Sha}, {<<"url">>, Url}, {<<"action">>, Action}] ->
       case Action of
         <<"create">> ->
           %lager:debug("Creating zone ~p", [Name]),
@@ -134,6 +153,12 @@ websocket_path() ->
 zones_url() ->
   zone_server_protocol() ++ "://" ++ zone_server_host() ++ ":" ++ integer_to_list(zone_server_port()) ++ "/zones/".
 
+zone_url(Name) ->
+  zones_url() ++ binary_to_list(Name).
+
+zone_check_url(Name, Sha) ->
+  zones_url() ++ binary_to_list(Name) ++ "/" ++ binary_to_list(Sha).
+
 websocket_url() ->
   atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
 
@@ -146,4 +171,3 @@ encoded_credentials() ->
 
 auth_header() ->
   {"Authorization","Basic " ++ encoded_credentials()}.
-
