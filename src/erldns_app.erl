@@ -16,13 +16,17 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
 
   lager:info("Loading zones from local file"),
   erldns_zone_loader:load_zones(),
+
   case application:get_env(erldns, zone_server) of
     {ok, _} ->
+      lager:info("Websocket monitor connecting"),
+      erldns_zoneserver_monitor:connect(),
       lager:info("Loading zones from remote server"),
-      erldns_zone_client:fetch_zones(),
+      erldns_zoneserver_monitor:fetch_zones(),
       lager:info("Zone loading complete"),
       ok;
-    _ -> not_fetching
+    _ ->
+      not_fetching
   end,
 
   % Start up the UDP and TCP servers now

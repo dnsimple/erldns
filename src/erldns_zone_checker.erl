@@ -15,7 +15,7 @@
   ]).
 
 -define(SERVER, ?MODULE).
--define(CHECK_INTERVAL, 1000 * 10). % Every 10 seconds
+-define(CHECK_INTERVAL, 1000 * 60). % Every N seconds
 
 -record(state, {tref}).
 
@@ -50,6 +50,6 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 %% Private API
 send_zone_check(Name, Sha) ->
-  lager:info("Sending zone check for ~p (~p)", [Name, Sha]),
+  lager:debug("Sending zone check for ~p (~p)", [Name, Sha]),
   erldns_zone_client:check_zone(Name, Sha),
   ok.

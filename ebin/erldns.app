@@ -1,6 +1,6 @@
 {application,erldns,
              [{description,"Erlang Authoritative DNS Server"},
-              {vsn,"2744f63"},
+              {vsn,"ce5310e"},
               {mod,{erldns_app,[]}},
               {applications,[kernel,stdlib,inets,crypto,ssl]},
               {start_phases,[{post_start,[]}]},
@@ -9,9 +9,10 @@
                         erldns_handler,erldns_metrics,erldns_packet_cache,
                         erldns_query_throttle,erldns_records,erldns_resolver,
                         erldns_server_sup,erldns_sup,erldns_tcp_server,
-                        erldns_txt,erldns_udp_server,erldns_worker,
-                        erldns_zone_cache,erldns_zone_checker,
+                        erldns_txt,erldns_udp_server,erldns_websocket_client,
+                        erldns_websocket_monitor,erldns_websocket_sup,
+                        erldns_worker,erldns_zone_cache,erldns_zone_checker,
                         erldns_zone_client,erldns_zone_loader,
-                        erldns_zone_parser,gen_nb_server,
-                        sample_custom_handler,sample_custom_zone_parser,
-                        stathat]}]}.
+                        erldns_zone_parser,erldns_zoneserver_monitor,
+                        gen_nb_server,sample_custom_handler,
+                        sample_custom_zone_parser,stathat]}]}.

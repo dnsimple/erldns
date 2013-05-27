@@ -7,7 +7,7 @@
 
 % Public API
 -export([
-    start_link/0,
+    websocket_url/0,
     fetch_zones/0,
     fetch_zone/1,
     check_zone/2
@@ -24,10 +24,8 @@
 -define(DEFAULT_WEBSOCKET_PATH, "/ws").
 
 % Public API
-start_link() ->
-  WebsocketUrl = websocket_url(),
-  lager:info("Starting websocket client (url=~p)", [WebsocketUrl]),
-  websocket_client:start_link(WebsocketUrl, ?MODULE, []).
+websocket_url() ->
+  atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
 
 fetch_zones() ->
   case httpc:request(get, {zones_url(), [auth_header()]}, [], [{body_format, binary}]) of
@@ -44,7 +42,9 @@ fetch_zones() ->
       {ok, length(JsonZones)};
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
       lager:error("Failed to load zones: ~p (status: ~p)", [ReasonPhrase, Status]),
-      {err, Status, ReasonPhrase}
+      {err, Status, ReasonPhrase};
+    {error, Error} ->
+      {err, Error}
   end.
 
 fetch_zone(Name) ->
@@ -70,13 +70,13 @@ check_zone(Name, Sha) ->
   check_zone(Name, Sha, zone_check_url(Name, Sha)).
 
 check_zone(Name, _Sha, Url) ->
-  lager:info("check_zone(~p) (url: ~p)", [Name, Url]),
+  lager:debug("check_zone(~p) (url: ~p)", [Name, Url]),
   case httpc:request(head, {Url, [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, _Body}} ->
-      lager:info("Sent zone check for ~p", [Name]),
+      lager:debug("Sent zone check for ~p", [Name]),
       ok;
     {ok, {{_Version, 304, _ReasonPhrase}, _Headers, _Body}} ->
-      lager:info("Zone has not changed for ~p", [Name]),
+      lager:debug("Zone has not changed for ~p", [Name]),
       ok;
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
       lager:error("Failed to send zone check for ~p: ~p (status: ~p)", [Name, ReasonPhrase, Status]),
@@ -158,9 +158,6 @@ zone_url(Name) ->
 
 zone_check_url(Name, Sha) ->
   zones_url() ++ binary_to_list(Name) ++ "/" ++ binary_to_list(Sha).
-
-websocket_url() ->
-  atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
 
 encoded_credentials() ->
   case application:get_env(erldns, credentials) of

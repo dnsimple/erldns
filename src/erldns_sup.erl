@@ -39,7 +39,7 @@ init(_Args) ->
   ],
 
   OptionalProcs = case application:get_env(erldns, zone_server) of
-    {ok, _} -> [?CHILD(erldns_zone_client, worker, [])];
+    {ok, _} -> [?CHILD(erldns_zoneserver_monitor, worker, [])];
     _ -> []
   end,
 
