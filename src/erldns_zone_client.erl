@@ -35,7 +35,7 @@ fetch_zones() ->
       lists:foreach(
         fun(JsonZone) ->
             Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-            lager:info("Zone: ~p", [Zone]),
+            lager:debug("Zone: ~p", [Zone]),
             erldns_zone_cache:put_zone(Zone)
         end, JsonZones),
       lager:info("Put ~p zones into cache", [length(JsonZones)]),
@@ -54,8 +54,7 @@ fetch_zone(Name, Url) ->
   case httpc:request(get, {Url, [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
       Zone = erldns_zone_parser:zone_to_erlang(jsx:decode(Body)),
-      lager:info("Putting ~p into zone cache", [Name]),
-      lager:debug("Zone: ~p", [Zone]),
+      lager:debug("Putting ~p into zone cache", [Name]),
       erldns_zone_cache:put_zone(Zone);
     {_, {{_Version, Status = 404, ReasonPhrase}, _Headers, _Body}} ->
       {err, Status, ReasonPhrase};
@@ -91,7 +90,7 @@ init([], _ConnState) ->
 
 websocket_handle({_Type, Msg}, _ConnState, State) ->
   ZoneNotification = jsx:decode(Msg),
-  lager:info("Zone notification received: ~p", [ZoneNotification]),
+  lager:debug("Zone notification received: ~p", [ZoneNotification]),
   case ZoneNotification of
     [{<<"name">>, Name}, {<<"sha">>, _Sha}, {<<"url">>, Url}, {<<"action">>, Action}] ->
       case Action of
