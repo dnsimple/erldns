@@ -17,7 +17,7 @@ init(_Args) ->
   WebsocketUrl = erldns_zone_client:websocket_url(),
   lager:debug("Connecting to web socket: ~p", [WebsocketUrl]),
   Procs = [
-    {websocket_client, {websocket_client, start_link, [WebsocketUrl, erldns_zone_client, []]}, permanent, 5000, worker, []}
+    {websocket_client, {websocket_client, start_link, [WebsocketUrl, erldns_zone_client, []]}, permanent, 5000, worker, [websocket_client]}
   ],
 
   {ok, {{one_for_one, 20, 10}, Procs}}.
