@@ -78,7 +78,9 @@ code_change(_, State, _) ->
 %% Internal API
 do_connect() ->
   process_flag(trap_exit, true),
-  erldns_websocket_sup:start_link().
+  WebsocketUrl = erldns_zone_client:websocket_url(),
+  lager:debug("Connecting to web socket: ~p", [WebsocketUrl]),
+  websocket_client:start_link(WebsocketUrl, erldns_zone_client, []).
 
 do_fetch_zones() ->
   case erldns_zone_client:fetch_zones() of
