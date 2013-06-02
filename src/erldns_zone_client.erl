@@ -54,9 +54,10 @@ fetch_zone(Name, Url) ->
   case httpc:request(get, {Url, [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
       Zone = erldns_zone_parser:zone_to_erlang(jsx:decode(Body)),
-      lager:debug("Putting ~p into zone cache", [Name]),
+      lager:debug("Putting ~p into zone cache (SHA: ~p)", [Name, Zone#zone.sha]),
       erldns_zone_cache:put_zone(Zone);
     {_, {{_Version, Status = 404, ReasonPhrase}, _Headers, _Body}} ->
+      erldns_zone_cache:delete_zone(Name),
       {err, Status, ReasonPhrase};
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
       lager:error("Failed to load zone: ~p (status: ~p)", [ReasonPhrase, Status]),
@@ -72,10 +73,14 @@ check_zone(Name, _Sha, Url) ->
   lager:debug("check_zone(~p) (url: ~p)", [Name, Url]),
   case httpc:request(head, {Url, [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, _Body}} ->
-      lager:debug("Sent zone check for ~p", [Name]),
+      lager:debug("Zone appears to have changed for ~p", [Name]),
       ok;
     {ok, {{_Version, 304, _ReasonPhrase}, _Headers, _Body}} ->
       lager:debug("Zone has not changed for ~p", [Name]),
+      ok;
+    {ok, {{_Version, 404, _ReasonPhrase}, _Headers, _Body}} ->
+      lager:debug("Zone server returned 404 for ~p, removing zone", [Url]),
+      erldns_zone_cache:delete_zone(Name),
       ok;
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
       lager:error("Failed to send zone check for ~p: ~p (status: ~p)", [Name, ReasonPhrase, Status]),
