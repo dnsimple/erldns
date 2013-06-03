@@ -120,6 +120,10 @@ websocket_handle({_Type, Msg}, _ConnState, State) ->
     _ ->
       lager:error("Unsupported zone notification message: ~p", [ZoneNotification])
   end,
+  {ok, State};
+
+websocket_handle(Message, _ConnState, State) ->
+  lager:info("Websocket handle: ~p", [Message]),
   {ok, State}.
 
 websocket_info(authenticate, _ConnState, State) ->
