@@ -68,10 +68,10 @@ get_zone(Name) ->
   gen_server:call(?SERVER, {get, Name}).
 
 put_zone({Name, Sha, Records}) ->
-  gen_server:cast(?SERVER, {put, Name, build_zone(Name, Sha, Records)}).
+  gen_server:call(?SERVER, {put, Name, build_zone(Name, Sha, Records)}).
 
 put_zone(Name, Zone) ->
-  gen_server:cast(?SERVER, {put, Name, Zone}).
+  gen_server:call(?SERVER, {put, Name, Zone}).
 
 delete_zone(Name) ->
   gen_server:cast(?SERVER, {delete, Name}).
@@ -114,6 +114,10 @@ handle_call({get, Name}, _From, State) ->
     [{NormalizedName, Zone}] -> {reply, {ok, Zone#zone{name = NormalizedName, records = [], records_by_name=trimmed}}, State};
     _ -> {reply, {error, zone_not_found}, State}
   end;
+
+handle_call({put, Name, Zone}, _From, State) ->
+  ets:insert(zones, {normalize_name(Name), Zone}),
+  {reply, ok, State};
 
 handle_call({get_delegations, Name}, _From, State) ->
   case find_zone_in_cache(Name, State) of
