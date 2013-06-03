@@ -35,7 +35,7 @@ fetch_zones() ->
       lists:foreach(
         fun(JsonZone) ->
             Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-            lager:debug("Putting zone ~p into cache", [Zone#zone.name]),
+            lager:debug("Putting zone ~p into cache", [Zone]),
             erldns_zone_cache:put_zone(Zone)
         end, JsonZones),
       lager:info("Put ~p zones into cache", [length(JsonZones)]),
