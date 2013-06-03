@@ -20,6 +20,8 @@
     websocket_info/3,
     websocket_terminate/3]).
 
+-record(state, {}).
+
 -define(DEFAULT_ZONE_SERVER_PORT, 443).
 -define(DEFAULT_WEBSOCKET_PATH, "/ws").
 
@@ -96,8 +98,8 @@ check_zone(Name, _Sha, Url) ->
 % Websocket Callbacks
 
 init([], _ConnState) ->
-  self() ! authenticate,
-  {ok, 2}.
+  %self() ! authenticate,
+  {ok, #state{}}.
 
 websocket_handle({_Type, Msg}, _ConnState, State) ->
   ZoneNotification = jsx:decode(Msg),
