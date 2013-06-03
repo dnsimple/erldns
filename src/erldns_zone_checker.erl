@@ -15,7 +15,7 @@
   ]).
 
 -define(SERVER, ?MODULE).
--define(CHECK_INTERVAL, 1000 * 60). % Every N seconds
+-define(CHECK_INTERVAL, 1000 * 600). % Every N seconds
 
 -record(state, {tref}).
 
