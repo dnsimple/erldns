@@ -32,12 +32,7 @@ fetch_zones() ->
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
       JsonZones = jsx:decode(Body),
       lager:info("Putting zones into cache"),
-      lists:foreach(
-        fun(JsonZone) ->
-            Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-            lager:debug("Putting zone ~p into cache", [Zone]),
-            erldns_zone_cache:put_zone(Zone)
-        end, JsonZones),
+      lists:foreach(fun safe_process_json_zone/1, JsonZones),
       lager:info("Put ~p zones into cache", [length(JsonZones)]),
       {ok, length(JsonZones)};
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
@@ -47,15 +42,29 @@ fetch_zones() ->
       {err, Error}
   end.
 
+safe_process_json_zone(JsonZone) ->
+  try process_json_zone(JsonZone) of
+    Zone -> Zone
+  catch
+    Exception:Reason ->
+      lager:error("Error parsing JSON zone (~p : ~p)", [Exception, Reason])
+  end.
+
+process_json_zone(JsonZone) ->
+  Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
+  %lager:debug("Putting zone ~p into cache", [Zone]),
+  erldns_zone_cache:put_zone(Zone).
+
 fetch_zone(Name) ->
   fetch_zone(Name,  zone_url(Name)).
 
 fetch_zone(Name, Url) ->
   case httpc:request(get, {Url, [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
-      Zone = erldns_zone_parser:zone_to_erlang(jsx:decode(Body)),
-      lager:debug("Putting ~p into zone cache (SHA: ~p)", [Name, Zone#zone.sha]),
-      erldns_zone_cache:put_zone(Zone);
+      safe_process_json_zone(jsx:decode(Body));
+      %Zone = erldns_zone_parser:zone_to_erlang(jsx:decode(Body)),
+      %lager:debug("Putting ~p into zone cache (SHA: ~p)", [Name, Zone#zone.sha]),
+      %erldns_zone_cache:put_zone(Zone);
     {_, {{_Version, Status = 404, ReasonPhrase}, _Headers, _Body}} ->
       erldns_zone_cache:delete_zone(Name),
       {err, Status, ReasonPhrase};
