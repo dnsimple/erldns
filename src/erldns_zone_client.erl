@@ -62,9 +62,6 @@ fetch_zone(Name, Url) ->
   case httpc:request(get, {Url, [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
       safe_process_json_zone(jsx:decode(Body));
-      %Zone = erldns_zone_parser:zone_to_erlang(jsx:decode(Body)),
-      %lager:debug("Putting ~p into zone cache (SHA: ~p)", [Name, Zone#zone.sha]),
-      %erldns_zone_cache:put_zone(Zone);
     {_, {{_Version, Status = 404, ReasonPhrase}, _Headers, _Body}} ->
       erldns_zone_cache:delete_zone(Name),
       {err, Status, ReasonPhrase};
