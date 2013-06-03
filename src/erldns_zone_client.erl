@@ -35,7 +35,7 @@ fetch_zones() ->
       lists:foreach(
         fun(JsonZone) ->
             Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-            lager:debug("Zone: ~p", [Zone]),
+            lager:debug("Putting zone ~p into cache", [Zone#zone.name]),
             erldns_zone_cache:put_zone(Zone)
         end, JsonZones),
       lager:info("Put ~p zones into cache", [length(JsonZones)]),
@@ -70,13 +70,13 @@ check_zone(Name, Sha) ->
   check_zone(Name, Sha, zone_check_url(Name, Sha)).
 
 check_zone(Name, _Sha, Url) ->
-  lager:debug("check_zone(~p) (url: ~p)", [Name, Url]),
+  %lager:debug("check_zone(~p) (url: ~p)", [Name, Url]),
   case httpc:request(head, {Url, [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, _Body}} ->
       lager:debug("Zone appears to have changed for ~p", [Name]),
       ok;
     {ok, {{_Version, 304, _ReasonPhrase}, _Headers, _Body}} ->
-      lager:debug("Zone has not changed for ~p", [Name]),
+      %lager:debug("Zone has not changed for ~p", [Name]),
       ok;
     {ok, {{_Version, 404, _ReasonPhrase}, _Headers, _Body}} ->
       lager:debug("Zone server returned 404 for ~p, removing zone", [Url]),
@@ -100,13 +100,13 @@ websocket_handle({_Type, Msg}, _ConnState, State) ->
     [{<<"name">>, Name}, {<<"sha">>, _Sha}, {<<"url">>, Url}, {<<"action">>, Action}] ->
       case Action of
         <<"create">> ->
-          %lager:debug("Creating zone ~p", [Name]),
+          lager:debug("Creating zone ~p", [Name]),
           fetch_zone(Name, binary_to_list(Url));
         <<"update">> ->
-          %lager:debug("Updating zone ~p", [Name]),
+          lager:debug("Updating zone ~p", [Name]),
           fetch_zone(Name, binary_to_list(Url));
         <<"delete">> ->
-          %lager:debug("Deleting zone ~p", [Name]),
+          lager:debug("Deleting zone ~p", [Name]),
           erldns_zone_cache:delete_zone(Name);
         _ ->
           lager:error("Unsupported action: ~p", [Action])
