@@ -28,7 +28,7 @@ websocket_url() ->
   atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
 
 fetch_zones() ->
-  case httpc:request(get, {zones_url(), [auth_header()]}, [], [{timeout, 60 * 1000}, {request_timeout, 60 * 1000}, {body_format, binary}]) of
+  case httpc:request(get, {zones_url(), [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
       JsonZones = jsx:decode(Body),
       lager:info("Putting zones into cache"),
