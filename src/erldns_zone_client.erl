@@ -127,7 +127,11 @@ websocket_handle({_Type, Msg}, _ConnState, State) ->
 websocket_info(authenticate, _ConnState, State) ->
   EncodedCredentials = encoded_credentials(),
   %lager:debug("Authenticating with ~p", [EncodedCredentials]),
-  {reply, {text, list_to_binary("Authorization: " ++ EncodedCredentials)}, State}.
+  {reply, {text, list_to_binary("Authorization: " ++ EncodedCredentials)}, State};
+
+websocket_info(Message, _ConnState, State) ->
+  lager:debug("websocket_info(~p)", [Message]),
+  {ok, State}.
 
 websocket_terminate(_Message, _ConnState, _State) ->
   ok.
