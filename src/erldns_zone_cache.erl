@@ -13,6 +13,8 @@
     get_zone/1,
     put_zone/1,
     put_zone/2,
+    put_zone_async/1,
+    put_zone_async/2,
     delete_zone/1,
     get_authority/1,
     get_delegations/1,
@@ -72,6 +74,12 @@ put_zone({Name, Sha, Records}) ->
 
 put_zone(Name, Zone) ->
   gen_server:call(?SERVER, {put, Name, Zone}).
+
+put_zone_async({Name, Sha, Records}) ->
+  gen_server:cast(?SERVER, {put, Name, build_zone(Name, Sha, Records)}).
+
+put_zone_async(Name, Zone) ->
+  gen_server:cast(?SERVER, {put, Name, Zone}).
 
 delete_zone(Name) ->
   gen_server:cast(?SERVER, {delete, Name}).
