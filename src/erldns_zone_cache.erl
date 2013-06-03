@@ -68,13 +68,13 @@ get_zone(Name) ->
   gen_server:call(?SERVER, {get, Name}).
 
 put_zone({Name, Sha, Records}) ->
-  gen_server:call(?SERVER, {put, Name, build_zone(Name, Sha, Records)}).
+  gen_server:cast(?SERVER, {put, Name, build_zone(Name, Sha, Records)}).
 
 put_zone(Name, Zone) ->
-  gen_server:call(?SERVER, {put, Name, Zone}).
+  gen_server:cast(?SERVER, {put, Name, Zone}).
 
 delete_zone(Name) ->
-  gen_server:call(?SERVER, {delete, Name}).
+  gen_server:cast(?SERVER, {delete, Name}).
 
 get_authority(Message) when is_record(Message, dns_message) ->
   case Message#dns_message.questions of
@@ -125,14 +125,6 @@ handle_call({get_delegations, Name}, _From, State) ->
       {reply, Response, State}
   end;
 
-handle_call({put, Name, Zone}, _From, State) ->
-  ets:insert(zones, {normalize_name(Name), Zone}),
-  {reply, ok, State};
-
-handle_call({delete, Name}, _From, State) ->
-  ets:delete(zones, normalize_name(Name)),
-  {reply, ok, State};
-
 handle_call({get_authority, Name}, _From, State) ->
   find_authority(normalize_name(Name), State);
 
@@ -158,6 +150,14 @@ handle_call({in_zone, Name}, _From, State) ->
 
 handle_call({zone_names_and_shas}, _From, State) ->
   {reply, ets:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.sha}] end, [], zones), State}.
+
+handle_cast({put, Name, Zone}, State) ->
+  ets:insert(zones, {normalize_name(Name), Zone}),
+  {noreply, State};
+
+handle_cast({delete, Name}, State) ->
+  ets:delete(zones, normalize_name(Name)),
+  {noreply, State};
 
 handle_cast(_, State) ->
   {noreply, State}.
