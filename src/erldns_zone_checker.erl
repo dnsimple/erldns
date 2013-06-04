@@ -15,7 +15,7 @@
   ]).
 
 -define(SERVER, ?MODULE).
--define(CHECK_INTERVAL, 1000 * 60). % Every N seconds
+-define(CHECK_INTERVAL, 1000 * 600). % Every N seconds
 
 -record(state, {tref}).
 
@@ -23,10 +23,10 @@ start_link() ->
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 check() ->
-  check_zones(erldns_zone_cache:zone_names_and_shas()).
+  check_zones(erldns_zone_cache:zone_names_and_versions()).
 
-check_zones(NamesAndShas) ->
-  gen_server:cast(?SERVER, {check_zones, NamesAndShas}).
+check_zones(NamesAndVersions) ->
+  gen_server:cast(?SERVER, {check_zones, NamesAndVersions}).
 
 init([]) ->
   {ok, Tref} = timer:apply_interval(?CHECK_INTERVAL, ?MODULE, check, []),
@@ -35,8 +35,8 @@ init([]) ->
 handle_call(_Message, _From, State) ->
   {reply, ok, State}.
 
-handle_cast({check_zones, NamesAndShas}, State) ->
-  lists:map(fun({Name, Sha}) -> send_zone_check(Name, Sha) end, NamesAndShas),
+handle_cast({check_zones, NamesAndVersions}, State) ->
+  lists:map(fun({Name, Version}) -> send_zone_check(Name, Version) end, NamesAndVersions),
   {noreply, State}.
 
 handle_info(_Message, State) ->
@@ -50,6 +50,6 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 %% Private API
 send_zone_check(Name, Sha) ->
-  lager:debug("Sending zone check for ~p (~p)", [Name, Sha]),
+  %lager:debug("Sending zone check for ~p (~p)", [Name, Sha]),
   erldns_zone_client:check_zone(Name, Sha),
   ok.

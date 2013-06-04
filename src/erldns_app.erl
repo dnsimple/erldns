@@ -19,11 +19,11 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
 
   case application:get_env(erldns, zone_server) of
     {ok, _} ->
-      lager:info("Websocket monitor connecting"),
-      erldns_zoneserver_monitor:connect(),
       lager:info("Loading zones from remote server"),
       erldns_zoneserver_monitor:fetch_zones(),
       lager:info("Zone loading complete"),
+      lager:info("Websocket monitor connecting"),
+      erldns_zoneserver_monitor:connect(),
       ok;
     _ ->
       not_fetching

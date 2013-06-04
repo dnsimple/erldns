@@ -30,7 +30,7 @@ delay_connect() ->
   erlang:send_after(?INTERVAL, self(), connect).
 
 fetch_zones() ->
-  gen_server:call(?SERVER, fetch_zones).
+  gen_server:call(?SERVER, fetch_zones, infinity).
 
 delay_fetch_zones() ->
   erlang:send_after(?INTERVAL, self(), fetch_zones).

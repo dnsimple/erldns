@@ -13,12 +13,14 @@
     get_zone/1,
     put_zone/1,
     put_zone/2,
+    put_zone_async/1,
+    put_zone_async/2,
     delete_zone/1,
     get_authority/1,
     get_delegations/1,
     get_records_by_name/1,
     in_zone/1,
-    zone_names_and_shas/0
+    zone_names_and_versions/0
   ]).
 
 % Gen server hooks
@@ -73,8 +75,14 @@ put_zone({Name, Sha, Records}) ->
 put_zone(Name, Zone) ->
   gen_server:call(?SERVER, {put, Name, Zone}).
 
+put_zone_async({Name, Sha, Records}) ->
+  gen_server:cast(?SERVER, {put, Name, build_zone(Name, Sha, Records)}).
+
+put_zone_async(Name, Zone) ->
+  gen_server:cast(?SERVER, {put, Name, Zone}).
+
 delete_zone(Name) ->
-  gen_server:call(?SERVER, {delete, Name}).
+  gen_server:cast(?SERVER, {delete, Name}).
 
 get_authority(Message) when is_record(Message, dns_message) ->
   case Message#dns_message.questions of
@@ -99,8 +107,8 @@ get_records_by_name(Name) ->
 in_zone(Name) ->
   gen_server:call(?SERVER, {in_zone, Name}).
 
-zone_names_and_shas() ->
-  gen_server:call(?SERVER, {zone_names_and_shas}).
+zone_names_and_versions() ->
+  gen_server:call(?SERVER, {zone_names_and_versions}).
 
 %% Gen server hooks
 init([]) ->
@@ -115,6 +123,10 @@ handle_call({get, Name}, _From, State) ->
     _ -> {reply, {error, zone_not_found}, State}
   end;
 
+handle_call({put, Name, Zone}, _From, State) ->
+  ets:insert(zones, {normalize_name(Name), Zone}),
+  {reply, ok, State};
+
 handle_call({get_delegations, Name}, _From, State) ->
   case find_zone_in_cache(Name, State) of
     {ok, Zone} ->
@@ -124,14 +136,6 @@ handle_call({get_delegations, Name}, _From, State) ->
       %lager:debug("get_delegations, failed to get zone for ~p: ~p", [Name, Response]),
       {reply, Response, State}
   end;
-
-handle_call({put, Name, Zone}, _From, State) ->
-  ets:insert(zones, {normalize_name(Name), Zone}),
-  {reply, ok, State};
-
-handle_call({delete, Name}, _From, State) ->
-  ets:delete(zones, normalize_name(Name)),
-  {reply, ok, State};
 
 handle_call({get_authority, Name}, _From, State) ->
   find_authority(normalize_name(Name), State);
@@ -156,8 +160,16 @@ handle_call({in_zone, Name}, _From, State) ->
       {reply, false, State}
   end;
 
-handle_call({zone_names_and_shas}, _From, State) ->
-  {reply, ets:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.sha}] end, [], zones), State}.
+handle_call({zone_names_and_versions}, _From, State) ->
+  {reply, ets:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones), State}.
+
+handle_cast({put, Name, Zone}, State) ->
+  ets:insert(zones, {normalize_name(Name), Zone}),
+  {noreply, State};
+
+handle_cast({delete, Name}, State) ->
+  ets:delete(zones, normalize_name(Name)),
+  {noreply, State};
 
 handle_cast(_, State) ->
   {noreply, State}.
@@ -199,10 +211,10 @@ find_zone_in_cache(Qname, State) ->
       end
   end.
 
-build_zone(Qname, Sha, Records) ->
+build_zone(Qname, Version, Records) ->
   RecordsByName = build_named_index(Records),
   Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
-  #zone{name = Qname, sha = Sha, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
+  #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;
