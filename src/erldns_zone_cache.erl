@@ -20,7 +20,7 @@
     get_delegations/1,
     get_records_by_name/1,
     in_zone/1,
-    zone_names_and_shas/0
+    zone_names_and_versions/0
   ]).
 
 % Gen server hooks
@@ -107,8 +107,8 @@ get_records_by_name(Name) ->
 in_zone(Name) ->
   gen_server:call(?SERVER, {in_zone, Name}).
 
-zone_names_and_shas() ->
-  gen_server:call(?SERVER, {zone_names_and_shas}).
+zone_names_and_versions() ->
+  gen_server:call(?SERVER, {zone_names_and_versions}).
 
 %% Gen server hooks
 init([]) ->
@@ -160,8 +160,8 @@ handle_call({in_zone, Name}, _From, State) ->
       {reply, false, State}
   end;
 
-handle_call({zone_names_and_shas}, _From, State) ->
-  {reply, ets:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.sha}] end, [], zones), State}.
+handle_call({zone_names_and_versions}, _From, State) ->
+  {reply, ets:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones), State}.
 
 handle_cast({put, Name, Zone}, State) ->
   ets:insert(zones, {normalize_name(Name), Zone}),
@@ -211,10 +211,10 @@ find_zone_in_cache(Qname, State) ->
       end
   end.
 
-build_zone(Qname, Sha, Records) ->
+build_zone(Qname, Version, Records) ->
   RecordsByName = build_named_index(Records),
   Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
-  #zone{name = Qname, sha = Sha, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
+  #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;

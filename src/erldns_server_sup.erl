@@ -25,7 +25,7 @@ init(_Args) ->
   ],
 
   CheckerProcs = [
-    ?CHILD(erldns_zone_checker, worker, [])
+    %?CHILD(erldns_zone_checker, worker, [])
   ],
 
   {ok, {{one_for_one, 20, 10}, ServerProcs ++ CheckerProcs}}.

@@ -59,6 +59,8 @@ process_json_zone(JsonZone, 'call') ->
   erldns_zone_cache:put_zone(Zone);
 process_json_zone(JsonZone, 'cast') ->
   Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
+  {Name, Version, _Records} = Zone,
+  lager:debug("Put zone async: ~p (~p)", [Name, Version]),
   erldns_zone_cache:put_zone_async(Zone).
 
 
@@ -79,14 +81,14 @@ fetch_zone(Name, Url) ->
 
 check_zone(_Name, []) ->
   ok;
-check_zone(Name, Sha) ->
-  check_zone(Name, Sha, zone_check_url(Name, Sha)).
+check_zone(Name, Version) ->
+  check_zone(Name, Version, zone_check_url(Name, Version)).
 
-check_zone(Name, _Sha, Url) ->
+check_zone(Name, Version, Url) ->
   %lager:debug("check_zone(~p) (url: ~p)", [Name, Url]),
   case httpc:request(head, {Url, [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, _Body}} ->
-      lager:debug("Zone appears to have changed for ~p", [Name]),
+      lager:debug("Zone appears to have changed for ~p (~p)", [Name, Version]),
       ok;
     {ok, {{_Version, 304, _ReasonPhrase}, _Headers, _Body}} ->
       %lager:debug("Zone has not changed for ~p", [Name]),
@@ -110,7 +112,7 @@ websocket_handle({_Type, Msg}, _ConnState, State) ->
   ZoneNotification = jsx:decode(Msg),
   lager:debug("Zone notification received: ~p", [ZoneNotification]),
   case ZoneNotification of
-    [{<<"name">>, Name}, {<<"sha">>, _Sha}, {<<"url">>, Url}, {<<"action">>, Action}] ->
+    [{<<"name">>, Name}, {<<"sha">>, _Version}, {<<"url">>, Url}, {<<"action">>, Action}] ->
       case Action of
         <<"create">> ->
           lager:debug("Creating zone ~p", [Name]),
@@ -177,8 +179,8 @@ zones_url() ->
 zone_url(Name) ->
   zones_url() ++ binary_to_list(Name).
 
-zone_check_url(Name, Sha) ->
-  zones_url() ++ binary_to_list(Name) ++ "/" ++ binary_to_list(Sha).
+zone_check_url(Name, Version) ->
+  zones_url() ++ binary_to_list(Name) ++ "/" ++ binary_to_list(Version).
 
 encoded_credentials() ->
   case application:get_env(erldns, credentials) of

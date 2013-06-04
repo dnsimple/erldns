@@ -8,7 +8,7 @@
 
 -record(zone, {
     name,
-    sha,
+    version,
     authority = [],
     record_count = 0,
     records = [],
