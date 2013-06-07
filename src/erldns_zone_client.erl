@@ -10,7 +10,7 @@
     websocket_url/0,
     fetch_zones/0,
     fetch_zone/1,
-    check_zone/2
+    fetch_zone/2
   ]).
 
 % Websocket callbacks
@@ -44,6 +44,27 @@ fetch_zones() ->
       {err, Error}
   end.
 
+fetch_zone(Name) ->
+  do_fetch_zone(Name, zone_url(Name)).
+
+fetch_zone(Name, Sha) ->
+  do_fetch_zone(Name, zone_url(Name, Sha)).
+
+do_fetch_zone(Name, Url) ->
+  case httpc:request(get, {Url, [auth_header()]}, [], [{body_format, binary}]) of
+    {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
+      safe_process_json_zone(jsx:decode(Body), 'cast');
+    {_, {{_Version, Status = 304, ReasonPhrase}, _Headers, _Body}} ->
+      %lager:debug("Zone not modified: ~p", [Name]),
+      {ok, Status, ReasonPhrase};
+    {_, {{_Version, Status = 404, ReasonPhrase}, _Headers, _Body}} ->
+      erldns_zone_cache:delete_zone(Name),
+      {err, Status, ReasonPhrase};
+    {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
+      lager:error("Failed to load zone: ~p (status: ~p)", [ReasonPhrase, Status]),
+      {err, Status, ReasonPhrase}
+  end.
+
 safe_process_json_zone(JsonZone) ->
   safe_process_json_zone(JsonZone, 'call').
 safe_process_json_zone(JsonZone, MessageType) ->
@@ -63,45 +84,6 @@ process_json_zone(JsonZone, 'cast') ->
   lager:debug("Put zone async: ~p (~p)", [Name, Version]),
   erldns_zone_cache:put_zone_async(Zone).
 
-
-fetch_zone(Name) ->
-  fetch_zone(Name,  zone_url(Name)).
-
-fetch_zone(Name, Url) ->
-  case httpc:request(get, {Url, [auth_header()]}, [], [{body_format, binary}]) of
-    {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
-      safe_process_json_zone(jsx:decode(Body), 'cast');
-    {_, {{_Version, Status = 404, ReasonPhrase}, _Headers, _Body}} ->
-      erldns_zone_cache:delete_zone(Name),
-      {err, Status, ReasonPhrase};
-    {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
-      lager:error("Failed to load zone: ~p (status: ~p)", [ReasonPhrase, Status]),
-      {err, Status, ReasonPhrase}
-  end.
-
-check_zone(_Name, []) ->
-  ok;
-check_zone(Name, Version) ->
-  check_zone(Name, Version, zone_check_url(Name, Version)).
-
-check_zone(Name, Version, Url) ->
-  %lager:debug("check_zone(~p) (url: ~p)", [Name, Url]),
-  case httpc:request(head, {Url, [auth_header()]}, [], [{body_format, binary}]) of
-    {ok, {{_Version, 200, _ReasonPhrase}, _Headers, _Body}} ->
-      lager:debug("Zone appears to have changed for ~p (~p)", [Name, Version]),
-      ok;
-    {ok, {{_Version, 304, _ReasonPhrase}, _Headers, _Body}} ->
-      %lager:debug("Zone has not changed for ~p", [Name]),
-      ok;
-    {ok, {{_Version, 404, _ReasonPhrase}, _Headers, _Body}} ->
-      lager:debug("Zone server returned 404 for ~p, removing zone", [Url]),
-      erldns_zone_cache:delete_zone(Name),
-      ok;
-    {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
-      lager:error("Failed to send zone check for ~p: ~p (status: ~p)", [Name, ReasonPhrase, Status]),
-      {err, Status, ReasonPhrase}
-  end.
-
 % Websocket Callbacks
 
 init([], _ConnState) ->
@@ -116,10 +98,10 @@ websocket_handle({_Type, Msg}, _ConnState, State) ->
       case Action of
         <<"create">> ->
           lager:debug("Creating zone ~p", [Name]),
-          fetch_zone(Name, binary_to_list(Url));
+          do_fetch_zone(Name, binary_to_list(Url));
         <<"update">> ->
           lager:debug("Updating zone ~p", [Name]),
-          fetch_zone(Name, binary_to_list(Url));
+          do_fetch_zone(Name, binary_to_list(Url));
         <<"delete">> ->
           lager:debug("Deleting zone ~p", [Name]),
           erldns_zone_cache:delete_zone(Name);
@@ -179,7 +161,7 @@ zones_url() ->
 zone_url(Name) ->
   zones_url() ++ binary_to_list(Name).
 
-zone_check_url(Name, Version) ->
+zone_url(Name, Version) ->
   zones_url() ++ binary_to_list(Name) ++ "/" ++ binary_to_list(Version).
 
 encoded_credentials() ->

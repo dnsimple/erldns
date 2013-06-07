@@ -50,6 +50,11 @@ handle_call(fetch_zones, _From, State) ->
 handle_cast(_, State) ->
   {noreply, State}.
 
+handle_info({'EXIT', _Pid, normal}, State) ->
+  lager:info("Websocket terminated normally, retrying in ~p seconds", [?INTERVAL / 1000]),
+  delay_connect(),
+  {noreply, State};
+
 handle_info({'EXIT', _Pid, {shutdown,{failed_to_start_child,websocket_client,econnrefused}}}, State) ->
   lager:info("Websocket failed to connect: connection was refused, retrying in ~p seconds", [?INTERVAL / 1000]),
   delay_connect(), 

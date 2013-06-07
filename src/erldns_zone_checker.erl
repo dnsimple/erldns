@@ -23,7 +23,9 @@ start_link() ->
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 check() ->
-  check_zones(erldns_zone_cache:zone_names_and_versions()).
+  NamesAndVersions = erldns_zone_cache:zone_names_and_versions(),
+  lager:debug("Running zone check on ~p zones", [length(NamesAndVersions)]),
+  check_zones(NamesAndVersions).
 
 check_zones(NamesAndVersions) ->
   gen_server:cast(?SERVER, {check_zones, NamesAndVersions}).
@@ -51,5 +53,8 @@ code_change(_PreviousVersion, State, _Extra) ->
 %% Private API
 send_zone_check(Name, Sha) ->
   %lager:debug("Sending zone check for ~p (~p)", [Name, Sha]),
-  erldns_zone_client:check_zone(Name, Sha),
+  case Sha of
+    [] -> lager:debug("Skipping check of ~p", [Name]);
+    _ -> erldns_zone_client:fetch_zone(Name, Sha)
+  end,
   ok.
