@@ -65,6 +65,11 @@ handle_info({'EXIT', _Pid, shutdown}, State) ->
   delay_connect(), 
   {noreply, State};
 
+handle_info({'EXIT', _Pid, {error, close}}, State) ->
+  lager:info("Websocket closed connection, retrying in ~p seconds", [?INTERVAL / 1000]),
+  delay_connect(),
+  {noreply, State};
+
 handle_info(connect, State) ->
   do_connect(),
   {noreply, State};
