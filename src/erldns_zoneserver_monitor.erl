@@ -70,6 +70,11 @@ handle_info({'EXIT', _Pid, {error, close}}, State) ->
   delay_connect(),
   {noreply, State};
 
+handle_info({'EXIT', _Pid, Message}, State) ->
+  lager:error("Unknown error: ~p, retrying in ~p seconds", [Message, ?INTERVAL / 1000]),
+  delay_connect(),
+  {noreply, State};
+
 handle_info(connect, State) ->
   do_connect(),
   {noreply, State};
