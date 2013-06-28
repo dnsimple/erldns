@@ -62,7 +62,10 @@ do_fetch_zone(Name, Url) ->
       {err, Status, ReasonPhrase};
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
       lager:error("Failed to load zone: ~p (status: ~p)", [ReasonPhrase, Status]),
-      {err, Status, ReasonPhrase}
+      {err, Status, ReasonPhrase};
+    {error, Reason} ->
+      lager:error("Failed to load zone due to server error: ~p", [Reason]),
+      {err, Reason}
   end.
 
 safe_process_json_zone(JsonZone) ->
