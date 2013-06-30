@@ -1,12 +1,12 @@
 {application,erldns,
              [{description,"Erlang Authoritative DNS Server"},
-              {vsn,"5d91308"},
+              {vsn,"d2d5299"},
               {mod,{erldns_app,[]}},
               {applications,[kernel,stdlib,inets,crypto,ssl]},
               {start_phases,[{post_start,[]}]},
               {modules,[erldns,erldns_app,erldns_axfr,erldns_config,
                         erldns_dnssec,erldns_edns,erldns_encoder,
-                        erldns_handler,erldns_metrics,erldns_packet_cache,
+                        erldns_handler,erldns_packet_cache,
                         erldns_query_throttle,erldns_records,erldns_resolver,
                         erldns_server_sup,erldns_sup,erldns_tcp_server,
                         erldns_txt,erldns_udp_server,erldns_websocket_sup,
@@ -14,4 +14,4 @@
                         erldns_zone_client,erldns_zone_loader,
                         erldns_zone_parser,erldns_zoneserver_monitor,
                         gen_nb_server,sample_custom_handler,
-                        sample_custom_zone_parser,stathat]}]}.
+                        sample_custom_zone_parser]}]}.
