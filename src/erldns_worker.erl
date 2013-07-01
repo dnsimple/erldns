@@ -48,7 +48,9 @@ handle_tcp_dns_query(Socket, Packet) ->
           %lager:info("received bad request from ~p", [Address]);
           ok;
         DecodedMessage ->
+          erldns_events:notify({start_handle, tcp, [{host, Address}]}),
           Response = erldns_handler:handle(DecodedMessage, Address),
+          erldns_events:notify({end_handle, tcp, [{host, Address}]}),
           case erldns_encoder:encode_message(Response) of
             {false, EncodedMessage} ->
               send_tcp_message(Socket, EncodedMessage);
@@ -84,7 +86,9 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
       %lager:debug("formerr bad request from ~p", [Host]);
       ok;
     DecodedMessage ->
+      erldns_events:notify({start_handle, udp, [{host, Host}]}),
       Response = erldns_handler:handle(DecodedMessage, Host),
+      erldns_events:notify({end_handle, udp, [{host, Host}]}),
       case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
         {false, EncodedMessage} -> gen_udp:send(Socket, Host, Port, EncodedMessage);
         {true, EncodedMessage, Message} when is_record(Message, dns_message)->

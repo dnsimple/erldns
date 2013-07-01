@@ -29,6 +29,8 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
       not_fetching
   end,
 
+  erldns_events:add_handler(erldns_event_logger),
+
   % Start up the UDP and TCP servers now
   erldns_server_sup:start_link(),
 
