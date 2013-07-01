@@ -67,20 +67,28 @@ handle(BadMessage, Host) ->
 handle(Message, Host, {throttled, Host, _ReqCount}) ->
   %lager:debug("Throttled ANY query for ~p. (req count: ~p)", [Host, ReqCount]),
   Message#dns_message{rc = ?DNS_RCODE_REFUSED};
+
 %% Message was not throttled, so handle it, then do EDNS handling, optionally
 %% append the SOA record if it is a zone transfer and complete the response
 %% by filling out count-related header fields.
 handle(Message, Host, _) ->
   %lager:debug("Questions: ~p", [Message#dns_message.questions]),
+  erldns_events:notify({start_handle, [{host, Host}, {message, Message}]}),
   NewMessage = handle_message(Message, Host),
-  complete_response(erldns_axfr:optionally_append_soa(erldns_edns:handle(NewMessage))).
+  Response = complete_response(erldns_axfr:optionally_append_soa(erldns_edns:handle(NewMessage))),
+  erldns_events:notify({end_handle, [{host, Host}, {message, Message}, {response, Response}]}),
+  Response.
 
 %% Handle the message by hitting the packet cache and either
 %% using the cached packet or continuing with the lookup process.
 handle_message(Message, Host) ->
   case erldns_packet_cache:get(Message#dns_message.questions, Host) of
-    {ok, CachedResponse} -> CachedResponse#dns_message{id=Message#dns_message.id};
-    {error, _} -> handle_packet_cache_miss(Message, get_authority(Message), Host) % SOA lookup
+    {ok, CachedResponse} ->
+      erldns_events:notify({packet_cache_hit, [{host, Host}, {message, Message}]}),
+      CachedResponse#dns_message{id=Message#dns_message.id};
+    {error, Reason} ->
+      erldns_events:notify({packet_cache_miss, [{reason, Reason}, {host, Host}, {message, Message}]}),
+      handle_packet_cache_miss(Message, get_authority(Message), Host) % SOA lookup
   end.
 
 %% If the packet is not in the cache and we are not authoritative, then answer
@@ -92,14 +100,16 @@ handle_packet_cache_miss(Message, [], _Host) ->
 %% The packet is not in the cache yet we are authoritative, so try to resolve
 %% the request.
 handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
-  handle_packet_cache_miss(Message#dns_message{ra = false}, AuthorityRecords, Host, Message#dns_message.aa).
+  safe_handle_packet_cache_miss(Message#dns_message{ra = false}, AuthorityRecords, Host).
 
-handle_packet_cache_miss(Message, AuthorityRecords, Host, Authoritative) ->
+safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
   case application:get_env(erldns, catch_exceptions) of
-    {ok, false} -> maybe_cache_packet(erldns_resolver:resolve(Message, AuthorityRecords, Host), Authoritative);
+    {ok, false} ->
+      Response = erldns_resolver:resolve(Message, AuthorityRecords, Host),
+      maybe_cache_packet(Response, Response#dns_message.aa);
     _ ->
       try erldns_resolver:resolve(Message, AuthorityRecords, Host) of
-        Response -> maybe_cache_packet(Response, Authoritative)
+        Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
         Exception:Reason ->
           lager:error("Error answering request: ~p (~p)", [Exception, Reason]),

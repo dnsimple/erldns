@@ -55,13 +55,10 @@ handle_tcp_dns_query(Socket, Packet) ->
             {false, EncodedMessage} ->
               send_tcp_message(Socket, EncodedMessage);
             {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-              %lager:debug("Leftover: ~p", [Message]),
               send_tcp_message(Socket, EncodedMessage);
             {false, EncodedMessage, _TsigMac} ->
-              %lager:debug("TSIG mac: ~p", [TsigMac]),
               send_tcp_message(Socket, EncodedMessage);
             {true, EncodedMessage, _TsigMac, _Message} ->
-              %lager:debug("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
               send_tcp_message(Socket, EncodedMessage)
           end
       end
@@ -77,31 +74,24 @@ send_tcp_message(Socket, EncodedMessage) ->
 %% Handle DNS query that comes in over UDP
 handle_udp_dns_query(Socket, Host, Port, Bin) ->
   %lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
-  %% TODO: measure
+  erldns_events:notify({start_udp, [{host, Host}]}),
   case dns:decode_message(Bin) of
-    {truncated, _} -> 
-      %lager:debug("received bad request from ~p", [Host]);
-      ok;
-    {formerr, _, _} -> 
-      %lager:debug("formerr bad request from ~p", [Host]);
-      ok;
+    {truncated, _} -> ok;
+    {formerr, _, _} -> ok;
     DecodedMessage ->
-      erldns_events:notify({start_handle, udp, [{host, Host}]}),
       Response = erldns_handler:handle(DecodedMessage, Host),
-      erldns_events:notify({end_handle, udp, [{host, Host}]}),
       case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
         {false, EncodedMessage} -> gen_udp:send(Socket, Host, Port, EncodedMessage);
         {true, EncodedMessage, Message} when is_record(Message, dns_message)->
-          %lager:debug("Leftover: ~p", [Message]),
           gen_udp:send(Socket, Host, Port, EncodedMessage);
         {false, EncodedMessage, _TsigMac} ->
-          %lager:debug("TSIG mac: ~p", [TsigMac]),
           gen_udp:send(Socket, Host, Port, EncodedMessage);
         {true, EncodedMessage, _TsigMac, _Message} ->
-          %lager:debug("TSIG mac: ~p; Leftover: ~p", [TsigMac, Message]),
           gen_udp:send(Socket, Host, Port, EncodedMessage)
       end
-  end.
+  end,
+  erldns_events:notify({end_udp, [{host, Host}]}),
+  ok.
 
 %% Determine the max payload size by looking for additional
 %% options passed by the client.

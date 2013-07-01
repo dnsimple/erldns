@@ -47,13 +47,15 @@ handle_call({get_packet, Question, _Host}, _From, State) ->
     [{Question, {Response, ExpiresAt}}] ->
       {_,T,_} = erlang:now(),
       case T > ExpiresAt of
-        true -> 
+        true ->
           {reply, {error, cache_expired}, State};
         false ->
           {reply, {ok, Response}, State}
       end;
-    _ -> {reply, {error, cache_miss}, State}
+    _ ->
+      {reply, {error, cache_miss}, State}
   end;
+
 handle_call({set_packet, [Question, Response]}, _From, State) ->
   {_,T,_} = erlang:now(),
   ets:insert(packet_cache, {Question, {Response, T + State#state.ttl}}),
