@@ -34,6 +34,8 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
   % Start up the UDP and TCP servers now
   erldns_server_sup:start_link(),
 
+  erldns_events:notify(servers_started),
+
   ok.
 
 stop(_State) ->
