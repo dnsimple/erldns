@@ -37,7 +37,7 @@ handle_info(timeout, State) ->
   %lager:info("UDP instance timed out"),
   {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
-  Response = handle_request(Socket, Host, Port, Bin, State),
+  Response = folsom_metrics:histogram_timed_update(udp_handoff_histogram, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]),
   inet:setopts(State#state.socket, [{active, once}]),
   Response;
 handle_info(_Message, State) ->

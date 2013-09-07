@@ -52,11 +52,22 @@ get_metrics() ->
     end, folsom_metrics:get_metrics()).
 
 get_stats() ->
-  folsom_metrics:get_histogram_statistics(request_handled_histogram).
+  Histograms = [udp_handoff_histogram, tcp_handoff_histogram, request_handled_histogram],
+  lists:map(
+    fun(Name) ->
+        {Name, folsom_metrics:get_histogram_statistics(Name)}
+    end, Histograms).
 
 define_metrics() ->
+  folsom_metrics:new_histogram(udp_handoff_histogram),
+  folsom_metrics:new_histogram(tcp_handoff_histogram),
+
   folsom_metrics:new_counter(request_throttled_counter),
   folsom_metrics:new_meter(request_throttled_meter),
   folsom_metrics:new_histogram(request_handled_histogram),
+
+  folsom_metrics:new_meter(cache_hit_meter),
+  folsom_metrics:new_meter(cache_expired_meter),
+  folsom_metrics:new_meter(cache_miss_meter),
 
   folsom_metrics:get_metrics().

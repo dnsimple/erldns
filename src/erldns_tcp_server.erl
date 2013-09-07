@@ -15,6 +15,9 @@
     code_change/3
   ]).
 
+% Internal API
+-export([handle_request/2]).
+
 -define(SERVER, ?MODULE).
 
 -record(state, {port, socket}).
@@ -33,9 +36,7 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Message, State) ->
   {noreply, State}.
 handle_info({tcp, Socket, Bin}, State) ->
-  poolboy:transaction(tcp_worker_pool, fun(Worker) ->
-    gen_server:call(Worker, {tcp_query, Socket, Bin})
-  end),
+  folsom_metrics:histogram_timed_update(tcp_handoff_histogram, ?MODULE, handle_request, [Socket, Bin]),
   {noreply, State};
 handle_info(_Message, State) ->
   {noreply, State}.
@@ -49,4 +50,7 @@ new_connection(Socket, State) ->
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
-
+handle_request(Socket, Bin) ->
+  poolboy:transaction(tcp_worker_pool, fun(Worker) ->
+    gen_server:call(Worker, {tcp_query, Socket, Bin})
+  end).

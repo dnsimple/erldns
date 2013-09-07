@@ -48,11 +48,14 @@ handle_call({get_packet, Question, _Host}, _From, State) ->
       {_,T,_} = erlang:now(),
       case T > ExpiresAt of
         true ->
+          folsom_metrics:notify(cache_expired_meter, 1),
           {reply, {error, cache_expired}, State};
         false ->
+          folsom_metrics:notify(cache_hit_meter, 1),
           {reply, {ok, Response}, State}
       end;
     _ ->
+      folsom_metrics:notify(cache_miss_meter, 1),
       {reply, {error, cache_miss}, State}
   end;
 
