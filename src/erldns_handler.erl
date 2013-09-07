@@ -1,10 +1,15 @@
 -module(erldns_handler).
+
+%% This module handles a single DNS question.
+
 -behavior(gen_server).
 
 -include("dns.hrl").
 -include("erldns.hrl").
 
 -export([start_link/0, register_handler/2, get_handlers/0, handle/2]).
+
+-export([do_handle/2]).
 
 % Gen server hooks
 -export([init/1,
@@ -65,7 +70,8 @@ handle(BadMessage, Host) ->
 %% We throttle ANY queries to discourage use of our authoritative name servers
 %% for reflection attacks.
 handle(Message, Host, {throttled, Host, _ReqCount}) ->
-  %lager:debug("Throttled ANY query for ~p. (req count: ~p)", [Host, ReqCount]),
+  folsom_metrics:notify({request_throttled_counter, {inc, 1}}),
+  folsom_metrics:notify({request_throttled_meter, 1}),
   Message#dns_message{rc = ?DNS_RCODE_REFUSED};
 
 %% Message was not throttled, so handle it, then do EDNS handling, optionally
@@ -74,10 +80,13 @@ handle(Message, Host, {throttled, Host, _ReqCount}) ->
 handle(Message, Host, _) ->
   %lager:debug("Questions: ~p", [Message#dns_message.questions]),
   erldns_events:notify({start_handle, [{host, Host}, {message, Message}]}),
-  NewMessage = handle_message(Message, Host),
-  Response = complete_response(erldns_axfr:optionally_append_soa(erldns_edns:handle(NewMessage))),
+  Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, Host]),
   erldns_events:notify({end_handle, [{host, Host}, {message, Message}, {response, Response}]}),
   Response.
+
+do_handle(Message, Host) ->
+  NewMessage = handle_message(Message, Host),
+  complete_response(erldns_axfr:optionally_append_soa(erldns_edns:handle(NewMessage))).
 
 %% Handle the message by hitting the packet cache and either
 %% using the cached packet or continuing with the lookup process.

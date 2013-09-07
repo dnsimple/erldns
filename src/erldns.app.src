@@ -2,6 +2,6 @@
  [{description, "Erlang Authoritative DNS Server"},
   {vsn, git},
   {mod, { erldns_app, []}},
-  {applications, [kernel, stdlib, inets, crypto, ssl]},
+  {applications, [kernel, stdlib, inets, crypto, ssl, folsom]},
   {start_phases, [{post_start, []}]}
   ]}.

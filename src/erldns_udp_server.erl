@@ -60,6 +60,9 @@ start(Port, InetFamily) ->
       {error, eacces}
   end.
 
+%% This function executes in a single process and thus
+%% must return very fast. The execution time of this function
+%% will determine the overall QPS of the system.
 handle_request(Socket, Host, Port, Bin, State) ->
   case queue:out(State#state.workers) of
     {{value, Worker}, Queue} ->

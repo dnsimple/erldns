@@ -4,7 +4,10 @@
 % Application hooks
 -export([start/2, start_phase/3, stop/1]).
 
+-export([get_metrics/0, get_stats/0]).
+
 start(_Type, _Args) ->
+  define_metrics(),
   random:seed(erlang:now()),
   erldns_sup:start_link().
 
@@ -41,3 +44,19 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
 stop(_State) ->
   lager:info("Stop erldns application"),
   ok.
+
+get_metrics() ->
+  lists:map(
+    fun(Name) ->
+        {Name, folsom_metrics:get_metric_value(Name)}
+    end, folsom_metrics:get_metrics()).
+
+get_stats() ->
+  folsom_metrics:get_histogram_statistics(request_handled_histogram).
+
+define_metrics() ->
+  folsom_metrics:new_counter(request_throttled_counter),
+  folsom_metrics:new_meter(request_throttled_meter),
+  folsom_metrics:new_histogram(request_handled_histogram),
+
+  folsom_metrics:get_metrics().

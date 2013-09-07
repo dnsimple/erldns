@@ -45,7 +45,7 @@ handle_tcp_dns_query(Socket, Packet) ->
     _ ->
       case dns:decode_message(Bin) of
         {truncated, _} -> 
-          %lager:info("received bad request from ~p", [Address]);
+          lager:info("received truncated request from ~p", [Address]),
           ok;
         DecodedMessage ->
           erldns_events:notify({start_handle, tcp, [{host, Address}]}),
