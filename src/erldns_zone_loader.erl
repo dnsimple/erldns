@@ -1,6 +1,6 @@
 -module(erldns_zone_loader).
 
--export([load_zones/0]).
+-export([load_zones/0, load_remote_zones/0]).
 
 -define(FILENAME, "zones.json").
 
@@ -22,8 +22,14 @@ load_zones() ->
       {err, Reason}
   end.
 
+
 filename() ->
   case application:get_env(erldns, zones) of
     {ok, Filename} -> Filename;
     _ -> ?FILENAME
   end.
+
+load_remote_zones() ->
+  {T, _} = timer:tc(erldns_zoneserver_monitor, fetch_zones, []),
+  folsom_metrics:notify({load_remote_zones_history, T}),
+  ok.

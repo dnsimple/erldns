@@ -91,3 +91,5 @@ Folsom is used to gather runtime metrics and statistics. There is an HTTP server
 ```sh
 curl -s http://localhost:8082/ -H "Accept: application/json" | python -mjson.tool
 ```
+
+Note that timing stats are givin in microseconds.

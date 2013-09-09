@@ -4,7 +4,7 @@
 
 -export([start_link/0]).
 
--export([setup/0, metrics/0, stats/0, filtered_stats/0]).
+-export([setup/0, metrics/0, stats/0, filtered_metrics/0, filtered_stats/0]).
 
 -define(DEFAULT_PORT, 8082).
 
@@ -33,6 +33,8 @@ setup() ->
   folsom_metrics:new_meter(cache_expired_meter),
   folsom_metrics:new_meter(cache_miss_meter),
 
+  folsom_metrics:new_history(load_remote_zones_history),
+
   folsom_metrics:get_metrics().
 
 metrics() ->
@@ -40,6 +42,9 @@ metrics() ->
     fun(Name) ->
         {Name, folsom_metrics:get_metric_value(Name)}
     end, folsom_metrics:get_metrics()).
+
+filtered_metrics() ->
+  filter_metrics(metrics()).
 
 stats() ->
   Histograms = [udp_handoff_histogram, tcp_handoff_histogram, request_handled_histogram],
@@ -50,6 +55,27 @@ stats() ->
 
 filtered_stats() ->
   filter_stats(stats()).
+
+% Functions to clean up metrics so they can be returned as JSON.
+filter_metrics(Metrics) ->
+  filter_metrics(Metrics, []).
+
+filter_metrics([], FilteredMetrics) ->
+  FilteredMetrics;
+filter_metrics([{Name, History = [{Timestamp, _Values}|_Rest]}|Rest], FilteredMetrics) when is_number(Timestamp) ->
+  filter_metrics(Rest, FilteredMetrics ++ [{Name, filter_history_entries(History)}]);
+filter_metrics([{Name, Metrics}|Rest], FilteredMetrics) ->
+  filter_metrics(Rest, FilteredMetrics ++ [{Name, Metrics}]).
+
+filter_history_entries(HistoryEntries) ->
+  filter_history_entries(HistoryEntries, []).
+filter_history_entries([], FilteredHistoryEntries) ->
+  FilteredHistoryEntries;
+filter_history_entries([{Timestamp, Values}|Rest], FilteredHistoryEntries) ->
+  filter_history_entries(Rest, FilteredHistoryEntries ++ [filter_history_entry(Timestamp, Values)]).
+
+filter_history_entry(Timestamp, Values) ->
+  [{<<"timestamp">>, Timestamp}, {<<"values">>, lists:map(fun({event, Value}) -> Value end, Values)}].
 
 % Functions to clean up the stats so they can be returned as JSON.
 filter_stats(Stats) ->

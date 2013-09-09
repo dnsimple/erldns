@@ -23,7 +23,7 @@ to_text(Req, State) ->
 to_json(Req, State) ->
   Body = jsx:encode([{<<"erldns">>, 
         [
-          {<<"metrics">>, erldns_metrics:metrics()},
+          {<<"metrics">>, erldns_metrics:filtered_metrics()},
           {<<"stats">>, erldns_metrics:filtered_stats()}
         ]
       }]),

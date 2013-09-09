@@ -227,7 +227,3 @@ build_named_index([R|Rest], Idx) ->
 
 normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
 normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
-
-%% Various matching functions.
-
-
