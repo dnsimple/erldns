@@ -83,3 +83,11 @@ erldns_zone_cache:put_zone({
     }
   ]}).
 ```
+
+## Metrics
+
+Folsom is used to gather runtime metrics and statistics. There is an HTTP server included that produces a JSON report containing these metrics. Here's an example script that shows how to get the output with curl and pass through Python to format it in a pretty fashion.
+
+```sh
+curl -s http://localhost:8082/ -H "Accept: application/json" | python -mjson.tool
+```

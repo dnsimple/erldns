@@ -32,6 +32,7 @@ init(_Args) ->
     ?CHILD(erldns_packet_cache, worker, []),
     ?CHILD(erldns_query_throttle, worker, []),
     ?CHILD(erldns_handler, worker, []),
+    ?CHILD(erldns_metrics, worker, []),
 
     ?CHILD(sample_custom_handler, worker, [])
   ],

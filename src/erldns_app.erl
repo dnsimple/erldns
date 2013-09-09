@@ -4,7 +4,7 @@
 % Application hooks
 -export([start/2, start_phase/3, stop/1]).
 
--export([get_metrics/0, get_stats/0]).
+-export([metrics/0, stats/0]).
 
 start(_Type, _Args) ->
   define_metrics(),
@@ -45,13 +45,13 @@ stop(_State) ->
   lager:info("Stop erldns application"),
   ok.
 
-get_metrics() ->
+metrics() ->
   lists:map(
     fun(Name) ->
         {Name, folsom_metrics:get_metric_value(Name)}
     end, folsom_metrics:get_metrics()).
 
-get_stats() ->
+stats() ->
   Histograms = [udp_handoff_histogram, tcp_handoff_histogram, request_handled_histogram],
   lists:map(
     fun(Name) ->

@@ -8,4 +8,6 @@ start() ->
   ssl:start(),
   lager:start(),
   folsom:start(),
+  application:start(ranch),
+  application:start(cowboy),
   application:start(erldns).
