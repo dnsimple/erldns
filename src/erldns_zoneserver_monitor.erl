@@ -51,26 +51,31 @@ handle_cast(_, State) ->
   {noreply, State}.
 
 handle_info({'EXIT', _Pid, normal}, State) ->
+  folsom_metrics:notify(websocket_connection_terminated_meter, 1),
   lager:info("Websocket terminated normally, retrying in ~p seconds", [?INTERVAL / 1000]),
   delay_connect(),
   {noreply, State};
 
 handle_info({'EXIT', _Pid, {shutdown,{failed_to_start_child,websocket_client,econnrefused}}}, State) ->
+  folsom_metrics:notify(websocket_connection_refused_meter, 1),
   lager:info("Websocket failed to connect: connection was refused, retrying in ~p seconds", [?INTERVAL / 1000]),
   delay_connect(), 
   {noreply, State};
 
 handle_info({'EXIT', _Pid, shutdown}, State) ->
+  folsom_metrics:notify(websocket_connection_failed_meter, 1),
   lager:info("Websocket connection failed, retrying in ~p seconds", [?INTERVAL / 1000]),
   delay_connect(), 
   {noreply, State};
 
 handle_info({'EXIT', _Pid, {error, close}}, State) ->
+  folsom_metrics:notify(websocket_connection_closed_meter, 1),
   lager:info("Websocket closed connection, retrying in ~p seconds", [?INTERVAL / 1000]),
   delay_connect(),
   {noreply, State};
 
 handle_info({'EXIT', _Pid, Message}, State) ->
+  folsom_metrics:notify(websocket_connection_error_meter, 1),
   lager:error("Unknown error: ~p, retrying in ~p seconds", [Message, ?INTERVAL / 1000]),
   delay_connect(),
   {noreply, State};
@@ -100,6 +105,7 @@ do_connect() ->
 do_fetch_zones() ->
   case erldns_zone_client:fetch_zones() of
     {err, Error} ->
+      folsom_metrics:notify(fetch_zones_error_meter, 1),
       lager:error("Failed to fetch zones: ~p, retrying in ~p seconds", [Error, ?INTERVAL / 1000]),
       delay_fetch_zones();
     Result -> 
