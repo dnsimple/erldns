@@ -93,3 +93,11 @@ curl -s http://localhost:8082/ -H "Accept: application/json" | python -mjson.too
 ```
 
 Note that timing stats are givin in microseconds.
+
+## Admin
+
+There is a simple administrative API for querying the current zone cache.
+
+```sh
+curl -s http://localhost:8083/ -H "Accept: application/json" | python -mjson.tool
+```

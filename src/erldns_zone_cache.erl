@@ -11,6 +11,7 @@
 -export(
   [
     get_zone/1,
+    get_zone_with_records/1,
     put_zone/1,
     put_zone/2,
     put_zone_async/1,
@@ -69,6 +70,9 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
 get_zone(Name) ->
   gen_server:call(?SERVER, {get, Name}).
 
+get_zone_with_records(Name) ->
+  gen_server:call(?SERVER, {get_zone_with_records, Name}).
+
 put_zone({Name, Sha, Records}) ->
   gen_server:call(?SERVER, {put, Name, build_zone(Name, Sha, Records)}).
 
@@ -120,6 +124,13 @@ handle_call({get, Name}, _From, State) ->
   NormalizedName = normalize_name(Name),
   case ets:lookup(zones, NormalizedName) of
     [{NormalizedName, Zone}] -> {reply, {ok, Zone#zone{name = NormalizedName, records = [], records_by_name=trimmed}}, State};
+    _ -> {reply, {error, zone_not_found}, State}
+  end;
+
+handle_call({get_zone_with_records, Name}, _From, State) ->
+  NormalizedName = normalize_name(Name),
+  case ets:lookup(zones, NormalizedName) of
+    [{NormalizedName, Zone}] -> {reply, {ok, Zone}, State};
     _ -> {reply, {error, zone_not_found}, State}
   end;
 
