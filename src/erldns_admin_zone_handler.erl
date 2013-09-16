@@ -1,7 +1,7 @@
 -module(erldns_admin_zone_handler).
 
 -export([init/3]).
--export([content_types_provided/2]).
+-export([content_types_provided/2, is_authorized/2]).
 -export([to_html/2, to_json/2, to_text/2]).
 
 -include("dns.hrl").
@@ -16,6 +16,9 @@ content_types_provided(Req, State) ->
       {<<"text/plain">>, to_text},
       {<<"application/json">>, to_json}
     ], Req, State}.
+
+is_authorized(Req, State) ->
+  erldns_admin:is_authorized(Req, State).
 
 to_html(Req, State) ->
   {<<"erldns admin">>, Req, State}.
@@ -42,4 +45,3 @@ to_json(Req, State) ->
         ]
       }]),
   {Body, Req, State}.
-

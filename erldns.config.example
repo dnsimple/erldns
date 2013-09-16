@@ -9,6 +9,13 @@
           {host, "your-zone-server.example.com"}
         ]},
       {zones, "zones.json"},
+      {metrics, [
+        {port, 8082}
+      ]},
+      {admin, [
+        {port, 8083},
+        {credentials, {"username", "password"}}
+      ]},
       {pools, [
           {tcp_worker_pool, [
               {size, 10},

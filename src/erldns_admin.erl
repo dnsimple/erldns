@@ -3,6 +3,7 @@
 -behavior(gen_server).
 
 -export([start_link/0]).
+-export([is_authorized/2]).
 
 -define(DEFAULT_PORT, 8083).
 
@@ -16,6 +17,18 @@
   ]).
 
 -record(state, {}).
+
+%% Not part of gen server
+
+is_authorized(Req, State) ->
+  {Username, Password} = credentials(),
+  {ok, Auth, Req1} = cowboy_req:parse_header(<<"authorization">>, Req),
+  case Auth of
+    {<<"basic">>, {User = Username, Password}} ->
+      {true, Req1, User};
+    _ ->
+      {{false, <<"Basic realm=\"erldns admin\"">>}, Req1, State}
+  end.
 
 %% Gen server
 start_link() ->
@@ -51,7 +64,11 @@ code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
 port() ->
- proplists:get_value(port, env(), ?DEFAULT_PORT).
+  proplists:get_value(port, env(), ?DEFAULT_PORT).
+
+credentials() ->
+  {Username, Password} = proplists:get_value(credentials, env()),
+  {list_to_binary(Username), list_to_binary(Password)}.
 
 env() ->
   case application:get_env(erldns, admin) of
