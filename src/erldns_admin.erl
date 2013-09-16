@@ -21,13 +21,16 @@
 %% Not part of gen server
 
 is_authorized(Req, State) ->
-  {Username, Password} = credentials(),
-  {ok, Auth, Req1} = cowboy_req:parse_header(<<"authorization">>, Req),
-  case Auth of
-    {<<"basic">>, {User = Username, Password}} ->
-      {true, Req1, User};
-    _ ->
-      {{false, <<"Basic realm=\"erldns admin\"">>}, Req1, State}
+  case credentials() of
+    {Username, Password} ->
+      {ok, Auth, Req1} = cowboy_req:parse_header(<<"authorization">>, Req),
+      case Auth of
+        {<<"basic">>, {User = Username, Password}} ->
+          {true, Req1, User};
+        _ ->
+          {{false, <<"Basic realm=\"erldns admin\"">>}, Req1, State}
+      end;
+    _ -> {{false, <<"Basic realm=\"erldns admin\"">>}, Req, State}
   end.
 
 %% Gen server
@@ -68,8 +71,11 @@ port() ->
   proplists:get_value(port, env(), ?DEFAULT_PORT).
 
 credentials() ->
-  {Username, Password} = proplists:get_value(credentials, env()),
-  {list_to_binary(Username), list_to_binary(Password)}.
+  case proplists:get_value(credentials, env()) of
+    {Username, Password} ->
+      {list_to_binary(Username), list_to_binary(Password)};
+    _ -> {}
+  end.
 
 env() ->
   case application:get_env(erldns, admin) of
