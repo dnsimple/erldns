@@ -74,16 +74,22 @@ get_zone_with_records(Name) ->
   gen_server:call(?SERVER, {get_zone_with_records, Name}).
 
 put_zone({Name, Sha, Records}) ->
-  gen_server:call(?SERVER, {put, Name, build_zone(Name, Sha, Records)}).
+  Zone = build_zone(Name, Sha, Records),
+  gen_server:call(?SERVER, {put, Name, Zone}),
+  Zone.
 
 put_zone(Name, Zone) ->
-  gen_server:call(?SERVER, {put, Name, Zone}).
+  gen_server:call(?SERVER, {put, Name, Zone}),
+  Zone.
 
 put_zone_async({Name, Sha, Records}) ->
-  gen_server:cast(?SERVER, {put, Name, build_zone(Name, Sha, Records)}).
+  Zone = build_zone(Name, Sha, Records),
+  gen_server:cast(?SERVER, {put, Name, Zone}),
+  Zone.
 
 put_zone_async(Name, Zone) ->
-  gen_server:cast(?SERVER, {put, Name, Zone}).
+  gen_server:cast(?SERVER, {put, Name, Zone}),
+  Zone.
 
 delete_zone(Name) ->
   gen_server:cast(?SERVER, {delete, Name}).

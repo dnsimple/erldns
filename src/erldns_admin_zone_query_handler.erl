@@ -1,4 +1,4 @@
--module(erldns_admin_zone_handler).
+-module(erldns_admin_zone_query_handler).
 
 -export([init/3]).
 -export([content_types_provided/2, is_authorized/2]).
@@ -29,19 +29,4 @@ to_text(Req, State) ->
 to_json(Req, State) ->
   {Name, _} = cowboy_req:binding(name, Req),
   {ok, Zone} = erldns_zone_cache:get_zone_with_records(Name),
-  lager:debug("Zone: ~p", [Zone]),
-  RecordsForJson = lists:map(
-    fun(Record) ->
-       erldns_zone_encoder:encode_record(Record) 
-    end, Zone#zone.records),
-
-  Body = jsx:encode([{<<"erldns">>, 
-        [
-          {<<"zone">>, [
-              {<<"name">>, Zone#zone.name},
-              {<<"version">>, Zone#zone.version},
-              {<<"records">>, RecordsForJson}
-            ]}
-        ]
-      }]),
-  {Body, Req, State}.
+  {erldns_zone_encoder:encode_zone_as_json(Zone), Req, State}.

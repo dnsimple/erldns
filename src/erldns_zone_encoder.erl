@@ -1,9 +1,25 @@
 -module(erldns_zone_encoder).
 
--export([encode_record/1]).
+-export([encode_zone_as_json/1, encode_record/1]).
 
 -include("dns.hrl").
 -include("erldns.hrl").
+
+encode_zone_as_json(Zone) ->
+  jsx:encode([{<<"erldns">>,
+        [
+          {<<"zone">>, [
+              {<<"name">>, Zone#zone.name},
+              {<<"version">>, Zone#zone.version},
+              {<<"records">>, lists:map(encoder(), Zone#zone.records)}
+            ]}
+        ]
+      }]).
+
+encoder() ->
+  fun(Record) ->
+      erldns_zone_encoder:encode_record(Record)
+  end.
 
 encode_record(Record) ->
   [
