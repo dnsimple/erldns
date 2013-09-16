@@ -1,33 +1,153 @@
 -module(erldns_zone_encoder).
 
--export([encode_zone_as_json/1, encode_record/1]).
+-behavior(gen_server).
 
 -include("dns.hrl").
 -include("erldns.hrl").
 
-encode_zone_as_json(Zone) ->
+-export([start_link/0]).
+-export([zone_to_json/1, register_encoders/1, register_encoder/1]).
+
+% Gen server hooks
+-export([init/1,
+	 handle_call/3,
+	 handle_cast/2,
+	 handle_info/2,
+	 terminate/2,
+	 code_change/3
+       ]).
+
+-define(SERVER, ?MODULE).
+
+-record(state, {encoders}).
+
+% Public API
+start_link() ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+zone_to_json(Zone) ->
+  gen_server:call(?SERVER, {encode_zone, Zone}).
+
+register_encoders(Modules) ->
+  lager:info("Registering custom encoders: ~p", [Modules]),
+  gen_server:call(?SERVER, {register_encoders, Modules}).
+
+register_encoder(Module) ->
+  lager:info("Registering customer encoder: ~p", [Module]),
+  gen_server:call(?SERVER, {register_encoder, Module}).
+
+%% Gen server hooks
+init([]) ->
+  {ok, #state{encoders = []}}.
+
+handle_call({encode_zone, Zone}, _From, State) ->
+  {reply, zone_to_json(Zone, State#state.encoders), State};
+
+handle_call({register_encoders, Modules}, _From, State) ->
+  {reply, ok, State#state{encoders = State#state.encoders ++ Modules}};
+
+handle_call({register_encoder, Module}, _From, State) ->
+  {reply, ok, State#state{encoders = State#state.encoders ++ [Module]}}.
+
+handle_cast(_, State) ->
+  {noreply, State}.
+
+handle_info(_, State) ->
+  {noreply, State}.
+
+terminate(_, _State) ->
+  ok.
+
+code_change(_, State, _) ->
+  {ok, State}.
+
+
+% Internal API
+
+zone_to_json(Zone, Encoders) ->
+  lager:debug("Encoding zone ~p", [Zone]),
+  Records = records_to_json(Zone, Encoders),
+  FilteredRecords = lists:filter(record_filter(), Records),
   jsx:encode([{<<"erldns">>,
         [
           {<<"zone">>, [
               {<<"name">>, Zone#zone.name},
               {<<"version">>, Zone#zone.version},
-              {<<"records">>, lists:map(encoder(), Zone#zone.records)}
+              {<<"records">>, FilteredRecords}
             ]}
         ]
       }]).
 
-encoder() ->
-  fun(Record) ->
-      erldns_zone_encoder:encode_record(Record)
+record_filter() ->
+  fun(R) ->
+      case R of
+        [] -> false;
+        _ -> true
+      end
   end.
 
+records_to_json(Zone, Encoders) ->
+  lists:map(encode(Encoders), Zone#zone.records).
+
+encode(Encoders) ->
+  fun(Record) ->
+      encode_record(Record, Encoders)
+  end.
+
+encode_record(Record, Encoders) ->
+  lager:debug("Encoding record ~p", [Record]),
+  case encode_record(Record) of
+    [] ->
+      lager:debug("Trying custom encoders: ~p", [Encoders]),
+      try_custom_encoders(Record, Encoders);
+    EncodedRecord -> EncodedRecord
+  end.
+
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SOA, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_NS, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_A, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_AAAA, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_CNAME, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_MX, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_HINFO, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_TXT, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SPF, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SSHFP, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SRV, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_NAPTR, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
+  lager:debug("Unable to encode record: ~p", [Record]),
+  [].
+
+encode_record(Name, Type, Ttl, Data) ->
   [
-    {<<"name">>, erlang:iolist_to_binary(io_lib:format("~s.", [Record#dns_rr.name]))},
-    {<<"type">>, dns:type_name(Record#dns_rr.type)},
-    {<<"ttl">>, Record#dns_rr.ttl},
-    {<<"content">>, encode_data(Record#dns_rr.data)}
+    {<<"name">>, erlang:iolist_to_binary(io_lib:format("~s.", [Name]))},
+    {<<"type">>, dns:type_name(Type)},
+    {<<"ttl">>, Ttl},
+    {<<"content">>, encode_data(Data)}
   ].
+
+
+try_custom_encoders(_Record, []) ->
+  {};
+try_custom_encoders(Record, [Encoder|Rest]) ->
+  lager:debug("Trying custom encoder ~p", [Encoder]),
+  case Encoder:encode_record(Record) of
+    [] -> try_custom_encoders(Record, Rest);
+    EncodedData -> EncodedData
+  end.
 
 encode_data({dns_rrdata_soa, Mname, Rname, Serial, Refresh, Retry, Expire, Minimum}) ->
   erlang:iolist_to_binary(io_lib:format("~s. ~s. (~w ~w ~w ~w ~w)", [Mname, Rname, Serial, Refresh, Retry, Expire, Minimum]));
@@ -56,4 +176,4 @@ encode_data({dns_rrdata_naptr, Order, Preference, Flags, Services, Regexp, Repla
   erlang:iolist_to_binary(io_lib:format("~w ~w ~s ~s ~s ~s", [Order, Preference, Flags, Services, Regexp, Replacements]));
 encode_data(Data) ->
   lager:debug("Unable to encode data: ~p", [Data]),
-  <<"">>.
+  {}.

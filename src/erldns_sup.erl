@@ -29,6 +29,7 @@ init(_Args) ->
     ?CHILD(erldns_events, worker, []),
     ?CHILD(erldns_zone_cache, worker, []),
     ?CHILD(erldns_zone_parser, worker, []),
+    ?CHILD(erldns_zone_encoder, worker, []),
     ?CHILD(erldns_packet_cache, worker, []),
     ?CHILD(erldns_query_throttle, worker, []),
     ?CHILD(erldns_handler, worker, []),

@@ -78,15 +78,17 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
           ParsedRecord -> ParsedRecord
         end
     end, JsonRecords),
-  FilteredRecords = lists:filter(
-    fun(R) ->
-        case R of
-          {} -> false;
-          _ -> true
-        end
-    end, Records),
+  FilteredRecords = lists:filter(record_filter(), Records),
   DistinctRecords = lists:usort(FilteredRecords),
   {Name, Sha, DistinctRecords}.
+
+record_filter() ->
+  fun(R) ->
+      case R of
+        {} -> false;
+        _ -> true
+      end
+  end.
 
 json_record_to_list(JsonRecord) ->
   [

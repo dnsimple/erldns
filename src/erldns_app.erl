@@ -15,6 +15,11 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
     _ -> ok
   end,
 
+  case application:get_env(erldns, custom_zone_encoders) of
+    {ok, Encoders} -> erldns_zone_encoder:register_encoders(Encoders);
+    _ -> ok
+  end,
+
   lager:info("Loading zones from local file"),
   erldns_zone_loader:load_zones(),
 

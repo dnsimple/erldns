@@ -29,4 +29,4 @@ to_text(Req, State) ->
 to_json(Req, State) ->
   {Name, _} = cowboy_req:binding(name, Req),
   {ok, Zone} = erldns_zone_cache:get_zone_with_records(Name),
-  {erldns_zone_encoder:encode_zone_as_json(Zone), Req, State}.
+  {erldns_zone_encoder:zone_to_json(Zone), Req, State}.
