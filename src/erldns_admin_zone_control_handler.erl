@@ -34,7 +34,7 @@ to_json(Req, State) ->
       lager:debug("Reloading ~p", [Name]),
       case erldns_zone_client:fetch_zone(Name) of
         Zone when is_record(Zone, zone) ->
-          {erldns_zone_encoder:encode_zone_as_json(Zone), Req, State};
+          {erldns_zone_encoder:zone_to_json(Zone), Req, State};
         Result ->
           lager:debug("Fetch zone result: ~p", [Result]),
           {jsx:encode([]), Req, State}
