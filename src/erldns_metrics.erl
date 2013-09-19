@@ -29,6 +29,9 @@ setup() ->
   folsom_metrics:new_meter(request_throttled_meter),
   folsom_metrics:new_histogram(request_handled_histogram),
 
+  folsom_metrics:new_counter(packet_dropped_empty_queue_counter),
+  folsom_metrics:new_meter(packet_dropped_empty_queue_meter),
+
   folsom_metrics:new_meter(cache_hit_meter),
   folsom_metrics:new_meter(cache_expired_meter),
   folsom_metrics:new_meter(cache_miss_meter),

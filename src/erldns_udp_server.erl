@@ -69,6 +69,8 @@ handle_request(Socket, Host, Port, Bin, State) ->
       gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin}),
       {noreply, State#state{workers = queue:in(Worker, Queue)}};
     {empty, _Queue} ->
+      folsom_metrics:notify({packet_dropped_empty_queue_counter, {inc, 1}}),
+      folsom_metrics:notify({packet_dropped_empty_queue_meter, 1}),
       lager:info("Queue is empty, dropping packet"),
       {noreply, State}
   end.
