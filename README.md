@@ -54,9 +54,7 @@ Here are some queries to try:
 
 ## Performance
 
-Currently this system is able to handle around 1k QPS of real traffic.
-
-The goal is 10k QPS.
+In our environment (DNSimple) we are seeing 30 to 65 µs handoff times to retreive a packet from the UDP port and give it to a worker for processing. Your performance may very, but given those measurements erl-dns is capable of handling between 15k and 30k questions per second. Please note: You may need to configure the number of workers available to handle traffic at higher volumes.
 
 ## Design
 
@@ -99,5 +97,5 @@ Note that timing stats are givin in microseconds.
 There is a simple administrative API for querying the current zone cache.
 
 ```sh
-curl -s http://localhost:8083/ -H "Accept: application/json" | python -mjson.tool
+curl -s http://localhost:8083/ -H "Accept: application/json" -u username:password | python -mjson.tool
 ```
