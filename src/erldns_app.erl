@@ -6,7 +6,6 @@
 
 start(_Type, _Args) ->
   erldns_metrics:setup(),
-  random:seed(erlang:now()),
   erldns_sup:start_link().
 
 start_phase(post_start, _StartType, _PhaseArgs) ->
