@@ -96,7 +96,7 @@ delete_zone(Name) ->
 
 get_authority(Message) when is_record(Message, dns_message) ->
   case Message#dns_message.questions of
-    [] -> [];
+    [] -> {error, no_question};
     Questions -> 
       Question = lists:last(Questions),
       get_authority(Question#dns_query.name)
