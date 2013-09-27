@@ -29,6 +29,11 @@
     fetch_zone/2
   ]).
 
+% Internal API
+-export([
+    parallel_fetch_zone/ 2
+  ]).
+
 % Websocket callbacks
 -export([
     init/2,
@@ -52,9 +57,7 @@ fetch_zones() ->
       lager:info("Putting zones into cache"),
       lists:foreach(
         fun([{<<"name">>, Name}, {<<"sha">>, Sha}, _]) ->
-            poolboy:transaction(zone_fetch_pool, fun(Worker) ->
-                  gen_server:call(Worker, {fetch_zone, Name, Sha})
-              end)
+            spawn(?MODULE, parallel_fetch_zone, [Name, Sha])
         end, JsonZones),
       %lists:foreach(fun safe_process_json_zone/1, JsonZones),
       lager:info("Put ~p zones into cache", [length(JsonZones)]),
@@ -65,6 +68,11 @@ fetch_zones() ->
     {error, Error} ->
       {err, Error}
   end.
+
+parallel_fetch_zone(Name, Sha) ->
+  poolboy:transaction(zone_fetch_pool, fun(Worker) ->
+        gen_server:call(Worker, {fetch_zone, Name, Sha})
+    end).
 
 fetch_zone(Name) ->
   do_fetch_zone(Name, zone_url(Name)).
