@@ -24,6 +24,8 @@ start(_Type, _Args) ->
   erldns_sup:start_link().
 
 start_phase(post_start, _StartType, _PhaseArgs) ->
+  erldns_events:add_handler(erldns_event_handler),
+
   case application:get_env(erldns, custom_zone_parsers) of
     {ok, Parsers} -> erldns_zone_parser:register_parsers(Parsers);
     _ -> ok
@@ -47,13 +49,6 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
     _ ->
       not_fetching
   end,
-
-  erldns_events:add_handler(erldns_event_logger),
-
-  % Start up the UDP and TCP servers now
-  erldns_server_sup:start_link(),
-
-  erldns_events:notify(servers_started),
 
   ok.
 

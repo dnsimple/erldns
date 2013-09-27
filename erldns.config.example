@@ -20,10 +20,6 @@
           {tcp_worker_pool, erldns_worker, [
               {size, 10},
               {max_overflow, 20}
-            ]},
-          {zone_fetch_pool, erldns_zone_fetcher, [
-              {size, 100},
-              {max_overflow, 100}
             ]}
         ]}
     ]},

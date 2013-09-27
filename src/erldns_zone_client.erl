@@ -29,11 +29,6 @@
     fetch_zone/2
   ]).
 
-% Internal API
--export([
-    parallel_fetch_zone/ 2
-  ]).
-
 % Websocket callbacks
 -export([
     init/2,
@@ -54,25 +49,20 @@ fetch_zones() ->
   case httpc:request(get, {zones_url(), headers()}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
       JsonZones = jsx:decode(Body),
+      hottub:start_link(zone_fetcher, 5, erldns_zone_fetcher, start_link, []),
+      erldns_zone_fetcher_countdown:set_remaining(length(JsonZones)),
       lager:info("Putting zones into cache"),
       lists:foreach(
         fun([{<<"name">>, Name}, {<<"sha">>, Sha}, _]) ->
-            spawn(?MODULE, parallel_fetch_zone, [Name, Sha])
+            hottub:cast(zone_fetcher, {fetch_zone, Name, Sha})
         end, JsonZones),
-      %lists:foreach(fun safe_process_json_zone/1, JsonZones),
-      lager:info("Put ~p zones into cache", [length(JsonZones)]),
-      {ok, length(JsonZones)};
+      {ok, 0};
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
       lager:error("Failed to load zones: ~p (status: ~p)", [ReasonPhrase, Status]),
       {err, Status, ReasonPhrase};
     {error, Error} ->
       {err, Error}
   end.
-
-parallel_fetch_zone(Name, Sha) ->
-  poolboy:transaction(zone_fetch_pool, fun(Worker) ->
-        gen_server:call(Worker, {fetch_zone, Name, Sha})
-    end).
 
 fetch_zone(Name) ->
   do_fetch_zone(Name, zone_url(Name)).
