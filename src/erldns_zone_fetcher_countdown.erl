@@ -41,7 +41,7 @@ handle_cast(decrement, State) ->
     0 ->
       erldns_events:notify(start_servers),
       lager:info("Loaded ~p zones", [State#state.start]),
-      {stop, fetch_complete, State#state{remaining = Remaining}};
+      {stop, normal, State#state{remaining = Remaining}};
     _ ->
       {noreply, State#state{remaining = Remaining}}
   end.
