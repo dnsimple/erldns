@@ -47,7 +47,7 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
       lager:info("Websocket monitor connecting"),
       erldns_zoneserver_monitor:connect();
     _ ->
-      not_fetching
+      erldns_events:notify(start_servers)
   end,
 
   ok.
