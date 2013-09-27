@@ -49,7 +49,7 @@ fetch_zones() ->
   case httpc:request(get, {zones_url(), headers()}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
       JsonZones = jsx:decode(Body),
-      hottub:start_link(zone_fetcher, 5, erldns_zone_fetcher, start_link, []),
+      hottub:start_link(zone_fetcher, zone_server_max_processes(), erldns_zone_fetcher, start_link, []),
       erldns_zone_fetcher_countdown:set_remaining(length(JsonZones)),
       lager:info("Putting zones into cache"),
       lists:foreach(
@@ -153,6 +153,9 @@ websocket_terminate(_Message, _ConnState, _State) ->
 zone_server_env() ->
   {ok, ZoneServerEnv} = application:get_env(erldns, zone_server),
   ZoneServerEnv.
+
+zone_server_max_processes() ->
+  proplists:get_value(max_processes, zone_server_env(), 16).
 
 zone_server_protocol() ->
   proplists:get_value(protocol, zone_server_env(), "https").

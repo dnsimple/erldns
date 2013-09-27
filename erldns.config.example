@@ -6,7 +6,8 @@
       {catch_exceptions, false},
       {credentials, {"indentifier", "token"}},
       {zone_server, [
-          {host, "your-zone-server.example.com"}
+          {host, "your-zone-server.example.com"},
+          {max_processes, 8}
         ]},
       {zones, "zones.json"},
       {metrics, [
