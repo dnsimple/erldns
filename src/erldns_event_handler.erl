@@ -13,7 +13,7 @@
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 %% @doc Basic event handler implementation that logs to a lager:debug.
--module(erldns_event_logger).
+-module(erldns_event_handler).
 
 -behavior(gen_event).
 
@@ -30,6 +30,12 @@
 
 init(_Args) ->
   {ok, #state{}}.
+
+handle_event(start_servers, State) ->
+  % Start up the UDP and TCP servers now
+  erldns_server_sup:start_link(),
+  erldns_events:notify(servers_started),
+  {ok, State};
 
 handle_event(Event, State) ->
   lager:debug("Received event: ~p", [Event]),
