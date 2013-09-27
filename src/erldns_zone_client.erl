@@ -52,7 +52,9 @@ fetch_zones() ->
       lager:info("Putting zones into cache"),
       lists:foreach(
         fun([{<<"name">>, Name}, {<<"sha">>, Sha}, _]) ->
-            fetch_zone(Name, Sha)
+            poolboy:transaction(zone_fetch_pool, fun(Worker) ->
+                  gen_server:call(Worker, {fetch_zone, Name, Sha})
+              end)
         end, JsonZones),
       %lists:foreach(fun safe_process_json_zone/1, JsonZones),
       lager:info("Put ~p zones into cache", [length(JsonZones)]),

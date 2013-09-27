@@ -34,9 +34,9 @@ start_link() ->
 
 init(_Args) ->
   {ok, AppPools} = application:get_env(erldns, pools),
-  AppPoolSpecs = lists:map(fun({PoolName, PoolConfig}) ->
+  AppPoolSpecs = lists:map(fun({PoolName, WorkerModule, PoolConfig}) ->
         Args = [{name, {local, PoolName}},
-                {worker_module, erldns_worker}]
+                {worker_module, WorkerModule}]
               ++ PoolConfig,
         poolboy:child_spec(PoolName, Args)
     end, AppPools),
