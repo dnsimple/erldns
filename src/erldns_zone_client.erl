@@ -46,11 +46,15 @@ websocket_url() ->
   atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
 
 fetch_zones() ->
-  case httpc:request(get, {zones_url(), [auth_header()]}, [], [{body_format, binary}]) of
+  case httpc:request(get, {zones_url(), headers()}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
       JsonZones = jsx:decode(Body),
       lager:info("Putting zones into cache"),
-      lists:foreach(fun safe_process_json_zone/1, JsonZones),
+      lists:foreach(
+        fun([{<<"name">>, Name}, {<<"sha">>, Sha}, _]) ->
+            fetch_zone(Name, Sha)
+        end, JsonZones),
+      %lists:foreach(fun safe_process_json_zone/1, JsonZones),
       lager:info("Put ~p zones into cache", [length(JsonZones)]),
       {ok, length(JsonZones)};
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
@@ -84,8 +88,8 @@ do_fetch_zone(Name, Url) ->
       {err, Reason}
   end.
 
-safe_process_json_zone(JsonZone) ->
-  safe_process_json_zone(JsonZone, 'call').
+%safe_process_json_zone(JsonZone) ->
+%  safe_process_json_zone(JsonZone, 'call').
 safe_process_json_zone(JsonZone, MessageType) ->
   try process_json_zone(JsonZone, MessageType) of
     Zone -> Zone
@@ -192,3 +196,6 @@ encoded_credentials() ->
 
 auth_header() ->
   {"Authorization","Basic " ++ encoded_credentials()}.
+
+headers() ->
+  [auth_header(), {"X-Zone-No-Records", "1"}].
