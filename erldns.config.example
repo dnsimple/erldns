@@ -4,12 +4,7 @@
       {inet4, "127.0.0.1"},
       {inet6, "::1"},
       {catch_exceptions, false},
-      {credentials, {"indentifier", "token"}},
-      {zone_server, [
-          {host, "your-zone-server.example.com"},
-          {max_processes, 8}
-        ]},
-      {zones, "zones.json"},
+      {zones, "priv/example.zone.json"},
       {metrics, [
         {port, 8082}
       ]},
@@ -26,7 +21,8 @@
     ]},
   {lager, [
       {handlers, [
-          {lager_file_backend, [{file, "log/console.log"}, {level, debug}, {size, 104857600}, {count, 5}]}
+          {lager_file_backend, [{file, "log/debug.log"}, {level, debug}, {size, 104857600}, {count, 5}]}
         ]}
     ]}
 ].
+
