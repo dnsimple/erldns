@@ -41,14 +41,20 @@
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-%% Takes a JSON zone and turns it into the tuple {Name, Records}.
+%% @doc Takes a JSON zone and turns it into the tuple {Name, Records}.
+%%
+%% The default timeout for parsing is currently 30 seconds.
 zone_to_erlang(Zone) ->
   gen_server:call(?SERVER, {parse_zone, Zone}, ?PARSE_TIMEOUT).
 
+%% @doc Register a list of custom parser modules.
+-spec register_parsers([module()]) -> ok.
 register_parsers(Modules) ->
   lager:info("Registering custom parsers: ~p", [Modules]),
   gen_server:call(?SERVER, {register_parsers, Modules}).
 
+%% @doc Regiaer a custom parser module.
+-spec register_parser(module()) -> ok.
 register_parser(Module) ->
   lager:info("Registering custom parser: ~p", [Module]),
   gen_server:call(?SERVER, {register_parser, Module}).

@@ -26,11 +26,15 @@
 start_link() ->
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%% @doc Set the number of items that need to be fetched.
 set_remaining(Remaining) ->
   gen_server:call(?MODULE, {set_remaining, Remaining}).
 
+%% @doc Decrement the number of items remaining to be fetched.
 decrement() ->
   gen_server:cast(?MODULE, decrement).
+
+% gen_server handlers
 
 init(_) ->
   {ok, #state{}}.
