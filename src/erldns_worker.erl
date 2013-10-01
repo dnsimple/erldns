@@ -50,7 +50,7 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
 
-  %% Handle DNS query that comes in over TCP
+%% Handle DNS query that comes in over TCP
 handle_tcp_dns_query(Socket, Packet) ->
   %% TODO: measure 
   <<_Len:16, Bin/binary>> = Packet,
