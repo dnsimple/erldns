@@ -91,7 +91,7 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
   %lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
   erldns_events:notify({start_udp, [{host, Host}]}),
   case dns:decode_message(Bin) of
-    {truncated, _} -> ok;
+    {truncated, _, _} -> ok;
     {formerr, _, _} -> ok;
     DecodedMessage ->
       Response = erldns_handler:handle(DecodedMessage, Host),
