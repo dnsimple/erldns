@@ -17,7 +17,7 @@
 -behavior(gen_server).
 
 % API
--export([start_link/2]).
+-export([start_link/2, is_running/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -35,9 +35,20 @@
 
 -record(state, {port, socket, workers}).
 
-%% Public API
+% Public API
+
+%% @doc Start the UDP server process
 start_link(Name, InetFamily) ->
   gen_server:start_link({local, Name}, ?MODULE, [InetFamily], []).
+
+%% @doc Return true if the UDP server process is running
+is_running() ->
+  try State = sys:get_state(udp_inet) of
+    _ -> true
+  catch
+    _ -> false
+  end.
+
 
 %% gen_server hooks
 init([InetFamily]) ->
@@ -45,7 +56,7 @@ init([InetFamily]) ->
   {ok, Socket} = start(Port, InetFamily),
   {ok, #state{port = Port, socket = Socket, workers = make_workers(queue:new())}}.
 handle_call(_Request, _From, State) ->
-  {ok, State}.
+  {reply, ok, State}.
 handle_cast(_Message, State) ->
   {noreply, State}.
 handle_info(timeout, State) ->
