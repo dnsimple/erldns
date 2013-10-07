@@ -84,6 +84,9 @@ handle(BadMessage, Host) ->
 
 %% We throttle ANY queries to discourage use of our authoritative name servers
 %% for reflection attacks.
+%%
+%% Note: this should probably be changed to return the original packet without
+%% any answer data and with TC bit set to 1.
 handle(Message, Host, {throttled, Host, _ReqCount}) ->
   folsom_metrics:notify({request_throttled_counter, {inc, 1}}),
   folsom_metrics:notify({request_throttled_meter, 1}),
