@@ -26,4 +26,5 @@ start() ->
   folsom:start(),
   application:start(ranch),
   application:start(cowboy),
+  application:start(hottub),
   application:start(erldns).
