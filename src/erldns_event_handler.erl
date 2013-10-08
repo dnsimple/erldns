@@ -37,8 +37,7 @@ handle_event(start_servers, State) ->
   erldns_events:notify(servers_started),
   {ok, State};
 
-handle_event(Event, State) ->
-  lager:debug("Received event: ~p", [Event]),
+handle_event(_Event, State) ->
   {ok, State}.
 
 handle_call(_Message, State) ->
