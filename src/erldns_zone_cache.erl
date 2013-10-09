@@ -71,7 +71,7 @@ start_link() ->
 %% @doc Find a zone for a given qname.
 -spec find_zone(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found} | {error, not_authoritative}.
 find_zone(Qname) ->
-  find_zone(normalize_name(Qname), get_authority(Qname)). %% Results in a message in the erldns_zone_cache process mailbox
+  find_zone(normalize_name(Qname), get_authority(Qname)).
 
 %% @doc Find a zone for a given qname.
 -spec find_zone(dns:dname(), {error, any()} | {ok, dns:rr()} | [dns:rr()] | dns:rr()) ->
@@ -90,7 +90,7 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
     [] -> {error, zone_not_found};
     [_] -> {error, zone_not_found};
     [_|Labels] ->
-      case get_zone(Name) of %% Results in a message in the erldns_zone_cache process mailbox
+      case get_zone(Name) of
         {ok, Zone} -> Zone;
         {error, zone_not_found} ->
           case Name =:= Authority#dns_rr.name of
@@ -104,15 +104,23 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
 %% the dname in any way, it will simply look up the name in the underlying data store.
 -spec get_zone(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
 get_zone(Name) ->
-  gen_server:call(?SERVER, {get, Name}).
+  NormalizedName = normalize_name(Name),
+  case ets:lookup(zones, NormalizedName) of
+    [{NormalizedName, Zone}] -> {ok, Zone#zone{name = NormalizedName, records = [], records_by_name=trimmed}};
+    _ -> {error, zone_not_found}
+  end.
 
 %% @doc Get a zone for the specific name, including the records for the zone.
 -spec get_zone_with_records(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
 get_zone_with_records(Name) ->
-  gen_server:call(?SERVER, {get_zone_with_records, Name}).
+  NormalizedName = normalize_name(Name),
+  case ets:lookup(zones, NormalizedName) of
+    [{NormalizedName, Zone}] -> {ok, Zone};
+    _ -> {error, zone_not_found}
+  end.
 
 %% @doc Find the SOA record for the given DNS question.
--spec get_authority(dns:message()) -> {error, no_question} | {error, no_authority} | {ok, dns:rr()}.
+-spec get_authority(dns:message() | dns:dname()) -> {error, no_question} | {error, no_authority} | {ok, dns:rr()}.
 get_authority(Message) when is_record(Message, dns_message) ->
   case Message#dns_message.questions of
     [] -> {error, no_question};
@@ -121,31 +129,50 @@ get_authority(Message) when is_record(Message, dns_message) ->
       get_authority(Question#dns_query.name)
   end;
 get_authority(Name) ->
-  gen_server:call(?SERVER, {get_authority, Name}).
+  case find_zone_in_cache(normalize_name(Name)) of
+    {ok, Zone} -> {ok, Zone#zone.authority};
+    _ -> {error, authority_not_found}
+  end.
 
 %% @doc Get the list of NS and glue records for the given name. This function
 %% will always return a list, even if it is empty.
 -spec get_delegations(dns:dname()) -> {ok, [dns:rr()]} | [].
 get_delegations(Name) ->
-  Result = gen_server:call(?SERVER, {get_delegations, Name}),
-  case Result of
-    {ok, Delegations} -> Delegations;
-    _ -> []
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      lists:filter(fun(R) -> apply(erldns_records:match_type(?DNS_TYPE_NS), [R]) and apply(erldns_records:match_glue(Name), [R]) end, Zone#zone.records);
+    _ ->
+      []
   end.
 
+%% @doc Return the record set for the given dname.
+-spec get_records_by_name(dns:dname()) -> [dns:rr()].
 get_records_by_name(Name) ->
-  gen_server:call(?SERVER, {get_records_by_name, Name}).
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      case dict:find(normalize_name(Name), Zone#zone.records_by_name) of
+        {ok, RecordSet} -> RecordSet;
+        _ -> []
+      end;
+    _ ->
+      []
+  end.
 
 %% @doc Check if the name is in a zone.
 -spec in_zone(binary()) -> boolean().
 in_zone(Name) ->
-  gen_server:call(?SERVER, {in_zone, Name}).
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      is_name_in_zone(Name, Zone);
+    _ ->
+      false
+  end.
 
 %% @doc Return a list of tuples with each tuple as a name and the version SHA
 %% for the zone.
 -spec zone_names_and_versions() -> [{dns:dname(), binary()}].
 zone_names_and_versions() ->
-  gen_server:call(?SERVER, {zone_names_and_versions}).
+  ets:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones).
 
 % ----------------------------------------------------------------------------------------------------
 % Write API
@@ -194,64 +221,6 @@ init([]) ->
   {ok, #state{parsers = []}}.
 
 % ----------------------------------------------------------------------------------------------------
-% gen_server callbacks for read operations
-
-%% @doc Get a zone from the cache by name. Do not include record data.
-handle_call({get, Name}, _From, State) ->
-  NormalizedName = normalize_name(Name),
-  case ets:lookup(zones, NormalizedName) of
-    [{NormalizedName, Zone}] -> {reply, {ok, Zone#zone{name = NormalizedName, records = [], records_by_name=trimmed}}, State};
-    _ -> {reply, {error, zone_not_found}, State}
-  end;
-
-%% @doc Get a zone from the cache by name. Include record data.
-%% Currently this is only used for administrative purposes.
-handle_call({get_zone_with_records, Name}, _From, State) ->
-  NormalizedName = normalize_name(Name),
-  case ets:lookup(zones, NormalizedName) of
-    [{NormalizedName, Zone}] -> {reply, {ok, Zone}, State};
-    _ -> {reply, {error, zone_not_found}, State}
-  end;
-
-%% @doc Get authority records (SOA) for a zone.
-handle_call({get_authority, Name}, _From, State) ->
-  find_authority(normalize_name(Name), State);
-
-%% @doc Get delegation records (NS and associated glue records) for a zone.
-handle_call({get_delegations, Name}, _From, State) ->
-  case find_zone_in_cache(Name, State) of
-    {ok, Zone} ->
-      Records = lists:filter(fun(R) -> apply(erldns_records:match_type(?DNS_TYPE_NS), [R]) and apply(erldns_records:match_glue(Name), [R]) end, Zone#zone.records),
-      {reply, {ok, Records}, State};
-    Response ->
-      %lager:debug("get_delegations, failed to get zone for ~p: ~p", [Name, Response]),
-      {reply, Response, State}
-  end;
-
-handle_call({get_records_by_name, Name}, _From, State) ->
-  case find_zone_in_cache(Name, State) of
-    {ok, Zone} ->
-      case dict:find(normalize_name(Name), Zone#zone.records_by_name) of
-        {ok, RecordSet} -> {reply, RecordSet, State};
-        _ -> {reply, [], State}
-      end;
-    _Response ->
-      %lager:debug("get_records_by_name, failed to get zone for ~p: ~p", [Name, Response]),
-      {reply, [], State}
-  end;
-
-handle_call({in_zone, Name}, _From, State) ->
-  case find_zone_in_cache(Name, State) of
-    {ok, Zone} ->
-      {reply, internal_in_zone(Name, Zone), State};
-    _ ->
-      {reply, false, State}
-  end;
-
-handle_call({zone_names_and_versions}, _From, State) ->
-  {reply, ets:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones), State};
-
-% ----------------------------------------------------------------------------------------------------
 % gen_server callbacks for Write operations
 
 %% @doc Write the zone into the cache.
@@ -269,33 +238,30 @@ handle_cast({delete, Name}, State) ->
 
 handle_cast(_, State) ->
   {noreply, State}.
+
 handle_info(_Message, State) ->
   {noreply, State}.
+
 terminate(_Reason, _State) ->
   ok.
+
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
 
 % Internal API
-internal_in_zone(Name, Zone) ->
+is_name_in_zone(Name, Zone) ->
   case dict:is_key(normalize_name(Name), Zone#zone.records_by_name) of
     true -> true;
     false ->
       case dns:dname_to_labels(Name) of
         [] -> false;
         [_] -> false;
-        [_|Labels] -> internal_in_zone(dns:labels_to_dname(Labels), Zone)
+        [_|Labels] -> is_name_in_zone(dns:labels_to_dname(Labels), Zone)
       end
   end.
 
-find_authority(Name, State) ->
-  case find_zone_in_cache(Name, State) of
-    {ok, Zone} -> {reply, {ok, Zone#zone.authority}, State};
-    _ -> {reply, {error, authority_not_found}, State}
-  end.
-
-find_zone_in_cache(Qname, State) ->
+find_zone_in_cache(Qname) ->
   Name = normalize_name(Qname),
   case dns:dname_to_labels(Name) of
     [] -> {error, zone_not_found};
@@ -303,7 +269,7 @@ find_zone_in_cache(Qname, State) ->
     [_|Labels] ->
       case ets:lookup(zones, Name) of
         [{Name, Zone}] -> {ok, Zone};
-        _ -> find_zone_in_cache(dns:labels_to_dname(Labels), State)
+        _ -> find_zone_in_cache(dns:labels_to_dname(Labels))
       end
   end.
 
@@ -318,7 +284,8 @@ build_named_index([R|Rest], Idx) ->
   case dict:find(R#dns_rr.name, Idx) of
     {ok, Records} ->
       build_named_index(Rest, dict:store(R#dns_rr.name, Records ++ [R], Idx));
-    error -> build_named_index(Rest, dict:store(R#dns_rr.name, [R], Idx))
+    error ->
+      build_named_index(Rest, dict:store(R#dns_rr.name, [R], Idx))
   end.
 
 normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
