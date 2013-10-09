@@ -59,26 +59,33 @@ handle_tcp_dns_query(Socket, Packet) ->
     <<>> -> ok;
     _ ->
       case dns:decode_message(Bin) of
-        {truncated, _} -> 
+        {truncated, _, _} ->
           lager:info("received truncated request from ~p", [Address]),
           ok;
+        {trailing_garbage, DecodedMessage, _} ->
+          handle_decoded_tcp_message(DecodedMessage, Socket, Address);
+        {_Error, _, _} ->
+          ok;
         DecodedMessage ->
-          erldns_events:notify({start_handle, tcp, [{host, Address}]}),
-          Response = erldns_handler:handle(DecodedMessage, Address),
-          erldns_events:notify({end_handle, tcp, [{host, Address}]}),
-          case erldns_encoder:encode_message(Response) of
-            {false, EncodedMessage} ->
-              send_tcp_message(Socket, EncodedMessage);
-            {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-              send_tcp_message(Socket, EncodedMessage);
-            {false, EncodedMessage, _TsigMac} ->
-              send_tcp_message(Socket, EncodedMessage);
-            {true, EncodedMessage, _TsigMac, _Message} ->
-              send_tcp_message(Socket, EncodedMessage)
-          end
+          handle_decoded_tcp_message(DecodedMessage, Socket, Address)
       end
   end,
   gen_tcp:close(Socket).
+
+handle_decoded_tcp_message(DecodedMessage, Socket, Address) ->
+  erldns_events:notify({start_handle, tcp, [{host, Address}]}),
+  Response = erldns_handler:handle(DecodedMessage, Address),
+  erldns_events:notify({end_handle, tcp, [{host, Address}]}),
+  case erldns_encoder:encode_message(Response) of
+    {false, EncodedMessage} ->
+      send_tcp_message(Socket, EncodedMessage);
+    {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
+      send_tcp_message(Socket, EncodedMessage);
+    {false, EncodedMessage, _TsigMac} ->
+      send_tcp_message(Socket, EncodedMessage);
+    {true, EncodedMessage, _TsigMac, _Message} ->
+      send_tcp_message(Socket, EncodedMessage)
+  end.
 
 send_tcp_message(Socket, EncodedMessage) ->
   BinLength = byte_size(EncodedMessage),
@@ -91,22 +98,27 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
   %lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
   erldns_events:notify({start_udp, [{host, Host}]}),
   case dns:decode_message(Bin) of
-    {truncated, _, _} -> ok;
-    {formerr, _, _} -> ok;
+    {trailing_garbage, DecodedMessage, _} ->
+      handle_decoded_udp_message(DecodedMessage, Socket, Host, Port);
+    {_Error, _, _} ->
+      ok;
     DecodedMessage ->
-      Response = erldns_handler:handle(DecodedMessage, Host),
-      case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
-        {false, EncodedMessage} -> gen_udp:send(Socket, Host, Port, EncodedMessage);
-        {true, EncodedMessage, Message} when is_record(Message, dns_message)->
-          gen_udp:send(Socket, Host, Port, EncodedMessage);
-        {false, EncodedMessage, _TsigMac} ->
-          gen_udp:send(Socket, Host, Port, EncodedMessage);
-        {true, EncodedMessage, _TsigMac, _Message} ->
-          gen_udp:send(Socket, Host, Port, EncodedMessage)
-      end
+      handle_decoded_udp_message(DecodedMessage, Socket, Host, Port)
   end,
   erldns_events:notify({end_udp, [{host, Host}]}),
   ok.
+
+handle_decoded_udp_message(DecodedMessage, Socket, Host, Port) ->
+  Response = erldns_handler:handle(DecodedMessage, Host),
+  case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
+    {false, EncodedMessage} -> gen_udp:send(Socket, Host, Port, EncodedMessage);
+    {true, EncodedMessage, Message} when is_record(Message, dns_message)->
+      gen_udp:send(Socket, Host, Port, EncodedMessage);
+    {false, EncodedMessage, _TsigMac} ->
+      gen_udp:send(Socket, Host, Port, EncodedMessage);
+    {true, EncodedMessage, _TsigMac, _Message} ->
+      gen_udp:send(Socket, Host, Port, EncodedMessage)
+  end.
 
 %% Determine the max payload size by looking for additional
 %% options passed by the client.

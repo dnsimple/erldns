@@ -33,8 +33,6 @@ resolve(Message, _AuthorityRecords, _Host, []) -> Message;
 resolve(Message, AuthorityRecords, Host, [Question]) -> resolve(Message, AuthorityRecords, Host, Question);
 %% Resolve the first question. Additional questions will be thrown away for now.
 resolve(Message, AuthorityRecords, Host, [Question|_]) -> resolve(Message, AuthorityRecords, Host, Question);
-
-
 %% Start the resolution process on the given question.
 %% Step 1: Set the RA bit to false
 resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
