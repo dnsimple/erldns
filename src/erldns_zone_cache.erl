@@ -13,6 +13,10 @@
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 %% @doc A cache holding all of the zone data.
+%%
+%% Write operations occur through the cache process mailbox, whereas read
+%% operations may occur either through the mailbox or directly through the
+%% underlying data store, depending on performance requirements.
 -module(erldns_zone_cache).
 
 -behavior(gen_server).
@@ -20,24 +24,28 @@
 -include_lib("dns/include/dns.hrl").
 -include("erldns.hrl").
 
-% API
 -export([start_link/0]).
--export([find_zone/1, find_zone/2]).
+
+% Read APIs
 -export(
   [
+    find_zone/1,
+    find_zone/2,
     get_zone/1,
     get_zone_with_records/1,
-    put_zone/1,
-    put_zone/2,
-    put_zone_async/1,
-    put_zone_async/2,
-    delete_zone/1,
     get_authority/1,
     get_delegations/1,
     get_records_by_name/1,
     in_zone/1,
     zone_names_and_versions/0
   ]).
+
+% Write APIs
+-export([put_zone/1,
+    put_zone/2,
+    put_zone_async/1,
+    put_zone_async/2,
+    delete_zone/1]).
 
 % Gen server hooks
 -export([init/1,
@@ -52,20 +60,30 @@
 
 -record(state, {parsers}).
 
-%% Public API
+%% @doc Start the zone cache process.
+-spec start_link() -> any().
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+% ----------------------------------------------------------------------------------------------------
+% Read API
+
+%% @doc Find a zone for a given qname.
+-spec find_zone(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found} | {error, not_authoritative}.
 find_zone(Qname) ->
   find_zone(normalize_name(Qname), get_authority(Qname)). %% Results in a message in the erldns_zone_cache process mailbox
 
-find_zone(Qname, {error, _}) -> find_zone(Qname, []);
-find_zone(Qname, {ok, Authority}) -> find_zone(Qname, Authority);
+%% @doc Find a zone for a given qname.
+-spec find_zone(dns:dname(), {error, any()} | {ok, dns:rr()} | [dns:rr()] | dns:rr()) ->
+  {ok, #zone{}} | {error, zone_not_found} | {error, not_authoritative}.
+find_zone(Qname, {error, _}) ->
+  find_zone(Qname, []);
+find_zone(Qname, {ok, Authority}) ->
+  find_zone(Qname, Authority);
 find_zone(_Qname, []) ->
   {error, not_authoritative};
 find_zone(Qname, Authorities) when is_list(Authorities) ->
   find_zone(Qname, lists:last(Authorities));
-
 find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
   Name = normalize_name(Qname),
   case dns:dname_to_labels(Name) of
@@ -82,33 +100,19 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
       end
   end.
 
+%% @doc Get a zone for the specific name. This function will not attempt to resolve
+%% the dname in any way, it will simply look up the name in the underlying data store.
+-spec get_zone(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
 get_zone(Name) ->
   gen_server:call(?SERVER, {get, Name}).
 
+%% @doc Get a zone for the specific name, including the records for the zone.
+-spec get_zone_with_records(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
 get_zone_with_records(Name) ->
   gen_server:call(?SERVER, {get_zone_with_records, Name}).
 
-put_zone({Name, Sha, Records}) ->
-  Zone = build_zone(Name, Sha, Records),
-  gen_server:call(?SERVER, {put, Name, Zone}),
-  Zone.
-
-put_zone(Name, Zone) ->
-  gen_server:call(?SERVER, {put, Name, Zone}),
-  Zone.
-
-put_zone_async({Name, Sha, Records}) ->
-  Zone = build_zone(Name, Sha, Records),
-  gen_server:cast(?SERVER, {put, Name, Zone}),
-  Zone.
-
-put_zone_async(Name, Zone) ->
-  gen_server:cast(?SERVER, {put, Name, Zone}),
-  Zone.
-
-delete_zone(Name) ->
-  gen_server:cast(?SERVER, {delete, Name}).
-
+%% @doc Find the SOA record for the given DNS question.
+-spec get_authority(dns:message()) -> {error, no_question} | {error, no_authority} | {ok, dns:rr()}.
 get_authority(Message) when is_record(Message, dns_message) ->
   case Message#dns_message.questions of
     [] -> {error, no_question};
@@ -119,6 +123,9 @@ get_authority(Message) when is_record(Message, dns_message) ->
 get_authority(Name) ->
   gen_server:call(?SERVER, {get_authority, Name}).
 
+%% @doc Get the list of NS and glue records for the given name. This function
+%% will always return a list, even if it is empty.
+-spec get_delegations(dns:dname()) -> {ok, [dns:rr()]} | [].
 get_delegations(Name) ->
   Result = gen_server:call(?SERVER, {get_delegations, Name}),
   case Result of
@@ -129,19 +136,65 @@ get_delegations(Name) ->
 get_records_by_name(Name) ->
   gen_server:call(?SERVER, {get_records_by_name, Name}).
 
+%% @doc Check if the name is in a zone.
+-spec in_zone(binary()) -> boolean().
 in_zone(Name) ->
   gen_server:call(?SERVER, {in_zone, Name}).
 
+%% @doc Return a list of tuples with each tuple as a name and the version SHA
+%% for the zone.
+-spec zone_names_and_versions() -> [{dns:dname(), binary()}].
 zone_names_and_versions() ->
   gen_server:call(?SERVER, {zone_names_and_versions}).
 
-%% Gen server hooks
+% ----------------------------------------------------------------------------------------------------
+% Write API
+
+%% @doc Put a name and its records into the cache, along with a SHA which can be
+%% used to determine if the zone requires updating.
+%%
+%% This function will build the necessary Zone record before interting.
+-spec put_zone({binary(), binary(), [#dns_rr{}]}) -> #zone{}.
+put_zone({Name, Sha, Records}) ->
+  Zone = build_zone(Name, Sha, Records),
+  gen_server:call(?SERVER, {put, Name, Zone}),
+  Zone.
+
+%% @doc Put a zone into the cache and wait for a response.
+-spec put_zone(binary(), #zone{}) -> #zone{}.
+put_zone(Name, Zone) ->
+  gen_server:call(?SERVER, {put, Name, Zone}),
+  Zone.
+
+%% @doc Put a zone into the cache without waiting for a response.
+-spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> #zone{}.
+put_zone_async({Name, Sha, Records}) ->
+  Zone = build_zone(Name, Sha, Records),
+  gen_server:cast(?SERVER, {put, Name, Zone}),
+  Zone.
+
+%% @doc Put a zone into the cache without waiting for a response.
+-spec put_zone_async(binary(), #zone{}) -> #zone{}.
+put_zone_async(Name, Zone) ->
+  gen_server:cast(?SERVER, {put, Name, Zone}),
+  Zone.
+
+%% @doc Remove a zone from the cache without waiting for a response.
+-spec delete_zone(binary()) -> any().
+delete_zone(Name) ->
+  gen_server:cast(?SERVER, {delete, Name}).
+
+% Gen server hooks
+
+%% @doc Initialize the zone cache.
+-spec init([]) -> {ok, #state{}}.
 init([]) ->
   ets:new(zones, [set, named_table]),
   ets:new(authorities, [set, named_table]),
   {ok, #state{parsers = []}}.
 
-% Read operations
+% ----------------------------------------------------------------------------------------------------
+% gen_server callbacks for read operations
 
 %% @doc Get a zone from the cache by name. Do not include record data.
 handle_call({get, Name}, _From, State) ->
@@ -198,7 +251,8 @@ handle_call({in_zone, Name}, _From, State) ->
 handle_call({zone_names_and_versions}, _From, State) ->
   {reply, ets:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones), State};
 
-% Write operations
+% ----------------------------------------------------------------------------------------------------
+% gen_server callbacks for Write operations
 
 %% @doc Write the zone into the cache.
 handle_call({put, Name, Zone}, _From, State) ->
