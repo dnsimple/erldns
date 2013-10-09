@@ -136,13 +136,12 @@ resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, Matc
 resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
   % NOTE: this is a potential bug because it assumes the last record is the one to examine.
   Answer = lists:last(MatchedRecords),
-  SoaRecordResult = erldns_zone_cache:get_authority(Qname),
   case NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
     [] ->
       resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords);
     _ ->
       NSRecord = lists:last(NSRecords),
-      case SoaRecordResult of
+      case erldns_zone_cache:get_authority(Qname) of
         {ok, [SoaRecord]} ->
           case SoaRecord#dns_rr.name =:= NSRecord#dns_rr.name of
             true ->
