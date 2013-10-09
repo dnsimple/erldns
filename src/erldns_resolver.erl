@@ -21,12 +21,13 @@
 -export([resolve/3]).
 
 %% @doc Resolve the questions in the message.
--spec resolve(dns:message(), [dns:rr(), ...], dns:ip()) -> dns:message().
+-spec resolve(dns:message(), [dns:rr()], dns:ip()) -> dns:message().
 resolve(Message, AuthorityRecords, Host) ->
   resolve(Message, AuthorityRecords, Host, Message#dns_message.questions).
 
 
 %% There were no questions in the message so just return it.
+-spec resolve(dns:message(), [dns:rr()], dns:ip(), [dns:question()]) -> dns:message().
 resolve(Message, _AuthorityRecords, _Host, []) -> Message;
 %% There is one question in the message; resolve it.
 resolve(Message, AuthorityRecords, Host, [Question]) -> resolve(Message, AuthorityRecords, Host, Question);
