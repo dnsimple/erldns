@@ -50,7 +50,8 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
 
-%% Handle DNS query that comes in over TCP
+%% @doc Handle DNS query that comes in over TCP
+-spec handle_tcp_dns_query(gen_tcp:socket(), iodata())  -> ok.
 handle_tcp_dns_query(Socket, Packet) ->
   %% TODO: measure 
   <<_Len:16, Bin/binary>> = Packet,
@@ -93,7 +94,8 @@ send_tcp_message(Socket, EncodedMessage) ->
   gen_tcp:send(Socket, TcpEncodedMessage).
 
 
-%% Handle DNS query that comes in over UDP
+%% @doc Handle DNS query that comes in over UDP
+-spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary()) -> ok.
 handle_udp_dns_query(Socket, Host, Port, Bin) ->
   %lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
   erldns_events:notify({start_udp, [{host, Host}]}),
@@ -108,6 +110,8 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
   erldns_events:notify({end_udp, [{host, Host}]}),
   ok.
 
+-spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number()) ->
+  ok | {error, not_owner | inet:posix()}.
 handle_decoded_udp_message(DecodedMessage, Socket, Host, Port) ->
   Response = erldns_handler:handle(DecodedMessage, Host),
   case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
