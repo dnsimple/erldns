@@ -57,7 +57,7 @@ start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 find_zone(Qname) ->
-  find_zone(normalize_name(Qname), get_authority(Qname)).
+  find_zone(normalize_name(Qname), get_authority(Qname)). %% Results in a message in the erldns_zone_cache process mailbox
 
 find_zone(Qname, {error, _}) -> find_zone(Qname, []);
 find_zone(Qname, {ok, Authority}) -> find_zone(Qname, Authority);
@@ -72,7 +72,7 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
     [] -> {error, zone_not_found};
     [_] -> {error, zone_not_found};
     [_|Labels] ->
-      case get_zone(Name) of
+      case get_zone(Name) of %% Results in a message in the erldns_zone_cache process mailbox
         {ok, Zone} -> Zone;
         {error, zone_not_found} ->
           case Name =:= Authority#dns_rr.name of
@@ -141,6 +141,9 @@ init([]) ->
   ets:new(authorities, [set, named_table]),
   {ok, #state{parsers = []}}.
 
+% Read operations
+
+%% @doc Get a zone from the cache by name. Do not include record data.
 handle_call({get, Name}, _From, State) ->
   NormalizedName = normalize_name(Name),
   case ets:lookup(zones, NormalizedName) of
@@ -148,6 +151,8 @@ handle_call({get, Name}, _From, State) ->
     _ -> {reply, {error, zone_not_found}, State}
   end;
 
+%% @doc Get a zone from the cache by name. Include record data.
+%% Currently this is only used for administrative purposes.
 handle_call({get_zone_with_records, Name}, _From, State) ->
   NormalizedName = normalize_name(Name),
   case ets:lookup(zones, NormalizedName) of
@@ -155,10 +160,11 @@ handle_call({get_zone_with_records, Name}, _From, State) ->
     _ -> {reply, {error, zone_not_found}, State}
   end;
 
-handle_call({put, Name, Zone}, _From, State) ->
-  ets:insert(zones, {normalize_name(Name), Zone}),
-  {reply, ok, State};
+%% @doc Get authority records (SOA) for a zone.
+handle_call({get_authority, Name}, _From, State) ->
+  find_authority(normalize_name(Name), State);
 
+%% @doc Get delegation records (NS and associated glue records) for a zone.
 handle_call({get_delegations, Name}, _From, State) ->
   case find_zone_in_cache(Name, State) of
     {ok, Zone} ->
@@ -168,9 +174,6 @@ handle_call({get_delegations, Name}, _From, State) ->
       %lager:debug("get_delegations, failed to get zone for ~p: ~p", [Name, Response]),
       {reply, Response, State}
   end;
-
-handle_call({get_authority, Name}, _From, State) ->
-  find_authority(normalize_name(Name), State);
 
 handle_call({get_records_by_name, Name}, _From, State) ->
   case find_zone_in_cache(Name, State) of
@@ -193,7 +196,14 @@ handle_call({in_zone, Name}, _From, State) ->
   end;
 
 handle_call({zone_names_and_versions}, _From, State) ->
-  {reply, ets:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones), State}.
+  {reply, ets:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones), State};
+
+% Write operations
+
+%% @doc Write the zone into the cache.
+handle_call({put, Name, Zone}, _From, State) ->
+  ets:insert(zones, {normalize_name(Name), Zone}),
+  {reply, ok, State}.
 
 handle_cast({put, Name, Zone}, State) ->
   ets:insert(zones, {normalize_name(Name), Zone}),
