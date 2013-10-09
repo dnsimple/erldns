@@ -35,20 +35,55 @@
 -define(SERVER, ?MODULE).
 -define(SWEEP_INTERVAL, 1000 * 60 * 10). % Every 10 minutes
 
--record(state, {ttl, tref}).
+-record(state, {
+    ttl :: non_neg_integer(),
+    tref :: timer:tref()
+  }).
 
-%% Public API
+% Public API
+
+%% @doc Start the cache.
+-spec start_link() -> any().
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+%% @doc Try to retrieve a cached response for the given question.
+-spec get(dns:question()) -> {ok, dns:message()} | {error, cache_expired} | {error, cache_miss}.
 get(Question) ->
   get(Question, unknown).
-get(Question, Host) ->
-  gen_server:call(?SERVER, {get_packet, Question, Host}).
+
+%% @doc Try to retrieve a cached response for the given question sent
+%% by the given host.
+-spec get(dns:question(), dns:ip()) -> {ok, dns:message()} | {error, cache_expired} | {error, cache_miss}.
+get(Question, _Host) ->
+  case ets:lookup(packet_cache, Question) of
+    [{Question, {Response, ExpiresAt}}] ->
+      {_,T,_} = erlang:now(),
+      case T > ExpiresAt of
+        true ->
+          folsom_metrics:notify(cache_expired_meter, 1),
+          {error, cache_expired};
+        false ->
+          folsom_metrics:notify(cache_hit_meter, 1),
+          {ok, Response}
+      end;
+    _ ->
+      folsom_metrics:notify(cache_miss_meter, 1),
+      {error, cache_miss}
+  end.
+
+%% @doc Put the response in the cache for the given question.
+-spec put(dns:question(), dns:message()) -> ok.
 put(Question, Response) ->
   gen_server:call(?SERVER, {set_packet, [Question, Response]}).
+
+%% @doc Remove all old cached packets from the cache.
+-spec sweep() -> any().
 sweep() ->
   gen_server:cast(?SERVER, {sweep, []}).
+
+%% @doc Clean the cache
+-spec clear() -> any().
 clear() ->
   gen_server:cast(?SERVER, {clear}).
 
@@ -60,23 +95,6 @@ init([TTL]) ->
   {ok, Tref} = timer:apply_interval(?SWEEP_INTERVAL, ?MODULE, sweep, []),
   {ok, #state{ttl = TTL, tref = Tref}}.
 
-handle_call({get_packet, Question, _Host}, _From, State) ->
-  case ets:lookup(packet_cache, Question) of
-    [{Question, {Response, ExpiresAt}}] ->
-      {_,T,_} = erlang:now(),
-      case T > ExpiresAt of
-        true ->
-          folsom_metrics:notify(cache_expired_meter, 1),
-          {reply, {error, cache_expired}, State};
-        false ->
-          folsom_metrics:notify(cache_hit_meter, 1),
-          {reply, {ok, Response}, State}
-      end;
-    _ ->
-      folsom_metrics:notify(cache_miss_meter, 1),
-      {reply, {error, cache_miss}, State}
-  end;
-
 handle_call({set_packet, [Question, Response]}, _From, State) ->
   {_,T,_} = erlang:now(),
   ets:insert(packet_cache, {Question, {Response, T + State#state.ttl}}),
@@ -87,6 +105,7 @@ handle_cast({sweep, []}, State) ->
   Keys = ets:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', T - 10}], ['$1']}]),
   lists:foreach(fun(K) -> ets:delete(packet_cache, K) end, Keys),
   {noreply, State};
+
 handle_cast({clear}, State) ->
   ets:delete_all_objects(packet_cache),
   {noreply, State}.
