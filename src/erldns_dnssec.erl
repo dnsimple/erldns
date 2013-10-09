@@ -15,8 +15,6 @@
 %% @doc Placeholder for eventual DNSSEC implementation.
 -module(erldns_dnssec).
 
--include("dns_records.hrl").
-
 -export([handle/1]).
 
 handle(Message) ->

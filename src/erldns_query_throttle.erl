@@ -19,7 +19,7 @@
 
 -behavior(gen_server).
 
--include("dns_records.hrl").
+-include_lib("dns/include/dns_records.hrl").
 
 % API
 -export([start_link/0, throttle/2, sweep/0]).

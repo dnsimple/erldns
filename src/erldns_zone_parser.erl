@@ -17,7 +17,7 @@
 
 -behavior(gen_server).
 
--include("dns.hrl").
+-include_lib("dns/include/dns.hrl").
 -include("erldns.hrl").
 
 -export([start_link/0, zone_to_erlang/1, register_parsers/1, register_parser/1]).

@@ -18,7 +18,7 @@
 
 -behaviour(websocket_client_handler).
 
--include("dns.hrl").
+-include_lib("dns/include/dns.hrl").
 -include("erldns.hrl").
 
 % Public API

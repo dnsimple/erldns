@@ -15,7 +15,7 @@
 %% @doc Placeholder for eventual EDNS0 implementation.
 -module(erldns_edns).
 
--include("dns_records.hrl").
+-include_lib("dns/include/dns_records.hrl").
 
 -export([handle/1]).
 

@@ -15,7 +15,7 @@
 %% Functions related to DNS records.
 -module(erldns_records).
 
--include("dns.hrl").
+-include_lib("dns/include/dns.hrl").
 
 -export([optionally_convert_wildcard/2, wildcard_qname/1]).
 -export([default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
