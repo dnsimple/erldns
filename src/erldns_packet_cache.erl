@@ -88,6 +88,7 @@ clear() ->
   gen_server:cast(?SERVER, {clear}).
 
 %% Gen server hooks
+-spec init([non_neg_integer(), ...]) -> {ok, #state{}}.
 init([]) ->
   init([20]);
 init([TTL]) ->

@@ -20,7 +20,8 @@
 
 -export([resolve/3]).
 
-%% Resolve the questions in the message.
+%% @doc Resolve the questions in the message.
+-spec resolve(dns:message(), [dns:rr(), ...], dns:ip()) -> dns:message().
 resolve(Message, AuthorityRecords, Host) ->
   resolve(Message, AuthorityRecords, Host, Message#dns_message.questions).
 
@@ -379,6 +380,7 @@ resolve_best_match_referral(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMa
 % given zone. This will attempt to walk through the
 % domain hierarchy in the Qname looking for both exact and
 % wildcard matches.
+-spec best_match(dns:dname(), #zone{}) -> [dns:rr()].
 best_match(Qname, Zone) -> best_match(Qname, dns:dname_to_labels(Qname), Zone).
 
 best_match(_Qname, [], _Zone) -> [];
@@ -398,6 +400,7 @@ best_match(_Qname, _Labels, _Zone, WildcardMatches) -> WildcardMatches.
 
 
 %% Function for executing custom lookups by registered handlers.
+-spec custom_lookup(dns:dname(), dns:type(), [dns:rr()]) -> fun(({module(), [dns:type()]}) -> [dns:rr()]).
 custom_lookup(Qname, Qtype, Records) ->
   fun({Module, Types}) ->
       case lists:member(Qtype, Types) of
