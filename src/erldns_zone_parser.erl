@@ -38,12 +38,15 @@
 
 %% Public API
 
+%% @doc Start the parser processor.
+-spec start_link() -> any().
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-%% @doc Takes a JSON zone and turns it into the tuple {Name, Records}.
+%% @doc Takes a JSON zone and turns it into the tuple {Name, Sha, Records}.
 %%
 %% The default timeout for parsing is currently 30 seconds.
+-spec zone_to_erlang(binary()) -> [{binary(), binary(), [dns:rr()]}].
 zone_to_erlang(Zone) ->
   gen_server:call(?SERVER, {parse_zone, Zone}, ?PARSE_TIMEOUT).
 

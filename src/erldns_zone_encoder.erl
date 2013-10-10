@@ -38,21 +38,32 @@
 -record(state, {encoders}).
 
 % Public API
+
+%% @doc Start the encoder process.
+-spec start_link() -> any().
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+%% @doc Encode a Zone record into JSON.
+-spec zone_to_json(#zone{}) -> binary().
 zone_to_json(Zone) ->
   gen_server:call(?SERVER, {encode_zone, Zone}).
 
+%% @doc Register a list of encoder modules.
+-spec register_encoders([module()]) -> ok.
 register_encoders(Modules) ->
   lager:info("Registering custom encoders: ~p", [Modules]),
   gen_server:call(?SERVER, {register_encoders, Modules}).
 
+%% @doc Register a single encoder module.
+-spec register_encoder(module()) -> ok.
 register_encoder(Module) ->
   lager:info("Registering customer encoder: ~p", [Module]),
   gen_server:call(?SERVER, {register_encoder, Module}).
 
-%% Gen server hooks
+
+% Gen server hooks
+
 init([]) ->
   {ok, #state{encoders = []}}.
 

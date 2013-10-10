@@ -22,10 +22,16 @@
 
 -record(state, {}).
 
+%% @doc Start the fetcher process.
+-spec start_link() -> any().
 start_link() ->
   start_link([]).
+
+-spec start_link([]) -> any().
 start_link([]) ->
   gen_server:start_link(?MODULE, [], []).
+
+% Gen server callbacks
 
 init(_) ->
   {ok, #state{}}.

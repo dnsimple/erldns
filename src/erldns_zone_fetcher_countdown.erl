@@ -23,14 +23,18 @@
 
 -record(state, {start, remaining}).
 
+%% @doc Start the countdown process.
+-spec start_link() -> any().
 start_link() ->
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 %% @doc Set the number of items that need to be fetched.
+-spec set_remaining(non_neg_integer()) -> ok.
 set_remaining(Remaining) ->
   gen_server:call(?MODULE, {set_remaining, Remaining}).
 
 %% @doc Decrement the number of items remaining to be fetched.
+-spec decrement() -> ok.
 decrement() ->
   gen_server:cast(?MODULE, decrement).
 

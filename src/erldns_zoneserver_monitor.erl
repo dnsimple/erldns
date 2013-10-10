@@ -36,25 +36,32 @@
 -define(SERVER, ?MODULE).
 -define(INTERVAL, 5000).
 
-%% Public API
+% Public API
+
+%% Start the zone server monitor.
+-spec start_link() -> any().
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %% @doc Attempt an immediate connection to the zone server.
+-spec connect() -> any().
 connect() ->
   gen_server:call(?SERVER, connect).
 
 %% @doc Attempt a connection to the zone server after a delay (default: 5 seconds)
 %% This is used after a failed connection to give the remote server time to recover
 %% and to not flood it with unnecessary requests.
+-spec delay_connect() -> any().
 delay_connect() ->
   erlang:send_after(?INTERVAL, self(), connect).
 
 %% @doc Fetch all zones from the zone server.
+-spec fetch_zones() -> any().
 fetch_zones() ->
   gen_server:call(?SERVER, fetch_zones, infinity).
 
 %% @doc Fetch all zones from the zone server after a delay (default: 5 seconds)
+-spec delay_fetch_zones() -> any().
 delay_fetch_zones() ->
   erlang:send_after(?INTERVAL, self(), fetch_zones).
 

@@ -38,10 +38,12 @@
 % Public API
 
 %% @doc Start the UDP server process
+-spec start_link(atom(), inet | inet6) -> {ok, pid()} | ignore | {error, term()}.
 start_link(Name, InetFamily) ->
   gen_server:start_link({local, Name}, ?MODULE, [InetFamily], []).
 
 %% @doc Return true if the UDP server process is running
+-spec is_running() -> boolean().
 is_running() ->
   try State = sys:get_state(udp_inet) of
     _ -> true
