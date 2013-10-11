@@ -19,7 +19,7 @@
 
 -export([start_link/0]).
 
--export([setup/0, metrics/0, stats/0, filtered_metrics/0, filtered_stats/0]).
+-export([setup/0, metrics/0, stats/0, vm/0, filtered_metrics/0, filtered_stats/0, filtered_vm/0]).
 
 -define(DEFAULT_PORT, 8082).
 
@@ -123,6 +123,14 @@ filter_stat_set([{histogram, _}|Rest], FilteredStatSet) ->
   filter_stat_set(Rest, FilteredStatSet);
 filter_stat_set([Pair|Rest], FilteredStatSet) ->
   filter_stat_set(Rest, FilteredStatSet ++ [Pair]).
+
+vm() ->
+  [
+    {<<"memory">>, folsom_vm_metrics:get_memory()}
+  ].
+
+filtered_vm() ->
+  vm().
 
 keys_to_strings(Pairs) ->
   lists:map(
