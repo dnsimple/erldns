@@ -12,7 +12,7 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Basic event handler implementation that logs to a lager:debug.
+%% @doc Application event handler implementation.
 -module(erldns_event_handler).
 
 -behavior(gen_event).
@@ -36,7 +36,6 @@ handle_event(start_servers, State) ->
   erldns_server_sup:start_link(),
   erldns_events:notify(servers_started),
   {ok, State};
-
 handle_event(_Event, State) ->
   {ok, State}.
 

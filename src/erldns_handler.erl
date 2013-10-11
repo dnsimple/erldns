@@ -40,14 +40,23 @@
 
 -record(state, {handlers}).
 
+%% @doc Start the handler registry process.
+-spec start_link() -> any().
 start_link() ->
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%% @doc Register a record handler.
+-spec register_handler([dns:type()], module()) -> ok.
 register_handler(RecordTypes, Module) ->
   gen_server:call(?MODULE, {register_handler, RecordTypes, Module}).
 
+%% @doc Get all registered handlers along with the DNS types they handle.
+-spec get_handlers() -> [{module(), [dns:type()]}].
 get_handlers() ->
   gen_server:call(?MODULE, {get_handlers}).
+
+
+% gen_server callbacks
 
 init([]) ->
   %lager:info("Initialized the handler_registry"),

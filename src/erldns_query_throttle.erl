@@ -21,7 +21,7 @@
 
 -include_lib("dns/include/dns_records.hrl").
 
-% API
+%% API
 -export([start_link/0, throttle/2, sweep/0]).
 
 % Gen server hooks
@@ -33,20 +33,32 @@
 	 code_change/3
        ]).
 
+%% Types
+-export_type([throttle_result/0, throttle_hit_count/0]).
+-type throttle_hit_count() :: non_neg_integer().
+-type throttle_result() :: {throttled | ok, inet:ip_address() | inet:hostname(), throttle_hit_count()}.
+
 -define(LIMIT, 5).
 -define(EXPIRATION, 60).
 -define(SWEEP_INTERVAL, 1000 * 60 * 10). % Every 10 minutes
 
 -record(state, {tref}).
 
-% API
+%% @doc Start the query throttle process.
+-spec start_link() -> any().
 start_link() ->
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%% @doc Throttle the given message if necessary.
+-spec throttle(dns:message(), inet:ip_address() | inet:hostname()) -> ok | throttle_result().
 throttle(Message, Host) ->
   gen_server:call(?MODULE, {throttle, Message, Host}).
+
+%% @doc Sweep the query throttle table for expired host records.
+-spec sweep() -> any().
 sweep() ->
   gen_server:cast(?MODULE, {sweep}).
+
 
 % Gen server hooks
 init([]) ->
@@ -77,6 +89,7 @@ terminate(_Reason, _State) ->
 
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
+
 
 % Internal API
 maybe_throttle(Host) ->
