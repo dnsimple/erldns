@@ -57,7 +57,7 @@ throttle(Message, Host) ->
 %% @doc Sweep the query throttle table for expired host records.
 -spec sweep() -> any().
 sweep() ->
-  gen_server:cast(?MODULE, {sweep}).
+  gen_server:cast(?MODULE, sweep).
 
 
 % Gen server hooks
@@ -72,7 +72,7 @@ handle_call({throttle, Message, Host}, _From, State) ->
     _ -> {reply, record_request(maybe_throttle(Host)), State}
   end.
 
-handle_cast({sweep}, State) ->
+handle_cast(sweep, State) ->
   %lager:debug("Sweeping host throttle"),
   {_, T, _} = erlang:now(),
   Keys = ets:select(host_throttle, [{{'$1', {'_', '$2'}}, [{'<', '$2', T - ?EXPIRATION}], ['$1']}]),

@@ -80,12 +80,12 @@ put(Question, Response) ->
 %% @doc Remove all old cached packets from the cache.
 -spec sweep() -> any().
 sweep() ->
-  gen_server:cast(?SERVER, {sweep, []}).
+  gen_server:cast(?SERVER, sweep).
 
 %% @doc Clean the cache
 -spec clear() -> any().
 clear() ->
-  gen_server:cast(?SERVER, {clear}).
+  gen_server:cast(?SERVER, clear).
 
 %% Gen server hooks
 -spec init([non_neg_integer(), ...]) -> {ok, #state{}}.
@@ -101,13 +101,13 @@ handle_call({set_packet, [Question, Response]}, _From, State) ->
   ets:insert(packet_cache, {Question, {Response, T + State#state.ttl}}),
   {reply, ok, State}.
 
-handle_cast({sweep, []}, State) ->
+handle_cast(sweep, State) ->
   {_, T, _} = erlang:now(),
   Keys = ets:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', T - 10}], ['$1']}]),
   lists:foreach(fun(K) -> ets:delete(packet_cache, K) end, Keys),
   {noreply, State};
 
-handle_cast({clear}, State) ->
+handle_cast(clear, State) ->
   ets:delete_all_objects(packet_cache),
   {noreply, State}.
 
