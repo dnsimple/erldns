@@ -19,7 +19,7 @@
 
 -export([start_link/0]).
 
--export([setup/0, metrics/0, stats/0, vm/0, filtered_metrics/0, filtered_stats/0, filtered_vm/0]).
+-export([setup/0, metrics/0, stats/0, vm/0, ets/0, filtered_metrics/0, filtered_stats/0, filtered_vm/0, filtered_ets/0]).
 
 -define(DEFAULT_PORT, 8082).
 
@@ -131,6 +131,28 @@ vm() ->
 
 filtered_vm() ->
   vm().
+
+ets() ->
+  [
+    {<<"ets">>, ets_metrics()}
+  ].
+
+filtered_ets() ->
+  lists:map(
+    fun(TableData) ->
+        {
+          proplists:get_value(name, TableData),
+          [
+            {compressed, proplists:get_value(compressed, TableData)},
+            {size, proplists:get_value(size, TableData)},
+            {type, atom_to_binary(proplists:get_value(type, TableData), latin1)},
+            {protection, atom_to_binary(proplists:get_value(protection, TableData), latin1)}
+          ]
+        }
+  end, ets_metrics()).
+
+ets_metrics() ->
+  lists:map(fun(Name) -> ets:info(Name) end, ets:all()).
 
 keys_to_strings(Pairs) ->
   lists:map(

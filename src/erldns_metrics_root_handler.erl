@@ -40,7 +40,8 @@ to_json(Req, State) ->
         [
           {<<"metrics">>, erldns_metrics:filtered_metrics()},
           {<<"stats">>, erldns_metrics:filtered_stats()},
-          {<<"vm">>, erldns_metrics:filtered_vm()}
+          {<<"vm">>, erldns_metrics:filtered_vm()},
+          {<<"ets">>, erldns_metrics:filtered_ets()}
         ]
       }]),
   {Body, Req, State}.
