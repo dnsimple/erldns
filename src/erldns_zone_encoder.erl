@@ -92,7 +92,6 @@ code_change(_, State, _) ->
 % Internal API
 
 zone_to_json(Zone, Encoders) ->
-  lager:debug("Encoding zone ~p", [Zone]),
   Records = records_to_json(Zone, Encoders),
   FilteredRecords = lists:filter(record_filter(), Records),
   jsx:encode([{<<"erldns">>,
