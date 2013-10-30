@@ -58,8 +58,7 @@ get(Question) ->
 get(Question, _Host) ->
   case ets:lookup(packet_cache, Question) of
     [{Question, {Response, ExpiresAt}}] ->
-      {_,T,_} = erlang:now(),
-      case T > ExpiresAt of
+      case timestamp() > ExpiresAt of
         true ->
           folsom_metrics:notify(cache_expired_meter, 1),
           {error, cache_expired};
@@ -97,13 +96,11 @@ init([TTL]) ->
   {ok, #state{ttl = TTL, tref = Tref}}.
 
 handle_call({set_packet, [Question, Response]}, _From, State) ->
-  {_,T,_} = erlang:now(),
-  ets:insert(packet_cache, {Question, {Response, T + State#state.ttl}}),
+  ets:insert(packet_cache, {Question, {Response, timestamp() + State#state.ttl}}),
   {reply, ok, State}.
 
 handle_cast(sweep, State) ->
-  {_, T, _} = erlang:now(),
-  Keys = ets:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', T - 10}], ['$1']}]),
+  Keys = ets:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}]),
   lists:foreach(fun(K) -> ets:delete(packet_cache, K) end, Keys),
   {noreply, State};
 
@@ -120,3 +117,7 @@ terminate(_Reason, _State) ->
 
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
+
+timestamp() ->
+  {TM, TS, _} = os:timestamp(),
+  (TM * 1000000) + TS.
