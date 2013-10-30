@@ -73,11 +73,13 @@ fetch_zone(Name, Sha) ->
 do_fetch_zone(Name, Url) ->
   case httpc:request(get, {Url, [auth_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
+      lager:debug("Zone fetched: ~p", [Name]),
       safe_process_json_zone(jsx:decode(Body), 'cast');
     {_, {{_Version, Status = 304, ReasonPhrase}, _Headers, _Body}} ->
-      %lager:debug("Zone not modified: ~p", [Name]),
+      lager:debug("Zone not modified: ~p", [Name]),
       {ok, Status, ReasonPhrase};
     {_, {{_Version, Status = 404, ReasonPhrase}, _Headers, _Body}} ->
+      lager:debug("Zone not found: ~p", [Name]),
       erldns_zone_cache:delete_zone(Name),
       {err, Status, ReasonPhrase};
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
