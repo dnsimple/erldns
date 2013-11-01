@@ -27,4 +27,5 @@ start() ->
   application:start(ranch),
   application:start(cowboy),
   application:start(hottub),
+  lager:debug("Starting erldns app"),
   application:start(erldns).
