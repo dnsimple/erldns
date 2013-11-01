@@ -114,9 +114,10 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
   ok | {error, not_owner | inet:posix()}.
 handle_decoded_udp_message(DecodedMessage, Socket, Host, Port) ->
   Response = erldns_handler:handle(DecodedMessage, Host),
-  DestHost = Host,
+  DestHost = {127, 0, 0, 10},
   case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
     {false, EncodedMessage} ->
+      %lager:debug("Sending encoded response to ~p", [DestHost]),
       gen_udp:send(Socket, DestHost, Port, EncodedMessage);
     {true, EncodedMessage, Message} when is_record(Message, dns_message)->
       gen_udp:send(Socket, DestHost, Port, EncodedMessage);
