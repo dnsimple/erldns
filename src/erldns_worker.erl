@@ -114,14 +114,16 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
   ok | {error, not_owner | inet:posix()}.
 handle_decoded_udp_message(DecodedMessage, Socket, Host, Port) ->
   Response = erldns_handler:handle(DecodedMessage, Host),
+  DestHost = Host,
   case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
-    {false, EncodedMessage} -> gen_udp:send(Socket, Host, Port, EncodedMessage);
+    {false, EncodedMessage} ->
+      gen_udp:send(Socket, DestHost, Port, EncodedMessage);
     {true, EncodedMessage, Message} when is_record(Message, dns_message)->
-      gen_udp:send(Socket, Host, Port, EncodedMessage);
+      gen_udp:send(Socket, DestHost, Port, EncodedMessage);
     {false, EncodedMessage, _TsigMac} ->
-      gen_udp:send(Socket, Host, Port, EncodedMessage);
+      gen_udp:send(Socket, DestHost, Port, EncodedMessage);
     {true, EncodedMessage, _TsigMac, _Message} ->
-      gen_udp:send(Socket, Host, Port, EncodedMessage)
+      gen_udp:send(Socket, DestHost, Port, EncodedMessage)
   end.
 
 %% Determine the max payload size by looking for additional
