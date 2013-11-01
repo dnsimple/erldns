@@ -23,9 +23,8 @@ start() ->
   crypto:start(),
   ssl:start(),
   lager:start(),
-  folsom:start(),
+  application:start(folsom),
   application:start(ranch),
   application:start(cowboy),
   application:start(hottub),
-  lager:debug("Starting erldns app"),
   application:start(erldns).
