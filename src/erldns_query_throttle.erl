@@ -22,7 +22,7 @@
 -include_lib("dns/include/dns_records.hrl").
 
 %% API
--export([start_link/0, throttle/2, sweep/0]).
+-export([start_link/0, throttle/2, sweep/0, stop/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -59,6 +59,11 @@ throttle(Message, Host) ->
 sweep() ->
   gen_server:cast(?MODULE, sweep).
 
+%% @doc Stop the query throttle process normally.
+-spec stop() -> any().
+stop() ->
+  gen_server:call(?MODULE, stop).
+
 
 % Gen server hooks
 init([]) ->
@@ -70,7 +75,10 @@ handle_call({throttle, Message, Host}, _From, State) ->
   case lists:filter(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Message#dns_message.questions) of
     [] -> {reply, ok, State};
     _ -> {reply, record_request(maybe_throttle(Host)), State}
-  end.
+  end;
+
+handle_call(stop, _From, State) ->
+  {stop, normal, ok, State}.
 
 handle_cast(sweep, State) ->
   lager:debug("Sweeping host throttle"),
