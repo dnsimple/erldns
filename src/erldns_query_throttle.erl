@@ -40,7 +40,7 @@
 
 -define(LIMIT, 5).
 -define(EXPIRATION, 60).
--define(SWEEP_INTERVAL, 1000 * 60 * 5). % Every 10 minutes
+-define(SWEEP_INTERVAL, 1000 * 60 * 5).
 
 -record(state, {tref}).
 
