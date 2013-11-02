@@ -21,7 +21,7 @@
 -behavior(gen_server).
 
 % API
--export([start_link/0, get/1, get/2, put/2, sweep/0, clear/0]).
+-export([start_link/0, get/1, get/2, put/2, sweep/0, clear/0, stop/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -33,7 +33,7 @@
        ]).
 
 -define(SERVER, ?MODULE).
--define(ENABLED, false).
+-define(ENABLED, true).
 -define(SWEEP_INTERVAL, 1000 * 60 * 10). % Every 10 minutes
 
 -record(state, {
@@ -94,6 +94,11 @@ sweep() ->
 clear() ->
   gen_server:cast(?SERVER, clear).
 
+%% @doc Stop the cache
+-spec stop() -> any().
+stop() ->
+  gen_server:call(?SERVER, stop).
+
 %% Gen server hooks
 -spec init([non_neg_integer()]) -> {ok, #state{}}.
 init([]) ->
@@ -105,7 +110,10 @@ init([TTL]) ->
 
 handle_call({set_packet, [Question, Response]}, _From, State) ->
   ets:insert(packet_cache, {Question, {Response, timestamp() + State#state.ttl}}),
-  {reply, ok, State}.
+  {reply, ok, State};
+
+handle_call(stop, _From, State) ->
+  {stop, normal, ok, State}.
 
 handle_cast(sweep, State) ->
   lager:debug("Sweep packet cache"),
