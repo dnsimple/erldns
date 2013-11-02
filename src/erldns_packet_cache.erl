@@ -33,6 +33,7 @@
        ]).
 
 -define(SERVER, ?MODULE).
+-define(ENABLED, false).
 -define(SWEEP_INTERVAL, 1000 * 60 * 10). % Every 10 minutes
 
 -record(state, {
@@ -74,7 +75,14 @@ get(Question, _Host) ->
 %% @doc Put the response in the cache for the given question.
 -spec put(dns:question(), dns:message()) -> ok.
 put(Question, Response) ->
-  gen_server:call(?SERVER, {set_packet, [Question, Response]}).
+  case ?ENABLED of
+    true ->
+      lager:debug("Set packet in cache for ~p", [Question]),
+      gen_server:call(?SERVER, {set_packet, [Question, Response]});
+    _ ->
+      lager:debug("Packet cache not enabled (Q: ~p)", [Question]),
+      ok
+  end.
 
 %% @doc Remove all old cached packets from the cache.
 -spec sweep() -> any().
@@ -100,11 +108,13 @@ handle_call({set_packet, [Question, Response]}, _From, State) ->
   {reply, ok, State}.
 
 handle_cast(sweep, State) ->
+  lager:debug("Sweep packet cache"),
   Keys = ets:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}]),
   lists:foreach(fun(K) -> ets:delete(packet_cache, K) end, Keys),
   {noreply, State};
 
 handle_cast(clear, State) ->
+  lager:debug("Clear packet cache"),
   ets:delete_all_objects(packet_cache),
   {noreply, State}.
 
