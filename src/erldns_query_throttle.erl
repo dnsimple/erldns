@@ -40,6 +40,7 @@
 
 -define(LIMIT, 5).
 -define(EXPIRATION, 60).
+-define(ENABLED, false).
 -define(SWEEP_INTERVAL, 1000 * 60 * 5).
 
 -record(state, {tref}).
@@ -52,7 +53,14 @@ start_link() ->
 %% @doc Throttle the given message if necessary.
 -spec throttle(dns:message(), inet:ip_address() | inet:hostname()) -> ok | throttle_result().
 throttle(Message, Host) ->
-  gen_server:call(?MODULE, {throttle, Message, Host}).
+  case ?ENABLED of
+    true ->
+      lager:debug("Checking throttle for ~p", [Host]),
+      gen_server:call(?MODULE, {throttle, Message, Host});
+    _ ->
+      lager:debug("Throttle not enabled"),
+      ok
+  end.
 
 %% @doc Sweep the query throttle table for expired host records.
 -spec sweep() -> any().
