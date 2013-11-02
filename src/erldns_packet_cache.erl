@@ -33,7 +33,7 @@
        ]).
 
 -define(SERVER, ?MODULE).
--define(ENABLED, true).
+-define(ENABLED, false).
 -define(SWEEP_INTERVAL, 1000 * 60 * 10). % Every 10 minutes
 
 -record(state, {
