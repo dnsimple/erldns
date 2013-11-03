@@ -40,7 +40,7 @@
 
 -define(LIMIT, 5).
 -define(EXPIRATION, 60).
--define(ENABLED, false).
+-define(ENABLED, true).
 -define(SWEEP_INTERVAL, 1000 * 60 * 5).
 
 -record(state, {tref}).
