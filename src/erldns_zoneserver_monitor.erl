@@ -116,6 +116,10 @@ handle_info(connect, State) ->
 
 handle_info(fetch_zones, State) ->
   do_fetch_zones(),
+  {noreply, State};
+
+handle_info(Message, State) ->
+  lager:info("Received unsupported message: ~p", [Message]),
   {noreply, State}.
 
 terminate(_Message, _State) ->
