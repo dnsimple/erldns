@@ -33,8 +33,8 @@
        ]).
 
 -define(SERVER, ?MODULE).
--define(ENABLED, false).
--define(SWEEP_INTERVAL, 1000 * 60 * 10). % Every 10 minutes
+-define(ENABLED, true).
+-define(SWEEP_INTERVAL, 1000 * 60 * 3). % Every 3 minutes
 
 -record(state, {
     ttl :: non_neg_integer(),
