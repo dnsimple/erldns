@@ -55,10 +55,10 @@ start_link() ->
 throttle(Message, Host) ->
   case ?ENABLED of
     true ->
-      lager:debug("Checking throttle for ~p", [Host]),
+      %lager:debug("Checking throttle for ~p", [Host]),
       gen_server:call(?MODULE, {throttle, Message, Host});
     _ ->
-      lager:debug("Throttle not enabled"),
+      %lager:debug("Throttle not enabled"),
       ok
   end.
 
