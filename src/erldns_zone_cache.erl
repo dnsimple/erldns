@@ -266,15 +266,7 @@ handle_cast(run_checker, State) ->
 
 handle_cast(check, State) ->
   lager:debug("Running zone check"),
-  NamesAndVersions = zone_names_and_versions(),
-  lager:debug("Running zone check on ~p zones", [length(NamesAndVersions)]),
-  lists:map(fun({Name, Sha}) ->
-        case Sha of
-          [] -> lager:debug("Skipping check of ~p", [Name]);
-          _ -> erldns_zone_client:fetch_zone(Name, Sha)
-        end
-    end, NamesAndVersions),
-  lager:debug("Completed zone check"),
+  erldns_zone_client:fetch_zones(),
   {noreply, State};
 
 handle_cast(Message, State) ->
