@@ -89,9 +89,7 @@ handle_call(stop, _From, State) ->
   {stop, normal, ok, State}.
 
 handle_cast(sweep, State) ->
-  lager:debug("Sweeping host throttle"),
   Keys = ets:select(host_throttle, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - ?EXPIRATION}], ['$1']}]),
-  lager:debug("Found keys: ~p", [Keys]),
   lists:foreach(fun(K) -> ets:delete(host_throttle, K) end, Keys),
   {noreply, State}.
 

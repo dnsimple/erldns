@@ -116,13 +116,11 @@ handle_call(stop, _From, State) ->
   {stop, normal, ok, State}.
 
 handle_cast(sweep, State) ->
-  lager:debug("Sweep packet cache"),
   Keys = ets:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}]),
   lists:foreach(fun(K) -> ets:delete(packet_cache, K) end, Keys),
   {noreply, State};
 
 handle_cast(clear, State) ->
-  lager:debug("Clear packet cache"),
   ets:delete_all_objects(packet_cache),
   {noreply, State}.
 
