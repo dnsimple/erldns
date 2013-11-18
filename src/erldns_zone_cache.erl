@@ -260,10 +260,12 @@ handle_cast({delete, Name}, State) ->
   {noreply, State};
 
 handle_cast(run_checker, State) ->
+  lager:debug("Running zone checker"),
   {ok, Tref} = timer:apply_interval(?CHECK_INTERVAL, ?MODULE, check_zones, []),
   {noreply, State#state{tref = Tref}};
 
 handle_cast(check, State) ->
+  lager:debug("Running zone check"),
   NamesAndVersions = zone_names_and_versions(),
   lager:debug("Running zone check on ~p zones", [length(NamesAndVersions)]),
   lists:map(fun({Name, Sha}) ->
@@ -272,9 +274,11 @@ handle_cast(check, State) ->
           _ -> erldns_zone_client:fetch_zone(Name, Sha)
         end
     end, NamesAndVersions),
+  lager:debug("Completed zone check"),
   {noreply, State};
 
-handle_cast(_, State) ->
+handle_cast(Message, State) ->
+  lager:debug("Received unsupported message: ~p", [Message]),
   {noreply, State}.
 
 handle_info(_Message, State) ->
