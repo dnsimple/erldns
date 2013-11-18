@@ -26,20 +26,31 @@
     terminate/2
   ]).
 
--record(state, {}).
+-record(state, {servers_running = false}).
 
 init(_Args) ->
   {ok, #state{}}.
 
 handle_event(start_servers, State) ->
-  % Start up the UDP and TCP servers
-  lager:debug("Starting the UDP and TCP supervisor"),
-  erldns_server_sup:start_link(),
-  %lager:debug("Starting the run checker"),
-  %erldns_zone_cache:run_checker(),
-  erldns_events:notify(servers_started),
+  case State#state.servers_running of
+    false ->
+      % Start up the UDP and TCP servers
+      lager:debug("Starting the UDP and TCP supervisor"),
+      erldns_server_sup:start_link(),
+      %lager:debug("Starting the run checker"),
+      %erldns_zone_cache:run_checker(),
+      erldns_events:notify(servers_started),
+       {ok, State#state{servers_running = true}};
+    _ ->
+       {ok, State}
+  end;
+
+handle_event(zone_fetcher_finished, State) ->
+  erldns_events:notify(start_servers),
   {ok, State};
-handle_event(_Event, State) ->
+
+handle_event(Event, State) ->
+  lager:debug("Unhandled event: ~p", [Event]),
   {ok, State}.
 
 handle_call(_Message, State) ->
