@@ -32,8 +32,9 @@ init(_Args) ->
   {ok, #state{}}.
 
 handle_event(start_servers, State) ->
-  % Start up the UDP and TCP servers now
+  % Start up the UDP and TCP servers
   erldns_server_sup:start_link(),
+  %erldns_zone_cache:run_checker(),
   erldns_events:notify(servers_started),
   {ok, State};
 handle_event(_Event, State) ->

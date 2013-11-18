@@ -41,11 +41,19 @@
   ]).
 
 % Write APIs
--export([put_zone/1,
+-export([
+    put_zone/1,
     put_zone/2,
     put_zone_async/1,
     put_zone_async/2,
-    delete_zone/1]).
+    delete_zone/1
+  ]).
+
+% Control APIs
+-export([
+    run_checker/0,
+    check_zones/0
+  ]).
 
 % Gen server hooks
 -export([init/1,
@@ -57,8 +65,9 @@
        ]).
 
 -define(SERVER, ?MODULE).
+-define(CHECK_INTERVAL, 1000 * 600). % Every N seconds
 
--record(state, {parsers}).
+-record(state, {parsers, tref = none}).
 
 %% @doc Start the zone cache process.
 -spec start_link() -> any().
@@ -211,7 +220,21 @@ put_zone_async(Name, Zone) ->
 delete_zone(Name) ->
   gen_server:cast(?SERVER, {delete, Name}).
 
-% Gen server hooks
+% ----------------------------------------------------------------------------------------------------
+% Control API
+
+%% @doc Start the zone check
+-spec run_checker() -> any().
+run_checker() ->
+  gen_server:cast(?SERVER, run_checker).
+
+%% @doc Check all zones to ensure cache is up-to-date
+-spec check_zones() -> any().
+check_zones() ->
+  gen_server:cast(?SERVER, check).
+
+% ----------------------------------------------------------------------------------------------------
+% Gen server init
 
 %% @doc Initialize the zone cache.
 -spec init([]) -> {ok, #state{}}.
@@ -221,7 +244,7 @@ init([]) ->
   {ok, #state{parsers = []}}.
 
 % ----------------------------------------------------------------------------------------------------
-% gen_server callbacks for Write operations
+% gen_server callbacks
 
 %% @doc Write the zone into the cache.
 handle_call({put, Name, Zone}, _From, State) ->
@@ -234,6 +257,21 @@ handle_cast({put, Name, Zone}, State) ->
 
 handle_cast({delete, Name}, State) ->
   ets:delete(zones, normalize_name(Name)),
+  {noreply, State};
+
+handle_cast(run_checker, State) ->
+  {ok, Tref} = timer:apply_interval(?CHECK_INTERVAL, ?MODULE, check_zones, []),
+  {noreply, State#state{tref = Tref}};
+
+handle_cast(check, State) ->
+  NamesAndVersions = zone_names_and_versions(),
+  lager:debug("Running zone check on ~p zones", [length(NamesAndVersions)]),
+  lists:map(fun({Name, Sha}) ->
+        case Sha of
+          [] -> lager:debug("Skipping check of ~p", [Name]);
+          _ -> erldns_zone_client:fetch_zone(Name, Sha)
+        end
+    end, NamesAndVersions),
   {noreply, State};
 
 handle_cast(_, State) ->

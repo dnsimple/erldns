@@ -41,8 +41,4 @@ init(_Args) ->
     {tcp_inet6, {erldns_tcp_server, start_link, [tcp_inet6, inet6]}, permanent, 5000, worker, [erldns_tcp_server]}
   ],
 
-  CheckerProcs = [
-    %?CHILD(erldns_zone_checker, worker, [])
-  ],
-
-  {ok, {{one_for_one, 20, 10}, ServerProcs ++ CheckerProcs}}.
+  {ok, {{one_for_one, 20, 10}, ServerProcs}}.
