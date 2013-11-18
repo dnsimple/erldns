@@ -38,7 +38,6 @@ fetch_zones(Parallel) ->
   case httpc:request(get, {zones_url(), headers()}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
       JsonZones = jsx:decode(Body),
-      hottub:start_link(zone_fetcher, erldns_config:zone_server_max_processes(), erldns_zone_fetcher, start_link, []),
       erldns_zone_fetcher_countdown:set_remaining(length(JsonZones)),
       lager:info("Putting zones into cache"),
       lists:foreach(

@@ -49,7 +49,6 @@ handle_cast(decrement, State) ->
     0 ->
       erldns_events:notify(zone_fetcher_finished),
       lager:info("Loaded ~p zones", [State#state.start]),
-      hottub:stop(zone_fetcher),
       {stop, normal, State#state{remaining = Remaining}};
     _ ->
       {noreply, State#state{remaining = Remaining}}
