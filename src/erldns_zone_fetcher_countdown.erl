@@ -47,7 +47,7 @@ handle_call({set_remaining, Remaining}, _, _) ->
 handle_cast(decrement, State) ->
   case Remaining = State#state.remaining - 1 of
     0 ->
-      erldns_events:notify(start_servers),
+      erldns_events:notify(zone_fetcher_finished),
       lager:info("Loaded ~p zones", [State#state.start]),
       {stop, normal, State#state{remaining = Remaining}};
     _ ->
