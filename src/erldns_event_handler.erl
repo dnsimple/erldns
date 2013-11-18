@@ -46,11 +46,11 @@ handle_event(start_servers, State) ->
   end;
 
 handle_event(zone_fetcher_finished, State) ->
+  lager:debug("Zone fetcher finished"),
   erldns_events:notify(start_servers),
   {ok, State};
 
-handle_event(Event, State) ->
-  lager:debug("Unhandled event: ~p", [Event]),
+handle_event(_Event, State) ->
   {ok, State}.
 
 handle_call(_Message, State) ->

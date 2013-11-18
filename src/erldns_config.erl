@@ -16,11 +16,28 @@
 -module(erldns_config).
 
 -export([get_address/1, get_port/0, get_num_workers/0]).
+-export([
+    zone_server_env/0,
+    zone_server_max_processes/0,
+    zone_server_protocol/0,
+    zone_server_host/0,
+    zone_server_port/0
+  ]).
+-export([
+    websocket_env/0,
+    websocket_protocol/0,
+    websocket_host/0,
+    websocket_port/0,
+    websocket_path/0,
+    websocket_url/0
+  ]).
 
 -define(DEFAULT_IPV4_ADDRESS, {127,0,0,1}).
 -define(DEFAULT_IPV6_ADDRESS, {0,0,0,0,0,0,0,1}).
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_NUM_WORKERS, 10).
+-define(DEFAULT_ZONE_SERVER_PORT, 443).
+-define(DEFAULT_WEBSOCKET_PATH, "/ws").
 
 %% @doc Get the IP address (either IPv4 or IPv6) that the DNS server
 %% should listen on.
@@ -65,3 +82,37 @@ parse_address(Address) when is_list(Address) ->
   {ok, Tuple} = inet_parse:address(Address),
   Tuple;
 parse_address(Address) -> Address.
+
+zone_server_env() ->
+  {ok, ZoneServerEnv} = application:get_env(erldns, zone_server),
+  ZoneServerEnv.
+
+zone_server_max_processes() ->
+  proplists:get_value(max_processes, zone_server_env(), 16).
+
+zone_server_protocol() ->
+  proplists:get_value(protocol, zone_server_env(), "https").
+
+zone_server_host() ->
+  proplists:get_value(host, zone_server_env(), "localhost").
+
+zone_server_port() ->
+  proplists:get_value(port, zone_server_env(), ?DEFAULT_ZONE_SERVER_PORT).
+
+websocket_env() ->
+  proplists:get_value(websocket, zone_server_env(), []).
+
+websocket_protocol() ->
+  proplists:get_value(protocol, websocket_env(), wss).
+
+websocket_host() ->
+  proplists:get_value(host, websocket_env(), zone_server_host()).
+
+websocket_port() ->
+  proplists:get_value(port, websocket_env(), zone_server_port()).
+
+websocket_path() ->
+  proplists:get_value(path, websocket_env(), ?DEFAULT_WEBSOCKET_PATH).
+
+websocket_url() ->
+  atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
