@@ -35,8 +35,8 @@ handle_event(start_servers, State) ->
   % Start up the UDP and TCP servers
   lager:debug("Starting the UDP and TCP supervisor"),
   erldns_server_sup:start_link(),
-  lager:debug("Starting the run checker"),
-  erldns_zone_cache:run_checker(),
+  %lager:debug("Starting the run checker"),
+  %erldns_zone_cache:run_checker(),
   erldns_events:notify(servers_started),
   {ok, State};
 handle_event(_Event, State) ->
