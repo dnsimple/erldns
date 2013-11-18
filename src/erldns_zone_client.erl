@@ -37,6 +37,7 @@ fetch_zones() ->
       lager:info("Putting zones into cache"),
       lists:foreach(
         fun([{<<"name">>, Name}, {<<"sha">>, Sha}, _]) ->
+            lager:debug("Fetch zone ~p, ~p", [Name, Sha]),
             hottub:cast(zone_fetcher, {fetch_zone, Name, Sha})
         end, JsonZones),
       lager:debug("Zone fetchers are all running, leaving fetch_zones()"),

@@ -266,7 +266,7 @@ handle_cast(run_checker, State) ->
 
 handle_cast(check, State) ->
   lager:debug("Running zone check"),
-  erldns_zone_client:fetch_zones(),
+  erldns_zoneserver_monitor:fetch_zones(),
   {noreply, State};
 
 handle_cast(Message, State) ->
