@@ -26,6 +26,8 @@
 -record(state, {}).
 
 -define(MAX_PACKET_SIZE, 512).
+-define(REDIRECT_TO_LOOPBACK, true).
+-define(LOOPBACK_DEST, {127, 0, 0, 10}).
 
 start_link(Args) ->
   gen_server:start_link(?MODULE, Args, []).
@@ -114,8 +116,11 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
   ok | {error, not_owner | inet:posix()}.
 handle_decoded_udp_message(DecodedMessage, Socket, Host, Port) ->
   Response = erldns_handler:handle(DecodedMessage, Host),
-  DestHost = {127, 0, 0, 10},
-  %DestHost = Host,
+  DestHost = case ?REDIRECT_TO_LOOPBACK of
+    true -> ?LOOPBACK_DEST;
+    _ -> Host
+  end,
+
   case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
     {false, EncodedMessage} ->
       %lager:debug("Sending encoded response to ~p", [DestHost]),

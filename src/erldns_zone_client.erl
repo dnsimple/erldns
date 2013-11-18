@@ -22,13 +22,19 @@
 % Public API
 -export([
     fetch_zones/0,
+    fetch_zones/1,
     fetch_zone/1,
     fetch_zone/2,
     do_fetch_zone/2
   ]).
 
+-define(PARALLEL_ZONE_LOADING, true).
+
 % Public API
 fetch_zones() ->
+  fetch_zones(?PARALLEL_ZONE_LOADING).
+
+fetch_zones(Parallel) ->
   case httpc:request(get, {zones_url(), headers()}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
       JsonZones = jsx:decode(Body),
@@ -37,8 +43,13 @@ fetch_zones() ->
       lager:info("Putting zones into cache"),
       lists:foreach(
         fun([{<<"name">>, Name}, {<<"sha">>, Sha}, _]) ->
-            lager:debug("Fetch zone ~p, ~p", [Name, Sha]),
-            hottub:cast(zone_fetcher, {fetch_zone, Name, Sha})
+            case Parallel of
+              true ->
+                lager:debug("Fetch zone ~p, ~p", [Name, Sha]),
+                hottub:cast(zone_fetcher, {fetch_zone, Name, Sha});
+              _ ->
+                fetch_zone(Name, Sha)
+            end
         end, JsonZones),
       lager:debug("Zone fetchers are all running, leaving fetch_zones()"),
       {ok, 0};

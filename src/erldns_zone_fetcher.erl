@@ -38,9 +38,7 @@ init(_) ->
 handle_call(_Request, _, State) ->
   {reply, ok, State}.
 handle_cast({fetch_zone, Name, Sha}, State) ->
-  lager:debug("Fetch zone ~p", [Name]),
   erldns_zone_client:fetch_zone(Name, Sha),
-  lager:debug("Decrement fetcher countdown"),
   erldns_zone_fetcher_countdown:decrement(),
   {noreply, State}.
 handle_info(_Info, State) ->
