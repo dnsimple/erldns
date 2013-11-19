@@ -35,10 +35,10 @@ handle_event(start_servers, State) ->
   case State#state.servers_running of
     false ->
       % Start up the UDP and TCP servers
-      lager:debug("Starting the UDP and TCP supervisor"),
+      lager:info("Starting the UDP and TCP supervisor"),
       erldns_server_sup:start_link(),
-      %lager:debug("Starting the run checker"),
-      %erldns_zone_cache:run_checker(),
+      lager:info("Starting the run checker"),
+      erldns_zone_cache:run_checker(),
       erldns_events:notify(servers_started),
        {ok, State#state{servers_running = true}};
     _ ->
