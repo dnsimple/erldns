@@ -43,12 +43,14 @@ fetch_zones(ProcessingType) ->
         fun([{<<"name">>, Name}, {<<"sha">>, Sha}, _]) ->
             case ProcessingType of
               none ->
+                lager:debug("Skipping fetch ~p", [Name]),
                 not_processed;
               serial ->
+                lager:debug("Serial fetch ~p, ~p", [Name, Sha]),
                 fetch_zone(Name, Sha);
               _ ->
                 % Always default to parallel
-                lager:debug("Fetch zone ~p, ~p", [Name, Sha]),
+                lager:debug("Parallel fetch ~p, ~p", [Name, Sha]),
                 hottub:cast(zone_fetcher, {fetch_zone, Name, Sha})
             end
         end, JsonZones),
