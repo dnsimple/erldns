@@ -20,6 +20,12 @@
 % API
 -export([start_link/0]).
 
+-export([
+    gc/0,
+    gc_registered/0,
+    gc_registered/1
+  ]).
+
 % Supervisor hooks
 -export([init/1]).
 
@@ -29,15 +35,49 @@
 -define(CHILD(I, Type, Args), {I, {I, start_link, Args}, permanent, 5000, Type, [I]}).
 
 %% Public API
+-spec start_link() -> any().
 start_link() ->
   supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
+-spec gc() -> integer().
+gc() ->
+  length(
+    lists:map(
+      fun(Pid) ->
+          lager:debug("GC ~p", [Pid]),
+          garbage_collect(Pid),
+          lager:debug("GC ~p done", [Pid])
+      end,
+      processes())
+  ).
+
+% Garbage collect all registered processes.
+-spec gc_registered() -> integer().
+gc_registered() ->
+  length(
+    lists:map(
+      fun(ProcessName) ->
+          gc_registered(ProcessName)
+      end,
+      registered())
+  ).
+
+-spec gc_registered(atom) -> ok.
+gc_registered(ProcessName) ->
+  Pid = whereis(ProcessName),
+  lager:debug("GC ~p", [ProcessName]),
+  garbage_collect(Pid),
+  lager:debug("GC ~p done", [ProcessName]),
+  ok.
+
+
+%% Callbacks
 init(_Args) ->
   {ok, AppPools} = application:get_env(erldns, pools),
   AppPoolSpecs = lists:map(fun({PoolName, WorkerModule, PoolConfig}) ->
         Args = [{name, {local, PoolName}},
-                {worker_module, WorkerModule}]
-              ++ PoolConfig,
+          {worker_module, WorkerModule}]
+        ++ PoolConfig,
         poolboy:child_spec(PoolName, Args)
     end, AppPools),
 
