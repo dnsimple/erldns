@@ -39,6 +39,7 @@
 start_link() ->
   supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
+%% @doc Garbage collect all processes.
 -spec gc() -> integer().
 gc() ->
   length(
@@ -51,7 +52,7 @@ gc() ->
       processes())
   ).
 
-% Garbage collect all registered processes.
+%% @doc Garbage collect all registered processes.
 -spec gc_registered() -> integer().
 gc_registered() ->
   length(
@@ -62,7 +63,8 @@ gc_registered() ->
       registered())
   ).
 
--spec gc_registered(atom) -> ok.
+%% @doc Garbage collect a named process.
+-spec gc_registered(atom()) -> ok.
 gc_registered(ProcessName) ->
   Pid = whereis(ProcessName),
   lager:debug("GC ~p", [ProcessName]),
