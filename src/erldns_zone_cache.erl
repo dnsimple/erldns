@@ -192,25 +192,35 @@ zone_names_and_versions() ->
 %% This function will build the necessary Zone record before interting.
 -spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone({Name, Sha, Records}) ->
-  gen_server:call(?SERVER, {put, Name, Sha, Records}),
+  lager:debug("put_zone(~p, ~p, ~p records)", [Name, Sha, length(Records)]),
+  ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  lager:debug("Zone inserted ~p", [Name]),
+  %gen_server:call(?SERVER, {put, Name, Sha, Records}),
   ok.
 
 %% @doc Put a zone into the cache and wait for a response.
 -spec put_zone(binary(), #zone{}) -> ok.
 put_zone(Name, Zone) ->
-  gen_server:call(?SERVER, {put, Name, Zone}),
+  lager:debug("put_zone(~p, Zone)", [Name, Zone]),
+  ets:insert(zones, {normalize_name(Name), Zone}),
+  lager:debug("Zone inserted ~p", [Name]),
+  %gen_server:call(?SERVER, {put, Name, Zone}),
   ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone_async({Name, Sha, Records}) ->
-  gen_server:cast(?SERVER, {put, Name, Sha, Records}),
+  lager:debug("put_zone_async(~p, ~p, ~p records)", [Name, Sha, length(Records)]),
+  ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  %gen_server:cast(?SERVER, {put, Name, Sha, Records}),
   ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async(binary(), #zone{}) -> ok.
 put_zone_async(Name, Zone) ->
-  gen_server:cast(?SERVER, {put, Name, Zone}),
+  lager:debug("put_zone_async(~p, Zone)", [Name, Zone]),
+  ets:insert(zones, {normalize_name(Name), Zone}),
+  %gen_server:cast(?SERVER, {put, Name, Zone}),
   ok.
 
 %% @doc Remove a zone from the cache without waiting for a response.
@@ -237,8 +247,8 @@ check_zones() ->
 %% @doc Initialize the zone cache.
 -spec init([]) -> {ok, #state{}}.
 init([]) ->
-  ets:new(zones, [set, named_table]),
-  ets:new(authorities, [set, named_table]),
+  ets:new(zones, [set, public, named_table]),
+  ets:new(authorities, [set, public, named_table]),
   {ok, #state{parsers = []}}.
 
 % ----------------------------------------------------------------------------------------------------
