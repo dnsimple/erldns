@@ -45,6 +45,8 @@ fetch_zones(ProcessingType) ->
               parallel ->
                 lager:debug("Fetch zone ~p, ~p", [Name, Sha]),
                 hottub:cast(zone_fetcher, {fetch_zone, Name, Sha});
+              none ->
+                ok;
               _ ->
                 fetch_zone(Name, Sha)
             end
