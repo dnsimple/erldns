@@ -190,30 +190,28 @@ zone_names_and_versions() ->
 %% used to determine if the zone requires updating.
 %%
 %% This function will build the necessary Zone record before interting.
--spec put_zone({binary(), binary(), [#dns_rr{}]}) -> #zone{}.
+-spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone({Name, Sha, Records}) ->
-  Zone = build_zone(Name, Sha, Records),
-  gen_server:call(?SERVER, {put, Name, Zone}),
-  Zone.
+  gen_server:call(?SERVER, {put, Name, Sha, Records}),
+  ok.
 
 %% @doc Put a zone into the cache and wait for a response.
--spec put_zone(binary(), #zone{}) -> #zone{}.
+-spec put_zone(binary(), #zone{}) -> ok.
 put_zone(Name, Zone) ->
   gen_server:call(?SERVER, {put, Name, Zone}),
-  Zone.
+  ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
--spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> #zone{}.
+-spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone_async({Name, Sha, Records}) ->
-  Zone = build_zone(Name, Sha, Records),
-  gen_server:cast(?SERVER, {put, Name, Zone}),
-  Zone.
+  gen_server:cast(?SERVER, {put, Name, Sha, Records}),
+  ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
--spec put_zone_async(binary(), #zone{}) -> #zone{}.
+-spec put_zone_async(binary(), #zone{}) -> ok.
 put_zone_async(Name, Zone) ->
   gen_server:cast(?SERVER, {put, Name, Zone}),
-  Zone.
+  ok.
 
 %% @doc Remove a zone from the cache without waiting for a response.
 -spec delete_zone(binary()) -> any().
@@ -249,10 +247,18 @@ init([]) ->
 %% @doc Write the zone into the cache.
 handle_call({put, Name, Zone}, _From, State) ->
   ets:insert(zones, {normalize_name(Name), Zone}),
+  {reply, ok, State};
+
+handle_call({put, Name, Sha, Records}, _From, State) ->
+  ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   {reply, ok, State}.
 
 handle_cast({put, Name, Zone}, State) ->
   ets:insert(zones, {normalize_name(Name), Zone}),
+  {noreply, State};
+
+handle_cast({put, Name, Sha, Records}, State) ->
+  ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   {noreply, State};
 
 handle_cast({delete, Name}, State) ->
