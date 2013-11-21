@@ -1,6 +1,6 @@
 {application,erldns,
              [{description,"Erlang Authoritative DNS Server"},
-              {vsn,"e470955"},
+              {vsn,"ee2612e"},
               {mod,{erldns_app,[]}},
               {applications,[kernel,stdlib,inets,crypto,ssl,observer,bear,
                              folsom,ranch,cowboy,hottub]},
