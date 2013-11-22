@@ -69,10 +69,8 @@ fetch_zone(Name) ->
 fetch_zone(Name, Sha) ->
   case erldns_zone_cache:get_zone(Name) of
     {ok, Zone} ->
-      lager:debug("Fetching ~p", [Name]),
       ZoneDigest = Zone#zone.version,
-      lager:debug("Remote digest: ~p", [Sha]),
-      lager:debug("Local digest: ~p", [ZoneDigest]),
+      lager:debug("Fetching ~p (local: ~p, remote ~p)", [Name, ZoneDigest, Sha]),
       case ZoneDigest =:= Sha of
         true ->
           lager:debug("Skipping zone since it's already in the cache"),
