@@ -45,9 +45,7 @@ gc() ->
   length(
     lists:map(
       fun(Pid) ->
-          lager:debug("GC ~p", [Pid]),
-          garbage_collect(Pid),
-          lager:debug("GC ~p done", [Pid])
+          garbage_collect(Pid)
       end,
       processes())
   ).
@@ -67,9 +65,7 @@ gc_registered() ->
 -spec gc_registered(atom()) -> ok.
 gc_registered(ProcessName) ->
   Pid = whereis(ProcessName),
-  lager:debug("GC ~p", [ProcessName]),
   garbage_collect(Pid),
-  lager:debug("GC ~p done", [ProcessName]),
   ok.
 
 
