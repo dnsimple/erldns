@@ -86,7 +86,7 @@ fetch_zone(Name, Sha) ->
 do_fetch_zone(Name, Url) ->
   AuthHeader = auth_header(),
   lager:debug("do_fetch_zone(~p, ~p)", [Name, Url]),
-  case httpc:request(get, {Url, [AuthHeader]}, [], [{body_format, binary}]) of
+  case httpc:request(get, {Url, [AuthHeader, client_api_version_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
       lager:debug("Zone fetched: ~p", [Name]),
       safe_process_json_zone(jsx:decode(Body), 'cast');
@@ -145,5 +145,8 @@ encoded_credentials() ->
 auth_header() ->
   {"Authorization","Basic " ++ encoded_credentials()}.
 
+client_api_version_header() ->
+  {"X-Zoneserver-API-Version", "1.0.0"}.
+
 headers() ->
-  [auth_header(), {"X-Zone-No-Records", "1"}].
+  [auth_header(), {"X-Zone-No-Records", "1"}, client_api_version_header()].
