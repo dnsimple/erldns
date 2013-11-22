@@ -22,14 +22,14 @@ websocket_handle({_Type, Msg}, _ConnState, State) ->
   ZoneNotification = jsx:decode(Msg),
   lager:debug("Zone notification received: ~p", [ZoneNotification]),
   case ZoneNotification of
-    [{<<"name">>, Name}, {<<"sha">>, _Version}, {<<"url">>, Url}, {<<"action">>, Action}] ->
+    [{<<"name">>, Name}, {<<"sha">>, Digest}, {<<"url">>, _Url}, {<<"action">>, Action}] ->
       case Action of
         <<"create">> ->
           lager:debug("Creating zone ~p", [Name]),
-          erldns_zone_client:do_fetch_zone(Name, binary_to_list(Url));
+          erldns_zone_client:fetch_zone(Name, Digest);
         <<"update">> ->
           lager:debug("Updating zone ~p", [Name]),
-          erldns_zone_client:do_fetch_zone(Name, binary_to_list(Url));
+          erldns_zone_client:fetch_zone(Name, Digest);
         <<"delete">> ->
           lager:debug("Deleting zone ~p", [Name]),
           erldns_zone_cache:delete_zone(Name);
