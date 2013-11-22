@@ -69,14 +69,17 @@ fetch_zone(Name) ->
 fetch_zone(Name, Sha) ->
   case erldns_zone_cache:get_zone(Name) of
     {ok, Zone} ->
+      lager:debug("Fetching ~p", [Name]),
       ZoneDigest = Zone#zone.version,
+      lager:debug("Remote digest: ~p", [Sha]),
+      lager:debug("Local digest: ~p", [ZoneDigest]),
       case ZoneDigest =:= Sha of
         true ->
           lager:debug("Skipping zone since it's already in the cache"),
           ok;
         _ ->
-          lager:debug("Fetching zone ~p ~p", [Name, Sha]),
-          do_fetch_zone(Name, zone_url(Name, Sha))
+          lager:debug("Fetching zone ~p ~p", [Name, ZoneDigest]),
+          do_fetch_zone(Name, zone_url(Name, ZoneDigest))
       end;
     _ ->
       lager:debug("Zone ~p not found, fetching zone", [Name]),
@@ -146,7 +149,7 @@ auth_header() ->
   {"Authorization","Basic " ++ encoded_credentials()}.
 
 client_api_version_header() ->
-  {"X-Zoneserver-API-Version", "1.0.0"}.
+  {"X-Zoneserver-API-Version", "2.0.0"}.
 
 headers() ->
   [auth_header(), {"X-Zone-No-Records", "1"}, client_api_version_header()].
