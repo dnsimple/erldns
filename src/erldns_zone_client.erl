@@ -67,7 +67,21 @@ fetch_zone(Name) ->
   do_fetch_zone(Name, zone_url(Name)).
 
 fetch_zone(Name, Sha) ->
-  do_fetch_zone(Name, zone_url(Name, Sha)).
+  case erldns_zone_cache:get_zone(Name) of
+    {ok, Zone} ->
+      ZoneDigest = Zone#zone.version,
+      case ZoneDigest =:= Sha of
+        true ->
+          lager:debug("Skipping zone since it's already in the cache"),
+          ok;
+        _ ->
+          lager:debug("Fetching zone ~p ~p", [Name, Sha]),
+          do_fetch_zone(Name, zone_url(Name, Sha))
+      end;
+    _ ->
+      lager:debug("Zone ~p not found, fetching zone", [Name]),
+      do_fetch_zone(Name, zone_url(Name))
+  end.
 
 do_fetch_zone(Name, Url) ->
   AuthHeader = auth_header(),
