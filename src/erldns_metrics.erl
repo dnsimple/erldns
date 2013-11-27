@@ -19,7 +19,7 @@
 
 -export([start_link/0]).
 
--export([setup/0, metrics/0, stats/0, vm/0, ets/0, filtered_metrics/0, filtered_stats/0, filtered_vm/0, filtered_ets/0]).
+-export([setup/0, metrics/0, stats/0, vm/0, ets/0, process_metrics/0, filtered_metrics/0, filtered_stats/0, filtered_vm/0, filtered_ets/0, filtered_process_metrics/0]).
 
 -define(DEFAULT_PORT, 8082).
 
@@ -159,6 +159,24 @@ keys_to_strings(Pairs) ->
     fun({K, V}) ->
         {list_to_binary(lists:flatten(io_lib:format("~p", [K]))), V}
     end, Pairs).
+
+process_metrics() ->
+  lists:map(
+    fun(ProcessName) ->
+        Pid = whereis(ProcessName),
+        {
+          ProcessName,
+          [
+            process_info(Pid, memory),
+            process_info(Pid, heap_size),
+            process_info(Pid, stack_size),
+            process_info(Pid, message_queue_len)
+          ]
+        }
+    end, registered()).
+
+filtered_process_metrics() ->
+  process_metrics().
 
 %% Gen server
 start_link() ->

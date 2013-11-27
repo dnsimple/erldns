@@ -41,11 +41,19 @@
   ]).
 
 % Write APIs
--export([put_zone/1,
+-export([
+    put_zone/1,
     put_zone/2,
     put_zone_async/1,
     put_zone_async/2,
-    delete_zone/1]).
+    delete_zone/1
+  ]).
+
+% Control APIs
+-export([
+    run_checker/0,
+    check_zones/0
+  ]).
 
 % Gen server hooks
 -export([init/1,
@@ -57,8 +65,9 @@
        ]).
 
 -define(SERVER, ?MODULE).
+-define(CHECK_INTERVAL, 1000 * 600). % Every N seconds
 
--record(state, {parsers}).
+-record(state, {parsers, tref = none}).
 
 %% @doc Start the zone cache process.
 -spec start_link() -> any().
@@ -181,62 +190,103 @@ zone_names_and_versions() ->
 %% used to determine if the zone requires updating.
 %%
 %% This function will build the necessary Zone record before interting.
--spec put_zone({binary(), binary(), [#dns_rr{}]}) -> #zone{}.
+-spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone({Name, Sha, Records}) ->
-  Zone = build_zone(Name, Sha, Records),
-  gen_server:call(?SERVER, {put, Name, Zone}),
-  Zone.
+  lager:debug("put_zone(~p, ~p, ~p records)", [Name, Sha, length(Records)]),
+  ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  lager:debug("Zone inserted ~p", [Name]),
+  %gen_server:call(?SERVER, {put, Name, Sha, Records}),
+  ok.
 
 %% @doc Put a zone into the cache and wait for a response.
--spec put_zone(binary(), #zone{}) -> #zone{}.
+-spec put_zone(binary(), #zone{}) -> ok.
 put_zone(Name, Zone) ->
-  gen_server:call(?SERVER, {put, Name, Zone}),
-  Zone.
+  lager:debug("put_zone(~p, Zone)", [Name, Zone]),
+  ets:insert(zones, {normalize_name(Name), Zone}),
+  lager:debug("Zone inserted ~p", [Name]),
+  %gen_server:call(?SERVER, {put, Name, Zone}),
+  ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
--spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> #zone{}.
+-spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone_async({Name, Sha, Records}) ->
-  Zone = build_zone(Name, Sha, Records),
-  gen_server:cast(?SERVER, {put, Name, Zone}),
-  Zone.
+  lager:debug("put_zone_async(~p, ~p, ~p records)", [Name, Sha, length(Records)]),
+  ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  %gen_server:cast(?SERVER, {put, Name, Sha, Records}),
+  ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
--spec put_zone_async(binary(), #zone{}) -> #zone{}.
+-spec put_zone_async(binary(), #zone{}) -> ok.
 put_zone_async(Name, Zone) ->
-  gen_server:cast(?SERVER, {put, Name, Zone}),
-  Zone.
+  lager:debug("put_zone_async(~p, Zone)", [Name, Zone]),
+  ets:insert(zones, {normalize_name(Name), Zone}),
+  %gen_server:cast(?SERVER, {put, Name, Zone}),
+  ok.
 
 %% @doc Remove a zone from the cache without waiting for a response.
 -spec delete_zone(binary()) -> any().
 delete_zone(Name) ->
   gen_server:cast(?SERVER, {delete, Name}).
 
-% Gen server hooks
+% ----------------------------------------------------------------------------------------------------
+% Control API
+
+%% @doc Start the zone check
+-spec run_checker() -> any().
+run_checker() ->
+  gen_server:cast(?SERVER, run_checker).
+
+%% @doc Check all zones to ensure cache is up-to-date
+-spec check_zones() -> any().
+check_zones() ->
+  gen_server:cast(?SERVER, check).
+
+% ----------------------------------------------------------------------------------------------------
+% Gen server init
 
 %% @doc Initialize the zone cache.
 -spec init([]) -> {ok, #state{}}.
 init([]) ->
-  ets:new(zones, [set, named_table]),
-  ets:new(authorities, [set, named_table]),
+  ets:new(zones, [set, public, named_table]),
+  ets:new(authorities, [set, public, named_table]),
   {ok, #state{parsers = []}}.
 
 % ----------------------------------------------------------------------------------------------------
-% gen_server callbacks for Write operations
+% gen_server callbacks
 
 %% @doc Write the zone into the cache.
 handle_call({put, Name, Zone}, _From, State) ->
   ets:insert(zones, {normalize_name(Name), Zone}),
+  {reply, ok, State};
+
+handle_call({put, Name, Sha, Records}, _From, State) ->
+  ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   {reply, ok, State}.
 
 handle_cast({put, Name, Zone}, State) ->
   ets:insert(zones, {normalize_name(Name), Zone}),
   {noreply, State};
 
+handle_cast({put, Name, Sha, Records}, State) ->
+  ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  {noreply, State};
+
 handle_cast({delete, Name}, State) ->
   ets:delete(zones, normalize_name(Name)),
   {noreply, State};
 
-handle_cast(_, State) ->
+handle_cast(run_checker, State) ->
+  lager:debug("Running zone checker"),
+  {ok, Tref} = timer:apply_interval(?CHECK_INTERVAL, ?MODULE, check_zones, []),
+  {noreply, State#state{tref = Tref}};
+
+handle_cast(check, State) ->
+  lager:debug("Running zone check"),
+  erldns_zoneserver_monitor:fetch_zones(),
+  {noreply, State};
+
+handle_cast(Message, State) ->
+  lager:debug("Received unsupported message: ~p", [Message]),
   {noreply, State}.
 
 handle_info(_Message, State) ->

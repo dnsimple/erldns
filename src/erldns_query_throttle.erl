@@ -22,7 +22,7 @@
 -include_lib("dns/include/dns_records.hrl").
 
 %% API
--export([start_link/0, throttle/2, sweep/0]).
+-export([start_link/0, throttle/2, sweep/0, stop/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -40,7 +40,8 @@
 
 -define(LIMIT, 5).
 -define(EXPIRATION, 60).
--define(SWEEP_INTERVAL, 1000 * 60 * 5). % Every 10 minutes
+-define(ENABLED, true).
+-define(SWEEP_INTERVAL, 1000 * 60 * 5).
 
 -record(state, {tref}).
 
@@ -52,12 +53,24 @@ start_link() ->
 %% @doc Throttle the given message if necessary.
 -spec throttle(dns:message(), inet:ip_address() | inet:hostname()) -> ok | throttle_result().
 throttle(Message, Host) ->
-  gen_server:call(?MODULE, {throttle, Message, Host}).
+  case ?ENABLED of
+    true ->
+      %lager:debug("Checking throttle for ~p", [Host]),
+      gen_server:call(?MODULE, {throttle, Message, Host});
+    _ ->
+      %lager:debug("Throttle not enabled"),
+      ok
+  end.
 
 %% @doc Sweep the query throttle table for expired host records.
 -spec sweep() -> any().
 sweep() ->
   gen_server:cast(?MODULE, sweep).
+
+%% @doc Stop the query throttle process normally.
+-spec stop() -> any().
+stop() ->
+  gen_server:call(?MODULE, stop).
 
 
 % Gen server hooks
@@ -70,12 +83,13 @@ handle_call({throttle, Message, Host}, _From, State) ->
   case lists:filter(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Message#dns_message.questions) of
     [] -> {reply, ok, State};
     _ -> {reply, record_request(maybe_throttle(Host)), State}
-  end.
+  end;
+
+handle_call(stop, _From, State) ->
+  {stop, normal, ok, State}.
 
 handle_cast(sweep, State) ->
-  lager:debug("Sweeping host throttle"),
   Keys = ets:select(host_throttle, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - ?EXPIRATION}], ['$1']}]),
-  lager:debug("Found keys: ~p", [Keys]),
   lists:foreach(fun(K) -> ets:delete(host_throttle, K) end, Keys),
   {noreply, State}.
 

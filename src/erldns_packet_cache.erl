@@ -21,7 +21,7 @@
 -behavior(gen_server).
 
 % API
--export([start_link/0, get/1, get/2, put/2, sweep/0, clear/0]).
+-export([start_link/0, get/1, get/2, put/2, sweep/0, clear/0, stop/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -33,7 +33,8 @@
        ]).
 
 -define(SERVER, ?MODULE).
--define(SWEEP_INTERVAL, 1000 * 60 * 10). % Every 10 minutes
+-define(ENABLED, true).
+-define(SWEEP_INTERVAL, 1000 * 60 * 3). % Every 3 minutes
 
 -record(state, {
     ttl :: non_neg_integer(),
@@ -74,7 +75,14 @@ get(Question, _Host) ->
 %% @doc Put the response in the cache for the given question.
 -spec put(dns:question(), dns:message()) -> ok.
 put(Question, Response) ->
-  gen_server:call(?SERVER, {set_packet, [Question, Response]}).
+  case ?ENABLED of
+    true ->
+      %lager:debug("Set packet in cache for ~p", [Question]),
+      gen_server:call(?SERVER, {set_packet, [Question, Response]});
+    _ ->
+      %lager:debug("Packet cache not enabled (Q: ~p)", [Question]),
+      ok
+  end.
 
 %% @doc Remove all old cached packets from the cache.
 -spec sweep() -> any().
@@ -85,6 +93,11 @@ sweep() ->
 -spec clear() -> any().
 clear() ->
   gen_server:cast(?SERVER, clear).
+
+%% @doc Stop the cache
+-spec stop() -> any().
+stop() ->
+  gen_server:call(?SERVER, stop).
 
 %% Gen server hooks
 -spec init([non_neg_integer()]) -> {ok, #state{}}.
@@ -97,7 +110,10 @@ init([TTL]) ->
 
 handle_call({set_packet, [Question, Response]}, _From, State) ->
   ets:insert(packet_cache, {Question, {Response, timestamp() + State#state.ttl}}),
-  {reply, ok, State}.
+  {reply, ok, State};
+
+handle_call(stop, _From, State) ->
+  {stop, normal, ok, State}.
 
 handle_cast(sweep, State) ->
   Keys = ets:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}]),

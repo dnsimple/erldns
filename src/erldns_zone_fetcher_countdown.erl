@@ -21,6 +21,8 @@
 -export([start_link/0, set_remaining/1, decrement/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-define(GC, true).
+
 -record(state, {start, remaining}).
 
 %% @doc Start the countdown process.
@@ -47,8 +49,16 @@ handle_call({set_remaining, Remaining}, _, _) ->
 handle_cast(decrement, State) ->
   case Remaining = State#state.remaining - 1 of
     0 ->
-      erldns_events:notify(start_servers),
+      erldns_events:notify(zone_fetcher_finished),
       lager:info("Loaded ~p zones", [State#state.start]),
+
+      case ?GC of
+        true ->
+          erldns_sup:gc(),
+          lager:info("GC complete");
+        _ -> skipped
+      end,
+
       {stop, normal, State#state{remaining = Remaining}};
     _ ->
       {noreply, State#state{remaining = Remaining}}

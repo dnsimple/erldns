@@ -22,7 +22,7 @@
 % Public API
 
 %% @doc Load zones from a file. The default file name is "zones.json".
--spec load_zones() -> {ok, integer} | {err,  atom}.
+-spec load_zones() -> {ok, integer()} | {err,  atom()}.
 load_zones() ->
   case file:read_file(filename()) of
     {ok, Binary} ->
@@ -42,13 +42,13 @@ load_zones() ->
   end.
 
 %% @doc Load zones from a remote zone server.
--spec load_remote_zones() -> {ok, integer} | {err, atom}.
+-spec load_remote_zones() -> {ok, integer()} | {err, atom()}.
 load_remote_zones() ->
   {T, _} = timer:tc(erldns_zoneserver_monitor, fetch_zones, []),
   folsom_metrics:notify({load_remote_zones_history, T}),
   ok.
 
-% Interal API
+% Internal API
 filename() ->
   case application:get_env(erldns, zones) of
     {ok, Filename} -> Filename;
