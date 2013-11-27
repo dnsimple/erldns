@@ -99,7 +99,7 @@ send_tcp_message(Socket, EncodedMessage) ->
 %% @doc Handle DNS query that comes in over UDP
 -spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary()) -> ok.
 handle_udp_dns_query(Socket, Host, Port, Bin) ->
-  lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
+  %lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
   erldns_events:notify({start_udp, [{host, Host}]}),
   case dns:decode_message(Bin) of
     {trailing_garbage, DecodedMessage, _} ->
