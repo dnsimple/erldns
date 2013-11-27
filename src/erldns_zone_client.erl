@@ -43,14 +43,14 @@ fetch_zones(ProcessingType) ->
         fun([{<<"name">>, Name}, {<<"sha">>, Sha}, _]) ->
             case ProcessingType of
               none ->
-                lager:debug("Skipping fetch ~p", [Name]),
+                %lager:debug("Skipping fetch ~p", [Name]),
                 not_processed;
               serial ->
-                lager:debug("Serial fetch ~p, ~p", [Name, Sha]),
+                %lager:debug("Serial fetch ~p, ~p", [Name, Sha]),
                 fetch_zone(Name, Sha);
               _ ->
                 % Always default to parallel
-                lager:debug("Parallel fetch ~p, ~p", [Name, Sha]),
+                %lager:debug("Parallel fetch ~p, ~p", [Name, Sha]),
                 hottub:cast(zone_fetcher, {fetch_zone, Name, Sha})
             end
         end, JsonZones),
@@ -70,32 +70,32 @@ fetch_zone(Name, Sha) ->
   case erldns_zone_cache:get_zone(Name) of
     {ok, Zone} ->
       ZoneDigest = Zone#zone.version,
-      lager:debug("Fetching ~p (local: ~p, remote ~p)", [Name, ZoneDigest, Sha]),
+      %lager:debug("Fetching ~p (local: ~p, remote ~p)", [Name, ZoneDigest, Sha]),
       case ZoneDigest =:= Sha of
         true ->
-          lager:debug("Skipping zone since it's already in the cache"),
+          %lager:debug("Skipping zone since it's already in the cache"),
           ok;
         _ ->
-          lager:debug("Fetching zone ~p ~p", [Name, ZoneDigest]),
+          %lager:debug("Fetching zone ~p ~p", [Name, ZoneDigest]),
           do_fetch_zone(Name, zone_url(Name, ZoneDigest))
       end;
     _ ->
-      lager:debug("Zone ~p not found, fetching zone", [Name]),
+      %lager:debug("Zone ~p not found, fetching zone", [Name]),
       do_fetch_zone(Name, zone_url(Name))
   end.
 
 do_fetch_zone(Name, Url) ->
   AuthHeader = auth_header(),
-  lager:debug("do_fetch_zone(~p, ~p)", [Name, Url]),
+  %lager:debug("do_fetch_zone(~p, ~p)", [Name, Url]),
   case httpc:request(get, {Url, [AuthHeader, client_api_version_header()]}, [], [{body_format, binary}]) of
     {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Body}} ->
-      lager:debug("Zone fetched: ~p", [Name]),
+      %lager:debug("Zone fetched: ~p", [Name]),
       safe_process_json_zone(jsx:decode(Body), 'cast');
     {_, {{_Version, Status = 304, ReasonPhrase}, _Headers, _Body}} ->
-      lager:debug("Zone not modified: ~p", [Name]),
+      %lager:debug("Zone not modified: ~p", [Name]),
       {ok, Status, ReasonPhrase};
     {_, {{_Version, Status = 404, ReasonPhrase}, _Headers, _Body}} ->
-      lager:debug("Zone not found: ~p", [Name]),
+      %lager:debug("Zone not found: ~p", [Name]),
       erldns_zone_cache:delete_zone(Name),
       {err, Status, ReasonPhrase};
     {_, {{_Version, Status, ReasonPhrase}, _Headers, _Body}} ->
@@ -121,8 +121,8 @@ process_json_zone(JsonZone, 'call') ->
   erldns_zone_cache:put_zone(Zone);
 process_json_zone(JsonZone, 'cast') ->
   Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-  {Name, Version, _Records} = Zone,
-  lager:debug("Put zone async: ~p (~p)", [Name, Version]),
+  {_Name, _Version, _Records} = Zone,
+  %lager:debug("Put zone async: ~p (~p)", [Name, Version]),
   erldns_zone_cache:put_zone_async(Zone).
 
 %% Internal functions

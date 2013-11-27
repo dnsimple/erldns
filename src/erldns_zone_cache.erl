@@ -192,25 +192,25 @@ zone_names_and_versions() ->
 %% This function will build the necessary Zone record before interting.
 -spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone({Name, Sha, Records}) ->
-  lager:debug("put_zone(~p, ~p, ~p records)", [Name, Sha, length(Records)]),
+  %lager:debug("put_zone(~p, ~p, ~p records)", [Name, Sha, length(Records)]),
   ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
-  lager:debug("Zone inserted ~p", [Name]),
+  %lager:debug("Zone inserted ~p", [Name]),
   %gen_server:call(?SERVER, {put, Name, Sha, Records}),
   ok.
 
 %% @doc Put a zone into the cache and wait for a response.
 -spec put_zone(binary(), #zone{}) -> ok.
 put_zone(Name, Zone) ->
-  lager:debug("put_zone(~p, Zone)", [Name, Zone]),
+  %lager:debug("put_zone(~p, Zone)", [Name, Zone]),
   ets:insert(zones, {normalize_name(Name), Zone}),
-  lager:debug("Zone inserted ~p", [Name]),
+  %lager:debug("Zone inserted ~p", [Name]),
   %gen_server:call(?SERVER, {put, Name, Zone}),
   ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone_async({Name, Sha, Records}) ->
-  lager:debug("put_zone_async(~p, ~p, ~p records)", [Name, Sha, length(Records)]),
+  %lager:debug("put_zone_async(~p, ~p, ~p records)", [Name, Sha, length(Records)]),
   ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   %gen_server:cast(?SERVER, {put, Name, Sha, Records}),
   ok.
@@ -218,7 +218,7 @@ put_zone_async({Name, Sha, Records}) ->
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async(binary(), #zone{}) -> ok.
 put_zone_async(Name, Zone) ->
-  lager:debug("put_zone_async(~p, Zone)", [Name, Zone]),
+  %lager:debug("put_zone_async(~p, Zone)", [Name, Zone]),
   ets:insert(zones, {normalize_name(Name), Zone}),
   %gen_server:cast(?SERVER, {put, Name, Zone}),
   ok.
