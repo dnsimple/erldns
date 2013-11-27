@@ -26,7 +26,7 @@
 -record(state, {}).
 
 -define(MAX_PACKET_SIZE, 512).
--define(REDIRECT_TO_LOOPBACK, true).
+-define(REDIRECT_TO_LOOPBACK, false).
 -define(LOOPBACK_DEST, {127, 0, 0, 10}).
 
 start_link(Args) ->
