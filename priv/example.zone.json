@@ -25,6 +25,14 @@
                 }
             },
             {
+                "name": "example.com",
+                "type": "AAAA",
+                "ttl": 3600,
+                "data": {
+                    "ip": "2001:6A8:0:1:210:4BFF:FE4B:4C61"
+                }
+            },
+            {
                 "name": "www.example.com",
                 "type": "CNAME",
                 "ttl": 120,
@@ -55,6 +63,14 @@
                 "ttl": 3600,
                 "data": {
                     "dname": "ns2.example.com"
+                }
+            },
+            {
+                "name": "example.com",
+                "type": "TXT",
+                "ttl": 3600,
+                "data": {
+                    "txt": "\"Hi, this is some text\""
                 }
             }
         ]
