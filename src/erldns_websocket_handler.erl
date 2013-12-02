@@ -25,13 +25,13 @@ websocket_handle({_Type, Msg}, _ConnState, State) ->
     [{<<"name">>, Name}, {<<"sha">>, Digest}, {<<"url">>, _Url}, {<<"action">>, Action}] ->
       case Action of
         <<"create">> ->
-          lager:debug("Creating zone ~p", [Name]),
+          %lager:debug("Creating zone ~p", [Name]),
           erldns_zone_client:fetch_zone(Name, Digest);
         <<"update">> ->
-          lager:debug("Updating zone ~p", [Name]),
+          %lager:debug("Updating zone ~p", [Name]),
           erldns_zone_client:fetch_zone(Name, Digest);
         <<"delete">> ->
-          lager:debug("Deleting zone ~p", [Name]),
+          %lager:debug("Deleting zone ~p", [Name]),
           erldns_zone_cache:delete_zone(Name);
         _ ->
           lager:error("Unsupported action: ~p", [Action])
