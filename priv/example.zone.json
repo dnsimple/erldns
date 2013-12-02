@@ -28,7 +28,7 @@
       "type": "MX",
       "ttl": 3600,
       "data": {
-        "preference": "10",
+        "preference": 10,
         "exchange": "mail.example.com"
       }
     }
