@@ -38,7 +38,7 @@
 -type throttle_hit_count() :: non_neg_integer().
 -type throttle_result() :: {throttled | ok, inet:ip_address() | inet:hostname(), throttle_hit_count()}.
 
--define(LIMIT, 5).
+-define(LIMIT, 1).
 -define(EXPIRATION, 60).
 -define(ENABLED, true).
 -define(SWEEP_INTERVAL, 1000 * 60 * 5).
@@ -55,8 +55,10 @@ start_link() ->
 throttle(Message, Host) ->
   case ?ENABLED of
     true ->
-      %lager:debug("Checking throttle for ~p", [Host]),
-      gen_server:call(?MODULE, {throttle, Message, Host});
+      case lists:filter(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Message#dns_message.questions) of
+        [] -> ok;
+        _ -> record_request(maybe_throttle(Host))
+      end;
     _ ->
       %lager:debug("Throttle not enabled"),
       ok
@@ -75,15 +77,9 @@ stop() ->
 
 % Gen server hooks
 init([]) ->
-  ets:new(host_throttle, [set, named_table]),
+  ets:new(host_throttle, [set, named_table, public]),
   {ok, Tref} = timer:apply_interval(?SWEEP_INTERVAL, ?MODULE, sweep, []),
   {ok, #state{tref = Tref}}.
-
-handle_call({throttle, Message, Host}, _From, State) ->
-  case lists:filter(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Message#dns_message.questions) of
-    [] -> {reply, ok, State};
-    _ -> {reply, record_request(maybe_throttle(Host)), State}
-  end;
 
 handle_call(stop, _From, State) ->
   {stop, normal, ok, State}.
