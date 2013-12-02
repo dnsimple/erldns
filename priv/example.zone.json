@@ -72,7 +72,27 @@
                 "data": {
                     "txt": "\"Hi, this is some text\""
                 }
+            },
+            {
+                "name": "_ldap._tcp.example.com",
+                "type": "SRV",
+                "ttl": 3600,
+                "data": {
+                    "priority": 0,
+                    "weight": 100,
+                    "port": 389,
+                    "target": "ldap.example.com"
+                }
+            },
+            {
+                "name": "ldap.example.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "50.40.50.40"
+                }
             }
+
         ]
     }
 ]
