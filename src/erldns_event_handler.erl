@@ -50,12 +50,15 @@ handle_event(zone_fetcher_finished, State) ->
   erldns_events:notify(start_servers),
   {ok, State};
 
-handle_event(end_udp, State) ->
+handle_event({end_udp, [{host, _Host}]}, State) ->
+  lager:debug("End UDP request"),
   folsom_metrics:notify({udp_request_meter, 1}),
+  folsom_metrics:notify({udp_request_counter, {inc, 1}}),
   {ok, State};
 
-handle_event(end_tcp, State) ->
+handle_event({end_tcp, [{host, _Host}]}, State) ->
   folsom_metrics:notify({tcp_request_meter, 1}),
+  folsom_metrics:notify({tcp_request_counter, {inc, 1}}),
   {ok, State};
 
 handle_event(_Event, State) ->

@@ -37,6 +37,8 @@
 %% Not part of gen server
 
 setup() ->
+  folsom_metrics:new_counter(udp_request_counter),
+  folsom_metrics:new_counter(tcp_request_counter),
   folsom_metrics:new_meter(udp_request_meter),
   folsom_metrics:new_meter(tcp_request_meter),
 
