@@ -37,6 +37,9 @@
 %% Not part of gen server
 
 setup() ->
+  folsom_metrics:new_meter(udp_request_meter),
+  folsom_metrics:new_meter(tcp_request_meter),
+
   folsom_metrics:new_histogram(udp_handoff_histogram),
   folsom_metrics:new_histogram(tcp_handoff_histogram),
 

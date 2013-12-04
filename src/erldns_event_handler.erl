@@ -50,6 +50,14 @@ handle_event(zone_fetcher_finished, State) ->
   erldns_events:notify(start_servers),
   {ok, State};
 
+handle_event(end_udp, State) ->
+  folsom_metrics:notify({udp_request_meter, 1}),
+  {ok, State};
+
+handle_event(end_tcp, State) ->
+  folsom_metrics:notify({tcp_request_meter, 1}),
+  {ok, State};
+
 handle_event(_Event, State) ->
   {ok, State}.
 
