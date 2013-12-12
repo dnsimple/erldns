@@ -1,6 +1,7 @@
 *.beam
 *.dump
 erldns.config
+erldns.config*
 log/
 ebin/
 deps/*
