@@ -101,13 +101,11 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
         % Filter by context
         case apply_context_options(Data) of
           pass ->
-            lager:debug("Record passed: ~p", [Data]),
             case json_record_to_erlang(Data) of
               {} -> try_custom_parsers(Data, Parsers);
               ParsedRecord -> ParsedRecord
             end;
           _ ->
-            lager:debug("Record did not pass: ~p", [Data]),
             {}
         end
     end, JsonRecords),
