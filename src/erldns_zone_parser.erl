@@ -287,7 +287,7 @@ json_record_to_erlang([Name, <<"SSHFP">>, Ttl, Data, _Context]) ->
     data = #dns_rrdata_sshfp{
       alg = proplists:get_value(<<"alg">>, Data),
       fp_type = proplists:get_value(<<"fptype">>, Data),
-      fp = proplists:get_value(<<"fp">>, Data)
+      fp = hex_to_bin(proplists:get_value(<<"fp">>, Data))
     },
     ttl = Ttl};
 
@@ -320,3 +320,12 @@ json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data, _Context]) ->
 json_record_to_erlang(_Data) ->
   %lager:debug("Cannot convert ~p", [Data]),
   {}.
+
+hex_to_bin(Bin) when is_binary(Bin) ->
+    Fun = fun(A, B) ->
+	     case io_lib:fread("~16u", [A, B]) of
+		 {ok, [V], []} -> V;
+		 _ -> error(badarg)
+	     end
+	  end,
+    << <<(Fun(A,B))>> || <<A, B>> <= Bin >>.
