@@ -281,15 +281,22 @@ json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) ->
     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"SSHFP">>, Ttl, Data, _Context]) ->
-  #dns_rr{
-    name = Name,
-    type = ?DNS_TYPE_SSHFP,
-    data = #dns_rrdata_sshfp{
-      alg = proplists:get_value(<<"alg">>, Data),
-      fp_type = proplists:get_value(<<"fptype">>, Data),
-      fp = hex_to_bin(proplists:get_value(<<"fp">>, Data))
-    },
-    ttl = Ttl};
+  try hex_to_bin(proplists:get_value(<<"fp">>, Data)) of
+    Fp ->
+      #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_SSHFP,
+        data = #dns_rrdata_sshfp {
+          alg = proplists:get_value(<<"alg">>, Data),
+          fp_type = proplists:get_value(<<"fptype">>, Data),
+          fp = Fp
+        },
+        ttl = Ttl
+      }
+    catch E ->
+        lager:error("Error converting fingerprint: ~p (Reason: ~p)", [proplists:get_value(<<"fp">>, Data), E]),
+        {}
+    end;
 
 json_record_to_erlang([Name, <<"SRV">>, Ttl, Data, _Context]) ->
   #dns_rr{
