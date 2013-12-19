@@ -286,15 +286,15 @@ json_record_to_erlang([Name, <<"SSHFP">>, Ttl, Data, _Context]) ->
       #dns_rr{
         name = Name,
         type = ?DNS_TYPE_SSHFP,
-        data = #dns_rrdata_sshfp {
+        data = #dns_rrdata_sshfp{
           alg = proplists:get_value(<<"alg">>, Data),
           fp_type = proplists:get_value(<<"fptype">>, Data),
           fp = Fp
         },
-        ttl = Ttl
-      }
-    catch E ->
-        lager:error("Error converting fingerprint: ~p (Reason: ~p)", [proplists:get_value(<<"fp">>, Data), E]),
+        ttl = Ttl}
+    catch
+      Exception:Reason ->
+        lager:error("Error parsing SSHFP ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason]),
         {}
     end;
 
@@ -329,10 +329,10 @@ json_record_to_erlang(_Data) ->
   {}.
 
 hex_to_bin(Bin) when is_binary(Bin) ->
-    Fun = fun(A, B) ->
-	     case io_lib:fread("~16u", [A, B]) of
-		 {ok, [V], []} -> V;
-		 _ -> error(badarg)
-	     end
-	  end,
-    << <<(Fun(A,B))>> || <<A, B>> <= Bin >>.
+  Fun = fun(A, B) ->
+      case io_lib:fread("~16u", [A, B]) of
+        {ok, [V], []} -> V;
+        _ -> error(badarg)
+      end
+  end,
+  << <<(Fun(A,B))>> || <<A, B>> <= Bin >>.
