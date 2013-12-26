@@ -333,9 +333,9 @@ build_named_index([], Idx) -> Idx;
 build_named_index([R|Rest], Idx) ->
   case dict:find(R#dns_rr.name, Idx) of
     {ok, Records} ->
-      build_named_index(Rest, dict:store(R#dns_rr.name, Records ++ [R], Idx));
+      build_named_index(Rest, dict:store(normalize_name(R#dns_rr.name), Records ++ [R], Idx));
     error ->
-      build_named_index(Rest, dict:store(R#dns_rr.name, [R], Idx))
+      build_named_index(Rest, dict:store(normalize_name(R#dns_rr.name), [R], Idx))
   end.
 
 normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
