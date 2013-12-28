@@ -125,7 +125,7 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
     end, JsonRecords),
   FilteredRecords = lists:filter(record_filter(), Records),
   DistinctRecords = lists:usort(FilteredRecords),
-  lager:debug("Records for ~p: ~p", [Name, DistinctRecords]),
+  % lager:debug("After parsing for ~p: ~p", [Name, DistinctRecords]),
   {Name, Sha, DistinctRecords}.
 
 record_filter() ->
@@ -275,11 +275,19 @@ json_record_to_erlang([Name, <<"RP">>, Ttl, Data, _Context]) ->
     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"TXT">>, Ttl, Data, _Context]) ->
-  #dns_rr{
-    name = Name,
-    type = ?DNS_TYPE_TXT,
-    data = #dns_rrdata_txt{txt = lists:flatten(erldns_txt:parse(proplists:get_value(<<"txt">>, Data)))},
-    ttl = Ttl};
+  %% This function call may crash. Handle it as a bad record.
+  try erldns_txt:parse(proplists:get_value(<<"txt">>, Data)) of
+    ParsedText ->
+      #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_TXT,
+        data = #dns_rrdata_txt{txt = lists:flatten(ParsedText)},
+        ttl = Ttl}
+    catch
+      Exception:Reason ->
+        lager:error("Error parsing TXT ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason])
+    end;
+
 
 json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) ->
   #dns_rr{
@@ -296,6 +304,7 @@ json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) ->
     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"SSHFP">>, Ttl, Data, _Context]) ->
+  %% This function call may crash. Handle it as a bad record.
   try hex_to_bin(proplists:get_value(<<"fp">>, Data)) of
     Fp ->
       #dns_rr{
