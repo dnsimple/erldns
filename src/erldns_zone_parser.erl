@@ -20,7 +20,13 @@
 -include_lib("dns/include/dns.hrl").
 -include("erldns.hrl").
 
--export([start_link/0, zone_to_erlang/1, register_parsers/1, register_parser/1]).
+-export([
+    start_link/0,
+    zone_to_erlang/1,
+    register_parsers/1,
+    register_parser/1,
+    list_parsers/0
+  ]).
 
 % Gen server hooks
 -export([init/1,
@@ -62,6 +68,11 @@ register_parser(Module) ->
   lager:info("Registering custom parser: ~p", [Module]),
   gen_server:call(?SERVER, {register_parser, Module}).
 
+-spec list_parsers() -> [module()].
+list_parsers() ->
+  gen_server:call(?SERVER, list_parsers).
+
+
 %% Gen server hooks
 init([]) ->
   {ok, #state{parsers = []}}.
@@ -73,7 +84,10 @@ handle_call({register_parsers, Modules}, _From, State) ->
   {reply, ok, State#state{parsers = State#state.parsers ++ Modules}};
 
 handle_call({register_parser, Module}, _From, State) ->
-  {reply, ok, State#state{parsers = State#state.parsers ++ [Module]}}.
+  {reply, ok, State#state{parsers = State#state.parsers ++ [Module]}};
+
+handle_call(list_parsers, _From, State) ->
+  {reply, ok, State#state.parsers}.
 
 handle_cast(_, State) ->
   {noreply, State}.
@@ -111,6 +125,7 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
     end, JsonRecords),
   FilteredRecords = lists:filter(record_filter(), Records),
   DistinctRecords = lists:usort(FilteredRecords),
+  lager:debug("Records for ~p: ~p", [Name, DistinctRecords]),
   {Name, Sha, DistinctRecords}.
 
 record_filter() ->

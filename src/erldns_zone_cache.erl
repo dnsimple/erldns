@@ -210,7 +210,7 @@ put_zone(Name, Zone) ->
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone_async({Name, Sha, Records}) ->
-  %lager:debug("put_zone_async(~p, ~p, ~p records)", [Name, Sha, length(Records)]),
+  lager:debug("put_zone_async(~p, ~p, ~p records)", [Name, Sha, length(Records)]),
   ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   %gen_server:cast(?SERVER, {put, Name, Sha, Records}),
   ok.
