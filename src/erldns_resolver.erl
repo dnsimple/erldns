@@ -48,8 +48,13 @@ resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
 %% No SOA was found for the Qname so we return the root hints
 %% Note: it seems odd that we are indicating we are authoritative here.
 resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain) ->
-  {Authority, Additional} = erldns_records:root_hints(),
-  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
+  case erldns_config:use_root_hints() of
+      true ->
+        {Authority, Additional} = erldns_records:root_hints(),
+        Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
+      _ ->
+        Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR}
+  end;
 
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
@@ -283,8 +288,13 @@ resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords
     false ->
       % TODO: this case does not appear to have any tests in the dnstest suite.
       % Why is it here?
-      {Authority, Additional} = erldns_records:root_hints(),
-      Message#dns_message{authority=Authority, additional=Additional}
+      case erldns_config:use_root_hints() of
+        true ->
+          {Authority, Additional} = erldns_records:root_hints(),
+          Message#dns_message{authority = Authority, additional = Additional};
+        _ ->
+          Message
+      end
   end.
 
 

@@ -3,6 +3,7 @@
       {port, 8053},
       {inet4, "127.0.0.1"},
       {inet6, "::1"},
+      {use_root_hints, false},
       {catch_exceptions, false},
       {zones, "priv/example.zone.json"},
       {metrics, [

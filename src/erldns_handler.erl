@@ -130,8 +130,13 @@ handle_message(Message, Host) ->
 %% If the packet is not in the cache and we are not authoritative, then answer
 %% immediately with the root delegation hints.
 handle_packet_cache_miss(Message, [], _Host) ->
-  {Authority, Additional} = erldns_records:root_hints(),
-  Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
+  case erldns_config:use_root_hints() of
+      true ->
+        {Authority, Additional} = erldns_records:root_hints(),
+        Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
+      _ ->
+        Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR}
+  end;
 
 %% The packet is not in the cache yet we are authoritative, so try to resolve
 %% the request.

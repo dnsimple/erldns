@@ -15,7 +15,14 @@
 %% @doc Provide application-wide configuration access.
 -module(erldns_config).
 
--export([get_address/1, get_port/0, get_num_workers/0]).
+-export([
+    get_address/1,
+    get_port/0,
+    get_num_workers/0
+  ]).
+-export([
+    use_root_hints/0
+  ]).
 -export([
     zone_server_env/0,
     zone_server_max_processes/0,
@@ -74,6 +81,13 @@ get_num_workers() ->
   case application:get_env(erldns, num_workers) of
     {ok, NumWorkers} -> NumWorkers;
     _ -> ?DEFAULT_NUM_WORKERS
+  end.
+
+-spec use_root_hints() -> boolean().
+use_root_hints() ->
+  case application:get_env(erldns, use_root_hints) of
+    {ok, Flag} -> Flag;
+    _ -> true
   end.
 
 % Private functions
