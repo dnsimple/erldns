@@ -16,7 +16,7 @@
 -module(erldns_admin_zone_query_handler).
 
 -export([init/3]).
--export([content_types_provided/2, is_authorized/2]).
+-export([content_types_provided/2, is_authorized/2, resource_exists/2]).
 -export([to_html/2, to_json/2, to_text/2]).
 
 -include_lib("dns/include/dns.hrl").
@@ -35,6 +35,10 @@ content_types_provided(Req, State) ->
 is_authorized(Req, State) ->
   erldns_admin:is_authorized(Req, State).
 
+resource_exists(Req, State) ->
+  {Name, _} = cowboy_req:binding(name, Req),
+  {erldns_zone_cache:in_zone(Name), Req, State}.
+
 to_html(Req, State) ->
   {<<"erldns admin">>, Req, State}.
 
@@ -47,6 +51,7 @@ to_json(Req, State) ->
     {ok, Zone} ->
       {erldns_zone_encoder:zone_to_json(Zone), Req, State};
     {error, Reason} ->
-      {ok, Req2} = cowboy_req:reply(400, [], Reason, Req),
-      {Req2, State}
+      lager:error("Error getting zone: ~p", [Reason]),
+      {ok, Req2} = cowboy_req:reply(400, [], io_lib:format("Error getting zone: ~p", [Reason]), Req),
+      {halt, Req2, State}
   end.
