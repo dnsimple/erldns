@@ -35,7 +35,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {port, socket}).
+-record(state, {port}).
 
 %% Public API
 start_link(_Name, Family) ->
