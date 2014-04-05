@@ -84,19 +84,12 @@ init(_Args) ->
     ?CHILD(erldns_zone_cache, worker, []),
     ?CHILD(erldns_zone_parser, worker, []),
     ?CHILD(erldns_zone_encoder, worker, []),
-    ?CHILD(erldns_zone_fetcher_countdown, worker, []),
     ?CHILD(erldns_packet_cache, worker, []),
     ?CHILD(erldns_query_throttle, worker, []),
     ?CHILD(erldns_handler, worker, []),
     ?CHILD(erldns_metrics, worker, []),
-    ?CHILD(erldns_admin, worker, []),
 
     ?CHILD(sample_custom_handler, worker, [])
   ],
 
-  OptionalProcs = case application:get_env(erldns, zone_server) of
-    {ok, _} -> [?CHILD(erldns_zoneserver_monitor, worker, [])];
-    _ -> []
-  end,
-
-  {ok, {{one_for_one, 20, 10}, SysProcs ++ OptionalProcs ++ AppPoolSpecs}}.
+  {ok, {{one_for_one, 20, 10}, SysProcs ++ AppPoolSpecs}}.

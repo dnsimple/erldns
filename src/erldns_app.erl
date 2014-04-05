@@ -43,20 +43,6 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
   lager:info("Loading zones from local file"),
   erldns_zone_loader:load_zones(),
 
-  lager:debug("Zone server config: ~p", [application:get_env(erldns, zone_server)]),
-  case application:get_env(erldns, zone_server) of
-    {ok, _} ->
-      hottub:start_link(zone_fetcher, erldns_config:zone_server_max_processes(), erldns_zone_fetcher, start_link, []),
-
-      lager:info("Loading zones from remote server"),
-      erldns_zone_loader:load_remote_zones(),
-
-      lager:info("Websocket monitor connecting"),
-      erldns_zoneserver_monitor:connect();
-    _ ->
-      erldns_events:notify(start_servers)
-  end,
-
   ok.
 
 stop(_State) ->
