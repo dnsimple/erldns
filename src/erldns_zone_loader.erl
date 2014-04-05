@@ -15,7 +15,7 @@
 %% @doc Funcions for loading zones from local or remote sources.
 -module(erldns_zone_loader).
 
--export([load_zones/0, load_remote_zones/0]).
+-export([load_zones/0]).
 
 -define(FILENAME, "zones.json").
 
@@ -40,13 +40,6 @@ load_zones() ->
       lager:error("Failed to load zones: ~p", [Reason]),
       {err, Reason}
   end.
-
-%% @doc Load zones from a remote zone server.
--spec load_remote_zones() -> {ok, integer()} | {err, atom()}.
-load_remote_zones() ->
-  {T, _} = timer:tc(erldns_zoneserver_monitor, fetch_zones, []),
-  folsom_metrics:notify({load_remote_zones_history, T}),
-  ok.
 
 % Internal API
 filename() ->
