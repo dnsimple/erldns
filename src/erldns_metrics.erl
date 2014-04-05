@@ -56,16 +56,6 @@ setup() ->
   folsom_metrics:new_meter(cache_expired_meter),
   folsom_metrics:new_meter(cache_miss_meter),
 
-  folsom_metrics:new_history(load_remote_zones_history),
-
-  folsom_metrics:new_meter(websocket_connection_terminated_meter),
-  folsom_metrics:new_meter(websocket_connection_refused_meter),
-  folsom_metrics:new_meter(websocket_connection_failed_meter),
-  folsom_metrics:new_meter(websocket_connection_closed_meter),
-  folsom_metrics:new_meter(websocket_connection_error_meter),
-
-  folsom_metrics:new_meter(fetch_zones_error_meter),
-
   folsom_metrics:get_metrics().
 
 metrics() ->
