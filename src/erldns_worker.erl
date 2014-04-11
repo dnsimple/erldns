@@ -54,8 +54,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @doc Handle DNS query that comes in over TCP
 -spec handle_tcp_dns_query(gen_tcp:socket(), iodata())  -> ok.
-handle_tcp_dns_query(Socket, Packet) ->
-  <<_Len:16, Bin/binary>> = Packet,
+handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>) ->
   {ok, {Address, _Port}} = inet:peername(Socket),
   erldns_events:notify({start_tcp, [{host, Address}]}),
   case Bin of
@@ -74,6 +73,9 @@ handle_tcp_dns_query(Socket, Packet) ->
       end
   end,
   erldns_events:notify({end_tcp, [{host, Address}]}),
+  gen_tcp:close(Socket);
+handle_tcp_dns_query(Socket, BadPacket) ->
+  lager:warn("Received bad packet ~p", BadPacket),
   gen_tcp:close(Socket).
 
 handle_decoded_tcp_message(DecodedMessage, Socket, Address) ->
