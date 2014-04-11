@@ -45,7 +45,7 @@ start_link(Name, InetFamily) ->
 %% @doc Return true if the UDP server process is running
 -spec is_running() -> boolean().
 is_running() ->
-  try State = sys:get_state(udp_inet) of
+  try sys:get_state(udp_inet) of
     _ -> true
   catch
     _ -> false
