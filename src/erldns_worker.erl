@@ -75,7 +75,7 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>) ->
   erldns_events:notify({end_tcp, [{host, Address}]}),
   gen_tcp:close(Socket);
 handle_tcp_dns_query(Socket, BadPacket) ->
-  lager:warn("Received bad packet ~p", BadPacket),
+  lager:error("Received bad packet ~p", BadPacket),
   gen_tcp:close(Socket).
 
 handle_decoded_tcp_message(DecodedMessage, Socket, Address) ->
