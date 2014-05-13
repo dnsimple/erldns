@@ -8,7 +8,6 @@
               {modules,[erldns,erldns_app,erldns_axfr,erldns_config,
                         erldns_dnssec,erldns_edns,erldns_encoder,
                         erldns_event_handler,erldns_events,erldns_handler,
-                        erldns_metrics,erldns_metrics_root_handler,
                         erldns_packet_cache,erldns_query_throttle,
                         erldns_records,erldns_resolver,erldns_server_sup,
                         erldns_sup,erldns_tcp_server,erldns_txt,
