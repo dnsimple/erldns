@@ -84,18 +84,10 @@ erldns_zone_cache:put_zone({
 
 ## Metrics
 
-Folsom is used to gather runtime metrics and statistics. There is an HTTP server included that produces a JSON report containing these metrics. Here's an example script that shows how to get the output with curl and pass through Python to format it in a pretty fashion.
+Folsom is used to gather runtime metrics and statistics.
 
-```sh
-curl -s http://localhost:8082/ -H "Accept: application/json" | python -mjson.tool
-```
-
-Note that timing stats are givin in microseconds.
+There is an HTTP API for querying metric data available at https://github.com/aetrion/erldns-metrics
 
 ## Admin
 
-There is a simple administrative API for querying the current zone cache.
-
-```sh
-curl -s http://localhost:8083/ -H "Accept: application/json" -u username:password | python -mjson.tool
-```
+There is a administrative API for querying the current zone cache and for basic control. You can find it in https://github.com/aetrion/erldns-admin
