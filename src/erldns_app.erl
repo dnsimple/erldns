@@ -43,6 +43,9 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
   lager:info("Loading zones from local file"),
   erldns_zone_loader:load_zones(),
 
+  lager:info("Notifying servers to start"),
+  erldns_events:notify(start_servers),
+
   ok.
 
 stop(_State) ->
