@@ -1,10 +1,9 @@
-.PHONY: deps
+all: clean build
 
-all: deps
+build:	
+	./rebar get-deps
 	./rebar compile
 
-deps:
-	@./rebar get-deps
-
 clean:
+	rm -Rf deps
 	./rebar clean
