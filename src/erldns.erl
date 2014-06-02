@@ -29,6 +29,4 @@ start() ->
   application:start(ranch),
   application:start(cowboy),
   application:start(hottub),
-  application:start(erldns),
-
-  erldns_events:notify(start_servers).
+  application:start(erldns).
