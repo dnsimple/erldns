@@ -80,7 +80,7 @@ handle_tcp_dns_query(Socket, BadPacket) ->
 
 handle_decoded_tcp_message(DecodedMessage, Socket, Address) ->
   erldns_events:notify({start_handle, tcp, [{host, Address}]}),
-  Response = erldns_handler:handle(DecodedMessage, Address),
+  Response = erldns_handler:handle(DecodedMessage, {tcp, Address}),
   erldns_events:notify({end_handle, tcp, [{host, Address}]}),
   case erldns_encoder:encode_message(Response) of
     {false, EncodedMessage} ->
@@ -118,7 +118,7 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
 -spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number()) ->
   ok | {error, not_owner | inet:posix()}.
 handle_decoded_udp_message(DecodedMessage, Socket, Host, Port) ->
-  Response = erldns_handler:handle(DecodedMessage, Host),
+  Response = erldns_handler:handle(DecodedMessage, {udp, Host}),
   DestHost = case ?REDIRECT_TO_LOOPBACK of
     true -> ?LOOPBACK_DEST;
     _ -> Host

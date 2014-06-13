@@ -52,7 +52,9 @@ start_link() ->
 
 %% @doc Throttle the given message if necessary.
 -spec throttle(dns:message(), inet:ip_address() | inet:hostname()) -> ok | throttle_result().
-throttle(Message, Host) ->
+throttle(_Message, {tcp, _Host}) ->
+  ok;
+throttle(Message, {_, Host}) ->
   case ?ENABLED of
     true ->
       case lists:filter(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Message#dns_message.questions) of
