@@ -80,8 +80,8 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 %% If the message has trailing garbage just throw the garbage away and continue
 %% trying to process the message.
-handle({trailing_garbage, Message, _}, {_, Host}) ->
-  handle(Message, Host);
+handle({trailing_garbage, Message, _}, Context) ->
+  handle(Message, Context);
 %% Handle the message, checking to see if it is throttled.
 handle(Message, Context = {_, Host}) when is_record(Message, dns_message) ->
   handle(Message, Host, erldns_query_throttle:throttle(Message, Context));
