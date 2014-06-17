@@ -40,6 +40,7 @@ handle_event(start_servers, State) ->
       erldns_events:notify(servers_started),
        {ok, State#state{servers_running = true}};
     _ ->
+      erldns_events:notify(servers_already_started),
        {ok, State}
   end;
 
