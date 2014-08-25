@@ -99,7 +99,7 @@ handle(BadMessage, {_, Host}) ->
 handle(Message, Host, {throttled, Host, _ReqCount}) ->
   folsom_metrics:notify({request_throttled_counter, {inc, 1}}),
   folsom_metrics:notify({request_throttled_meter, 1}),
-  Message#dns_message{rc = ?DNS_RCODE_REFUSED};
+  Message#dns_message{tc = true, aa = true, rc = ?DNS_RCODE_NOERROR};
 
 %% Message was not throttled, so handle it, then do EDNS handling, optionally
 %% append the SOA record if it is a zone transfer and complete the response
