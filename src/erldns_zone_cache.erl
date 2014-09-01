@@ -138,7 +138,7 @@ get_authority(Name) ->
 
 %% @doc Get the list of NS and glue records for the given name. This function
 %% will always return a list, even if it is empty.
--spec get_delegations(dns:dname()) -> {ok, [dns:rr()]} | [].
+-spec get_delegations(dns:dname()) -> [dns:rr()] | [].
 get_delegations(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
