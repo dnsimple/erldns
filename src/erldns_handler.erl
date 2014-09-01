@@ -117,6 +117,8 @@ do_handle(Message, Host) ->
 
 %% Handle the message by hitting the packet cache and either
 %% using the cached packet or continuing with the lookup process.
+%%
+%% If the cache is missed, then the SOA (Start of Authority) is discovered here.
 handle_message(Message, Host) ->
   case erldns_packet_cache:get(Message#dns_message.questions, Host) of
     {ok, CachedResponse} ->
@@ -127,8 +129,9 @@ handle_message(Message, Host) ->
       handle_packet_cache_miss(Message, get_authority(Message), Host) % SOA lookup
   end.
 
-%% If the packet is not in the cache and we are not authoritative, then answer
-%% immediately with the root delegation hints.
+%% If the packet is not in the cache and we are not authoritative (because there
+%% is no SOA record for this zone), then answer immediately setting the AA flag to false.
+%% If erldns is configured to use root hints then those will be added to the response.
 handle_packet_cache_miss(Message, [], _Host) ->
   case erldns_config:use_root_hints() of
       true ->
@@ -139,7 +142,8 @@ handle_packet_cache_miss(Message, [], _Host) ->
   end;
 
 %% The packet is not in the cache yet we are authoritative, so try to resolve
-%% the request.
+%% the request. This is the point the request moves on to the erldns_resolver
+%% module.
 handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
   safe_handle_packet_cache_miss(Message#dns_message{ra = false}, AuthorityRecords, Host).
 
