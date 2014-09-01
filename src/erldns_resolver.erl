@@ -33,8 +33,9 @@ resolve(Message, _AuthorityRecords, _Host, []) -> Message;
 resolve(Message, AuthorityRecords, Host, [Question]) -> resolve(Message, AuthorityRecords, Host, Question);
 %% Resolve the first question. Additional questions will be thrown away for now.
 resolve(Message, AuthorityRecords, Host, [Question|_]) -> resolve(Message, AuthorityRecords, Host, Question);
+
 %% Start the resolution process on the given question.
-%% Step 1: Set the RA bit to false
+%% Step 1: Set the RA bit to false as we do not handle recursive queries.
 resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
   resolve(Message#dns_message{ra = false}, AuthorityRecords, Question#dns_query.name, Question#dns_query.type, Host).
 
@@ -42,7 +43,7 @@ resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_
 %% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), % Zone lookup
-  Records = resolve(Message, Qname, Qtype, Zone, Host, []),
+  Records = resolve(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
   additional_processing(rewrite_soa_ttl(Records), Host, Zone).
 
 %% No SOA was found for the Qname so we return the root hints
@@ -62,7 +63,7 @@ resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
   resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone).
 
 %% There were no exact matches on name, so move to the best-match resolution.
-resolve(Message, Qname, Qtype, [], Host, CnameChain, Zone) ->
+resolve(Message, Qname, Qtype, _MatchedRecords = [], Host, CnameChain, Zone) ->
   %lager:debug("No exact matches, using best-match resolution"),
   best_match_resolution(Message, Qname, Qtype, Host, CnameChain, best_match(Qname, Zone), Zone);
 
@@ -79,7 +80,7 @@ exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, 
   exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords).
 
 %% No CNAME records found in the records with the Qname
-exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, []) ->
+exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _CnameRecords = []) ->
   resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone);
 
 %% CNAME records found in the records for the Qname
@@ -112,7 +113,7 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
 
 %% There were no matches for exact name and type, so now we are looking for NS records
 %% in the exact name matches.
-resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], AuthorityRecords) ->
+resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _ExactTypeMatches = [], AuthorityRecords) ->
   %lager:debug("No exact matches for name and type"),
   ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), MatchedRecords), % Query matched records for NS type
   resolve_no_exact_type_match(Message, Qtype, Host, CnameChain, [], Zone, MatchedRecords, ReferralRecords, AuthorityRecords);
@@ -143,7 +144,7 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
   Answer = lists:last(MatchedRecords),
   case NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
     [] ->
-      resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords);
+      resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords = []);
     _ ->
       NSRecord = lists:last(NSRecords),
       case erldns_zone_cache:get_authority(Qname) of
@@ -160,7 +161,7 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
   end.
 
 %% We are authoritative and there were no NS records here.
-resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, []) ->
+resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, _NSRecords = []) ->
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
 
 %% We are authoritative and there are NS records here.
