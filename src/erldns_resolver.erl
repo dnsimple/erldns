@@ -166,16 +166,30 @@ resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRec
 
 %% We are authoritative and there are NS records here.
 resolve_exact_type_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
+  % NOTE: there are potential bugs here because it assumes the last record is the one to examine
   Answer = lists:last(MatchedRecords),
   NSRecord = lists:last(NSRecords),
   Name = NSRecord#dns_rr.name,
   case Name =:= Answer#dns_rr.name of
-    true ->
+    true -> % Handle NS recursion breakout
       Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Message#dns_message.authority ++ NSRecords};
     false ->
-      restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name))
+      % TODO: only restart delegation if the NS record is on a parent node
+      % if it is a sibling then we should not restart
+      case check_if_parent(Name, Answer#dns_rr.name) of
+        true ->
+          restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name));
+        false ->
+          Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords}
+      end
   end.
 
+%% Returns true if the first domain name is a parent of the second domain name.
+check_if_parent(PossibleParentName, Name) ->
+  case lists:subtract(dns:dname_to_labels(PossibleParentName), dns:dname_to_labels(Name)) of
+    [] -> true;
+    _ -> false
+  end.
 
 
 %% There were no exact type matches, but there were other name matches and there are NS records.
