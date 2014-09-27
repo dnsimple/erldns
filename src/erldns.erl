@@ -26,6 +26,7 @@ start() ->
   application:start(observer),
   application:start(bear),
   application:start(folsom),
+  application:start(cowlib),
   application:start(ranch),
   application:start(cowboy),
   application:start(hottub),
