@@ -28,12 +28,12 @@
 
 % Gen server hooks
 -export([init/1,
-	 handle_call/3,
-	 handle_cast/2,
-	 handle_info/2,
-	 terminate/2,
-	 code_change/3
-       ]).
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3
+        ]).
 
 % Internal API
 -export([handle_message/2]).
@@ -134,11 +134,11 @@ handle_message(Message, Host) ->
 %% If erldns is configured to use root hints then those will be added to the response.
 handle_packet_cache_miss(Message, [], _Host) ->
   case erldns_config:use_root_hints() of
-      true ->
-        {Authority, Additional} = erldns_records:root_hints(),
-        Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
-      _ ->
-        Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR}
+    true ->
+      {Authority, Additional} = erldns_records:root_hints(),
+      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
+    _ ->
+      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR}
   end;
 
 %% The packet is not in the cache yet we are authoritative, so try to resolve
@@ -180,9 +180,9 @@ get_authority(MessageOrName) ->
 
 %% Update the message counts and set the QR flag to true.
 complete_response(Message) ->
-   Message#dns_message{
+  Message#dns_message{
     anc = length(Message#dns_message.answers),
     auc = length(Message#dns_message.authority),
     adc = length(Message#dns_message.additional),
     qr = true
-  }.
+   }.

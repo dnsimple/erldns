@@ -21,7 +21,13 @@
 -behaviour(poolboy_worker).
 
 -export([start_link/1]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3
+        ]).
 
 -record(state, {}).
 
@@ -120,9 +126,9 @@ handle_udp_dns_query(Socket, Host, Port, Bin) ->
 handle_decoded_udp_message(DecodedMessage, Socket, Host, Port) ->
   Response = erldns_handler:handle(DecodedMessage, {udp, Host}),
   DestHost = case ?REDIRECT_TO_LOOPBACK of
-    true -> ?LOOPBACK_DEST;
-    _ -> Host
-  end,
+               true -> ?LOOPBACK_DEST;
+               _ -> Host
+             end,
 
   case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
     {false, EncodedMessage} ->

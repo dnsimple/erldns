@@ -54,12 +54,12 @@ handle_call({filter, Records}, _From, State) ->
   TypeMatchFunction = type_match(),
   ConvertFunction = convert(),
   NewRecords = lists:flatten(lists:map(
-      fun(R) ->
-          case TypeMatchFunction(R) of
-            true -> ConvertFunction(R);
-            false -> R
-          end
-      end, Records)),
+                               fun(R) ->
+                                   case TypeMatchFunction(R) of
+                                     true -> ConvertFunction(R);
+                                     false -> R
+                                   end
+                               end, Records)),
   {reply, NewRecords, State}.
 
 handle_cast(_Message, State) ->

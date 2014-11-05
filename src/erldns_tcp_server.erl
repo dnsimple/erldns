@@ -21,14 +21,14 @@
 
 % Gen server hooks
 -export([init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    sock_opts/0,
-    new_connection/2,
-    code_change/3
-  ]).
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         sock_opts/0,
+         new_connection/2,
+         code_change/3
+        ]).
 
 % Internal API
 -export([handle_request/2]).
@@ -67,5 +67,5 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 handle_request(Socket, Bin) ->
   poolboy:transaction(tcp_worker_pool, fun(Worker) ->
-    gen_server:call(Worker, {tcp_query, Socket, Bin})
-  end).
+                                           gen_server:call(Worker, {tcp_query, Socket, Bin})
+                                       end).

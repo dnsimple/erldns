@@ -21,10 +21,10 @@
 -export([start_link/0]).
 
 -export([
-    gc/0,
-    gc_registered/0,
-    gc_registered/1
-  ]).
+         gc/0,
+         gc_registered/0,
+         gc_registered/1
+        ]).
 
 % Supervisor hooks
 -export([init/1]).
@@ -48,7 +48,7 @@ gc() ->
           garbage_collect(Pid)
       end,
       processes())
-  ).
+   ).
 
 %% @doc Garbage collect all registered processes.
 -spec gc_registered() -> integer().
@@ -59,7 +59,7 @@ gc_registered() ->
           gc_registered(ProcessName)
       end,
       registered())
-  ).
+   ).
 
 %% @doc Garbage collect a named process.
 -spec gc_registered(atom()) -> ok.
@@ -73,22 +73,22 @@ gc_registered(ProcessName) ->
 init(_Args) ->
   {ok, AppPools} = application:get_env(erldns, pools),
   AppPoolSpecs = lists:map(fun({PoolName, WorkerModule, PoolConfig}) ->
-        Args = [{name, {local, PoolName}},
-          {worker_module, WorkerModule}]
-        ++ PoolConfig,
-        poolboy:child_spec(PoolName, Args)
-    end, AppPools),
+                               Args = [{name, {local, PoolName}},
+                                       {worker_module, WorkerModule}]
+                               ++ PoolConfig,
+                               poolboy:child_spec(PoolName, Args)
+                           end, AppPools),
 
   SysProcs = [
-    ?CHILD(erldns_events, worker, []),
-    ?CHILD(erldns_zone_cache, worker, []),
-    ?CHILD(erldns_zone_parser, worker, []),
-    ?CHILD(erldns_zone_encoder, worker, []),
-    ?CHILD(erldns_packet_cache, worker, []),
-    ?CHILD(erldns_query_throttle, worker, []),
-    ?CHILD(erldns_handler, worker, []),
+              ?CHILD(erldns_events, worker, []),
+              ?CHILD(erldns_zone_cache, worker, []),
+              ?CHILD(erldns_zone_parser, worker, []),
+              ?CHILD(erldns_zone_encoder, worker, []),
+              ?CHILD(erldns_packet_cache, worker, []),
+              ?CHILD(erldns_query_throttle, worker, []),
+              ?CHILD(erldns_handler, worker, []),
 
-    ?CHILD(sample_custom_handler, worker, [])
-  ],
+              ?CHILD(sample_custom_handler, worker, [])
+             ],
 
   {ok, {{one_for_one, 20, 10}, SysProcs ++ AppPoolSpecs}}.

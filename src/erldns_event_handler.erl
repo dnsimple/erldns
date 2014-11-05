@@ -18,13 +18,13 @@
 -behavior(gen_event).
 
 -export([
-    init/1,
-    handle_event/2,
-    handle_call/2,
-    handle_info/2,
-    code_change/3,
-    terminate/2
-  ]).
+         init/1,
+         handle_event/2,
+         handle_call/2,
+         handle_info/2,
+         code_change/3,
+         terminate/2
+        ]).
 
 -record(state, {servers_running = false}).
 
@@ -38,10 +38,10 @@ handle_event(start_servers, State) ->
       lager:info("Starting the UDP and TCP supervisor"),
       erldns_server_sup:start_link(),
       erldns_events:notify(servers_started),
-       {ok, State#state{servers_running = true}};
+      {ok, State#state{servers_running = true}};
     _ ->
       erldns_events:notify(servers_already_started),
-       {ok, State}
+      {ok, State}
   end;
 
 handle_event({end_udp, [{host, _Host}]}, State) ->
@@ -65,6 +65,6 @@ handle_info(_Message, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
- 
+
 terminate(_Reason, _State) ->
   ok.

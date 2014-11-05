@@ -16,28 +16,28 @@
 -module(erldns_config).
 
 -export([
-    get_address/1,
-    get_port/0,
-    get_num_workers/0
-  ]).
+         get_address/1,
+         get_port/0,
+         get_num_workers/0
+        ]).
 -export([
-    use_root_hints/0
-  ]).
+         use_root_hints/0
+        ]).
 -export([
-    zone_server_env/0,
-    zone_server_max_processes/0,
-    zone_server_protocol/0,
-    zone_server_host/0,
-    zone_server_port/0
-  ]).
+         zone_server_env/0,
+         zone_server_max_processes/0,
+         zone_server_protocol/0,
+         zone_server_host/0,
+         zone_server_port/0
+        ]).
 -export([
-    websocket_env/0,
-    websocket_protocol/0,
-    websocket_host/0,
-    websocket_port/0,
-    websocket_path/0,
-    websocket_url/0
-  ]).
+         websocket_env/0,
+         websocket_protocol/0,
+         websocket_host/0,
+         websocket_port/0,
+         websocket_path/0,
+         websocket_url/0
+        ]).
 
 -define(DEFAULT_IPV4_ADDRESS, {127,0,0,1}).
 -define(DEFAULT_IPV6_ADDRESS, {0,0,0,0,0,0,0,1}).

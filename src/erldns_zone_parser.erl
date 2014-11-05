@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2013, Aetrion LLC
+%% Copyright (c) 2012-2014, Aetrion LLC
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
@@ -21,21 +21,21 @@
 -include("erldns.hrl").
 
 -export([
-    start_link/0,
-    zone_to_erlang/1,
-    register_parsers/1,
-    register_parser/1,
-    list_parsers/0
-  ]).
+         start_link/0,
+         zone_to_erlang/1,
+         register_parsers/1,
+         register_parser/1,
+         list_parsers/0
+        ]).
 
 % Gen server hooks
 -export([init/1,
-	 handle_call/3,
-	 handle_cast/2,
-	 handle_info/2,
-	 terminate/2,
-	 code_change/3
-       ]).
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3
+        ]).
 
 -define(SERVER, ?MODULE).
 -define(PARSE_TIMEOUT, 30 * 1000).
@@ -109,20 +109,20 @@ json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
 
 json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}], Parsers) ->
   Records = lists:map(
-    fun(JsonRecord) ->
-        Data = json_record_to_list(JsonRecord),
+              fun(JsonRecord) ->
+                  Data = json_record_to_list(JsonRecord),
 
-        % Filter by context
-        case apply_context_options(Data) of
-          pass ->
-            case json_record_to_erlang(Data) of
-              {} -> try_custom_parsers(Data, Parsers);
-              ParsedRecord -> ParsedRecord
-            end;
-          _ ->
-            {}
-        end
-    end, JsonRecords),
+                  % Filter by context
+                  case apply_context_options(Data) of
+                    pass ->
+                      case json_record_to_erlang(Data) of
+                        {} -> try_custom_parsers(Data, Parsers);
+                        ParsedRecord -> ParsedRecord
+                      end;
+                    _ ->
+                      {}
+                  end
+              end, JsonRecords),
   FilteredRecords = lists:filter(record_filter(), Records),
   DistinctRecords = lists:usort(FilteredRecords),
   % lager:debug("After parsing for ~p: ~p", [Name, DistinctRecords]),
@@ -160,9 +160,9 @@ apply_context_options([_, _, _, _, Context]) ->
     {ok, ContextOptions} ->
       ContextSet = sets:from_list(Context),
       Result = lists:append([
-          apply_context_match_empty_check(proplists:get_value(match_empty, ContextOptions), Context),
-          apply_context_list_check(sets:from_list(proplists:get_value(allow, ContextOptions)), ContextSet)
-        ]),
+                             apply_context_match_empty_check(proplists:get_value(match_empty, ContextOptions), Context),
+                             apply_context_list_check(sets:from_list(proplists:get_value(allow, ContextOptions)), ContextSet)
+                            ]),
       case lists:any(fun(I) -> I =:= pass end, Result) of
         true -> pass;
         _ -> fail
@@ -173,11 +173,11 @@ apply_context_options([_, _, _, _, Context]) ->
 
 json_record_to_list(JsonRecord) ->
   [
-    proplists:get_value(<<"name">>, JsonRecord),
-    proplists:get_value(<<"type">>, JsonRecord),
-    proplists:get_value(<<"ttl">>, JsonRecord),
-    proplists:get_value(<<"data">>, JsonRecord),
-    proplists:get_value(<<"context">>, JsonRecord)
+   proplists:get_value(<<"name">>, JsonRecord),
+   proplists:get_value(<<"type">>, JsonRecord),
+   proplists:get_value(<<"ttl">>, JsonRecord),
+   proplists:get_value(<<"data">>, JsonRecord),
+   proplists:get_value(<<"context">>, JsonRecord)
   ].
 
 try_custom_parsers([_Name, _Type, _Ttl, _Rdata, _Context], []) ->
@@ -195,27 +195,27 @@ json_record_to_erlang([Name, Type, _Ttl, null, _]) ->
 
 json_record_to_erlang([Name, <<"SOA">>, Ttl, Data, _Context]) ->
   #dns_rr{
-    name = Name,
-    type = ?DNS_TYPE_SOA,
-    data = #dns_rrdata_soa{
-      mname = proplists:get_value(<<"mname">>, Data),
-      rname = proplists:get_value(<<"rname">>, Data),
-      serial = proplists:get_value(<<"serial">>, Data),
-      refresh = proplists:get_value(<<"refresh">>, Data),
-      retry = proplists:get_value(<<"retry">>, Data),
-      expire = proplists:get_value(<<"expire">>, Data),
-      minimum = proplists:get_value(<<"minimum">>, Data)
-    },
-    ttl = Ttl};
+     name = Name,
+     type = ?DNS_TYPE_SOA,
+     data = #dns_rrdata_soa{
+               mname = proplists:get_value(<<"mname">>, Data),
+               rname = proplists:get_value(<<"rname">>, Data),
+               serial = proplists:get_value(<<"serial">>, Data),
+               refresh = proplists:get_value(<<"refresh">>, Data),
+               retry = proplists:get_value(<<"retry">>, Data),
+               expire = proplists:get_value(<<"expire">>, Data),
+               minimum = proplists:get_value(<<"minimum">>, Data)
+              },
+     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"NS">>, Ttl, Data, _Context]) ->
   #dns_rr{
-    name = Name,
-    type = ?DNS_TYPE_NS,
-    data = #dns_rrdata_ns{
-      dname = proplists:get_value(<<"dname">>, Data)
-    },
-    ttl = Ttl};
+     name = Name,
+     type = ?DNS_TYPE_NS,
+     data = #dns_rrdata_ns{
+               dname = proplists:get_value(<<"dname">>, Data)
+              },
+     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"A">>, Ttl, Data, _Context]) ->
   Ip = proplists:get_value(<<"ip">>, Data),
@@ -239,114 +239,114 @@ json_record_to_erlang([Name, <<"AAAA">>, Ttl, Data, _Context]) ->
 
 json_record_to_erlang([Name, <<"CNAME">>, Ttl, Data, _Context]) ->
   #dns_rr{
-    name = Name,
-    type = ?DNS_TYPE_CNAME,
-    data = #dns_rrdata_cname{dname = proplists:get_value(<<"dname">>, Data)},
-    ttl = Ttl};
+     name = Name,
+     type = ?DNS_TYPE_CNAME,
+     data = #dns_rrdata_cname{dname = proplists:get_value(<<"dname">>, Data)},
+     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"MX">>, Ttl, Data, _Context]) ->
   #dns_rr{
-    name = Name,
-    type = ?DNS_TYPE_MX,
-    data = #dns_rrdata_mx{
-      exchange = proplists:get_value(<<"exchange">>, Data),
-      preference = proplists:get_value(<<"preference">>, Data)
-    },
-    ttl = Ttl};
+     name = Name,
+     type = ?DNS_TYPE_MX,
+     data = #dns_rrdata_mx{
+               exchange = proplists:get_value(<<"exchange">>, Data),
+               preference = proplists:get_value(<<"preference">>, Data)
+              },
+     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"HINFO">>, Ttl, Data, _Context]) ->
   #dns_rr{
-    name = Name,
-    type = ?DNS_TYPE_HINFO,
-    data = #dns_rrdata_hinfo{
-      cpu = proplists:get_value(<<"cpu">>, Data),
-      os = proplists:get_value(<<"os">>, Data)
-    },
-    ttl = Ttl};
+     name = Name,
+     type = ?DNS_TYPE_HINFO,
+     data = #dns_rrdata_hinfo{
+               cpu = proplists:get_value(<<"cpu">>, Data),
+               os = proplists:get_value(<<"os">>, Data)
+              },
+     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"RP">>, Ttl, Data, _Context]) ->
   #dns_rr{
-    name = Name,
-    type = ?DNS_TYPE_RP,
-    data = #dns_rrdata_rp{
-      mbox = proplists:get_value(<<"mbox">>, Data),
-      txt = proplists:get_value(<<"txt">>, Data)
-    },
-    ttl = Ttl};
+     name = Name,
+     type = ?DNS_TYPE_RP,
+     data = #dns_rrdata_rp{
+               mbox = proplists:get_value(<<"mbox">>, Data),
+               txt = proplists:get_value(<<"txt">>, Data)
+              },
+     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"TXT">>, Ttl, Data, _Context]) ->
   %% This function call may crash. Handle it as a bad record.
   try erldns_txt:parse(proplists:get_value(<<"txt">>, Data)) of
     ParsedText ->
       #dns_rr{
-        name = Name,
-        type = ?DNS_TYPE_TXT,
-        data = #dns_rrdata_txt{txt = lists:flatten(ParsedText)},
-        ttl = Ttl}
-    catch
-      Exception:Reason ->
-        lager:error("Error parsing TXT ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason])
-    end;
+         name = Name,
+         type = ?DNS_TYPE_TXT,
+         data = #dns_rrdata_txt{txt = lists:flatten(ParsedText)},
+         ttl = Ttl}
+  catch
+    Exception:Reason ->
+      lager:error("Error parsing TXT ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason])
+  end;
 
 
 json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) ->
   #dns_rr{
-    name = Name,
-    type = ?DNS_TYPE_SPF,
-    data = #dns_rrdata_spf{spf = [proplists:get_value(<<"spf">>, Data)]},
-    ttl = Ttl};
+     name = Name,
+     type = ?DNS_TYPE_SPF,
+     data = #dns_rrdata_spf{spf = [proplists:get_value(<<"spf">>, Data)]},
+     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) ->
   #dns_rr{
-    name = Name,
-    type = ?DNS_TYPE_PTR,
-    data = #dns_rrdata_ptr{dname = proplists:get_value(<<"dname">>, Data)},
-    ttl = Ttl};
+     name = Name,
+     type = ?DNS_TYPE_PTR,
+     data = #dns_rrdata_ptr{dname = proplists:get_value(<<"dname">>, Data)},
+     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"SSHFP">>, Ttl, Data, _Context]) ->
   %% This function call may crash. Handle it as a bad record.
   try hex_to_bin(proplists:get_value(<<"fp">>, Data)) of
     Fp ->
       #dns_rr{
-        name = Name,
-        type = ?DNS_TYPE_SSHFP,
-        data = #dns_rrdata_sshfp{
-          alg = proplists:get_value(<<"alg">>, Data),
-          fp_type = proplists:get_value(<<"fptype">>, Data),
-          fp = Fp
-        },
-        ttl = Ttl}
-    catch
-      Exception:Reason ->
-        lager:error("Error parsing SSHFP ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason]),
-        {}
-    end;
+         name = Name,
+         type = ?DNS_TYPE_SSHFP,
+         data = #dns_rrdata_sshfp{
+                   alg = proplists:get_value(<<"alg">>, Data),
+                   fp_type = proplists:get_value(<<"fptype">>, Data),
+                   fp = Fp
+                  },
+         ttl = Ttl}
+  catch
+    Exception:Reason ->
+      lager:error("Error parsing SSHFP ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason]),
+      {}
+  end;
 
 json_record_to_erlang([Name, <<"SRV">>, Ttl, Data, _Context]) ->
   #dns_rr{
-    name = Name,
-    type = ?DNS_TYPE_SRV,
-    data = #dns_rrdata_srv{
-      priority = proplists:get_value(<<"priority">>, Data),
-      weight = proplists:get_value(<<"weight">>, Data),
-      port = proplists:get_value(<<"port">>, Data),
-      target = proplists:get_value(<<"target">>, Data)
-    },
-    ttl = Ttl};
+     name = Name,
+     type = ?DNS_TYPE_SRV,
+     data = #dns_rrdata_srv{
+               priority = proplists:get_value(<<"priority">>, Data),
+               weight = proplists:get_value(<<"weight">>, Data),
+               port = proplists:get_value(<<"port">>, Data),
+               target = proplists:get_value(<<"target">>, Data)
+              },
+     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data, _Context]) ->
   #dns_rr{
-    name = Name,
-    type = ?DNS_TYPE_NAPTR,
-    data = #dns_rrdata_naptr{
-      order = proplists:get_value(<<"order">>, Data),
-      preference = proplists:get_value(<<"preference">>, Data),
-      flags = proplists:get_value(<<"flags">>, Data),
-      services = proplists:get_value(<<"services">>, Data),
-      regexp = proplists:get_value(<<"regexp">>, Data),
-      replacement = proplists:get_value(<<"replacement">>, Data)
-    },
-    ttl = Ttl};
+     name = Name,
+     type = ?DNS_TYPE_NAPTR,
+     data = #dns_rrdata_naptr{
+               order = proplists:get_value(<<"order">>, Data),
+               preference = proplists:get_value(<<"preference">>, Data),
+               flags = proplists:get_value(<<"flags">>, Data),
+               services = proplists:get_value(<<"services">>, Data),
+               regexp = proplists:get_value(<<"regexp">>, Data),
+               replacement = proplists:get_value(<<"replacement">>, Data)
+              },
+     ttl = Ttl};
 
 json_record_to_erlang(_Data) ->
   %lager:debug("Cannot convert ~p", [Data]),
@@ -354,9 +354,9 @@ json_record_to_erlang(_Data) ->
 
 hex_to_bin(Bin) when is_binary(Bin) ->
   Fun = fun(A, B) ->
-      case io_lib:fread("~16u", [A, B]) of
-        {ok, [V], []} -> V;
-        _ -> error(badarg)
-      end
-  end,
+            case io_lib:fread("~16u", [A, B]) of
+              {ok, [V], []} -> V;
+              _ -> error(badarg)
+            end
+        end,
   << <<(Fun(A,B))>> || <<A, B>> <= Bin >>.

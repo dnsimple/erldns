@@ -26,12 +26,12 @@
 
 % Gen server hooks
 -export([init/1,
-	 handle_call/3,
-	 handle_cast/2,
-	 handle_info/2,
-	 terminate/2,
-	 code_change/3
-       ]).
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3
+        ]).
 
 -define(SERVER, ?MODULE).
 
@@ -95,14 +95,14 @@ zone_to_json(Zone, Encoders) ->
   Records = records_to_json(Zone, Encoders),
   FilteredRecords = lists:filter(record_filter(), Records),
   jsx:encode([{<<"erldns">>,
-        [
-          {<<"zone">>, [
-              {<<"name">>, Zone#zone.name},
-              {<<"version">>, Zone#zone.version},
-              {<<"records">>, FilteredRecords}
-            ]}
-        ]
-      }]).
+               [
+                {<<"zone">>, [
+                              {<<"name">>, Zone#zone.name},
+                              {<<"version">>, Zone#zone.version},
+                              {<<"records">>, FilteredRecords}
+                             ]}
+               ]
+              }]).
 
 record_filter() ->
   fun(R) ->
@@ -159,10 +159,10 @@ encode_record(Record) ->
 
 encode_record(Name, Type, Ttl, Data) ->
   [
-    {<<"name">>, erlang:iolist_to_binary(io_lib:format("~s.", [Name]))},
-    {<<"type">>, dns:type_name(Type)},
-    {<<"ttl">>, Ttl},
-    {<<"content">>, encode_data(Data)}
+   {<<"name">>, erlang:iolist_to_binary(io_lib:format("~s.", [Name]))},
+   {<<"type">>, dns:type_name(Type)},
+   {<<"ttl">>, Ttl},
+   {<<"content">>, encode_data(Data)}
   ].
 
 

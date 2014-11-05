@@ -26,12 +26,12 @@
 
 % Gen server hooks
 -export([init/1,
-	 handle_call/3,
-	 handle_cast/2,
-	 handle_info/2,
-	 terminate/2,
-	 code_change/3
-       ]).
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3
+        ]).
 
 %% Types
 -export_type([throttle_result/0, throttle_hit_count/0]).
@@ -120,15 +120,15 @@ record_request({ThrottleResponse, Host, ReqCount}) ->
 
 is_throttled({127,0,0,1}, ReqCount, _) -> {false, ReqCount + 1};
 is_throttled(Host, ReqCount, LastRequestAt) ->
-   ExceedsLimit = ReqCount >= ?LIMIT,
-   Expired = timestamp() - LastRequestAt > ?EXPIRATION,
-   case Expired of
-     true -> 
-       ets:delete(host_throttle, Host),
-       {false, 1};
-     false -> 
-       {ExceedsLimit, ReqCount + 1}
-   end.
+  ExceedsLimit = ReqCount >= ?LIMIT,
+  Expired = timestamp() - LastRequestAt > ?EXPIRATION,
+  case Expired of
+    true -> 
+      ets:delete(host_throttle, Host),
+      {false, 1};
+    false -> 
+      {ExceedsLimit, ReqCount + 1}
+  end.
 
 timestamp() ->
   {TM, TS, _} = os:timestamp(),

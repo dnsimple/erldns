@@ -50,11 +50,11 @@ resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
 %% Note: it seems odd that we are indicating we are authoritative here.
 resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain) ->
   case erldns_config:use_root_hints() of
-      true ->
-        {Authority, Additional} = erldns_records:root_hints(),
-        Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
-      _ ->
-        Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR}
+    true ->
+      {Authority, Additional} = erldns_records:root_hints(),
+      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
+    _ ->
+      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR}
   end;
 
 %% An SOA was found, thus we are authoritative and have the zone.
@@ -95,11 +95,11 @@ exact_match_resolution(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords,
 resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
   AuthorityRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), MatchedRecords), % Query matched records for SOA type
   TypeMatches = case Qtype of
-    ?DNS_TYPE_ANY ->
-      filter_records(MatchedRecords, erldns_handler:get_handlers());
-    _ ->
-      lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
-  end,
+                  ?DNS_TYPE_ANY ->
+                    filter_records(MatchedRecords, erldns_handler:get_handlers());
+                  _ ->
+                    lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
+                end,
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
@@ -317,13 +317,13 @@ resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords
 resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, []) ->
   %lager:debug("Resolving best match with wildcard"),
   TypeMatchedRecords = case Qtype of
-    ?DNS_TYPE_ANY ->
-      FilteredMatchedRecords = filter_records(MatchedRecords, erldns_handler:get_handlers()),
-      %lager:debug("Qtype is ANY, original records: ~p; using records ~p", [MatchedRecords, FilteredMatchedRecords]),
-      FilteredMatchedRecords;
-    _ ->
-      lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
-  end,
+                         ?DNS_TYPE_ANY ->
+                           FilteredMatchedRecords = filter_records(MatchedRecords, erldns_handler:get_handlers()),
+                           %lager:debug("Qtype is ANY, original records: ~p; using records ~p", [MatchedRecords, FilteredMatchedRecords]),
+                           FilteredMatchedRecords;
+                         _ ->
+                           lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
+                       end,
   TypeMatches = lists:map(erldns_records:replace_name(Qname), TypeMatchedRecords),
   case TypeMatches of
     [] ->
@@ -333,7 +333,7 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, Matche
       %lager:debug("Records from custom handlers: ~p", [NewRecords]),
       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], NewRecords);
     _ ->
-       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], TypeMatches)
+      resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], TypeMatches)
   end;
 
 % It is a wildcard CNAME
@@ -393,7 +393,7 @@ resolve_best_match_referral(Message, _Qname, _Qtype, _Host, [], _BestMatchRecord
 % We are authoritative and the Qtype is ANY so we just return the 
 % original message.
 resolve_best_match_referral(Message, _Qname, ?DNS_TYPE_ANY, _Host, _CnameChain, _BestMatchRecords, _Zone, _ReferralRecords, _Authority) ->
-   Message;
+  Message;
 resolve_best_match_referral(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _Zone, _ReferralRecords, Authority) ->
   Message#dns_message{authority = Authority}.
 
@@ -480,8 +480,8 @@ additional_processing(Message, _Host, _Zone, _Names, Records) ->
 requires_additional_processing([], RequiresAdditional) -> RequiresAdditional;
 requires_additional_processing([Answer|Rest], RequiresAdditional) ->
   Names = case Answer#dns_rr.data of
-    Data when is_record(Data, dns_rrdata_ns) -> [Data#dns_rrdata_ns.dname];
-    Data when is_record(Data, dns_rrdata_mx) -> [Data#dns_rrdata_mx.exchange];
-    _ -> []
-  end,
+            Data when is_record(Data, dns_rrdata_ns) -> [Data#dns_rrdata_ns.dname];
+            Data when is_record(Data, dns_rrdata_mx) -> [Data#dns_rrdata_mx.exchange];
+            _ -> []
+          end,
   requires_additional_processing(Rest, RequiresAdditional ++ Names).

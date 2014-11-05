@@ -27,36 +27,35 @@
 -export([start_link/0]).
 
 % Read APIs
--export(
-  [
-    find_zone/1,
-    find_zone/2,
-    get_zone/1,
-    get_zone_with_records/1,
-    get_authority/1,
-    get_delegations/1,
-    get_records_by_name/1,
-    in_zone/1,
-    zone_names_and_versions/0
-  ]).
+-export([
+         find_zone/1,
+         find_zone/2,
+         get_zone/1,
+         get_zone_with_records/1,
+         get_authority/1,
+         get_delegations/1,
+         get_records_by_name/1,
+         in_zone/1,
+         zone_names_and_versions/0
+        ]).
 
 % Write APIs
 -export([
-    put_zone/1,
-    put_zone/2,
-    put_zone_async/1,
-    put_zone_async/2,
-    delete_zone/1
-  ]).
+         put_zone/1,
+         put_zone/2,
+         put_zone_async/1,
+         put_zone_async/2,
+         delete_zone/1
+        ]).
 
 % Gen server hooks
 -export([init/1,
-	 handle_call/3,
-	 handle_cast/2,
-	 handle_info/2,
-	 terminate/2,
-	 code_change/3
-       ]).
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3
+        ]).
 
 -define(SERVER, ?MODULE).
 

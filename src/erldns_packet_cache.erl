@@ -25,21 +25,21 @@
 
 % Gen server hooks
 -export([init/1,
-	 handle_call/3,
-	 handle_cast/2,
-	 handle_info/2,
-	 terminate/2,
-	 code_change/3
-       ]).
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3
+        ]).
 
 -define(SERVER, ?MODULE).
 -define(ENABLED, true).
 -define(SWEEP_INTERVAL, 1000 * 60 * 3). % Every 3 minutes
 
 -record(state, {
-    ttl :: non_neg_integer(),
-    tref :: timer:tref()
-  }).
+          ttl :: non_neg_integer(),
+          tref :: timer:tref()
+         }).
 
 % Public API
 

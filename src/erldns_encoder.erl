@@ -32,10 +32,10 @@ encode_message(Response) ->
 %%
 %% Note that this function should never throw an exception.
 -spec encode_message(dns:message(), [dns:encode_message_opt()]) ->
-			    {false, dns:message_bin()} |
-			    {true, dns:message_bin(), dns:message()} |
-			    {false, dns:message_bin(), dns:tsig_mac()} |
-			    {true, dns:message_bin(), dns:tsig_mac(), dns:message()}.
+  {false, dns:message_bin()} |
+  {true, dns:message_bin(), dns:message()} |
+  {false, dns:message_bin(), dns:tsig_mac()} |
+  {true, dns:message_bin(), dns:tsig_mac(), dns:message()}.
 encode_message(Response, Opts) ->
   case application:get_env(erldns, catch_exceptions) of
     {ok, false} -> dns:encode_message(Response, Opts);

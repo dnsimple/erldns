@@ -22,11 +22,11 @@
 %% Determine if AXFR is enabled for the given request host.
 is_enabled(Host, Metadata) ->
   MatchingMetadata = lists:filter(
-      fun(MetadataRow) ->
-          [_Id, _DomainId, Kind, Content] = MetadataRow,
-          {ok, AllowedAddress} = inet_parse:address(binary_to_list(Content)),
-          AllowedAddress =:= Host andalso Kind =:= <<"axfr">>
-      end, Metadata),
+                       fun(MetadataRow) ->
+                           [_Id, _DomainId, Kind, Content] = MetadataRow,
+                           {ok, AllowedAddress} = inet_parse:address(binary_to_list(Content)),
+                           AllowedAddress =:= Host andalso Kind =:= <<"axfr">>
+                       end, Metadata),
   length(MatchingMetadata) > 0.
 
 %% If the message is an AXFR request then append the SOA record.

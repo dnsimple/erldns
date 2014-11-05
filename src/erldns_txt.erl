@@ -86,6 +86,6 @@ parse_test() ->
   ?assertEqual(parse("\\"), [[<<"\\">>]]),
   ?assertEqual(parse("test\\;"), [[<<"test\\;">>]]),
   ?assertEqual(parse("test\\"), [[<<"test\\">>]]).
-  %?assertEqual(parse("\"test\"\""), [[<<"test\"">>]]).
+%?assertEqual(parse("\"test\"\""), [[<<"test\"">>]]).
 
 -endif.
