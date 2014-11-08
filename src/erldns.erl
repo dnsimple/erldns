@@ -23,6 +23,7 @@ start() ->
   crypto:start(),
   ssl:start(),
   lager:start(),
+  application:start(cutkey),
   application:start(observer),
   application:start(bear),
   application:start(folsom),
