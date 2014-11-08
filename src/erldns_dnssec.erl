@@ -38,17 +38,37 @@ sign_message(Message, Zone) ->
     [] ->
       {ok, Message};
     RRSet ->
+
       Question = lists:last(Message#dns_message.questions),
+      % Question#dns_query.type
       SignedZone = signed_zone(Zone),
-      [SigningKey, DNSKey] = signing_key(SignedZone, Question#dns_query.type),
-      KeyTag = DNSKey#dns_rr.data#dns_rrdata_dnskey.key_tag,
+
+      KSKPublicKey = public_key(SignedZone#zone.key_signing_key),
+      KSKDNSKeyData = #dns_rrdata_dnskey{flags = 257, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = KSKPublicKey},
+      KSKDNSKeyRR = #dns_rr{name = Zone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = 3600, data = KSKDNSKeyData},
+      KSKDNSKey = dnssec:add_keytag_to_dnskey(KSKDNSKeyRR),
+
+      ZSKPublicKey = public_key(SignedZone#zone.zone_signing_key),
+      ZSKDNSKeyData = #dns_rrdata_dnskey{flags = 256, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = ZSKPublicKey},
+      ZSKDNSKeyRR = #dns_rr{name = Zone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = 3600, data = ZSKDNSKeyData},
+      ZSKDNSKey = dnssec:add_keytag_to_dnskey(ZSKDNSKeyRR),
+
+      [SigningKey, DNSKeyRR] = case Question#dns_query.type of
+        ?DNS_TYPE_DNSKEY_NUMBER -> [SignedZone#zone.key_signing_key, KSKDNSKey];
+        _ -> [SignedZone#zone.zone_signing_key, ZSKDNSKey]
+      end,
+
+      KeyTag = DNSKeyRR#dns_rr.data#dns_rrdata_dnskey.key_tag,
       RRSig = dnssec:sign_rrset(RRSet, Zone#zone.name, KeyTag, ?DNS_ALG_RSASHA256, SigningKey, []),
-      {ok, Message#dns_message{answers=Message#dns_message.answers ++ [RRSig]}}
+
+      KeyRRSet = case Question#dns_query.type of
+        ?DNS_TYPE_ANY -> [KSKDNSKey, ZSKDNSKey];
+        ?DNS_TYPE_DNSKEY -> [KSKDNSKey, ZSKDNSKey];
+        _ -> []
+      end,
+
+      {ok, Message#dns_message{answers=Message#dns_message.answers ++ [RRSig] ++ KeyRRSet}}
   end.
-
-signing_key(SignedZone, ?DNS_TYPE_DNSKEY_NUMBER) -> [SignedZone#zone.key_signing_key, find_dnskey(SignedZone, 257)];
-signing_key(SignedZone, _) -> [SignedZone#zone.zone_signing_key, find_dnskey(SignedZone, 256)].
-
 
 signed_zone(Zone) ->
   case Zone#zone.zone_signing_key of
@@ -56,12 +76,5 @@ signed_zone(Zone) ->
     _ -> Zone
   end.
 
-find_dnskey(Zone, KeyType) ->
-  case lists:filter(fun(R) -> apply(erldns_records:match_type(?DNS_TYPE_DNSKEY), [R]) end, Zone#zone.records) of
-    [] -> not_found;
-    DNSKeys ->
-      case lists:filter(fun(R) -> apply(erldns_records:match_dnskey_type(KeyType), [R]) end, DNSKeys) of
-        [] -> not_found;
-        DNSKeysForType -> lists:last(DNSKeysForType)
-      end
-  end.
+public_key(_Key = [E, N, _D]) ->
+  [E, N].

@@ -212,22 +212,8 @@ sign_zone(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
       {ok, KSK} = cutkey:rsa(1024, 1025, [{return, bare}, erlint]),
-
-      KSKPublicKey = public_key(KSK),
-      KSKDNSKeyData = #dns_rrdata_dnskey{flags = 257, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = KSKPublicKey},
-      KSKDNSKeyRR = #dns_rr{name = Zone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = 3600, data = KSKDNSKeyData},
-      KSKDNSKey = dnssec:add_keytag_to_dnskey(KSKDNSKeyRR),
-      %lager:debug("KSK: ~p", [KSKDNSKey]),
-
       {ok, ZSK} = cutkey:rsa(512, 513, [{return, bare}, erlint]),
-
-      ZSKPublicKey = public_key(ZSK),
-      ZSKDNSKeyData = #dns_rrdata_dnskey{flags = 256, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = ZSKPublicKey},
-      ZSKDNSKeyRR = #dns_rr{name = Zone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = 3600, data = ZSKDNSKeyData},
-      ZSKDNSKey = dnssec:add_keytag_to_dnskey(ZSKDNSKeyRR),
-      %lager:debug("ZSK: ~p", [ZSKDNSKey]),
-
-      SignedZone = index_zone(Zone#zone{key_signing_key = KSK, zone_signing_key = ZSK, records = Zone#zone.records ++ [KSKDNSKey, ZSKDNSKey]}),
+      SignedZone = index_zone(Zone#zone{key_signing_key = KSK, zone_signing_key = ZSK}),
       put_zone(Name, SignedZone),
       SignedZone
   end.
@@ -331,6 +317,3 @@ build_named_index([R|Rest], Idx) ->
 
 normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
 normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
-
-public_key(_Key = [E, N, _D]) ->
-  [E, N].
