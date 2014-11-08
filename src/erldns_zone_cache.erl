@@ -45,6 +45,7 @@
          put_zone/2,
          put_zone_async/1,
          put_zone_async/2,
+         sign_zone/1,
          delete_zone/1
         ]).
 
@@ -205,6 +206,32 @@ put_zone_async(Name, Zone) ->
   ets:insert(zones, {normalize_name(Name), Zone}),
   ok.
 
+%% @doc Sign a zone.
+-spec sign_zone(binary()) -> ok.
+sign_zone(Name) ->
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      {ok, KSK} = cutkey:rsa(1024, 1025, [{return, bare}, erlint]),
+
+      KSKPublicKey = public_key(KSK),
+      KSKDNSKeyData = #dns_rrdata_dnskey{flags = 257, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = KSKPublicKey},
+      KSKDNSKeyRR = #dns_rr{name = Zone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = 3600, data = KSKDNSKeyData},
+      KSKDNSKey = dnssec:add_keytag_to_dnskey(KSKDNSKeyRR),
+      %lager:debug("KSK: ~p", [KSKDNSKey]),
+
+      {ok, ZSK} = cutkey:rsa(512, 513, [{return, bare}, erlint]),
+
+      ZSKPublicKey = public_key(ZSK),
+      ZSKDNSKeyData = #dns_rrdata_dnskey{flags = 256, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = ZSKPublicKey},
+      ZSKDNSKeyRR = #dns_rr{name = Zone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = 3600, data = ZSKDNSKeyData},
+      ZSKDNSKey = dnssec:add_keytag_to_dnskey(ZSKDNSKeyRR),
+      %lager:debug("ZSK: ~p", [ZSKDNSKey]),
+
+      SignedZone = index_zone(Zone#zone{key_signing_key = KSK, zone_signing_key = ZSK, records = Zone#zone.records ++ [KSKDNSKey, ZSKDNSKey]}),
+      put_zone(Name, SignedZone),
+      SignedZone
+  end.
+
 %% @doc Remove a zone from the cache without waiting for a response.
 -spec delete_zone(binary()) -> any().
 delete_zone(Name) ->
@@ -285,9 +312,12 @@ find_zone_in_cache(Qname) ->
   end.
 
 build_zone(Qname, Version, Records) ->
-  RecordsByName = build_named_index(Records),
-  Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
-  #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
+  index_zone(#zone{name = Qname, version = Version, record_count = length(Records), records = Records}).
+
+index_zone(Zone) ->
+  RecordsByName = build_named_index(Zone#zone.records),
+  Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Zone#zone.records),
+  Zone#zone{authority = Authorities, records_by_name = RecordsByName}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;
@@ -301,3 +331,6 @@ build_named_index([R|Rest], Idx) ->
 
 normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
 normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
+
+public_key(_Key = [E, N, _D]) ->
+  [E, N].

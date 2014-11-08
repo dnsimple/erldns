@@ -17,18 +17,18 @@
 
 -include_lib("dns/include/dns_records.hrl").
 
--export([handle/1]).
+-export([handle/2]).
 
-handle(Message) ->
-  handle_opts(Message, Message#dns_message.additional).
+handle(Message, Zone) ->
+  handle_opts(Message, Zone, Message#dns_message.additional).
 
-handle_opts(Message, []) ->
+handle_opts(Message, _Zone, []) ->
   Message;
-handle_opts(Message, [RR|Rest]) when is_record(RR, dns_optrr) ->
+handle_opts(Message, Zone, [RR|Rest]) when is_record(RR, dns_optrr) ->
   NewMessage = case RR#dns_optrr.dnssec of
-                 true -> erldns_dnssec:handle(Message);
+                 true -> erldns_dnssec:handle(Message, Zone);
                  false -> Message
                end,
-  handle_opts(NewMessage, Rest);
-handle_opts(Message, [_|Rest]) ->
-  handle_opts(Message, Rest).
+  handle_opts(NewMessage, Zone, Rest);
+handle_opts(Message, Zone, [_|Rest]) ->
+  handle_opts(Message, Zone, Rest).

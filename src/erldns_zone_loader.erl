@@ -15,6 +15,8 @@
 %% @doc Funcions for loading zones from local or remote sources.
 -module(erldns_zone_loader).
 
+-include("erldns.hrl").
+
 -export([load_zones/0]).
 
 -define(FILENAME, "zones.json").
@@ -31,8 +33,9 @@ load_zones() ->
       lager:info("Putting zones into cache"),
       lists:foreach(
         fun(JsonZone) ->
-            Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-            erldns_zone_cache:put_zone(Zone)
+            Zone = {Name, _Sha, _Records} = erldns_zone_parser:zone_to_erlang(JsonZone),
+            erldns_zone_cache:put_zone(Zone),
+            erldns_zone_cache:sign_zone(Name)
         end, JsonZones),
       lager:info("Loaded ~p zones", [length(JsonZones)]),
       {ok, length(JsonZones)};

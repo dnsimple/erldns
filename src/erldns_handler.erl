@@ -113,14 +113,14 @@ handle(Message, Host, _) ->
 
 do_handle(Message, Host) ->
   NewMessage = handle_message(Message, Host),
-  complete_response(erldns_axfr:optionally_append_soa(erldns_edns:handle(NewMessage))).
+  complete_response(erldns_axfr:optionally_append_soa(NewMessage)).
 
 %% Handle the message by hitting the packet cache and either
 %% using the cached packet or continuing with the lookup process.
 %%
 %% If the cache is missed, then the SOA (Start of Authority) is discovered here.
 handle_message(Message, Host) ->
-  case erldns_packet_cache:get(Message#dns_message.questions, Host) of
+  case erldns_packet_cache:get(Message#dns_message.questions, Message#dns_message.additional, Host) of
     {ok, CachedResponse} ->
       erldns_events:notify({packet_cache_hit, [{host, Host}, {message, Message}]}),
       CachedResponse#dns_message{id=Message#dns_message.id};
@@ -164,7 +164,7 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
 
 %% We are authoritative so cache the packet and return the message.
 maybe_cache_packet(Message, true) ->
-  erldns_packet_cache:put(Message#dns_message.questions, Message),
+  erldns_packet_cache:put(Message#dns_message.questions, Message#dns_message.additional, Message),
   Message;
 
 %% We are not authoritative so just return the message.
