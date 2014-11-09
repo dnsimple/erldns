@@ -60,7 +60,8 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain)
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
-  erldns_edns:handle(resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone), Zone).
+  ResolvedMessage = resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone),
+  erldns_dnssec:add_nsec(ResolvedMessage, Zone).
 
 %% There were no exact matches on name, so move to the best-match resolution.
 resolve(Message, Qname, Qtype, _MatchedRecords = [], Host, CnameChain, Zone) ->
@@ -97,6 +98,8 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
   TypeMatches = case Qtype of
                   ?DNS_TYPE_ANY ->
                     filter_records(MatchedRecords, erldns_handler:get_handlers());
+                  ?DNS_TYPE_DNSKEY ->
+                    erldns_dnssec:dnskey_rrset(Message, Zone);
                   _ ->
                     lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
                 end,
@@ -134,9 +137,9 @@ resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, Host, CnameChain, Matche
   restart_delegated_query(Message, Name, ?DNS_TYPE_A, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name));
 
 %% There was an exact type match for an NS query and an SOA record.
-resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords) ->
-  %lager:debug("Authoritative for record, returning answers"),
-  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
+resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
+  lager:debug("Exact type match authoritative for record"),
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = erldns_dnssec:sign_records(Message, Zone, MatchedRecords)};
 
 %% There was an exact type match for something other than an NS record and we are authoritative because there is an SOA record.
 resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
@@ -144,14 +147,14 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
   Answer = lists:last(MatchedRecords),
   case NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
     [] ->
-      resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords = []);
+      resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords);
     _ ->
       NSRecord = lists:last(NSRecords),
       case erldns_zone_cache:get_authority(Qname) of
         {ok, [SoaRecord]} ->
           case SoaRecord#dns_rr.name =:= NSRecord#dns_rr.name of
             true ->
-              Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
+              resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, []);
             false ->
               resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords)
           end;
@@ -161,8 +164,8 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
   end.
 
 %% We are authoritative and there were no NS records here.
-resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, _NSRecords = []) ->
-  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
+resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRecords, Zone, _AuthorityRecords, _NSRecords = []) ->
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = erldns_dnssec:sign_records(Message, Zone, MatchedRecords)};
 
 %% We are authoritative and there are NS records here.
 resolve_exact_type_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
@@ -344,10 +347,16 @@ resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _B
   Message#dns_message{aa = true, authority=Zone#zone.authority};
 
 % It is not a CNAME and there were exact type matches
-resolve_best_match_with_wildcard(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _Zone, [], TypeMatches) ->
-  Records = lists:map(erldns_records:replace_name(Qname), TypeMatches),
-  Message#dns_message{aa = true, answers = Message#dns_message.answers ++ Records}.
+resolve_best_match_with_wildcard(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, [], TypeMatches) ->
+  lager:debug("Not a CNAME but there were exact type matches: ~p", [TypeMatches]),
 
+  Records = lists:map(erldns_records:replace_name(Qname), TypeMatches),
+  RRSig = case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
+            true -> lists:map(erldns_records:replace_name(Qname), [erldns_dnssec:sign_rrset(Message, Zone, TypeMatches)]);
+            false -> []
+          end,
+
+  Message#dns_message{aa = true, answers = Message#dns_message.answers ++ Records ++ RRSig}.
 
 
 
@@ -445,7 +454,6 @@ custom_lookup(Qname, Qtype, Records) ->
 filter_records(Records, []) -> Records;
 filter_records(Records, [{Handler,_}|Rest]) ->
   filter_records(Handler:filter(Records), Rest).
-
 
 
 %% According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response

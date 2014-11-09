@@ -15,7 +15,7 @@
 %% @doc Placeholder for eventual DNSSEC implementation.
 -module(erldns_dnssec).
 
--export([handle/2]).
+-export([handle/2, sign_rrset/3, sign_records/3, add_nsec/2, dnskey_rrset/1, dnskey_rrset/2]).
 
 -include("erldns.hrl").
 -include_lib("dns/include/dns.hrl").
@@ -33,41 +33,78 @@ handle(Message, ZoneWithoutRecords) ->
       SignedMessage
   end.
 
+
+%% DNSSEC signing
+sign_records(Message, Zone, Records) ->
+  Answers = Message#dns_message.answers ++ Records,
+  case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
+    true -> Answers ++ [erldns_dnssec:sign_rrset(Message, Zone, Records)];
+    false -> Answers
+  end.
+
+
+% Adds the NSEC record and sign it
+add_nsec(ResolvedMessage, Zone) ->
+  case proplists:get_bool(dnssec, erldns_edns:get_opts(ResolvedMessage)) of
+    true ->
+      case ResolvedMessage#dns_message.answers of
+        [] -> ResolvedMessage;
+        MessageAnswers ->
+          Authority = lists:last(Zone#zone.authority),
+          NSECRecords = dnssec:gen_nsec(Zone#zone.name, MessageAnswers, Authority#dns_rr.data#dns_rrdata_soa.minimum),
+          Answers = ResolvedMessage#dns_message.answers ++ NSECRecords ++ [erldns_dnssec:sign_rrset(ResolvedMessage, Zone, NSECRecords)],
+          ResolvedMessage#dns_message{answers = Answers}
+      end;
+    false ->
+      ResolvedMessage
+  end.
+
+sign_rrset(Message, Zone, RRSet) ->
+  %lager:debug("Sign RRSet: ~p", [RRSet]),
+  SignedZone = signed_zone(Zone),
+  [SigningKey, KeyTag] = key_and_tag(Message, SignedZone),
+  dnssec:sign_rrset(RRSet, Zone#zone.name, KeyTag, ?DNS_ALG_RSASHA256, SigningKey, []).
+
+key_and_tag(Message, SignedZone) ->
+  Question = lists:last(Message#dns_message.questions),
+
+  [KSKDNSKey, ZSKDNSKey] = dnskey_rrset(SignedZone),
+
+  case Question#dns_query.type of
+    ?DNS_TYPE_DNSKEY_NUMBER -> [SignedZone#zone.key_signing_key, KSKDNSKey#dns_rr.data#dns_rrdata_dnskey.key_tag];
+    _ -> [SignedZone#zone.zone_signing_key, ZSKDNSKey#dns_rr.data#dns_rrdata_dnskey.key_tag]
+  end.
+
+dnskey_rrset(SignedZone) ->
+  [ksk_dnskey_rr(SignedZone), zsk_dnskey_rr(SignedZone)].
+
+dnskey_rrset(Message, Zone) ->
+  case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
+    true -> erldns_dnssec:dnskey_rrset(Zone);
+    false -> []
+  end.
+
+ksk_dnskey_rr(SignedZone) ->
+  KSKPublicKey = public_key(SignedZone#zone.key_signing_key),
+  KSKDNSKeyData = #dns_rrdata_dnskey{flags = 257, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = KSKPublicKey},
+  KSKDNSKeyRR = #dns_rr{name = SignedZone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = 3600, data = KSKDNSKeyData},
+  dnssec:add_keytag_to_dnskey(KSKDNSKeyRR).
+
+zsk_dnskey_rr(SignedZone) ->
+  ZSKPublicKey = public_key(SignedZone#zone.zone_signing_key),
+  ZSKDNSKeyData = #dns_rrdata_dnskey{flags = 256, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = ZSKPublicKey},
+  ZSKDNSKeyRR = #dns_rr{name = SignedZone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = 3600, data = ZSKDNSKeyData},
+  dnssec:add_keytag_to_dnskey(ZSKDNSKeyRR).
+
 sign_message(Message, Zone) ->
+  %Question = lists:last(Message#dns_message.questions),
+
   case Message#dns_message.answers of
     [] ->
       {ok, Message};
     RRSet ->
-
-      Question = lists:last(Message#dns_message.questions),
-      % Question#dns_query.type
-      SignedZone = signed_zone(Zone),
-
-      KSKPublicKey = public_key(SignedZone#zone.key_signing_key),
-      KSKDNSKeyData = #dns_rrdata_dnskey{flags = 257, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = KSKPublicKey},
-      KSKDNSKeyRR = #dns_rr{name = Zone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = 3600, data = KSKDNSKeyData},
-      KSKDNSKey = dnssec:add_keytag_to_dnskey(KSKDNSKeyRR),
-
-      ZSKPublicKey = public_key(SignedZone#zone.zone_signing_key),
-      ZSKDNSKeyData = #dns_rrdata_dnskey{flags = 256, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = ZSKPublicKey},
-      ZSKDNSKeyRR = #dns_rr{name = Zone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = 3600, data = ZSKDNSKeyData},
-      ZSKDNSKey = dnssec:add_keytag_to_dnskey(ZSKDNSKeyRR),
-
-      [SigningKey, DNSKeyRR] = case Question#dns_query.type of
-        ?DNS_TYPE_DNSKEY_NUMBER -> [SignedZone#zone.key_signing_key, KSKDNSKey];
-        _ -> [SignedZone#zone.zone_signing_key, ZSKDNSKey]
-      end,
-
-      KeyTag = DNSKeyRR#dns_rr.data#dns_rrdata_dnskey.key_tag,
-      RRSig = dnssec:sign_rrset(RRSet, Zone#zone.name, KeyTag, ?DNS_ALG_RSASHA256, SigningKey, []),
-
-      KeyRRSet = case Question#dns_query.type of
-        ?DNS_TYPE_ANY -> [KSKDNSKey, ZSKDNSKey];
-        ?DNS_TYPE_DNSKEY -> [KSKDNSKey, ZSKDNSKey];
-        _ -> []
-      end,
-
-      {ok, Message#dns_message{answers=Message#dns_message.answers ++ [RRSig] ++ KeyRRSet}}
+      RRSig = sign_rrset(Message, Zone, RRSet),
+      {ok, Message#dns_message{answers=Message#dns_message.answers ++ [RRSig]}}
   end.
 
 signed_zone(Zone) ->
