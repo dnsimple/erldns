@@ -60,8 +60,7 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain)
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
-  ResolvedMessage = resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone),
-  erldns_dnssec:add_nsec(ResolvedMessage, Zone).
+  resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone).
 
 %% There were no exact matches on name, so move to the best-match resolution.
 resolve(Message, Qname, Qtype, _MatchedRecords = [], Host, CnameChain, Zone) ->
@@ -350,13 +349,23 @@ resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _B
 resolve_best_match_with_wildcard(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, [], TypeMatches) ->
   lager:debug("Not a CNAME but there were exact type matches: ~p", [TypeMatches]),
 
-  Records = lists:map(erldns_records:replace_name(Qname), TypeMatches),
-  RRSig = case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
-            true -> lists:map(erldns_records:replace_name(Qname), [erldns_dnssec:sign_rrset(Message, Zone, TypeMatches)]);
-            false -> []
-          end,
+  TypeMatch = lists:last(TypeMatches),
+  Name = TypeMatch#dns_rr.name,
 
-  Message#dns_message{aa = true, answers = Message#dns_message.answers ++ Records ++ RRSig}.
+  Records = lists:map(erldns_records:replace_name(Qname), TypeMatches),
+  NewMessage = Message#dns_message{aa = true, answers = Message#dns_message.answers ++ Records},
+
+  case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
+    true ->
+      RRSig = lists:map(erldns_records:replace_name(Qname), [erldns_dnssec:sign_rrset(Message, Zone, TypeMatches)]),
+      Authority = lists:last(Zone#zone.authority),
+      NSECRecords = dnssec:gen_nsec(Zone#zone.name, erldns_zone_cache:get_records(Zone#zone.name), Authority#dns_rr.data#dns_rrdata_soa.minimum),
+      NSECRecord = lists:nth(2, lists:dropwhile(fun(R) -> R#dns_rr.name =/= Name end, NSECRecords)),
+      SignedNSECRecord = [NSECRecord, erldns_dnssec:sign_rrset(Message, Zone, [NSECRecord])],
+      NewMessage#dns_message{answers = NewMessage#dns_message.answers ++ RRSig, authority = NewMessage#dns_message.authority ++ SignedNSECRecord};
+    false ->
+      NewMessage
+  end.
 
 
 

@@ -15,7 +15,7 @@
 %% @doc Placeholder for eventual DNSSEC implementation.
 -module(erldns_dnssec).
 
--export([handle/2, sign_rrset/3, sign_records/3, add_nsec/2, dnskey_rrset/1, dnskey_rrset/2]).
+-export([handle/2, sign_rrset/3, sign_records/3, dnskey_rrset/1, dnskey_rrset/2]).
 
 -include("erldns.hrl").
 -include_lib("dns/include/dns.hrl").
@@ -42,23 +42,8 @@ sign_records(Message, Zone, Records) ->
     false -> Answers
   end.
 
-
-% Adds the NSEC record and sign it
-add_nsec(ResolvedMessage, Zone) ->
-  case proplists:get_bool(dnssec, erldns_edns:get_opts(ResolvedMessage)) of
-    true ->
-      case ResolvedMessage#dns_message.answers of
-        [] -> ResolvedMessage;
-        MessageAnswers ->
-          Authority = lists:last(Zone#zone.authority),
-          NSECRecords = dnssec:gen_nsec(Zone#zone.name, MessageAnswers, Authority#dns_rr.data#dns_rrdata_soa.minimum),
-          Answers = ResolvedMessage#dns_message.answers ++ NSECRecords ++ [erldns_dnssec:sign_rrset(ResolvedMessage, Zone, NSECRecords)],
-          ResolvedMessage#dns_message{answers = Answers}
-      end;
-    false ->
-      ResolvedMessage
-  end.
-
+%% @doc Signs an RR set and returns a single RRSIG record.
+-spec sign_rrset(dns:message(), erldns:zone(), [dns:rr()]) -> dns:rr().
 sign_rrset(Message, Zone, RRSet) ->
   %lager:debug("Sign RRSet: ~p", [RRSet]),
   SignedZone = signed_zone(Zone),
@@ -80,7 +65,7 @@ dnskey_rrset(SignedZone) ->
 
 dnskey_rrset(Message, Zone) ->
   case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
-    true -> erldns_dnssec:dnskey_rrset(Zone);
+    true -> dnskey_rrset(Zone);
     false -> []
   end.
 

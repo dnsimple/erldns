@@ -34,6 +34,7 @@
          get_zone_with_records/1,
          get_authority/1,
          get_delegations/1,
+         get_records/1,
          get_records_by_name/1,
          in_zone/1,
          zone_names_and_versions/0
@@ -143,6 +144,15 @@ get_delegations(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
       lists:filter(fun(R) -> apply(erldns_records:match_type(?DNS_TYPE_NS), [R]) and apply(erldns_records:match_glue(Name), [R]) end, Zone#zone.records);
+    _ ->
+      []
+  end.
+
+-spec get_records(dns:dname()) -> [dns:rr()] | [].
+get_records(Name) ->
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      Zone#zone.records;
     _ ->
       []
   end.
