@@ -252,7 +252,14 @@ resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, _MatchedRecords
   CnameRecord = lists:last(CnameRecords),
   Name = CnameRecord#dns_rr.data#dns_rrdata_cname.dname,
   %lager:debug("Restarting query with CNAME name ~p (exact match)", [Name]),
-  restart_query(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords}, Name, Qtype, Host, CnameChain ++ CnameRecords, Zone, erldns_zone_cache:in_zone(Name)).
+
+  NewMessage = Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords},
+  SignedMessage = case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
+    true -> erldns_dnssec:sign_message(NewMessage, Name, Zone, CnameRecords);
+    false -> NewMessage
+  end,
+
+  restart_query(SignedMessage, Name, Qtype, Host, CnameChain ++ CnameRecords, Zone, erldns_zone_cache:in_zone(Name)).
 
 
 

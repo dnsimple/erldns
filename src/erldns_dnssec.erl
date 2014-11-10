@@ -15,11 +15,19 @@
 %% @doc Placeholder for eventual DNSSEC implementation.
 -module(erldns_dnssec).
 
--export([sign_message/6, sign_wildcard_message/4, sign_rrset/3, sign_records/3, dnskey_rrset/1, dnskey_rrset/2]).
+-export([sign_message/4, sign_message/6, sign_wildcard_message/4, sign_rrset/3, sign_records/3, dnskey_rrset/1, dnskey_rrset/2]).
 
 -include("erldns.hrl").
 -include_lib("dns/include/dns.hrl").
 
+sign_message(Message, _Qname, Zone, AnswerRecords) ->
+  AnswersRRSig = [erldns_dnssec:sign_rrset(Message, Zone, AnswerRecords)],
+  % Authority = lists:last(Zone#zone.authority),
+  % NSECRecords = dnssec:gen_nsec(Zone#zone.name, erldns_zone_cache:get_records(Zone#zone.name), Authority#dns_rr.data#dns_rrdata_soa.minimum),
+  % PreviousNSECRecords = lists:takewhile(fun(R) -> R#dns_rr.name < Qname end, NSECRecords),
+  % NSECRecord = lists:last(PreviousNSECRecords),
+  % SignedNSECRecord = [NSECRecord, erldns_dnssec:sign_rrset(Message, Zone, [NSECRecord])],
+  Message#dns_message{answers = Message#dns_message.answers ++ AnswersRRSig}.
 
 sign_message(Message, Qname, _Qtype, Zone, _AnswerRecords = [], AuthorityRecords) ->
   Authority = lists:last(Zone#zone.authority),
