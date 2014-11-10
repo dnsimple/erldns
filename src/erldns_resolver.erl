@@ -43,8 +43,8 @@ resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_
 %% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), % Zone lookup
-  Records = resolve(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
-  additional_processing(rewrite_soa_ttl(Records), Host, Zone).
+  NewMessage = resolve(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
+  additional_processing(rewrite_soa_ttl(NewMessage), Host, Zone).
 
 %% No SOA was found for the Qname so we return the root hints
 %% Note: it seems odd that we are indicating we are authoritative here.
@@ -115,10 +115,10 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
 
 %% There were no matches for exact name and type, so now we are looking for NS records
 %% in the exact name matches.
-resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _ExactTypeMatches = [], AuthorityRecords) ->
+resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _ExactTypeMatches = [], AuthorityRecords) ->
   %lager:debug("No exact matches for name and type"),
   ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), MatchedRecords), % Query matched records for NS type
-  resolve_no_exact_type_match(Message, Qtype, Host, CnameChain, [], Zone, MatchedRecords, ReferralRecords, AuthorityRecords);
+  resolve_no_exact_type_match(Message, Qname, Qtype, Host, CnameChain, [], Zone, MatchedRecords, ReferralRecords, AuthorityRecords);
 
 %% There were exact matches of name and type.
 resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, _MatchedRecords, Zone, ExactTypeMatches, AuthorityRecords) ->
@@ -136,12 +136,12 @@ resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, Host, CnameChain, Matche
   restart_delegated_query(Message, Name, ?DNS_TYPE_A, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name));
 
 %% There was an exact type match for an NS query and an SOA record.
-resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
-  lager:debug("Exact type match authoritative for record"),
-  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = erldns_dnssec:sign_records(Message, Zone, MatchedRecords)};
+resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords) ->
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = MatchedRecords};
 
 %% There was an exact type match for something other than an NS record and we are authoritative because there is an SOA record.
 resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
+  lager:debug("Exact type match for something other than an NS and we are authoritative"),
   % NOTE: this is a potential bug because it assumes the last record is the one to examine.
   Answer = lists:last(MatchedRecords),
   case NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
@@ -196,13 +196,16 @@ check_if_parent(PossibleParentName, Name) ->
 
 %% There were no exact type matches, but there were other name matches and there are NS records.
 %% Since the Qtype is ANY we indicate we are authoritative and include the NS records.
-resolve_no_exact_type_match(Message, ?DNS_TYPE_ANY, _Host, _CnameChain, _ExactTypeMatches, _Zone, [], [], AuthorityRecords) ->
+resolve_no_exact_type_match(Message, _Qname, ?DNS_TYPE_ANY, _Host, _CnameChain, _ExactTypeMatches, _Zone, _MatchedRecords = [], _ReferralRecords = [], AuthorityRecords) ->
+  lager:debug("No exact name and type match, but ANY query"),
   Message#dns_message{aa = true, authority = AuthorityRecords};
-resolve_no_exact_type_match(Message, _Qtype, _Host, _CnameChain, [], Zone, _MatchedRecords, [], _AuthorityRecords) ->
+resolve_no_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, _ExactTypeMatches = [], Zone, _MatchedRecords, _ReferralRecords = [], _AuthorityRecords) ->
+  lager:debug("No exact name and type match, but other name matches and NS records present"),
   Message#dns_message{aa = true, authority = Zone#zone.authority};
-resolve_no_exact_type_match(Message, _Qtype, _Host, _CnameChain, ExactTypeMatches, _Zone, _MatchedRecords, [], _AuthorityRecords) ->
+resolve_no_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, ExactTypeMatches, _Zone, _MatchedRecords, _ReferralRecords = [], _AuthorityRecords) ->
+  lager:debug("No exact name and type match, but other name matches and NS records present"),
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ ExactTypeMatches};
-resolve_no_exact_type_match(Message, Qtype, _Host, _CnameChain, _ExactTypeMatches, _Zone, MatchedRecords, ReferralRecords, AuthorityRecords) ->
+resolve_no_exact_type_match(Message, _Qname, Qtype, _Host, _CnameChain, _ExactTypeMatches, _Zone, MatchedRecords, ReferralRecords, AuthorityRecords) ->
   resolve_exact_match_referral(Message, Qtype, MatchedRecords, ReferralRecords, AuthorityRecords).
 
 
@@ -348,25 +351,12 @@ resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _B
 % It is not a CNAME and there were exact type matches
 resolve_best_match_with_wildcard(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, [], TypeMatches) ->
   lager:debug("Not a CNAME but there were exact type matches: ~p", [TypeMatches]),
-
-  TypeMatch = lists:last(TypeMatches),
-  Name = TypeMatch#dns_rr.name,
-
   Records = lists:map(erldns_records:replace_name(Qname), TypeMatches),
   NewMessage = Message#dns_message{aa = true, answers = Message#dns_message.answers ++ Records},
-
   case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
-    true ->
-      RRSig = lists:map(erldns_records:replace_name(Qname), [erldns_dnssec:sign_rrset(Message, Zone, TypeMatches)]),
-      Authority = lists:last(Zone#zone.authority),
-      NSECRecords = dnssec:gen_nsec(Zone#zone.name, erldns_zone_cache:get_records(Zone#zone.name), Authority#dns_rr.data#dns_rrdata_soa.minimum),
-      NSECRecord = lists:nth(2, lists:dropwhile(fun(R) -> R#dns_rr.name =/= Name end, NSECRecords)),
-      SignedNSECRecord = [NSECRecord, erldns_dnssec:sign_rrset(Message, Zone, [NSECRecord])],
-      NewMessage#dns_message{answers = NewMessage#dns_message.answers ++ RRSig, authority = NewMessage#dns_message.authority ++ SignedNSECRecord};
-    false ->
-      NewMessage
+    true -> erldns_dnssec:sign_wildcard_message(NewMessage, Qname, Zone, TypeMatches);
+    false -> NewMessage
   end.
-
 
 
 % It is a CNAME and the Qtype was CNAME
@@ -408,8 +398,15 @@ resolve_best_match_referral(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMa
 
 % We are authoritative for the name since there was an SOA record in
 % the best match results.
-resolve_best_match_referral(Message, _Qname, _Qtype, _Host, [], _BestMatchRecords, _Zone, _ReferralRecords, Authority) ->
-  Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Authority};
+resolve_best_match_referral(Message, Qname, Qtype, _Host, _CnameChain = [], _BestMatchRecords, Zone, _ReferralRecords, AuthorityRecords) ->
+  lager:debug("Best match referral, NXDOMAIN"),
+  NewMessage = Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = AuthorityRecords},
+  case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
+    true -> erldns_dnssec:sign_message(NewMessage, Qname, Qtype, Zone, [], AuthorityRecords);
+    false -> NewMessage
+  end;
+
+
 
 % We are authoritative and the Qtype is ANY so we just return the 
 % original message.
@@ -471,6 +468,10 @@ rewrite_soa_ttl(Message) -> rewrite_soa_ttl(Message, Message#dns_message.authori
 rewrite_soa_ttl(Message, [], NewAuthority) -> Message#dns_message{authority = NewAuthority};
 rewrite_soa_ttl(Message, [R|Rest], NewAuthority) -> rewrite_soa_ttl(Message, Rest, NewAuthority ++ [erldns_records:minimum_soa_ttl(R, R#dns_rr.data)]).
 
+rewrite_soa_records_ttl([]) -> [];
+rewrite_soa_records_ttl(Records) -> rewrite_soa_records_ttl(Records, []).
+rewrite_soa_records_ttl([], NewRecords) -> NewRecords;
+rewrite_soa_records_ttl([R|Rest], NewRecords) -> rewrite_soa_records_ttl(Rest, NewRecords ++ [erldns_records:minimum_soa_ttl(R, R#dns_rr.data)]).
 
 %% See if additional processing is necessary.
 additional_processing(Message, _Host, {error, _}) ->
