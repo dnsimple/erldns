@@ -15,26 +15,12 @@
 %% @doc Placeholder for eventual DNSSEC implementation.
 -module(erldns_dnssec).
 
--export([handle/2, sign_rrset/3, sign_records/3, dnskey_rrset/1, dnskey_rrset/2]).
+-export([sign_rrset/3, sign_records/3, dnskey_rrset/1, dnskey_rrset/2]).
 
 -include("erldns.hrl").
 -include_lib("dns/include/dns.hrl").
 
-handle(Message, ZoneWithoutRecords) ->
-  %lager:debug("Received DNSSEC request: ~p", [Message]),
-  {ok, Zone} = erldns_zone_cache:get_zone_with_records(ZoneWithoutRecords#zone.name),
 
-  case sign_message(Message, Zone) of
-    {error, ErrorMessage} ->
-      lager:error("Cannot sign message: ~p", [ErrorMessage]),
-      Message;
-    {ok, SignedMessage} ->
-      %lager:debug("Signed message: ~p", [SignedMessage]),
-      SignedMessage
-  end.
-
-
-%% DNSSEC signing
 sign_records(Message, Zone, Records) ->
   Answers = Message#dns_message.answers ++ Records,
   case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
@@ -81,17 +67,6 @@ dnskey_rr(SignedZone, Flags) ->
   DNSKeyData = #dns_rrdata_dnskey{flags = Flags, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = PublicKey},
   DNSKeyRR = #dns_rr{name = SignedZone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum, data = DNSKeyData},
   dnssec:add_keytag_to_dnskey(DNSKeyRR).
-
-sign_message(Message, Zone) ->
-  %Question = lists:last(Message#dns_message.questions),
-
-  case Message#dns_message.answers of
-    [] ->
-      {ok, Message};
-    RRSet ->
-      RRSig = sign_rrset(Message, Zone, RRSet),
-      {ok, Message#dns_message{answers=Message#dns_message.answers ++ [RRSig]}}
-  end.
 
 signed_zone(Zone) ->
   case Zone#zone.zone_signing_key of

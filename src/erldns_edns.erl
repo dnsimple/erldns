@@ -17,21 +17,7 @@
 
 -include_lib("dns/include/dns_records.hrl").
 
--export([handle/2, get_opts/1]).
-
-handle(Message, Zone) ->
-  handle_opts(Message, Zone, Message#dns_message.additional).
-
-handle_opts(Message, _Zone, []) ->
-  Message;
-handle_opts(Message, Zone, [RR|Rest]) when is_record(RR, dns_optrr) ->
-  NewMessage = case RR#dns_optrr.dnssec of
-                 true -> erldns_dnssec:handle(Message, Zone);
-                 false -> Message
-               end,
-  handle_opts(NewMessage, Zone, Rest);
-handle_opts(Message, Zone, [_|Rest]) ->
-  handle_opts(Message, Zone, Rest).
+-export([get_opts/1]).
 
 % @doc Get a property list of EDNS0 options.
 %
