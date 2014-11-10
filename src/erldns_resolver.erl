@@ -464,9 +464,7 @@ filter_records(Records, [{Handler,_}|Rest]) ->
 
 %% According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
 %% must be set to the value of the minimum field in the SOA content.
-rewrite_soa_ttl(Message) -> rewrite_soa_ttl(Message, Message#dns_message.authority, []).
-rewrite_soa_ttl(Message, [], NewAuthority) -> Message#dns_message{authority = NewAuthority};
-rewrite_soa_ttl(Message, [R|Rest], NewAuthority) -> rewrite_soa_ttl(Message, Rest, NewAuthority ++ [erldns_records:minimum_soa_ttl(R, R#dns_rr.data)]).
+rewrite_soa_ttl(Message) -> Message#dns_message{authority = rewrite_soa_records_ttl(Message#dns_message.authority)}.
 
 rewrite_soa_records_ttl([]) -> [];
 rewrite_soa_records_ttl(Records) -> rewrite_soa_records_ttl(Records, []).
