@@ -70,15 +70,17 @@ dnskey_rrset(Message, Zone) ->
   end.
 
 ksk_dnskey_rr(SignedZone) ->
+  Authority = lists:last(SignedZone#zone.authority),
   KSKPublicKey = public_key(SignedZone#zone.key_signing_key),
   KSKDNSKeyData = #dns_rrdata_dnskey{flags = 257, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = KSKPublicKey},
-  KSKDNSKeyRR = #dns_rr{name = SignedZone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = 3600, data = KSKDNSKeyData},
+  KSKDNSKeyRR = #dns_rr{name = SignedZone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum, data = KSKDNSKeyData},
   dnssec:add_keytag_to_dnskey(KSKDNSKeyRR).
 
 zsk_dnskey_rr(SignedZone) ->
+  Authority = lists:last(SignedZone#zone.authority),
   ZSKPublicKey = public_key(SignedZone#zone.zone_signing_key),
   ZSKDNSKeyData = #dns_rrdata_dnskey{flags = 256, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = ZSKPublicKey},
-  ZSKDNSKeyRR = #dns_rr{name = SignedZone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = 3600, data = ZSKDNSKeyData},
+  ZSKDNSKeyRR = #dns_rr{name = SignedZone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum, data = ZSKDNSKeyData},
   dnssec:add_keytag_to_dnskey(ZSKDNSKeyRR).
 
 sign_message(Message, Zone) ->
