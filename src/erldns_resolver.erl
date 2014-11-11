@@ -52,7 +52,7 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain)
   case erldns_config:use_root_hints() of
     true ->
       {Authority, Additional} = erldns_records:root_hints(),
-      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
+      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Message#dns_message.authority ++ Authority, additional = Message#dns_message.additional ++ Additional};
     _ ->
       Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR}
   end;
