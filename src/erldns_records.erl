@@ -16,27 +16,103 @@
 -module(erldns_records).
 
 -include_lib("dns/include/dns.hrl").
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 
--export([optionally_convert_wildcard/2, wildcard_qname/1]).
+-export([wildcard_qname/1, wildcard_substitution/2, dname_match/2, strip_wildcard/2]).
 -export([default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
 -export([minimum_soa_ttl/2]).
 -export([match_name/1, match_type/1, match_types/1, match_wildcard/0, match_glue/1, match_dnskey_type/1, match_optrr/0]).
 -export([replace_name/1]).
 
-%% If the name returned from the DB is a wildcard name then the
-%% Original Qname needs to be returned in its place.
-optionally_convert_wildcard(Name, Qname) ->
-  [Head|_] = dns:dname_to_labels(Name),
-  case Head of
-    <<"*">> -> Qname;
-    _ -> Name
-  end.
-
 %% Get a wildcard variation of a Qname. Replaces the leading
 %% label with an asterisk for wildcard lookup.
+-spec wildcard_qname(dns:dname()) -> dns:dname().
 wildcard_qname(Qname) ->
   [_|Rest] = dns:dname_to_labels(Qname),
   dns:labels_to_dname([<<"*">>] ++ Rest).
+
+-spec wildcard_substitution(dns:dname(), dns:dname()) -> dns:dname().
+wildcard_substitution(Name, Qname) ->
+  case dname_match(Name, Qname) of
+    true -> Qname;
+    false -> Name
+  end.
+
+-ifdef(TEST).
+wildcard_substitution_test_() ->
+  Qname = <<"a.a1.example.com">>,
+  [
+   ?_assert(wildcard_substitution(<<"a.a1.example.com">>, Qname) =:= <<"a.a1.example.com">>),
+   ?_assert(wildcard_substitution(<<"*.a1.example.com">>, Qname) =:= Qname),
+   ?_assert(wildcard_substitution(<<"*.b1.example.com">>, Qname) =:= <<"*.b1.example.com">>)
+  ].
+-endif.
+
+% @doc Return true if the names match with wildcard substitution.
+-spec dname_match(dns:dname(), dns:dname()) -> boolean().
+dname_match(N1, N2) ->
+  L1 = strip_wildcard(N1),
+  L2 = strip_wildcard(N2),
+  L2R = remove_labels(N1, L1, L2),
+  L1R = remove_labels(N2, L2, L1),
+  L1R =:= L2R.
+
+-ifdef(TEST).
+dname_match_test_() ->
+  [
+   ?_assert(dname_match(<<"a.a1.example.com">>, <<"a.a1.example.com">>)),
+   ?_assert(dname_match(<<"a.a1.example.com">>, <<"*.a1.example.com">>)),
+   ?_assertNot(dname_match(<<"a.a1.example.com">>, <<"a.b1.example.com">>)),
+   ?_assertNot(dname_match(<<"a.a1.example.com">>, <<"*.b1.example.com">>))
+  ].
+-endif.
+
+remove_labels(Name, L1, L2) ->
+  case length(L1) =:= length(dns:dname_to_labels(Name)) of
+    true -> L2;
+    false -> lists:reverse(lists:sublist(lists:reverse(L2), length(L1)))
+  end.
+
+-ifdef(TEST).
+remove_labels_test_() ->
+  [
+    ?_assert(remove_labels(<<"a.a1.example.com">>, dns:dname_to_labels(<<"a.a1.example.com">>), dns:dname_to_labels(<<"b.a1.example.com">>)) =:= dns:dname_to_labels(<<"b.a1.example.com">>)),
+    ?_assert(remove_labels(<<"a.a1.example.com">>, dns:dname_to_labels(<<"a1.example.com">>), dns:dname_to_labels(<<"b.a1.example.com">>)) =:= dns:dname_to_labels(<<"a1.example.com">>)),
+    ?_assert(remove_labels(<<"b.a.a1.example.com">>, dns:dname_to_labels(<<"a1.example.com">>), dns:dname_to_labels(<<"b.a.a1.example.com">>)) =:= dns:dname_to_labels(<<"a1.example.com">>))
+  ].
+-endif.
+
+% @doc Convert a name into labels. Wildcards are removed.
+-spec strip_wildcard(dns:dname()) -> [dns:label()].
+strip_wildcard(Name) ->
+  case lists:any(match_wildcard_label(), dns:dname_to_labels(Name)) of
+    true ->lists:dropwhile(match_wildcard_label(), dns:dname_to_labels(Name));
+    _ -> dns:dname_to_labels(Name)
+  end.
+
+-ifdef(TEST).
+strip_wildcard_test_() ->
+  [
+    ?_assert(strip_wildcard(<<"a.a1.example.com">>) =:= dns:dname_to_labels(<<"a.a1.example.com">>)),
+    ?_assert(strip_wildcard(<<"*.a1.example.com">>) =:= dns:dname_to_labels(<<"a1.example.com">>))
+  ].
+-endif.
+
+
+% Given a name and a wildcard, it will strip down the Name and the WildcardName
+% to the same number of labels to the right of the wildcard so that they can be compared
+-spec strip_wildcard(dns:dname(), dns:dname()) -> {dns:dname(), dns:dname()}.
+strip_wildcard(Name, WildcardName) ->
+  WildcardNameLabels = dns:dname_to_labels(WildcardName),
+  WildcardLabelsWithoutWildcard = lists:dropwhile(fun(L) -> L =:= <<"*">> end, WildcardNameLabels),
+  case length(WildcardLabelsWithoutWildcard) of
+    L when L =:= length(WildcardNameLabels) ->
+      {Name, WildcardName};
+    _ ->
+      {dns:labels_to_dname(lists:nthtail(length(WildcardLabelsWithoutWildcard), dns:dname_to_labels(Name))), dns:labels_to_dname(WildcardLabelsWithoutWildcard)}
+  end.
 
 %% Return the TTL value or 3600 if it is undefined.
 default_ttl(TTL) ->
@@ -76,10 +152,7 @@ match_types(Types) ->
 
 match_wildcard() ->
   fun(R) when is_record(R, dns_rr) ->
-      lists:any(
-        fun(L) ->
-            L =:= <<"*">>
-        end, dns:dname_to_labels(R#dns_rr.name))
+      lists:any(match_wildcard_label(), dns:dname_to_labels(R#dns_rr.name))
   end.
 
 match_glue(Name) ->
@@ -100,6 +173,10 @@ match_optrr() ->
       end
   end.
 
+match_wildcard_label() ->
+  fun(L) ->
+      L =:= <<"*">>
+  end.
 
 
 %% Replacement functions.
