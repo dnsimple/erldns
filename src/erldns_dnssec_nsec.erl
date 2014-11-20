@@ -15,7 +15,7 @@
 %% @doc DNSSEC NSEC support methods.
 -module(erldns_dnssec_nsec).
 
--export([include_nsec/5]).
+-export([include_nsec/5, sign_nsec_records/2]).
 
 -include("erldns.hrl").
 -include_lib("dns/include/dns.hrl").
@@ -49,7 +49,7 @@
 % loaded.
 -spec include_nsec(dns:message(), dns:dname(), dns:type(), erldns:zone(), [dns:dns_rr()]) -> dns:message().
 include_nsec(Message, Qname, Qtype, Zone, CnameChain) when is_record(Message, dns_message) ->
-  %lager:debug("include_nsec for ~p, ~p (CNAME chain: ~p)", [Qname, dns:type_name(Qtype), CnameChain]),
+  lager:debug("include_nsec for ~p, ~p", [Qname, dns:type_name(Qtype)]),
 
   AuthorityRecords =  lists:filter(empty_name_predicate(), Message#dns_message.authority),
   AllRecords = Message#dns_message.answers ++ AuthorityRecords,
@@ -66,8 +66,21 @@ include_nsec(Message, Qname, Qtype, Zone, CnameChain) when is_record(Message, dn
   case ActionFunction of
     [] -> Message;
     [F|_] ->
-      MessageWithNSEC = F(Message, Records, Qname, Qtype, Zone),
-      sign_nsec_records(MessageWithNSEC, Zone)
+      dedupe(F(Message, Records, Qname, Qtype, Zone))
+  end.
+
+
+dedupe(Message) when is_record(Message, dns_message) ->
+  Message#dns_message{authority = dedupe(Message#dns_message.authority)};
+dedupe(Records) -> 
+  dedupe(Records, _Found = [], _Duplicates = []).
+
+dedupe([], Found, _Duplicates) ->
+  Found;
+dedupe([RR|Records], Found, Duplicates) ->
+  case lists:any(fun(R) -> (R#dns_rr.name =:= RR#dns_rr.name) and (R#dns_rr.type =:= RR#dns_rr.type) end, Found) of
+    true -> dedupe(Records, Found, Duplicates ++ [RR]);
+    false -> dedupe(Records, Found ++ [RR], Duplicates)
   end.
 
 nsec_function_set() ->
