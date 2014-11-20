@@ -1,3 +1,4 @@
+*.iml
 *.beam
 *.dump
 erldns.config
