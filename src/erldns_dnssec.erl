@@ -12,46 +12,33 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Placeholder for eventual DNSSEC implementation.
+%% @doc DNSSEC support methods.
 -module(erldns_dnssec).
 
--export([sign_message/4, sign_message/6, sign_wildcard_message/4, sign_rrset/3, sign_records/3, dnskey_rrset/1, dnskey_rrset/2]).
+-export([sign_message/5, sign_message/6, sign_wildcard_message/4, sign_wildcard_message/5, sign_rrset/3, sign_records/3, dnskey_rrset/1, dnskey_rrset/2]).
 
 -include("erldns.hrl").
 -include_lib("dns/include/dns.hrl").
 
-sign_message(Message, _Qname, Zone, AnswerRecords) ->
+sign_message(Message, _Qname, _Qtype, Zone, AnswerRecords) ->
   AnswersRRSig = [erldns_dnssec:sign_rrset(Message, Zone, AnswerRecords)],
-  % Authority = lists:last(Zone#zone.authority),
-  % NSECRecords = dnssec:gen_nsec(Zone#zone.name, erldns_zone_cache:get_records(Zone#zone.name), Authority#dns_rr.data#dns_rrdata_soa.minimum),
-  % PreviousNSECRecords = lists:takewhile(fun(R) -> R#dns_rr.name < Qname end, NSECRecords),
-  % NSECRecord = lists:last(PreviousNSECRecords),
-  % SignedNSECRecord = [NSECRecord, erldns_dnssec:sign_rrset(Message, Zone, [NSECRecord])],
   Message#dns_message{answers = Message#dns_message.answers ++ AnswersRRSig}.
 
-sign_message(Message, Qname, _Qtype, Zone, _AnswerRecords = [], AuthorityRecords) ->
+sign_message(Message, _Qname, _Qtype, Zone, _AnswerRecords = [], AuthorityRecords) ->
   Authority = lists:last(Zone#zone.authority),
-  AllRecords = erldns_zone_cache:get_records(Zone#zone.name) ++ dnskey_rrset(Zone),
-
-  AuthorityNSECRecords = dnssec:gen_nsec(Zone#zone.name, AllRecords, Authority#dns_rr.data#dns_rrdata_soa.minimum),
-  AuthorityNSECRecord = lists:last(lists:reverse(AuthorityNSECRecords)),
-  SignedAuthorityNSECRecord = [AuthorityNSECRecord, erldns_dnssec:sign_rrset(Message, Zone, [AuthorityNSECRecord])],
-
   AuthoritiesRRSig = lists:map(rewrite_rrsig_ttl(Authority), [erldns_dnssec:sign_rrset(Message, Zone, AuthorityRecords)]),
-  NSECRecords = dnssec:gen_nsec(Zone#zone.name, AllRecords, Authority#dns_rr.data#dns_rrdata_soa.minimum),
-  PreviousNSECRecords = lists:takewhile(fun(R) -> R#dns_rr.name < Qname end, NSECRecords),
-  NSECRecord = lists:last(PreviousNSECRecords),
-  SignedNSECRecord = [NSECRecord, erldns_dnssec:sign_rrset(Message, Zone, [NSECRecord])],
-  Message#dns_message{authority = Message#dns_message.authority ++ SignedAuthorityNSECRecord ++ AuthoritiesRRSig ++ SignedNSECRecord}.
+  Message#dns_message{authority = Message#dns_message.authority ++ AuthoritiesRRSig}.
 
 sign_wildcard_message(Message, Qname, Zone, AnswerRecords) ->
+  lager:debug("Sign wildcard message (Qname = ~p)", [Qname]),
+  lager:debug("Answers: ~p", [AnswerRecords]),
   AnswersRRSig = lists:map(erldns_records:replace_name(Qname), [erldns_dnssec:sign_rrset(Message, Zone, AnswerRecords)]),
-  Authority = lists:last(Zone#zone.authority),
-  NSECRecords = dnssec:gen_nsec(Zone#zone.name, erldns_zone_cache:get_records(Zone#zone.name), Authority#dns_rr.data#dns_rrdata_soa.minimum),
-  PreviousNSECRecords = lists:takewhile(fun(R) -> R#dns_rr.name < Qname end, NSECRecords),
-  NSECRecord = lists:last(PreviousNSECRecords),
-  SignedNSECRecord = [NSECRecord, erldns_dnssec:sign_rrset(Message, Zone, [NSECRecord])],
-  Message#dns_message{answers = Message#dns_message.answers ++ AnswersRRSig, authority = Message#dns_message.authority ++ SignedNSECRecord}.
+  Message#dns_message{answers = Message#dns_message.answers ++ AnswersRRSig, authority = Message#dns_message.authority}.
+
+sign_wildcard_message(Message, Qname, Zone, AnswerRecords, FollowedCname) ->
+  lager:debug("Sign wildcard message (Qname = ~p, CNAME = ~p)", [Qname, FollowedCname]),
+  AnswersRRSig = lists:map(erldns_records:replace_name(Qname), [erldns_dnssec:sign_rrset(Message, Zone, AnswerRecords)]),
+  Message#dns_message{answers = Message#dns_message.answers ++ AnswersRRSig, authority = Message#dns_message.authority}.
 
 
 sign_records(Message, Zone, Records) ->
@@ -67,7 +54,10 @@ sign_rrset(Message, Zone, RRSet) ->
   %lager:debug("Sign RRSet: ~p", [RRSet]),
   SignedZone = signed_zone(Zone),
   [SigningKey, KeyTag] = key_and_tag(Message, SignedZone),
-  dnssec:sign_rrset(RRSet, Zone#zone.name, KeyTag, ?DNS_ALG_RSASHA256, SigningKey, []).
+  dnssec:sign_rrset(lists:flatten([RRSet]), Zone#zone.name, KeyTag, ?DNS_ALG_RSASHA256, SigningKey, []).
+
+
+
 
 key_and_tag(Message, SignedZone) ->
   Question = lists:last(Message#dns_message.questions),
@@ -95,11 +85,18 @@ zsk_dnskey_rr(SignedZone) ->
   dnskey_rr(SignedZone, 256).
 
 dnskey_rr(SignedZone, Flags) ->
-  Authority = lists:last(SignedZone#zone.authority),
-  PublicKey = public_key(SignedZone#zone.zone_signing_key),
-  DNSKeyData = #dns_rrdata_dnskey{flags = Flags, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = PublicKey},
-  DNSKeyRR = #dns_rr{name = SignedZone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum, data = DNSKeyData},
-  dnssec:add_keytag_to_dnskey(DNSKeyRR).
+  case lists:filter(erldns_records:match_dnskey_type(Flags), SignedZone#zone.records) of
+    [] ->
+      Authority = lists:last(SignedZone#zone.authority),
+      PublicKey = public_key(SignedZone#zone.zone_signing_key),
+      DNSKeyData = #dns_rrdata_dnskey{flags = Flags, protocol = 3, alg = ?DNS_ALG_RSASHA256, public_key = PublicKey},
+      DNSKeyRR = #dns_rr{name = SignedZone#zone.name, type = ?DNS_TYPE_DNSKEY, ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum, data = DNSKeyData},
+      dnssec:add_keytag_to_dnskey(DNSKeyRR);
+    Records ->
+      % There should only be one key of the type indicated by Flags
+      % In the future this may change if we support multiple zone signing keys
+      lists:last(Records)
+  end.
 
 signed_zone(Zone) ->
   case Zone#zone.zone_signing_key of

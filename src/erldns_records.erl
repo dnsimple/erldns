@@ -20,10 +20,10 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--export([wildcard_qname/1, wildcard_substitution/2, dname_match/2, strip_wildcard/2]).
+-export([wildcard_qname/1, wildcard_substitution/2, dname_match/2]).
 -export([default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
 -export([minimum_soa_ttl/2]).
--export([match_name/1, match_type/1, match_types/1, match_wildcard/0, match_glue/1, match_dnskey_type/1, match_optrr/0]).
+-export([match_name/1, match_type/1, match_types/1, match_wildcard/0, match_glue/1, match_dnskey_type/1, match_optrr/0, not_match/1]).
 -export([replace_name/1]).
 
 %% Get a wildcard variation of a Qname. Replaces the leading
@@ -100,20 +100,6 @@ strip_wildcard_test_() ->
   ].
 -endif.
 
-
-% Given a name and a wildcard, it will strip down the Name and the WildcardName
-% to the same number of labels to the right of the wildcard so that they can be compared
--spec strip_wildcard(dns:dname(), dns:dname()) -> {dns:dname(), dns:dname()}.
-strip_wildcard(Name, WildcardName) ->
-  WildcardNameLabels = dns:dname_to_labels(WildcardName),
-  WildcardLabelsWithoutWildcard = lists:dropwhile(fun(L) -> L =:= <<"*">> end, WildcardNameLabels),
-  case length(WildcardLabelsWithoutWildcard) of
-    L when L =:= length(WildcardNameLabels) ->
-      {Name, WildcardName};
-    _ ->
-      {dns:labels_to_dname(lists:nthtail(length(WildcardLabelsWithoutWildcard), dns:dname_to_labels(Name))), dns:labels_to_dname(WildcardLabelsWithoutWildcard)}
-  end.
-
 %% Return the TTL value or 3600 if it is undefined.
 default_ttl(TTL) ->
   case TTL of
@@ -129,6 +115,7 @@ default_priority(Priority) ->
   end.
 
 % Applies a minimum TTL based on the SOA minumum value.
+-spec minimum_soa_ttl(dns:dns_rr(), dns:dns_rrdata_soa()) -> dns:dns_rr().
 minimum_soa_ttl(Record, Data) when is_record(Data, dns_rrdata_soa) -> Record#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, Record#dns_rr.ttl)};
 minimum_soa_ttl(Record, _) -> Record.
 
@@ -162,7 +149,10 @@ match_glue(Name) ->
 
 match_dnskey_type(Type) ->
   fun (R) when is_record(R, dns_rr) ->
-      R#dns_rr.data#dns_rrdata_dnskey.flags =:= Type
+      case R#dns_rr.data of
+        D when is_record(D, dns_rrdata_dnskey) -> R#dns_rr.data#dns_rrdata_dnskey.flags =:= Type;
+        _ -> false
+      end
   end.
 
 match_optrr() ->
@@ -177,6 +167,12 @@ match_wildcard_label() ->
   fun(L) ->
       L =:= <<"*">>
   end.
+
+not_match(F) ->
+  fun(R) ->
+      not(F(R))
+  end.
+
 
 
 %% Replacement functions.

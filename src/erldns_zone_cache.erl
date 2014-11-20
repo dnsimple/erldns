@@ -217,13 +217,16 @@ put_zone_async(Name, Zone) ->
   ok.
 
 %% @doc Sign a zone.
--spec sign_zone(binary()) -> ok.
+-spec sign_zone(erldns:zone()|binary()) -> ok.
+sign_zone(Zone) when is_record(Zone, zone) ->
+  {ok, KSK} = cutkey:rsa(1024, 1025, [{return, bare}, erlint]),
+  {ok, ZSK} = cutkey:rsa(512, 513, [{return, bare}, erlint]),
+  Zone#zone{key_signing_key = KSK, zone_signing_key = ZSK};
+
 sign_zone(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      {ok, KSK} = cutkey:rsa(1024, 1025, [{return, bare}, erlint]),
-      {ok, ZSK} = cutkey:rsa(512, 513, [{return, bare}, erlint]),
-      SignedZone = index_zone(Zone#zone{key_signing_key = KSK, zone_signing_key = ZSK}),
+      SignedZone = index_zone(sign_zone(Zone)),
       put_zone(Name, SignedZone),
       SignedZone
   end.
