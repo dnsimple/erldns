@@ -51,10 +51,10 @@
 include_nsec(Message, Qname, Qtype, Zone, CnameChain) when is_record(Message, dns_message) ->
   lager:debug("include_nsec for ~p, ~p (CNAME chain: ~p)", [Qname, dns:type_name(Qtype), CnameChain]),
   Functions = [
-               {nsec_test(no_data, CnameChain), nsec_action(no_data)},
-               {nsec_test(name_error, CnameChain), nsec_action(name_error)},
-               {nsec_test(wildcard_answer, CnameChain), nsec_action(wildcard_answer)},
-               {nsec_test(wildcard_no_data, CnameChain), nsec_action(wildcard_no_data)}
+               {nsec_test(no_data), nsec_action(no_data)},
+               {nsec_test(name_error), nsec_action(name_error)},
+               {nsec_test(wildcard_answer), nsec_action(wildcard_answer)},
+               {nsec_test(wildcard_no_data), nsec_action(wildcard_no_data)}
               ],
   Records = lists:filter(
               erldns_records:not_match(
@@ -64,7 +64,7 @@ include_nsec(Message, Qname, Qtype, Zone, CnameChain) when is_record(Message, dn
 
   ActionFunctions = lists:map(
                       fun({TestFunction, ActionFunction}) ->
-                          case TestFunction(lists:filter(erldns_records:not_match(erldns_records:match_optrr()), Records), Qname, Qtype) of
+                          case TestFunction(lists:filter(erldns_records:not_match(erldns_records:match_optrr()), Records), Qname, Qtype, CnameChain) of
                             true -> ActionFunction;
                             false -> undefined
                           end
@@ -80,27 +80,10 @@ include_nsec(Message, Qname, Qtype, Zone, CnameChain) when is_record(Message, dn
   case ActionFunction of
     [] -> Message;
     [F|_] ->
-      sign_nsec_records(F(Message, Records, Qname, Qtype, Zone), Zone)
+      MessageWithNSEC = F(Message, Records, Qname, Qtype, Zone),
+      sign_nsec_records(MessageWithNSEC, Zone)
   end.
 
-
--ifdef(TEST).
-include_nsec_in_message_test_() ->
-  Zone = #zone{},
-  Qname = <<"a.a1.example.com">>,
-  Qtype = ?DNS_TYPE_A,
-  CnameChain = [],
-  [
-   fun() ->
-       Message = #dns_message{answers = [], authority = [], additional = []},
-       ?assertMatch(Message, include_nsec(Message, Qname, Qtype, Zone, CnameChain))
-   end,
-   fun() ->
-       Message = #dns_message{answers = [#dns_rr{name = Qname, type = Qtype}], authority = [], additional = []},
-       ?assertMatch(Message, include_nsec(Message, Qname, Qtype, Zone, CnameChain))
-   end
-  ].
--endif.
 
 % @doc Sign the NSEC records in the DNS message.
 -spec sign_nsec_records(dns:message(), erldns:zone()) -> dns:message().
@@ -113,19 +96,10 @@ sign_nsec_records(Message, Zone) ->
    }.
 
 
--ifdef(TEST).
-sign_nsec_records_test_() ->
-  Zone = #zone{},
-  Message = #dns_message{answers = [], authority = [], additional = []},
-  [
-   ?_assertMatch(Message, sign_nsec_records(Message, Zone))
-  ].
--endif.
-
 % @doc Determine if the RRSet matches the given NSEC rule.
--spec nsec_test(no_data|name_error|wildcard_answer|wildcard_no_data, [dns:rr()]) -> fun(([dns:rr()], dns:dname(), dns:type()) -> boolean()).
-nsec_test(no_data, _CnameChain) ->
-  fun(RRSet, Qname, Qtype) ->
+-spec nsec_test(no_data|name_error|wildcard_answer|wildcard_no_data) -> fun(([dns:rr()], dns:dname(), dns:type(), [dns:rr()]) -> boolean()).
+nsec_test(no_data) ->
+  fun(RRSet, Qname, Qtype, _CnameChain) ->
       % exact match by name, but not type
       lists:any(
         fun(RR) ->
@@ -135,24 +109,24 @@ nsec_test(no_data, _CnameChain) ->
             end
         end, RRSet)
   end;
-nsec_test(name_error, _CnameChain) ->
-  fun(RRSet, Qname, _Qtype) ->
+nsec_test(name_error) ->
+  fun(RRSet, Qname, _Qtype, _CnameChain) ->
       % no match by name, including wildcard expansion
       lists:any(
         fun(RR) ->
             (erldns_records:wildcard_substitution(RR#dns_rr.name, Qname) =/= Qname)
         end, RRSet)
   end;
-nsec_test(wildcard_answer, _CnameChain) ->
-  fun(RRSet, Qname, Qtype) ->
+nsec_test(wildcard_answer) ->
+  fun(RRSet, Qname, Qtype, _CnameChain) ->
       % no exact match by name, but match name and type with wildcard expansion
       lists:any(
         fun(RR) ->
             (RR#dns_rr.name =/= Qname) and ((erldns_records:wildcard_substitution(RR#dns_rr.name, Qname) =:= Qname) and ((Qtype =:= ?DNS_TYPE_ANY) or (RR#dns_rr.type =:= Qtype)))
         end, RRSet)
   end;
-nsec_test(wildcard_no_data, _CnameChain) ->
-  fun(RRSet, Qname, Qtype) ->
+nsec_test(wildcard_no_data) ->
+  fun(RRSet, Qname, Qtype, _CnameChain) ->
       % no exact match by name, exact match by name with wildcard, but not type
       lists:any(
         fun(RR) ->
@@ -163,66 +137,7 @@ nsec_test(wildcard_no_data, _CnameChain) ->
         end, RRSet)
   end.
 
--ifdef(TEST).
-nsec_test_no_data_test_() ->
-  Qname = <<"example.com">>,
-  Qtype = ?DNS_TYPE_A,
-  CnameChain = [],
-  F = nsec_test(no_data, CnameChain),
-  [
-   ?_assertNot(F([], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = Qname, type = Qtype}], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = Qname, type = ?DNS_TYPE_A}], Qname, ?DNS_TYPE_ANY)),
-   ?_assert(F([#dns_rr{name = Qname, type = ?DNS_TYPE_NS}], Qname, Qtype)),
-   ?_assert(F([#dns_rr{name = Qname, type = Qtype}, #dns_rr{name = Qname, type = ?DNS_TYPE_NS}], Qname, Qtype))
-  ].
 
-nsec_test_name_error_test_() ->
-  % no match by name, including wildcard expansion
-  Qname = <<"a.a1.example.com">>,
-  Qtype = ?DNS_TYPE_A,
-  CnameChain = [],
-  F = nsec_test(name_error, CnameChain),
-  [
-   ?_assertNot(F([], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = Qname, type = Qtype}], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = Qname, type = ?DNS_TYPE_NS}], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = <<"*.a1.example.com">>, type = Qtype}], Qname, Qtype)),
-   ?_assert(F([#dns_rr{name = <<"*.b1.example.com">>, type = Qtype}], Qname, Qtype))
-  ].
-
-nsec_test_wildcard_answer_test_() ->
-  % no exact match by name, but match name and type with wildcard expansion
-  Qname = <<"a.a1.example.com">>,
-  Qtype = ?DNS_TYPE_A,
-  CnameChain = [],
-  F = nsec_test(wildcard_answer, CnameChain),
-  [
-   ?_assertNot(F([], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = Qname, type = Qtype}], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = Qname, type = ?DNS_TYPE_NS}], Qname, Qtype)),
-   ?_assert(F([#dns_rr{name = <<"*.a1.example.com">>, type = Qtype}], Qname, Qtype)),
-   ?_assert(F([#dns_rr{name = <<"*.a1.example.com">>, type = Qtype}], Qname, ?DNS_TYPE_ANY)),
-   ?_assertNot(F([#dns_rr{name = <<"*.a1.example.com">>, type = ?DNS_TYPE_NS}], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = <<"*.b1.example.com">>, type = Qtype}], Qname, Qtype))
-  ].
-
-nsec_test_wildcard_no_data_test_() ->
-  % no exact match by name, exact match by name with wildcard, but not type
-  Qname = <<"a.a1.example.com">>,
-  Qtype = ?DNS_TYPE_A,
-  CnameChain = [],
-  F = nsec_test(wildcard_no_data, CnameChain),
-  [
-   ?_assertNot(F([], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = Qname, type = Qtype}], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = Qname, type = ?DNS_TYPE_NS}], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = <<"*.a1.example.com">>, type = Qtype}], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = <<"*.a1.example.com">>, type = Qtype}], Qname, ?DNS_TYPE_ANY)),
-   ?_assert(F([#dns_rr{name = <<"*.a1.example.com">>, type = ?DNS_TYPE_NS}], Qname, Qtype)),
-   ?_assertNot(F([#dns_rr{name = <<"*.b1.example.com">>, type = Qtype}], Qname, Qtype))
-  ].
--endif.
 
 % @doc Given a particular case where NSEC is required, return the NSEC RR.
 -spec nsec_action(no_data|name_error|wildcard_answer|wildcard_no_data) -> fun((dns:message(), [[dns:rr()]], dns:dname(), dns:type(), erldns:zone()) -> dns:message()).
@@ -266,9 +181,16 @@ nsec_action(wildcard_answer) ->
       end
   end;
 nsec_action(wildcard_no_data) ->
-  fun(Message, _RRSet, _Qname, _Qtype, _Zone) ->
+  fun(Message, RRSet, Qname, _Qtype, Zone) ->
       lager:debug("NSEC Wildcard No Data"),
-      Message
+      case RRSet of
+        [] ->
+          Message;
+        _ ->
+          lager:debug("Calling add_nsec for RRSet ~p", [RRSet]),
+          ZoneRecords = Zone#zone.records ++ erldns_dnssec:dnskey_rrset(Zone),
+          add_nsec(no_data, Message, Zone, ZoneRecords, Qname, RRSet)
+      end
   end.
 
 add_nsec(_, Message, _Zone, _ZoneRecords, _Qname, []) -> Message;
@@ -299,6 +221,91 @@ add_nsec(Action = name_error, Message, Zone, ZoneRecords, Qname, [RR|Rest]) ->
 
 
 -ifdef(TEST).
+
+include_nsec_in_message_test_() ->
+  Zone = #zone{},
+  Qname = <<"a.a1.example.com">>,
+  Qtype = ?DNS_TYPE_A,
+  CnameChain = [],
+  [
+   fun() ->
+       Message = #dns_message{answers = [], authority = [], additional = []},
+       ?assertMatch(Message, include_nsec(Message, Qname, Qtype, Zone, CnameChain))
+   end,
+   fun() ->
+       Message = #dns_message{answers = [#dns_rr{name = Qname, type = Qtype}], authority = [], additional = []},
+       ?assertMatch(Message, include_nsec(Message, Qname, Qtype, Zone, CnameChain))
+   end
+  ].
+
+sign_nsec_records_test_() ->
+  Zone = #zone{},
+  Message = #dns_message{answers = [], authority = [], additional = []},
+  [
+   ?_assertMatch(Message, sign_nsec_records(Message, Zone))
+  ].
+
+
+nsec_test_no_data_test_() ->
+  Qname = <<"example.com">>,
+  Qtype = ?DNS_TYPE_A,
+  CnameChain = [],
+  F = nsec_test(no_data),
+  [
+   ?_assertNot(F([], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = Qname, type = Qtype}], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = Qname, type = ?DNS_TYPE_A}], Qname, ?DNS_TYPE_ANY, CnameChain)),
+   ?_assert(F([#dns_rr{name = Qname, type = ?DNS_TYPE_NS}], Qname, Qtype, CnameChain)),
+   ?_assert(F([#dns_rr{name = Qname, type = Qtype}, #dns_rr{name = Qname, type = ?DNS_TYPE_NS}], Qname, Qtype, CnameChain))
+  ].
+
+nsec_test_name_error_test_() ->
+  % no match by name, including wildcard expansion
+  Qname = <<"a.a1.example.com">>,
+  Qtype = ?DNS_TYPE_A,
+  CnameChain = [],
+  F = nsec_test(name_error),
+  [
+   ?_assertNot(F([], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = Qname, type = Qtype}], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = Qname, type = ?DNS_TYPE_NS}], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = <<"*.a1.example.com">>, type = Qtype}], Qname, Qtype, CnameChain)),
+   ?_assert(F([#dns_rr{name = <<"*.b1.example.com">>, type = Qtype}], Qname, Qtype, CnameChain))
+  ].
+
+nsec_test_wildcard_answer_test_() ->
+  % no exact match by name, but match name and type with wildcard expansion
+  Qname = <<"a.a1.example.com">>,
+  Qtype = ?DNS_TYPE_A,
+  CnameChain = [],
+  F = nsec_test(wildcard_answer),
+  [
+   ?_assertNot(F([], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = Qname, type = Qtype}], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = Qname, type = ?DNS_TYPE_NS}], Qname, Qtype, CnameChain)),
+   ?_assert(F([#dns_rr{name = <<"*.a1.example.com">>, type = Qtype}], Qname, Qtype, CnameChain)),
+   ?_assert(F([#dns_rr{name = <<"*.a1.example.com">>, type = Qtype}], Qname, ?DNS_TYPE_ANY, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = <<"*.a1.example.com">>, type = ?DNS_TYPE_NS}], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = <<"*.b1.example.com">>, type = Qtype}], Qname, Qtype, CnameChain))
+  ].
+
+nsec_test_wildcard_no_data_test_() ->
+  % no exact match by name, exact match by name with wildcard, but not type
+  Qname = <<"a.a1.example.com">>,
+  Qtype = ?DNS_TYPE_A,
+  CnameChain = [],
+  F = nsec_test(wildcard_no_data),
+  [
+   ?_assertNot(F([], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = Qname, type = Qtype}], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = Qname, type = ?DNS_TYPE_NS}], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = <<"*.a1.example.com">>, type = Qtype}], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = <<"*.a1.example.com">>, type = Qtype}], Qname, ?DNS_TYPE_ANY, CnameChain)),
+   ?_assert(F([#dns_rr{name = <<"*.a1.example.com">>, type = ?DNS_TYPE_NS}], Qname, Qtype, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = <<"*.b1.example.com">>, type = Qtype}], Qname, Qtype, CnameChain))
+  ].
+
+
 nsec_action_no_data_test_() ->
   % exact match by name, but not type
   Message = #dns_message{},
