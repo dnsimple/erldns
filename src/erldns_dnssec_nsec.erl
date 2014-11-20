@@ -112,11 +112,14 @@ nsec_test(no_data) ->
         end, RRSet)
   end;
 nsec_test(name_error) ->
-  fun(RRSet, Qname, _Qtype, _CnameChain) ->
+  fun(RRSet, Qname, Qtype, _CnameChain) ->
       % no match by name, including wildcard expansion
       lists:any(
         fun(RR) ->
-            (erldns_records:wildcard_substitution(RR#dns_rr.name, Qname) =/= Qname)
+            case {Qtype, RR#dns_rr.type} of
+              {?DNS_TYPE_ANY, ?DNS_TYPE_CNAME} -> false;
+              _ -> (erldns_records:wildcard_substitution(RR#dns_rr.name, Qname) =/= Qname)
+            end
         end, RRSet)
   end;
 nsec_test(wildcard_answer) ->
@@ -272,7 +275,9 @@ nsec_test_name_error_test_() ->
    ?_assertNot(F([#dns_rr{name = Qname, type = Qtype}], Qname, Qtype, CnameChain)),
    ?_assertNot(F([#dns_rr{name = Qname, type = ?DNS_TYPE_NS}], Qname, Qtype, CnameChain)),
    ?_assertNot(F([#dns_rr{name = <<"*.a1.example.com">>, type = Qtype}], Qname, Qtype, CnameChain)),
-   ?_assert(F([#dns_rr{name = <<"*.b1.example.com">>, type = Qtype}], Qname, Qtype, CnameChain))
+   ?_assert(F([#dns_rr{name = <<"*.b1.example.com">>, type = Qtype}], Qname, Qtype, CnameChain)),
+   ?_assert(F([#dns_rr{name = <<"a.b1.example.com">>, type = Qtype}], Qname, ?DNS_TYPE_ANY, CnameChain)),
+   ?_assertNot(F([#dns_rr{name = <<"a.b1.example.com">>, type = ?DNS_TYPE_CNAME}], Qname, ?DNS_TYPE_ANY, CnameChain))
   ].
 
 nsec_test_wildcard_answer_test_() ->
