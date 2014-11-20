@@ -49,39 +49,41 @@
 % loaded.
 -spec include_nsec(dns:message(), dns:dname(), dns:type(), erldns:zone(), [dns:dns_rr()]) -> dns:message().
 include_nsec(Message, Qname, Qtype, Zone, CnameChain) when is_record(Message, dns_message) ->
-  lager:debug("include_nsec for ~p, ~p (CNAME chain: ~p)", [Qname, dns:type_name(Qtype), CnameChain]),
-  Functions = [
-               {nsec_test(no_data), nsec_action(no_data)},
-               {nsec_test(name_error), nsec_action(name_error)},
-               {nsec_test(wildcard_answer), nsec_action(wildcard_answer)},
-               {nsec_test(wildcard_no_data), nsec_action(wildcard_no_data)}
-              ],
-  Records = lists:filter(
-              erldns_records:not_match(
-                erldns_records:match_type(?DNS_TYPE_RRSIG)), Message#dns_message.answers ++ lists:filter(fun(R) -> 
-                                                                                                             R#dns_rr.name =/= <<"">>
-                                                                                                         end, Message#dns_message.authority)),
+  %lager:debug("include_nsec for ~p, ~p (CNAME chain: ~p)", [Qname, dns:type_name(Qtype), CnameChain]),
 
+  AuthorityRecords =  lists:filter(empty_name_predicate(), Message#dns_message.authority),
+  AllRecords = Message#dns_message.answers ++ AuthorityRecords,
+  Records = lists:filter(erldns_records:not_match(erldns_records:match_type(?DNS_TYPE_RRSIG)), AllRecords),
   ActionFunctions = lists:map(
                       fun({TestFunction, ActionFunction}) ->
                           case TestFunction(lists:filter(erldns_records:not_match(erldns_records:match_optrr()), Records), Qname, Qtype, CnameChain) of
                             true -> ActionFunction;
                             false -> undefined
                           end
-                      end, Functions),
-
-  ActionFunction = lists:filter(fun(F) ->
-                                    case F of
-                                      undefined -> false;
-                                      _ -> true
-                                    end
-                                end, ActionFunctions),
+                      end, nsec_function_set()),
+  ActionFunction = lists:filter(undefined_predicate(), ActionFunctions),
 
   case ActionFunction of
     [] -> Message;
     [F|_] ->
       MessageWithNSEC = F(Message, Records, Qname, Qtype, Zone),
       sign_nsec_records(MessageWithNSEC, Zone)
+  end.
+
+nsec_function_set() ->
+  lists:map(fun(Rule) -> {nsec_test(Rule), nsec_action(Rule)} end, [no_data, name_error, wildcard_answer, wildcard_no_data]).
+
+empty_name_predicate() ->
+  fun(R) ->
+      R#dns_rr.name =/= <<"">>
+  end.
+
+undefined_predicate() ->
+  fun(F) ->
+      case F of
+        undefined -> false;
+        _ -> true
+      end
   end.
 
 
@@ -195,15 +197,15 @@ nsec_action(wildcard_no_data) ->
 
 add_nsec(_, Message, _Zone, _ZoneRecords, _Qname, []) -> Message;
 
-add_nsec(Action = no_data, Message, Zone, ZoneRecords, Qname, [RR|Rest]) ->
-  lager:debug("add_nsec no data case for ~p", [RR#dns_rr.name]),
+add_nsec(Action = no_data, Message, Zone, ZoneRecords, Qname, [_RR|Rest]) ->
+  %lager:debug("add_nsec no data case for ~p", [RR#dns_rr.name]),
   AllNSEC = dnssec:gen_nsec(ZoneRecords),
   NSEC = lists:filter(erldns_records:match_name(Zone#zone.name), AllNSEC),
   MessageWithNSEC = Message#dns_message{authority = Message#dns_message.authority ++ NSEC},
   add_nsec(Action, MessageWithNSEC, Zone, ZoneRecords, Qname, Rest);
 
-add_nsec(Action = name_error, Message, Zone, ZoneRecords, Qname, [RR|Rest]) ->
-  lager:debug("add_nsec name error case for ~p", [RR#dns_rr.name]),
+add_nsec(Action = name_error, Message, Zone, ZoneRecords, Qname, [_RR|Rest]) ->
+  %lager:debug("add_nsec name error case for ~p", [RR#dns_rr.name]),
   AllNSEC = dnssec:gen_nsec(ZoneRecords),
   NSEC1 = lists:filter(erldns_records:match_name(Zone#zone.name), AllNSEC),
   NSEC2 = case lists:takewhile(fun(R) -> R#dns_rr.name < Qname end, AllNSEC) of
