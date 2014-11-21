@@ -184,25 +184,25 @@ zone_names_and_versions() ->
 %% This function will build the necessary Zone record before interting.
 -spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone({Name, Sha, Records}) ->
-  ok = erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   ok.
 
 %% @doc Put a zone into the cache and wait for a response.
 -spec put_zone(binary(), #zone{}) -> ok.
 put_zone(Name, Zone) ->
-  ok = erldns_storage:insert(zones, {normalize_name(Name), Zone}),
+  erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone_async({Name, Sha, Records}) ->
-  ok = erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async(binary(), #zone{}) -> ok.
 put_zone_async(Name, Zone) ->
-  ok = erldns_storage:insert(zones, {normalize_name(Name), Zone}),
+  erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   ok.
 
 %% @doc Remove a zone from the cache without waiting for a response.
@@ -218,8 +218,8 @@ delete_zone(Name) ->
 %% @doc Initialize the zone cache.
 -spec init([]) -> {ok, #state{}}.
 init([]) ->
-  ok = erldns_storage:create(zones),
-  ok = erldns_storage:create(authorities),
+  erldns_storage:create(zones),
+  erldns_storage:create(authorities),
   {ok, #state{parsers = []}}.
 
 % ----------------------------------------------------------------------------------------------------
@@ -227,19 +227,19 @@ init([]) ->
 
 %% @doc Write the zone into the cache.
 handle_call({put, Name, Zone}, _From, State) ->
-  ok = erldns_storage:insert(zones, {normalize_name(Name), Zone}),
+  erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   {reply, ok, State};
 
 handle_call({put, Name, Sha, Records}, _From, State) ->
-  ok = erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   {reply, ok, State}.
 
 handle_cast({put, Name, Zone}, State) ->
-  ok = erldns_storage:insert(zones, {normalize_name(Name), Zone}),
+  erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   {noreply, State};
 
 handle_cast({put, Name, Sha, Records}, State) ->
-  ok = erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   {noreply, State};
 
 handle_cast({delete, Name}, State) ->
