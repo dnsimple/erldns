@@ -78,7 +78,7 @@ dedupe(Records) ->
 dedupe([], Found, _Duplicates) ->
   Found;
 dedupe([RR|Records], Found, Duplicates) ->
-  case lists:any(fun(R) -> (R#dns_rr.name =:= RR#dns_rr.name) and (R#dns_rr.type =:= RR#dns_rr.type) end, Found) of
+  case lists:any(fun(R) -> (R#dns_rr.name =:= RR#dns_rr.name) and (R#dns_rr.type =:= RR#dns_rr.type) and (R#dns_rr.data =:= RR#dns_rr.data) end, Found) of
     true -> dedupe(Records, Found, Duplicates ++ [RR]);
     false -> dedupe(Records, Found ++ [RR], Duplicates)
   end.
@@ -118,8 +118,9 @@ nsec_test(no_data) ->
       % exact match by name, but not type
       lists:any(
         fun(RR) ->
-            case Qtype of
-              ?DNS_TYPE_ANY -> false;
+            case {Qtype, RR#dns_rr.type} of
+              {_, ?DNS_TYPE_CNAME} -> false;
+              {?DNS_TYPE_ANY, _} -> false;
               _ -> (RR#dns_rr.name =:= Qname) and (RR#dns_rr.type =/= Qtype)
             end
         end, RRSet)
