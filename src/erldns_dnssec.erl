@@ -79,10 +79,10 @@ dnskey_rrset(Message, Zone) ->
   end.
 
 ksk_dnskey_rr(SignedZone) ->
-  dnskey_rr(SignedZone, 257).
+  dnskey_rr(SignedZone, ?DNSKEY_KSK_TYPE).
 
 zsk_dnskey_rr(SignedZone) ->
-  dnskey_rr(SignedZone, 256).
+  dnskey_rr(SignedZone, ?DNSKEY_ZSK_TYPE).
 
 dnskey_rr(SignedZone, Flags) ->
   case lists:filter(erldns_records:match_dnskey_type(Flags), SignedZone#zone.records) of

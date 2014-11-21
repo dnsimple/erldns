@@ -15,6 +15,7 @@
 %% Functions related to DNS records.
 -module(erldns_records).
 
+-include("erldns.hrl").
 -include_lib("dns/include/dns.hrl").
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

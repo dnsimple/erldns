@@ -9,3 +9,6 @@
     key_signing_key :: crypto:rsa_private(),
     zone_signing_key :: crypto:rsa_private()
   }).
+
+-define(DNSKEY_ZSK_TYPE, 256).
+-define(DNSKEY_KSK_TYPE, 257).
