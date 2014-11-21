@@ -234,7 +234,7 @@ resolve_no_exact_type_match(Message, Qname, Qtype, _Host, _CnameChain, _ExactTyp
 
 % Given an exact name match where the Qtype is not found in the record set and we are not authoritative,
 % add the NS records to the authority section of the message.
-resolve_exact_match_referral(Message, _Qtype, _MatchedRecords, ReferralRecords, []) ->
+resolve_exact_match_referral(Message, _Qtype, _MatchedRecords, ReferralRecords, _AuthorityRecords = []) ->
   Message#dns_message{authority = Message#dns_message.authority ++ ReferralRecords};
 
 % Given an exact name match and the type of ANY, return all of the matched records.
@@ -277,10 +277,10 @@ resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, _MatchedRecords
   Name = CnameRecord#dns_rr.data#dns_rrdata_cname.dname,
   lager:debug("Restarting query with CNAME name ~p (exact match)", [Name]),
 
-  NewMessage = Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords},
+  ResolvedMessage = Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords},
   SignedMessage = case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
-    true -> erldns_dnssec:sign_message(NewMessage, Name, Qtype, Zone, CnameRecords);
-    false -> NewMessage
+    true -> erldns_dnssec:sign_message(ResolvedMessage, Name, Qtype, Zone, CnameRecords);
+    false -> ResolvedMessage
   end,
 
   restart_query(SignedMessage, Name, Qtype, Host, CnameChain ++ CnameRecords, Zone, erldns_zone_cache:in_zone(Name)).
@@ -382,7 +382,7 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMa
   resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords).
 
 % It is not a CNAME and there were no exact type matches
-resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, [], []) ->
+resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, _CnameRecords = [], _TypeMatches = []) ->
   Message#dns_message{aa = true, authority = Message#dns_message.authority ++ Zone#zone.authority};
 
 % It is not a CNAME and there were exact type matches
