@@ -105,9 +105,9 @@ undefined_predicate() ->
 sign_nsec_records(Message, Zone) ->
   Additional = lists:filter(erldns_records:match_type(?DNS_TYPE_NSEC), lists:filter(erldns_records:not_match(erldns_records:match_optrr()), Message#dns_message.additional)),
   Message#dns_message{
-    answers = Message#dns_message.answers ++ lists:map(fun(R) -> erldns_dnssec:sign_rrset(Message, Zone, R) end, lists:filter(erldns_records:match_type(?DNS_TYPE_NSEC), Message#dns_message.answers)),
-    authority = Message#dns_message.authority ++ lists:map(fun(R) -> erldns_dnssec:sign_rrset(Message, Zone, R) end, lists:filter(erldns_records:match_type(?DNS_TYPE_NSEC), Message#dns_message.authority)),
-    additional = Message#dns_message.additional ++ lists:map(fun(R) -> erldns_dnssec:sign_rrset(Message, Zone, R) end, Additional)
+    answers = Message#dns_message.answers ++ lists:flatten(lists:map(fun(R) -> erldns_dnssec:sign_rrset(Message, Zone, R) end, lists:filter(erldns_records:match_type(?DNS_TYPE_NSEC), Message#dns_message.answers))),
+    authority = Message#dns_message.authority ++ lists:flatten(lists:map(fun(R) -> erldns_dnssec:sign_rrset(Message, Zone, R) end, lists:filter(erldns_records:match_type(?DNS_TYPE_NSEC), Message#dns_message.authority))),
+    additional = Message#dns_message.additional ++ lists:flatten(lists:map(fun(R) -> erldns_dnssec:sign_rrset(Message, Zone, R) end, Additional))
    }.
 
 
