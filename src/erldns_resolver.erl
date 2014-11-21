@@ -222,8 +222,13 @@ resolve_no_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, _ExactT
 resolve_no_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, ExactTypeMatches, _Zone, _MatchedRecords, _ReferralRecords = [], _AuthorityRecords) ->
   % lager:debug("No exact name and type match, but other name matches and NS records present"),
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ ExactTypeMatches};
-resolve_no_exact_type_match(Message, _Qname, Qtype, _Host, _CnameChain, _ExactTypeMatches, _Zone, MatchedRecords, ReferralRecords, AuthorityRecords) ->
-  resolve_exact_match_referral(Message, Qtype, MatchedRecords, ReferralRecords, AuthorityRecords).
+resolve_no_exact_type_match(Message, Qname, Qtype, _Host, _CnameChain, _ExactTypeMatches, Zone, MatchedRecords, ReferralRecords, AuthorityRecords) ->
+  lager:debug("Not exact name and type match, but referral present"),
+  ResolvedMessage = resolve_exact_match_referral(Message, Qtype, MatchedRecords, ReferralRecords, AuthorityRecords),
+  case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
+    true -> erldns_dnssec:sign_message(ResolvedMessage, Qname, Qtype, Zone, [], AuthorityRecords);
+    false -> ResolvedMessage
+  end.
 
 
 
