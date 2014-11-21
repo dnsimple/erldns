@@ -24,7 +24,7 @@
 -export([wildcard_qname/1, wildcard_substitution/2, dname_match/2]).
 -export([default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
 -export([minimum_soa_ttl/2]).
--export([match_name/1, match_type/1, match_types/1, match_wildcard/0, match_glue/1, match_dnskey_type/1, match_optrr/0, not_match/1]).
+-export([match_name/1, match_type/1, match_types/1, match_wildcard/0, match_glue/1, match_dnskey_type/1, match_optrr/0, match_any_subdomain/1, not_match/1]).
 -export([empty_name_predicate/0]).
 -export([replace_name/1]).
 
@@ -43,15 +43,7 @@ wildcard_substitution(Name, Qname) ->
     false -> Name
   end.
 
--ifdef(TEST).
-wildcard_substitution_test_() ->
-  Qname = <<"a.a1.example.com">>,
-  [
-   ?_assert(wildcard_substitution(<<"a.a1.example.com">>, Qname) =:= <<"a.a1.example.com">>),
-   ?_assert(wildcard_substitution(<<"*.a1.example.com">>, Qname) =:= Qname),
-   ?_assert(wildcard_substitution(<<"*.b1.example.com">>, Qname) =:= <<"*.b1.example.com">>)
-  ].
--endif.
+
 
 % @doc Return true if the names match with wildcard substitution.
 -spec dname_match(dns:dname(), dns:dname()) -> boolean().
@@ -62,15 +54,6 @@ dname_match(N1, N2) ->
   L1R = remove_labels(N2, L2, L1),
   L1R =:= L2R.
 
--ifdef(TEST).
-dname_match_test_() ->
-  [
-   ?_assert(dname_match(<<"a.a1.example.com">>, <<"a.a1.example.com">>)),
-   ?_assert(dname_match(<<"a.a1.example.com">>, <<"*.a1.example.com">>)),
-   ?_assertNot(dname_match(<<"a.a1.example.com">>, <<"a.b1.example.com">>)),
-   ?_assertNot(dname_match(<<"a.a1.example.com">>, <<"*.b1.example.com">>))
-  ].
--endif.
 
 remove_labels(Name, L1, L2) ->
   case length(L1) =:= length(dns:dname_to_labels(Name)) of
@@ -78,14 +61,6 @@ remove_labels(Name, L1, L2) ->
     false -> lists:reverse(lists:sublist(lists:reverse(L2), length(L1)))
   end.
 
--ifdef(TEST).
-remove_labels_test_() ->
-  [
-    ?_assert(remove_labels(<<"a.a1.example.com">>, dns:dname_to_labels(<<"a.a1.example.com">>), dns:dname_to_labels(<<"b.a1.example.com">>)) =:= dns:dname_to_labels(<<"b.a1.example.com">>)),
-    ?_assert(remove_labels(<<"a.a1.example.com">>, dns:dname_to_labels(<<"a1.example.com">>), dns:dname_to_labels(<<"b.a1.example.com">>)) =:= dns:dname_to_labels(<<"a1.example.com">>)),
-    ?_assert(remove_labels(<<"b.a.a1.example.com">>, dns:dname_to_labels(<<"a1.example.com">>), dns:dname_to_labels(<<"b.a.a1.example.com">>)) =:= dns:dname_to_labels(<<"a1.example.com">>))
-  ].
--endif.
 
 % @doc Convert a name into labels. Wildcards are removed.
 -spec strip_wildcard(dns:dname()) -> [dns:label()].
@@ -95,22 +70,16 @@ strip_wildcard(Name) ->
     _ -> dns:dname_to_labels(Name)
   end.
 
--ifdef(TEST).
-strip_wildcard_test_() ->
-  [
-    ?_assert(strip_wildcard(<<"a.a1.example.com">>) =:= dns:dname_to_labels(<<"a.a1.example.com">>)),
-    ?_assert(strip_wildcard(<<"*.a1.example.com">>) =:= dns:dname_to_labels(<<"a1.example.com">>))
-  ].
--endif.
 
-%% Return the TTL value or 3600 if it is undefined.
+
+% @doc Return the TTL value or 3600 if it is undefined.
 default_ttl(TTL) ->
   case TTL of
     undefined -> 3600;
     Value -> Value
   end.
 
-%% Return the Priority value or 0 if it is undefined.
+% @doc Return the Priority value or 0 if it is undefined.
 default_priority(Priority) ->
   case Priority of
     undefined -> 0;
@@ -121,7 +90,6 @@ default_priority(Priority) ->
 -spec minimum_soa_ttl(dns:dns_rr(), dns:dns_rrdata_soa()) -> dns:dns_rr().
 minimum_soa_ttl(Record, Data) when is_record(Data, dns_rrdata_soa) -> Record#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, Record#dns_rr.ttl)};
 minimum_soa_ttl(Record, _) -> Record.
-
 
 
 %% Various matching functions.
@@ -171,6 +139,11 @@ match_wildcard_label() ->
       L =:= <<"*">>
   end.
 
+match_any_subdomain(Name) ->
+  fun(R) ->
+      is_subdomain(Name, R#dns_rr.name)
+  end.
+
 not_match(F) ->
   fun(R) ->
       not(F(R))
@@ -184,6 +157,35 @@ empty_name_predicate() ->
 
 %% Replacement functions.
 replace_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} end.
+
+%% @doc Return true if the OtherLabels is a subdomain of Labels.
+-spec is_subdomain(dns:dname(), dns:dname()) -> boolean().
+is_subdomain(Name, OtherName) when is_bitstring(Name) and is_bitstring(OtherName) ->
+  is_subdomain(lists:reverse(dns:dname_to_labels(Name)), lists:reverse(dns:dname_to_labels(OtherName)));
+is_subdomain([], []) ->
+  false;
+is_subdomain([], _OtherLabels) ->
+  true;
+is_subdomain(_Labels, []) ->
+  false;
+is_subdomain([L|Rest], [OL|ORest]) ->
+  case L =:= OL of
+    true -> is_subdomain(Rest, ORest);
+    false -> false
+  end.
+
+-ifdef(TEST).
+is_subdomain_test_() ->
+  [
+    ?_assertNot(is_subdomain(<<"example.com">>, <<"example.com">>)),
+    ?_assertNot(is_subdomain(<<"example.com">>, <<"example.net">>)),
+    ?_assertNot(is_subdomain(<<"example.com">>, <<"www.example.com.net">>)),
+    ?_assert(is_subdomain(<<"example.com">>, <<"www.example.com">>)),
+    ?_assert(is_subdomain(<<"example.com">>, <<"a.b.c.example.com">>)),
+    ?_assert(is_subdomain(<<"example.com">>, <<"*.a.b.c.example.com">>))
+  ].
+-endif.
+
 
 %% @doc Returns the type value given a binary string.
 -spec name_type(binary()) -> dns:type() | 'undefined'.
@@ -291,3 +293,117 @@ root_hints() ->
     #dns_rr{name = <<"m.root-servers.net">>, type=?DNS_TYPE_A, ttl=3600000, data = #dns_rrdata_a{ip = {202,12,27,33}}}
    ]
   }.
+
+
+
+-ifdef(TEST).
+
+wildcard_qname_test_() ->
+  ?_assertEqual(<<"*.b.example.com">>, wildcard_qname(<<"a.b.example.com">>)).
+
+wildcard_substitution_test_() ->
+  Qname = <<"a.a1.example.com">>,
+  [
+   ?_assert(wildcard_substitution(<<"a.a1.example.com">>, Qname) =:= <<"a.a1.example.com">>),
+   ?_assert(wildcard_substitution(<<"*.a1.example.com">>, Qname) =:= Qname),
+   ?_assert(wildcard_substitution(<<"*.b1.example.com">>, Qname) =:= <<"*.b1.example.com">>)
+  ].
+
+dname_match_test_() ->
+  [
+   ?_assert(dname_match(<<"a.a1.example.com">>, <<"a.a1.example.com">>)),
+   ?_assert(dname_match(<<"a.a1.example.com">>, <<"*.a1.example.com">>)),
+   ?_assertNot(dname_match(<<"a.a1.example.com">>, <<"a.b1.example.com">>)),
+   ?_assertNot(dname_match(<<"a.a1.example.com">>, <<"*.b1.example.com">>))
+  ].
+
+remove_labels_test_() ->
+  [
+    ?_assert(remove_labels(<<"a.a1.example.com">>, dns:dname_to_labels(<<"a.a1.example.com">>), dns:dname_to_labels(<<"b.a1.example.com">>)) =:= dns:dname_to_labels(<<"b.a1.example.com">>)),
+    ?_assert(remove_labels(<<"a.a1.example.com">>, dns:dname_to_labels(<<"a1.example.com">>), dns:dname_to_labels(<<"b.a1.example.com">>)) =:= dns:dname_to_labels(<<"a1.example.com">>)),
+    ?_assert(remove_labels(<<"b.a.a1.example.com">>, dns:dname_to_labels(<<"a1.example.com">>), dns:dname_to_labels(<<"b.a.a1.example.com">>)) =:= dns:dname_to_labels(<<"a1.example.com">>))
+  ].
+
+strip_wildcard_test_() ->
+  [
+    ?_assert(strip_wildcard(<<"a.a1.example.com">>) =:= dns:dname_to_labels(<<"a.a1.example.com">>)),
+    ?_assert(strip_wildcard(<<"*.a1.example.com">>) =:= dns:dname_to_labels(<<"a1.example.com">>))
+  ].
+
+minimum_soa_ttl_test_() ->
+  [
+    ?_assertMatch(#dns_rr{ttl = 3600}, minimum_soa_ttl(#dns_rr{ttl = 3600}, #dns_rrdata_a{})),
+    ?_assertMatch(#dns_rr{ttl = 30}, minimum_soa_ttl(#dns_rr{ttl = 3600}, #dns_rrdata_soa{minimum = 30})),
+    ?_assertMatch(#dns_rr{ttl = 30}, minimum_soa_ttl(#dns_rr{ttl = 30}, #dns_rrdata_soa{minimum = 3600}))
+  ].
+
+replace_name_test_() ->
+  [
+   ?_assertEqual([], lists:map(replace_name(<<"example">>), [])),
+   ?_assertMatch([#dns_rr{name = <<"example">>}], lists:map(replace_name(<<"example">>), [#dns_rr{name = <<"test.com">>}]))
+  ].
+
+match_name_test_() ->
+  [
+    ?_assert(lists:any(match_name(<<"example.com">>), [#dns_rr{name = <<"example.com">>}])),
+    ?_assertNot(lists:any(match_name(<<"example.com">>), [#dns_rr{name = <<"example.net">>}]))
+  ].
+
+match_type_test_() ->
+  [
+    ?_assert(lists:any(match_type(?DNS_TYPE_A), [#dns_rr{type = ?DNS_TYPE_A}])),
+    ?_assertNot(lists:any(match_type(?DNS_TYPE_CNAME), [#dns_rr{type = ?DNS_TYPE_A}]))
+  ].
+
+match_types_test_() ->
+  [
+    ?_assert(lists:any(match_types([?DNS_TYPE_A]), [#dns_rr{type = ?DNS_TYPE_A}])),
+    ?_assert(lists:any(match_types([?DNS_TYPE_A, ?DNS_TYPE_CNAME]), [#dns_rr{type = ?DNS_TYPE_A}])),
+    ?_assertNot(lists:any(match_types([?DNS_TYPE_CNAME]), [#dns_rr{type = ?DNS_TYPE_A}]))
+  ].
+
+match_wildcard_test_() ->
+  [
+    ?_assert(lists:any(match_wildcard(), [#dns_rr{name = <<"*.example.com">>}])),
+    ?_assertNot(lists:any(match_wildcard(), [#dns_rr{name = <<"www.example.com">>}]))
+  ].
+
+match_glue_test_() ->
+  [
+    ?_assert(lists:any(match_glue(<<"ns1.example.com">>), [#dns_rr{data = #dns_rrdata_ns{dname = <<"ns1.example.com">>}}])),
+    ?_assertNot(lists:any(match_glue(<<"ns1.example.com">>), [#dns_rr{data = #dns_rrdata_ns{dname = <<"ns2.example.com">>}}]))
+  ].
+
+match_glue_dnskey_type_test_() ->
+  [
+    ?_assert(lists:any(match_dnskey_type(?DNSKEY_KSK_TYPE), [#dns_rr{data = #dns_rrdata_dnskey{flags = ?DNSKEY_KSK_TYPE}}])),
+    ?_assert(lists:any(match_dnskey_type(?DNSKEY_ZSK_TYPE), [#dns_rr{data = #dns_rrdata_dnskey{flags = ?DNSKEY_ZSK_TYPE}}])),
+    ?_assertNot(lists:any(match_dnskey_type(?DNSKEY_ZSK_TYPE), [#dns_rr{data = #dns_rrdata_dnskey{flags = ?DNSKEY_KSK_TYPE}}])),
+    ?_assertNot(lists:any(match_dnskey_type(?DNSKEY_KSK_TYPE), [#dns_rr{data = #dns_rrdata_dnskey{flags = ?DNSKEY_ZSK_TYPE}}]))
+  ].
+
+match_optrr_test_() ->
+  [
+    ?_assert(lists:any(match_optrr(), [#dns_optrr{}])),
+    ?_assertNot(lists:any(match_optrr(), [#dns_rr{}]))
+  ].
+
+match_wildcard_label_test_() ->
+  [
+    ?_assert(lists:any(match_wildcard_label(), dns:dname_to_labels(<<"*.example.com">>))),
+    ?_assertNot(lists:any(match_wildcard_label(), dns:dname_to_labels(<<"www.example.com">>)))
+  ].
+
+match_any_subdomain_test_() ->
+  [
+    ?_assertNot(lists:any(match_any_subdomain(<<"example.com">>), [#dns_rr{name = <<"example.com">>}])),
+    ?_assert(lists:any(match_any_subdomain(<<"example.com">>), [#dns_rr{name = <<"www.example.com">>}]))
+  ].
+
+not_match_test_() ->
+  [
+    ?_assertNot(lists:any(not_match(match_name(<<"name">>)), [#dns_rr{name = <<"name">>}])),
+    ?_assert(lists:any(not_match(match_name(<<"name">>)), [#dns_rr{name = <<"notname">>}]))
+  ].
+
+-endif.
