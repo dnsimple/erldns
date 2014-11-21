@@ -1,43 +1,54 @@
-%%%-------------------------------------------------------------------
-%%% @author kyle
-%%% @copyright (C) 2014, siftlogic LLC
-%%% @doc
-%%%     API for any prefered storage type. Modules for the specified type should be of the form
-%%%     erldns_storage_mnesia, etc...
-%%% @end
-%%% Created : 20. Nov 2014 3:33 PM
-%%%-------------------------------------------------------------------
+%% Copyright (c) 2014, SiftLogic LLC
+%%
+%% Permission to use, copy, modify, and/or distribute this software for any
+%% purpose with or without fee is hereby granted, provided that the above
+%% copyright notice and this permission notice appear in all copies.
+%%
+%% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+%% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+%% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+%% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+%% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+%% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
 -module(erldns_storage).
--author("kyle").
 
 -behaviour(gen_server).
 
+%% inter-module API
+-export([start_link/0]).
+
 %% API
--export([start_link/0,
-         create/1,
-         create/2,
+-export([create/1,
          insert/2,
-         delete/1,
+         delete_table/1,
          delete/2,
-         select/0,
-         lookup/2]).
+         backup_table/1,
+         backup_tables/0,
+         select/2,
+         select/3,
+         foldl/3,
+         empty_table/1]).
 
 %% gen_server callbacks
 -export([init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    code_change/3]).
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 -record(state, {}).
 
 -define(POLL_WAIT_HOURS, 1).
 
+%% Gen Server Callbacks
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
+    %%This call to handle_info starts the timer to backup tables in the given interval.
     {ok, #state{}, 0}.
 
 handle_call(_Request, _From, State) ->
@@ -46,9 +57,10 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State, 0}.
 
+%% @doc Backups the tables in the given period
 handle_info(timeout, State) ->
     Before = now(),
-    backup(),
+    ok = backup_tables(),
     TimeSpentMs = timer:now_diff(now(), Before) div 1000,
     {noreply, State, max((?POLL_WAIT_HOURS * 60000) - TimeSpentMs, 0)};
 handle_info(_Info, State) ->
@@ -60,26 +72,81 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-create(Key) ->
-    not_implemented.
+%% API
+%% @doc API for a module's function calls. Please note that all crashes should be handled at the
+%% lowest level of the API (ex. erldns_storage_json).
 
-create(Key, Options) ->
-    not_implemented.
+%% @doc Call to a module's create. Creates a new table.
+-spec create(atom()) -> ok.
+create(Table) ->
+    Module = mod(Table),
+    Module:create(Table).
 
-insert(Key, Value)->
-    not_implemented.
+%% @doc Call to a module's insert. Inserts a value into the table.
+-spec insert(atom(), tuple()) -> ok.
+insert(Table, Value)->
+    Module = mod(Table),
+    Module:insert(Table, Value).
 
-delete(Key)->
-    not_implemented.
+%% @doc Call to a module's delete_table. Deletes the entire table.
+-spec delete_table(atom()) -> true.
+delete_table(Table)->
+    Module = mod(Table),
+    Module:delete_table(Table).
 
-delete(Key, Value)->
-    not_implemented.
+%% @doc Call to a module's delete. Deletes a key value from a table.
+-spec delete(atom(), term()) -> true.
+delete(Table, Key) ->
+    Module = mod(Table),
+    Module:delete(Table, Key).
 
-select()->
-    not_implemented.
+%% @doc Backup the table to the JSON file.
+-spec backup_tables() -> ok | {error, Reason}.
+backup_table(Table)->
+    Module = mod(Table),
+    Module:backup_table(Table).
 
-backup()->
-    not_implemented.
+%% @doc Backup the tables to the JSON file.
+-spec backup_tables() -> ok | {error, Reason}.
+backup_tables() ->
+    Module = mod(),
+    Module:backup_tables().
 
-lookup(Key, Value) ->
-    not_implemented.
+%% @doc Call to a module's select. Uses table key pair, and can be considered a "lookup" in terms of ets.
+-spec select(atom(), term()) -> tuple().
+select(Table, Key) ->
+    Module = mod(Table),
+    Module:select(Table, Key).
+
+%% @doc Call to a module's select. Uses a matchspec to generate matches.
+-spec select(atom(), list(), integer()) -> tuple() | '$end_of_table'.
+select(Table, MatchSpec, Limit) ->
+    Module = mod(Table),
+    Module:select(Table, MatchSpec, Limit).
+
+%% @doc Call to a module's foldl.
+-spec foldl(fun(), list(), atom())  -> Acc | {error, Reason}.
+foldl(Fun, Acc, Table) ->
+    Module = mod(Table),
+    Module:foldl(Fun, Table, Acc).
+
+%% @doc This function emptys the specified table of all values.
+-spec empty_table(atom()) -> ok.
+empty_table(Table) ->
+    Module = mod(Table),
+    Module:empty_table(Table).
+
+%% @doc This function retrieves the module name to be used for a given application or table (ex. erldns_storage_json...)
+%% Matched tables are always going to use ets because they are either cached, or functionality
+%% is optimal in ets.
+mod() ->
+    erldns_config:storage_type().
+
+mod(packet_cache) ->
+    erldns_storage_json;
+mod(host_throttle) ->
+    erldns_storage_json;
+mod(handler_registry) ->
+    erldns_storage_json;
+mod(_Table) ->
+    erldns_config:storage_type().
