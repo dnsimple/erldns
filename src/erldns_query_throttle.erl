@@ -79,7 +79,7 @@ stop() ->
 
 % Gen server hooks
 init([]) ->
-  ets:new(host_throttle, [set, named_table, public]),
+  erldns_storage:create(host_throttle),
   {ok, Tref} = timer:apply_interval(?SWEEP_INTERVAL, ?MODULE, sweep, []),
   {ok, #state{tref = Tref}}.
 
@@ -87,15 +87,15 @@ handle_call(stop, _From, State) ->
   {stop, normal, ok, State}.
 
 handle_cast(sweep, State) ->
-  Keys = ets:select(host_throttle, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - ?EXPIRATION}], ['$1']}]),
-  lists:foreach(fun(K) -> ets:delete(host_throttle, K) end, Keys),
+  Keys = erldns_storage:select(host_throttle, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - ?EXPIRATION}], ['$1']}]),
+  lists:foreach(fun(K) -> erldns_storage:delete(host_throttle, K) end, Keys),
   {noreply, State}.
 
 handle_info(_Message, State) ->
   {noreply, State}.
 
 terminate(_Reason, _State) ->
-  ets:delete(host_throttle),
+  erldns_storage:delete_table(host_throttle),
   ok.
 
 code_change(_PreviousVersion, State, _Extra) ->
@@ -104,7 +104,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 % Internal API
 maybe_throttle(Host) ->
-  case ets:lookup(host_throttle, Host) of
+  case erldns_storage:select(host_throttle, Host) of
     [{_, {ReqCount, LastRequestAt}}] -> 
       case is_throttled(Host, ReqCount, LastRequestAt) of
         {true, NewReqCount} -> {throttled, Host, NewReqCount};
@@ -115,7 +115,7 @@ maybe_throttle(Host) ->
   end.
 
 record_request({ThrottleResponse, Host, ReqCount}) ->
-  ets:insert(host_throttle, {Host, {ReqCount, timestamp()}}),
+  erldns_storage:insert(host_throttle, {Host, {ReqCount, timestamp()}}),
   {ThrottleResponse, Host, ReqCount}.
 
 is_throttled({127,0,0,1}, ReqCount, _) -> {false, ReqCount + 1};
@@ -124,7 +124,7 @@ is_throttled(Host, ReqCount, LastRequestAt) ->
   Expired = timestamp() - LastRequestAt > ?EXPIRATION,
   case Expired of
     true -> 
-      ets:delete(host_throttle, Host),
+      erldns_storage:delete(host_throttle, Host),
       {false, 1};
     false -> 
       {ExceedsLimit, ReqCount + 1}
