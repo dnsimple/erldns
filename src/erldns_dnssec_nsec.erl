@@ -83,6 +83,24 @@ dedupe([RR|Records], Found, Duplicates) ->
     false -> dedupe(Records, Found ++ [RR], Duplicates)
   end.
 
+-ifdef(TEST).
+
+dedupe_test_() ->
+  RR = #dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_A, data = #dns_rrdata_a{ip = {1, 2, 3, 4}}},
+  RR2 = RR#dns_rr{data = #dns_rrdata_a{ip = {5,6,7,8}}},
+
+  [
+   ?_assertMatch(#dns_message{authority = []}, dedupe(#dns_message{authority = []})),
+   ?_assertMatch(#dns_message{authority = [RR]}, dedupe(#dns_message{authority = [RR, RR]})),
+   ?_assertMatch(#dns_message{authority = [RR, RR2]}, dedupe(#dns_message{authority = [RR, RR2]})),
+
+   ?_assertEqual([], dedupe([])),
+   ?_assertEqual([RR], dedupe([RR, RR])),
+   ?_assertEqual([RR, RR2], dedupe([RR, RR2]))
+  ].
+
+-endif.
+
 nsec_function_set() ->
   lists:map(fun(Rule) -> {nsec_test(Rule), nsec_action(Rule)} end, [no_data, name_error, wildcard_answer, wildcard_no_data]).
 
