@@ -87,8 +87,8 @@ init(_Args) ->
               ?CHILD(erldns_packet_cache, worker, []),
               ?CHILD(erldns_query_throttle, worker, []),
               ?CHILD(erldns_handler, worker, []),
-
-              ?CHILD(sample_custom_handler, worker, [])
+              ?CHILD(sample_custom_handler, worker, []),
+              ?CHILD(erldns_storage, worker, [])
              ],
 
   {ok, {{one_for_one, 20, 10}, SysProcs ++ AppPoolSpecs}}.
