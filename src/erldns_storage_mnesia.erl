@@ -1,0 +1,108 @@
+%% Copyright (c) 2014, SiftLogic LLC
+%%
+%% Permission to use, copy, modify, and/or distribute this software for any
+%% purpose with or without fee is hereby granted, provided that the above
+%% copyright notice and this permission notice appear in all copies.
+%%
+%% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+%% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+%% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+%% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+%% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+%% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+-module(erldns_storage_mnesia).
+
+-include("erldns.hrl").
+
+%% API
+-export([create/1,
+         insert/2,
+         delete_table/1,
+         delete/2,
+         backup_table/1,
+         backup_tables/0,
+         select/2,
+         select/3,
+         foldl/3,
+         empty_table/1]).
+
+-spec create(atom()) -> ok.
+create(zones) ->
+    case application:stop(mnesia) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            lager:warning("Could not stop mnesia for reason ~p~n", [Reason])
+    end,
+    case mnesia:create_schema(node()) of
+        {error, {_, {already_exists, _}}} ->
+            lager:warning("The schema already exists on node ~p.~n", [node()]),
+            ok;
+        ok ->
+            ok
+    end,
+    ok = application:start(mnesia),
+    case mnesia:create_table(zones,
+        [{attributes, record_info(fields,zone)},
+            {index, [#zone.name]},
+            {disc_only_copies, node()},
+            {type, set}]) of
+        {aborted, {already_exists, zones}} ->
+            lager:warning("The zones table already exists on node ~p.~n",
+                [node()]),
+            ok;
+        {atomic, ok} ->
+            ok
+    end.
+
+-spec insert(atom(), record()) -> ok.
+insert(zones, {_N, #zone{name = Name,
+                         version = Version,
+                         authority = Authority,
+                         record_count = RecordCount,
+                         records = Records,
+                         records_by_name = RecordsByName,
+                         records_by_type = RecordsByType
+}})->
+    ok = mnesia:write(#zone{name = Name,
+                            version = Version,
+                            authority = Authority,
+                            record_count = RecordCount,
+                            records = Records,
+                            records_by_name = RecordsByName,
+                            records_by_type = RecordsByType
+    }).
+
+-spec delete_table(atom()) -> true.
+delete_table(Table) ->
+    mnesia:delete_table(Table).
+
+-spec delete(atom(), term()) -> true.
+delete(Table, Key)->
+    mnesia:delete({Table, Key}).
+
+-spec backup_table(atom()) -> ok | {error, Reason}.
+backup_table(_Table)->
+    mnesia:backup(mnesia:schema()).
+
+-spec backup_tables() -> ok | {error, Reason}.
+backup_tables()->
+    not_implemented.
+
+-spec select(atom(), term()) -> tuple().
+select(Table, Key)->
+    mnesia:read({Table, Key}).
+
+-spec select(atom(), list(), integer()) -> tuple() | '$end_of_table'.
+select(_Table, MatchSpec, _Limit) ->
+    mnesia:match_object(MatchSpec).
+
+-spec foldl(fun(), list(), atom())  -> Acc | {error, Reason}.
+foldl(Fun, Acc, Table) ->
+    mnesia:foldl(Fun, Acc, Table).
+
+-spec empty_table(atom()) -> ok.
+empty_table(Table) ->
+    mnesia:clear_table(Table).
