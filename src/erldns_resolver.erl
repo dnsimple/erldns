@@ -60,6 +60,11 @@ resolve(Message, Qname, _Qtype, {error, not_authoritative}, _Host, CnameChain) -
       Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR}
   end;
 
+%% An SOA was found, thus we are authoritative, however the qtype is RRSIG.
+resolve(Message, _Qname, ?DNS_TYPE_RRSIG, _Zone, _Host, _CnameChain) ->
+  lager:debug("Authoritative but type is RRSIG"),
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOTIMP};
+
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
@@ -243,6 +248,7 @@ resolve_exact_match_referral(Message, ?DNS_TYPE_SOA, _MatchedRecords, _ReferralR
 % return the SOA records for the zone in the authority section of the message and set the RC to
 % NOERROR.
 resolve_exact_match_referral(Message, _, _MatchedRecords, _ReferralRecords, AuthorityRecords) ->
+  %lager:debug("Exact match name, no type match, and qtype is not ANY, SOA or NS"),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Message#dns_message.authority ++ AuthorityRecords}.
 
 
