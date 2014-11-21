@@ -1399,6 +1399,74 @@
             }
         ]
     },
+
+    {
+        "name": "secure-delegated.dnssec-parent.com",
+        "records": [
+        {
+          "name": "secure-delegated.dnssec-parent.com",
+          "type": "SOA",
+          "ttl": 3600,
+          "data": {
+            "mname": "ns1.secure-delegated.dnssec-parent.com",
+            "rname": "ahu.example.com",
+            "serial": 2005092501,
+            "refresh": 28800,
+            "retry": 7200,
+            "expire": 604800,
+            "minimum": 86400
+          }
+        },
+        {
+          "name": "secure-delegated.dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns1.secure-delegated.dnssec-parent.com"
+          }
+        },
+        {
+          "name": "secure-delegated.dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns2.secure-delegated.dnssec-parent.com"
+          }
+        },
+        {
+          "name": "secure-delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "9.9.9.9"
+          }
+        },
+        {
+          "name": "ns1.secure-delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "1.2.3.4"
+          }
+        },
+        {
+          "name": "ns2.secure-delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "5.6.7.8"
+          }
+        },
+        {
+          "name": "www.secure-delegated.dnssec-parent.com",
+          "type": "CNAME",
+          "ttl": 3600,
+          "data": {
+            "ip": "secure-delegated.dnssec-parent.com"
+          }
+        }]
+    },
+
     {
         "name": "wtest.com",
         "records": [
