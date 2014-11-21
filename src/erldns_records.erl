@@ -25,6 +25,7 @@
 -export([default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
 -export([minimum_soa_ttl/2]).
 -export([match_name/1, match_type/1, match_types/1, match_wildcard/0, match_glue/1, match_dnskey_type/1, match_optrr/0, not_match/1]).
+-export([empty_name_predicate/0]).
 -export([replace_name/1]).
 
 %% Get a wildcard variation of a Qname. Replaces the leading
@@ -33,6 +34,7 @@
 wildcard_qname(Qname) ->
   [_|Rest] = dns:dname_to_labels(Qname),
   dns:labels_to_dname([<<"*">>] ++ Rest).
+
 
 -spec wildcard_substitution(dns:dname(), dns:dname()) -> dns:dname().
 wildcard_substitution(Name, Qname) ->
@@ -174,6 +176,10 @@ not_match(F) ->
       not(F(R))
   end.
 
+empty_name_predicate() ->
+  fun(R) ->
+      R#dns_rr.name =/= <<"">>
+  end.
 
 
 %% Replacement functions.

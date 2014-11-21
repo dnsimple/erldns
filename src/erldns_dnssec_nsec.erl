@@ -51,7 +51,7 @@
 include_nsec(Message, Qname, Qtype, Zone, CnameChain) when is_record(Message, dns_message) ->
   lager:debug("include_nsec for ~p, ~p", [Qname, dns:type_name(Qtype)]),
 
-  AuthorityRecords =  lists:filter(empty_name_predicate(), Message#dns_message.authority),
+  AuthorityRecords =  lists:filter(erldns_records:empty_name_predicate(), Message#dns_message.authority),
   AllRecords = Message#dns_message.answers ++ AuthorityRecords,
   Records = lists:filter(erldns_records:not_match(erldns_records:match_type(?DNS_TYPE_RRSIG)), AllRecords),
   ActionFunctions = lists:map(
@@ -85,11 +85,6 @@ dedupe([RR|Records], Found, Duplicates) ->
 
 nsec_function_set() ->
   lists:map(fun(Rule) -> {nsec_test(Rule), nsec_action(Rule)} end, [no_data, name_error, wildcard_answer, wildcard_no_data]).
-
-empty_name_predicate() ->
-  fun(R) ->
-      R#dns_rr.name =/= <<"">>
-  end.
 
 undefined_predicate() ->
   fun(F) ->
