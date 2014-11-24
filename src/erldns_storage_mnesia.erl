@@ -49,7 +49,7 @@ create(schema) ->
 create(zones) ->
     ok = ensure_mnesia_started(),
     case mnesia:create_table(zones,
-        [{attributes, record_info(fields, zone)},
+        [{attributes, record_info(fields, zones)},
             {disc_copies, [node()]}]) of
         {aborted, {already_exists, zones}} ->
             lager:warning("The zone table already exists on node ~p.~n",
