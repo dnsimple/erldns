@@ -150,3 +150,33 @@ mod(handler_registry) ->
     erldns_storage_json;
 mod(_Table) ->
     erldns_config:storage_type().
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-include("erldns.hrl").
+-include("../deps/dns/include/dns.hrl").
+-endif.
+
+-ifdef(TEST).
+    mnesia_test() ->
+        application:set_env(storage, type, erldns_storage_mnesia),
+        {ok, erldns_storage_mnesia} = application:get_env(storage, type),
+        DNSRR = #dns_rr{name = <<"TEST DNSRR NAME">>, class = 1, type = 0, ttl = 0, data = <<"TEST DNSRR DATA">>},
+        ZONE1 = #zone{name = <<"TEST NAME 1">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
+        ZONE2 = #zone{name = <<"TEST NAME 2">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
+        ZONE3 = #zone{name = <<"TEST NAME 3">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
+        ZONE4 = #zone{name = <<"TEST NAME 4">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
+        ZONE5 = #zone{name = <<"TEST NAME 5">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
+        zones = create(zones),
+        true = insert(zones, ZONE1),
+        true = insert(zones, ZONE2),
+        true = insert(zones, ZONE3),
+        true = insert(zones, ZONE4),
+        true = insert(zones, ZONE5),
+        ok = backup_table(zones),
+%%         foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones),
+        true = delete(zones, <<"TEST NAME 1">>),
+        true = empty_table(zones),
+        true = delete_table(zones).
+
+-endif.
