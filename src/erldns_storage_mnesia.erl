@@ -71,7 +71,7 @@ create(authorities) ->
             ok
     end.
 
--spec insert(atom(), #zone{}) -> ok.
+-spec insert(atom(), #zone{}) -> true | any().
 insert(zones, {_N, #zone{name = Name,
                          version = Version,
                          authority = Authority,
@@ -80,23 +80,23 @@ insert(zones, {_N, #zone{name = Name,
                          records_by_name = RecordsByName,
                          records_by_type = RecordsByType
 }})->
-    Write = fun() ->mnesia:write(#zone{name = Name,
+    Write = fun() ->mnesia:write(zones, #zone{name = Name,
                                        version = Version,
                                        authority = Authority,
                                        record_count = RecordCount,
                                        records = Records,
                                        records_by_name = RecordsByName,
                                        records_by_type = RecordsByType
-    }) end,
+    }, write) end,
     mnesia:activity(transaction, Write).
 
 
--spec delete_table(atom()) -> true.
+-spec delete_table(atom()) -> true | {aborted, any()}.
 delete_table(Table) ->
     DeleteTable = fun() -> mnesia:delete_table(Table) end,
     mnesia:activity(transaction, DeleteTable).
 
--spec delete(Table :: atom(), Key :: term()) -> true.
+-spec delete(Table :: atom(), Key :: term()) -> true | any().
 delete(Table, Key)->
    Delete = fun() -> mnesia:delete({Table, Key})end,
    mnesia:activity(transaction, Delete).
@@ -126,7 +126,7 @@ foldl(Fun, Acc, Table) ->
     Foldl = fun() -> mnesia:foldl(Fun, Acc, Table) end,
     mnesia:activity(transaction, Foldl).
 
--spec empty_table(atom()) -> ok.
+-spec empty_table(atom()) -> true | {aborted, term()}.
 empty_table(Table) ->
     ClearTable = fun() ->mnesia:clear_table(Table) end,
     mnesia:activity(transaction, ClearTable).
