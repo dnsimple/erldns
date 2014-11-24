@@ -79,19 +79,24 @@ insert(zones, {_N, #zone{name = Name,
 delete_table(Table) ->
     mnesia:delete_table(Table).
 
--spec delete(atom(), term()) -> true.
+-spec delete(Table :: atom(), Key :: term()) -> true.
 delete(Table, Key)->
     mnesia:delete({Table, Key}).
 
--spec backup_table(atom()) -> ok | {error, Reason}.
+-spec backup_table(atom()) -> ok | {error, Reason :: term()}.
 backup_table(_Table)->
-    mnesia:backup(mnesia:schema()).
+    case mnesia:backup(mnesia:schema()) of
+        ok ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
--spec backup_tables() -> ok | {error, Reason}.
+-spec backup_tables() -> ok | {error, Reason :: term()}.
 backup_tables()->
-    not_implemented.
+    ok.
 
--spec select(atom(), term()) -> tuple().
+-spec select(Table :: atom(), Key :: term()) -> tuple().
 select(Table, Key)->
     mnesia:read({Table, Key}).
 
@@ -99,7 +104,7 @@ select(Table, Key)->
 select(_Table, MatchSpec, _Limit) ->
     mnesia:match_object(MatchSpec).
 
--spec foldl(fun(), list(), atom())  -> Acc | {error, Reason}.
+-spec foldl(fun(), list(), atom())  -> Acc :: term() | {error, Reason :: term()}.
 foldl(Fun, Acc, Table) ->
     mnesia:foldl(Fun, Acc, Table).
 

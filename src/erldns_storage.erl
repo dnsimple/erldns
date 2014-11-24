@@ -101,13 +101,13 @@ delete(Table, Key) ->
     Module:delete(Table, Key).
 
 %% @doc Backup the table to the JSON file.
--spec backup_tables() -> ok | {error, Reason}.
+-spec backup_table(atom()) -> ok | {error, Reason :: term()}.
 backup_table(Table)->
     Module = mod(Table),
     Module:backup_table(Table).
 
 %% @doc Backup the tables to the JSON file.
--spec backup_tables() -> ok | {error, Reason}.
+-spec backup_tables() -> ok | {error, Reason :: term()}.
 backup_tables() ->
     Module = mod(),
     Module:backup_tables().
@@ -125,7 +125,7 @@ select(Table, MatchSpec, Limit) ->
     Module:select(Table, MatchSpec, Limit).
 
 %% @doc Call to a module's foldl.
--spec foldl(fun(), list(), atom())  -> Acc | {error, Reason}.
+-spec foldl(fun(), list(), atom())  -> Acc :: term() | {error, Reason :: term()}.
 foldl(Fun, Acc, Table) ->
     Module = mod(Table),
     Module:foldl(Fun, Table, Acc).

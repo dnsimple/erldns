@@ -51,13 +51,13 @@ delete_table(Table)->
 delete(Table, Key) ->
     ets:delete(Table, Key).
 
--spec backup_table(atom()) -> ok | {error, Reason}.
-backup_table(Table)->
-    not_implemented.
+-spec backup_table(atom()) -> ok | {error, Reason:: term()}.
+backup_table(_Table)->
+    ok.
 
--spec backup_tables() -> ok | {error, Reason}.
+-spec backup_tables() -> ok | {error, Reason :: term()}.
 backup_tables() ->
-    not_implemented.
+    ok.
 
 -spec select(atom(), term()) -> tuple().
 select(Key, Value) ->
@@ -67,7 +67,7 @@ select(Key, Value) ->
 select(Table, MatchSpec, Limit) ->
     ets:select(Table, MatchSpec, Limit).
 
--spec foldl(fun(), list(), atom())  -> Acc | {error, Reason}.
+-spec foldl(fun(), list(), atom())  -> Acc :: term() | {error, Reason :: term()}.
 foldl(Fun, Acc, Table) ->
     ets:foldl(Fun, Acc, Table).
 
