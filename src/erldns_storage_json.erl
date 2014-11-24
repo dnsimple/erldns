@@ -28,20 +28,20 @@
 
 -spec create(atom()) -> ok.
 create(zones) ->
-    ok = ets:new(zones, [set, public, named_table]);
+    zones = ets:new(zones, [set, public, named_table]);
 create(authorities) ->
-    ok = ets:new(authorities, [set, public, named_table]);
+    authorities = ets:new(authorities, [set, public, named_table]);
 %% These tables should always use ets.
 create(packet_cache) ->
-    ok = ets:new(packet_cache, [set, named_table]);
+    packet_cache = ets:new(packet_cache, [set, named_table]);
 create(host_throttle) ->
-    ok = ets:new(host_throttle, [set, named_table, public]);
+    host_throttle = ets:new(host_throttle, [set, named_table, public]);
 create(handler_registry) ->
-    ok = ets:new(handler_registry, [set, named_table, public]).
+    handler_registry = ets:new(handler_registry, [set, named_table, public]).
 
 -spec insert(atom(), tuple()) -> ok.
 insert(Key, Value)->
-    ok = ets:insert(Key, Value).
+    true = ets:insert(Key, Value).
 
 -spec delete_table(atom()) -> true.
 delete_table(Table)->
