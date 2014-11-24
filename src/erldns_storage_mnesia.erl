@@ -29,35 +29,49 @@
          empty_table/1]).
 
 -spec create(atom()) -> ok.
-create(zones) ->
+create(schema) ->
     case application:stop(mnesia) of
         ok ->
             ok;
         {error, Reason} ->
             lager:warning("Could not stop mnesia for reason ~p~n", [Reason])
     end,
-    case mnesia:create_schema(node()) of
+    filelib:ensure_dir("db/zone.DCD"),
+    application:set_env(mnesia, dir, "db"),
+    case mnesia:create_schema([node()]) of
         {error, {_, {already_exists, _}}} ->
             lager:warning("The schema already exists on node ~p.~n", [node()]),
             ok;
         ok ->
             ok
     end,
-    ok = application:start(mnesia),
+    application:start(mnesia);
+create(zones) ->
+    ok = ensure_mnesia_started(),
     case mnesia:create_table(zones,
-        [{attributes, record_info(fields,zone)},
-            {index, [#zone.name]},
-            {disc_only_copies, node()},
-            {type, set}]) of
-        {aborted, {already_exists, zones}} ->
-            lager:warning("The zones table already exists on node ~p.~n",
+        [{attributes, record_info(fields, zone)},
+            {disc_copies, [node()]}]) of
+        {aborted, {already_exists, zone}} ->
+            lager:warning("The zone table already exists on node ~p.~n",
+                [node()]),
+            ok;
+        {atomic, ok} ->
+            ok
+    end;
+create(authorities) ->
+    ok = ensure_mnesia_started(),
+    case mnesia:create_table(authorities,
+        [{attributes, record_info(fields, authorities)},
+            {disc_copies, [node()]}]) of
+        {aborted, {already_exists, authorities}} ->
+            lager:warning("The zone table already exists on node ~p.~n",
                 [node()]),
             ok;
         {atomic, ok} ->
             ok
     end.
 
--spec insert(atom(), record()) -> ok.
+-spec insert(atom(), #zone{}) -> ok.
 insert(zones, {_N, #zone{name = Name,
                          version = Version,
                          authority = Authority,
@@ -98,11 +112,13 @@ backup_tables()->
 
 -spec select(Table :: atom(), Key :: term()) -> tuple().
 select(Table, Key)->
-    mnesia:read({Table, Key}).
+    Select = fun () -> mnesia:read({Table, Key}) end,
+    mnesia:activity(transaction, Select).
 
 -spec select(atom(), list(), integer()) -> tuple() | '$end_of_table'.
 select(_Table, MatchSpec, _Limit) ->
-    mnesia:match_object(MatchSpec).
+    MatchObject = fun() -> mnesia:match_object(MatchSpec) end,
+    mnesia:activity(transaction, MatchObject).
 
 -spec foldl(fun(), list(), atom())  -> Acc :: term() | {error, Reason :: term()}.
 foldl(Fun, Acc, Table) ->
@@ -111,3 +127,14 @@ foldl(Fun, Acc, Table) ->
 -spec empty_table(atom()) -> ok.
 empty_table(Table) ->
     mnesia:clear_table(Table).
+
+%% Private
+ensure_mnesia_started() ->
+    case application:start(mnesia) of
+        ok ->
+            ok;
+        {error,{already_started, mnesia}} ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
