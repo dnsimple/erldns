@@ -159,10 +159,10 @@ storage_env() ->
 
 storage_get(Key) ->
     case lists:keyfind(Key, 1, get_env(storage)) of
-        {ok, Value} ->
-            Value;
         false ->
-            undefined
+            undefined;
+        {Key, Value} ->
+            Value
     end.
 
 get_env(storage) ->
