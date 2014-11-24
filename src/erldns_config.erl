@@ -166,15 +166,13 @@ storage_get(Key) ->
     end.
 
 get_env(storage) ->
-    get_env(storage, [{type, erldns_storage_json},
-        {user, undefined},
-        {pass, undefined},
-        {host, undefined},
-        {port, undefined}
-    ]).
-
-get_env(Key, Default) ->
-    case application:get_env(Key) of
-        undefined -> Default;
-        {ok, Value} -> Value
+    case application:get_env(erldns, storage) of
+        undefined ->
+            [{type, erldns_storage_json},
+             {user, undefined},
+             {pass, undefined},
+             {host, undefined},
+             {port, undefined}];
+        Env ->
+            Env
     end.
