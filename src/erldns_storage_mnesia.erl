@@ -72,7 +72,6 @@ create(authorities) ->
             ok
     end.
 
--spec insert(atom(), #zone{}) -> true | any().
 insert(zones, #zone{} = Zone)->
     Write = fun() -> mnesia:write(zones, Zone, write) end,
     ok = mnesia:activity(transaction, Write),
@@ -80,8 +79,11 @@ insert(zones, #zone{} = Zone)->
 insert(zones, {_N, #zone{} = Zone})->
     Write = fun() -> mnesia:write(zones, Zone, write) end,
     ok = mnesia:activity(transaction, Write),
+    ok;
+insert(authorities, #authorities{} = Auth) ->
+    Write = fun() -> mnesia:write(authorities, Auth, write) end,
+    ok = mnesia:activity(transaction, Write),
     ok.
-
 
 -spec delete_table(atom()) -> true | {aborted, any()}.
 delete_table(Table) ->
@@ -122,9 +124,14 @@ select(_Table, MatchSpec, _Limit) ->
     mnesia:activity(transaction, MatchObject).
 
 -spec foldl(fun(), list(), atom())  -> Acc :: term() | {error, Reason :: term()}.
-foldl(Fun, Acc, Table) ->
-    Foldl = fun() -> mnesia:foldl(Fun, Acc, Table) end,
-    mnesia:activity(transaction, Foldl).
+foldl(Iterator, _Acc, Table) ->
+    Exec = fun() -> mnesia:foldl(Iterator, [], Table) end,
+    case mnesia:is_transaction() of
+    true ->
+        Exec();
+    false ->
+        mnesia:activity(transaction, Exec)
+    end.
 
 -spec empty_table(atom()) -> ok | {aborted, term()}.
 empty_table(Table) ->
