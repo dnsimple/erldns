@@ -80,6 +80,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Public API
 %% @doc API for a module's function calls. Please note that all crashes should be handled at the
 %% lowest level of the API (ex. erldns_storage_json).
+%% @end
 
 %% @doc Call to a module's create. Creates a new table.
 -spec create(atom()) -> ok.
@@ -173,9 +174,10 @@ filename() ->
         _ -> ?FILENAME
     end.
 
-%% @doc This function retrieves the module name to be used for a given application or table (ex. erldns_storage_json...)
-%% Matched tables are always going to use ets because they are either cached, or functionality
-%% is optimal in ets.
+%% @doc This function retrieves the module name to be used for a given application or table
+%% (ex. erldns_storage_json...). Matched tables are always going to use ets because they are either
+%% cached, or functionality is optimal in ets.
+%% @end
 mod() ->
     erldns_config:storage_type().
 
@@ -195,52 +197,52 @@ mod(_Table) ->
 -endif.
 
 -ifdef(TEST).
-    mnesia_test() ->
-        application:set_env(erldns, storage, [{type, erldns_storage_mnesia}]),
-        erldns_storage_mnesia = erldns_config:storage_type(),
-        DNSRR = #dns_rr{name = <<"TEST DNSRR NAME">>, class = 1, type = 0, ttl = 0, data = <<"TEST DNSRR DATA">>},
-        ZONE1 = #zone{name = <<"TEST NAME 1">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
-        ZONE2 = #zone{name = <<"TEST NAME 2">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
-        ZONE3 = #zone{name = <<"TEST NAME 3">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
-        ZONE4 = #zone{name = <<"TEST NAME 4">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
-        ZONE5 = #zone{name = <<"TEST NAME 5">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
-        create(schema),
-        create(zones),
-        mnesia:wait_for_tables([zones], 10000),
-        insert(zones, ZONE1),
-        insert(zones, ZONE2),
-        insert(zones, ZONE3),
-        insert(zones, {<<"Test Name">>, ZONE4}),
-        insert(zones, {<<"Test Name">>, ZONE5}),
-        backup_table(zones),
-        %%Iterate through table and see all the entrys.
-        Iterator =  fun(Rec,_)->
-            io:format("~p~n",[Rec]),
-            []
-        end,
-        foldl(Iterator, [], zones),
-        select(zones, <<"TEST NAME 1">>),
-        delete(zones, <<"TEST NAME 1">>),
-        empty_table(zones),
-        delete_table(zones),
-        %%authority test
-        create(authorities),
-        mnesia:wait_for_tables([authorities], 10000),
-        AUTH1 = #authorities{owner_name = <<"Test Name">>, ttl = 1, class = <<"test calss">>, name_server = <<"Test Name Server">>,
-                             email_addr = <<"test email">>, serial_num = 1, refresh = 1, retry = 1, expiry = 1, nxdomain = <<"test domain">>},
-        AUTH2 = #authorities{owner_name = <<"Test Name">>, ttl = 1, class = <<"test calss">>, name_server = <<"Test Name Server">>,
-                             email_addr = <<"test email">>, serial_num = 1, refresh = 1, retry = 1, expiry = 1, nxdomain = <<"test domain">>},
-        AUTH3 = #authorities{owner_name = <<"Test Name">>, ttl = 1, class = <<"test calss">>, name_server = <<"Test Name Server">>,
-                             email_addr = <<"test email">>, serial_num = 1, refresh = 1, retry = 1, expiry = 1, nxdomain = <<"test domain">>},
-        insert(authorities, AUTH1),
-        insert(authorities, AUTH2),
-        insert(authorities, AUTH3),
-        backup_table(authorities),
-        foldl(Iterator, [], authorities),
-        select(authorities, <<"Test Name">>),
-        delete(authorities, <<"Test Name">>),
-        empty_table(authorities),
-        delete_table(authorities).
+mnesia_test() ->
+    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}]),
+    erldns_storage_mnesia = erldns_config:storage_type(),
+    DNSRR = #dns_rr{name = <<"TEST DNSRR NAME">>, class = 1, type = 0, ttl = 0, data = <<"TEST DNSRR DATA">>},
+    ZONE1 = #zone{name = <<"TEST NAME 1">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
+    ZONE2 = #zone{name = <<"TEST NAME 2">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
+    ZONE3 = #zone{name = <<"TEST NAME 3">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
+    ZONE4 = #zone{name = <<"TEST NAME 4">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
+    ZONE5 = #zone{name = <<"TEST NAME 5">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
+    create(schema),
+    create(zones),
+    mnesia:wait_for_tables([zones], 10000),
+    insert(zones, ZONE1),
+    insert(zones, ZONE2),
+    insert(zones, ZONE3),
+    insert(zones, {<<"Test Name">>, ZONE4}),
+    insert(zones, {<<"Test Name">>, ZONE5}),
+    backup_table(zones),
+    %%Iterate through table and see all the entrys.
+    Iterator =  fun(Rec,_)->
+        io:format("~p~n",[Rec]),
+        []
+    end,
+    foldl(Iterator, [], zones),
+    select(zones, <<"TEST NAME 1">>),
+    delete(zones, <<"TEST NAME 1">>),
+    empty_table(zones),
+    delete_table(zones),
+    %%authority test
+    create(authorities),
+    mnesia:wait_for_tables([authorities], 10000),
+    AUTH1 = #authorities{owner_name = <<"Test Name">>, ttl = 1, class = <<"test calss">>, name_server = <<"Test Name Server">>,
+                         email_addr = <<"test email">>, serial_num = 1, refresh = 1, retry = 1, expiry = 1, nxdomain = <<"test domain">>},
+    AUTH2 = #authorities{owner_name = <<"Test Name">>, ttl = 1, class = <<"test calss">>, name_server = <<"Test Name Server">>,
+                         email_addr = <<"test email">>, serial_num = 1, refresh = 1, retry = 1, expiry = 1, nxdomain = <<"test domain">>},
+    AUTH3 = #authorities{owner_name = <<"Test Name">>, ttl = 1, class = <<"test calss">>, name_server = <<"Test Name Server">>,
+                         email_addr = <<"test email">>, serial_num = 1, refresh = 1, retry = 1, expiry = 1, nxdomain = <<"test domain">>},
+    insert(authorities, AUTH1),
+    insert(authorities, AUTH2),
+    insert(authorities, AUTH3),
+    backup_table(authorities),
+    foldl(Iterator, [], authorities),
+    select(authorities, <<"Test Name">>),
+    delete(authorities, <<"Test Name">>),
+    empty_table(authorities),
+    delete_table(authorities).
 
 json_test() ->
     application:set_env(erldns, storage, [{type, erldns_storage_json}]),
@@ -268,4 +270,4 @@ json_test() ->
     delete(zones, <<"TEST NAME 1">>),
     empty_table(zones),
     delete_table(zones).
-    -endif.
+-endif.
