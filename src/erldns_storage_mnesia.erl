@@ -34,12 +34,12 @@
 %% @end
 create(schema) ->
     ok = ensure_mnesia_started(),
-    case application:get_env(mnesia, dir) of
-        {ok, Dir} ->
-            filelib:ensure_dir(Dir);
+    case erldns_config:storage_dir() of
         undefined ->
             lager:error("You need to add a directory for mnesia in erldns.config"),
-            exit(-1)
+            exit(-1);
+        Dir ->
+            filelib:ensure_dir(Dir)
     end,
     case application:stop(mnesia) of
         ok ->

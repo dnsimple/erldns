@@ -44,7 +44,8 @@
          storage_user/0,
          storage_pass/0,
          storage_host/0,
-         storage_port/0
+         storage_port/0,
+         storage_dir/0
         ]).
 
 -define(DEFAULT_IPV4_ADDRESS, {127,0,0,1}).
@@ -142,6 +143,9 @@ websocket_url() ->
 storage_type() ->
     storage_get(type).
 
+storage_dir() ->
+    storage_get(dir).
+
 storage_user() ->
     storage_get(user).
 
@@ -169,6 +173,7 @@ get_env(storage) ->
     case application:get_env(erldns, storage) of
         undefined ->
             [{type, erldns_storage_json},
+             {dir, undefined},
              {user, undefined},
              {pass, undefined},
              {host, undefined},

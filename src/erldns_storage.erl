@@ -203,7 +203,7 @@ mod(_Table) ->
 
 -ifdef(TEST).
 mnesia_test() ->
-    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}]),
+    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "db"}]),
     erldns_storage_mnesia = erldns_config:storage_type(),
     DNSRR = #dns_rr{name = <<"TEST DNSRR NAME">>, class = 1, type = 0, ttl = 0, data = <<"TEST DNSRR DATA">>},
     ZONE1 = #zone{name = <<"TEST NAME 1">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
