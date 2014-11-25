@@ -135,7 +135,12 @@ backup_tables()->
 %% @doc Select based on key value.
 -spec select(Table :: atom(), Key :: term()) -> tuple().
 select(Table, Key)->
-    Select = fun () -> mnesia:read({Table, Key}) end,
+    Select = fun () ->
+                case mnesia:read({Table, Key}) of
+                    [Record] -> [{Key,Record}];
+                    _ -> []
+                end
+            end,
     mnesia:activity(transaction, Select).
 
 %% @doc Select using a match spec.

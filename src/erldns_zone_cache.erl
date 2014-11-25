@@ -107,8 +107,10 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
 get_zone(Name) ->
   NormalizedName = normalize_name(Name),
   case erldns_storage:select(zones, NormalizedName) of
-    [{NormalizedName, Zone}] -> {ok, Zone#zone{name = NormalizedName, records = [], records_by_name=trimmed}};
-    _ -> {error, zone_not_found}
+    [{NormalizedName, Zone}] ->
+        {ok, Zone#zone{name = NormalizedName, records = [], records_by_name=trimmed}};
+    _Res ->
+        {error, zone_not_found}
   end.
 
 %% @doc Get a zone for the specific name, including the records for the zone.
