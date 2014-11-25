@@ -50,6 +50,7 @@ create(zones) ->
     ok = ensure_mnesia_started(),
     case mnesia:create_table(zones,
         [{attributes, record_info(fields, zone)},
+            {record_name, zone},
             {disc_copies, [node()]}]) of
         {aborted, {already_exists, zones}} ->
             lager:warning("The zone table already exists on node ~p.~n",
@@ -72,39 +73,38 @@ create(authorities) ->
     end.
 
 -spec insert(atom(), #zone{}) -> true | any().
-insert(zones, {_N, #zone{name = Name,
-                         version = Version,
-                         authority = Authority,
-                         record_count = RecordCount,
-                         records = Records,
-                         records_by_name = RecordsByName,
-                         records_by_type = RecordsByType
-}})->
-    Write = fun() ->mnesia:write(zones, #zone{name = Name,
-                                       version = Version,
-                                       authority = Authority,
-                                       record_count = RecordCount,
-                                       records = Records,
-                                       records_by_name = RecordsByName,
-                                       records_by_type = RecordsByType
-    }, write) end,
-    mnesia:activity(transaction, Write).
+insert(zones, #zone{} = Zone)->
+    Write = fun() -> mnesia:write(zones, Zone, write) end,
+    ok = mnesia:activity(transaction, Write),
+    ok;
+insert(zones, {_N, #zone{} = Zone})->
+    Write = fun() -> mnesia:write(zones, Zone, write) end,
+    ok = mnesia:activity(transaction, Write),
+    ok.
 
 
 -spec delete_table(atom()) -> true | {aborted, any()}.
 delete_table(Table) ->
-    DeleteTable = fun() -> mnesia:delete_table(Table) end,
-    mnesia:activity(transaction, DeleteTable).
+    {atomic, ok} = mnesia:delete_table(Table),
+    ok.
 
+%% @doc Delete a mnesia record, have to do things different for zones since we specified {record_name, zone}
+%% in the table creation.
 -spec delete(Table :: atom(), Key :: term()) -> true | any().
+delete(zones, Key)->
+    ok = mnesia:dirty_delete({zones, Key}),
+    ok;
 delete(Table, Key)->
-   Delete = fun() -> mnesia:delete({Table, Key})end,
-   mnesia:activity(transaction, Delete).
+   Delete = fun() -> mnesia:delete({Table, Key}) end,
+    ok = mnesia:activity(transaction, Delete),
+    ok.
+
 
 -spec backup_table(atom()) -> ok | {error, Reason :: term()}.
 backup_table(_Table)->
     Backup = fun() -> mnesia:backup(mnesia:schema()) end,
-    mnesia:activity(transaction, Backup).
+    ok = mnesia:activity(transaction, Backup),
+    ok.
 
 
 -spec backup_tables() -> ok | {error, Reason :: term()}.
@@ -126,10 +126,10 @@ foldl(Fun, Acc, Table) ->
     Foldl = fun() -> mnesia:foldl(Fun, Acc, Table) end,
     mnesia:activity(transaction, Foldl).
 
--spec empty_table(atom()) -> true | {aborted, term()}.
+-spec empty_table(atom()) -> ok | {aborted, term()}.
 empty_table(Table) ->
-    ClearTable = fun() ->mnesia:clear_table(Table) end,
-    mnesia:activity(transaction, ClearTable).
+    {atomic, ok} = mnesia:clear_table(Table),
+    ok.
 
 %% Private
 ensure_mnesia_started() ->
