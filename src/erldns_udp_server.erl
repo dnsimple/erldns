@@ -17,7 +17,7 @@
 -behavior(gen_server).
 
 % API
--export([start_link/3, is_running/0]).
+-export([start_link/4, is_running/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -38,9 +38,9 @@
 % Public API
 
 %% @doc Start the UDP server process
--spec start_link(atom(), inet | inet6, inet:ip_address()) -> {ok, pid()} | ignore | {error, term()}.
-start_link(Name, InetFamily, Addr) ->
-  gen_server:start_link({local, Name}, ?MODULE, [InetFamily, Addr], []).
+-spec start_link(atom(), inet | inet6, inet:ip_address(), non_neg_integer()) -> {ok, pid()} | ignore | {error, term()}.
+start_link(Name, InetFamily, Addr, Port) ->
+  gen_server:start_link({local, Name}, ?MODULE, [InetFamily, Addr, Port], []).
 
 %% @doc Return true if the UDP server process is running
 -spec is_running() -> boolean().
@@ -53,8 +53,7 @@ is_running() ->
 
 
 %% gen_server hooks
-init([InetFamily, Addr]) ->
-  Port = erldns_config:get_port(),
+init([InetFamily, Addr, Port]) ->
   {ok, Socket} = start(Port, InetFamily, Addr),
   {ok, #state{port = Port, socket = Socket, workers = make_workers(queue:new())}}.
 handle_call(_Request, _From, State) ->

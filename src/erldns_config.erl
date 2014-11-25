@@ -63,10 +63,31 @@
 %% IPv6 default: ::1
 -spec get_address(none()) -> inet:ip_address().
 get_servers() ->
-    lists:foldl(fun(Type, Acc) ->
-        Addr = get_address(Type),
-        [{Type, hd(Addr)} | Acc]
-    end, [], [inet,inet6]).
+    ServerList = case application:get_env(erldns, servers) of
+                    undefined ->
+                        [];
+                    {ok, ServerList0} ->
+                        ServerList0
+                 end,
+    lists:foldl(fun(Server, Acc) ->
+        {port, Port} = lists:keyfind(port, 1, Server),
+        {listen, IPList} = lists:keyfind(listen, 1, Server),
+        {protocol, Proto} = lists:keyfind(protocol, 1, Server),
+        parse_server(IPList, Proto, Port, Acc)
+    end, [], ServerList).
+
+parse_server([], _ProtocolList, _Port, Acc) ->
+    Acc;
+parse_server([IP | Tail], ProtocolList, Port, Acc0) ->
+    {IPType, IPAddr} = parse_address(IP),
+    Acc = add_protocols(ProtocolList, IPType, IPAddr, Port, Acc0),
+    parse_server(Tail, ProtocolList, Port, Acc).
+
+add_protocols([], _IPType, _IPAddr, _Port, Acc) ->
+    Acc;
+add_protocols([Proto | Tail], IPType, IPAddr, Port, Acc0) ->
+    add_protocols(Tail, IPType, IPAddr, Port,
+        [{IPType, IPAddr, Proto, Port} | Acc0]).
 
 get_address(inet) ->
   case application:get_env(erldns, inet4) of
@@ -127,9 +148,11 @@ parse_address(Address) when is_binary(Address) ->
     parse_address(binary_to_list(Address));
 parse_address(Address) when is_list(Address) ->
   {ok, Tuple} = inet_parse:address(Address),
-  Tuple;
-parse_address({_,_,_,_,_,_,_,_} = Address) -> Address;
-parse_address({_,_,_,_} = Address) -> Address.
+  parse_address(Tuple);
+parse_address({_,_,_,_,_,_,_,_} = Address) ->
+    {inet6, Address};
+parse_address({_,_,_,_} = Address) ->
+    {inet, Address}.
 
 zone_server_env() ->
   {ok, ZoneServerEnv} = application:get_env(erldns, zone_server),

@@ -73,14 +73,23 @@ terminate(_Reason, _State) ->
 
 add_servers([]) ->
     ok;
-add_servers([{Type, Addr} | T]) ->
-    TCPName = list_to_atom("tcp_" ++ atom_to_list(Type)),
-    SpecTCP = {TCPName, {erldns_tcp_server, start_link, [TCPName, Type, Addr]},
+add_servers([{inet, {_, _, _, _} = IPAddr, tcp, Port}| T]) ->
+    Spec = {tcp_inet, {erldns_tcp_server, start_link, [tcp_inet, inet, IPAddr, Port]},
         permanent, 5000, worker, [erldns_tcp_server]},
-    R1 = supervisor:start_child(erldns_server_sup, SpecTCP),
-    UDPName = list_to_atom("udp_" ++ atom_to_list(Type)),
-    SpecUDP = {UDPName, {erldns_udp_server, start_link, [UDPName, Type, Addr]},
+    supervisor:start_child(erldns_server_sup, Spec),
+    add_servers(T);
+add_servers([{inet6, {_, _, _, _, _, _, _, _} = IPAddr, tcp, Port}| T]) ->
+    Spec = {tcp_inet6, {erldns_tcp_server, start_link, [tcp_inet6, inet6, IPAddr, Port]},
+        permanent, 5000, worker, [erldns_tcp_server]},
+    supervisor:start_child(erldns_server_sup, Spec),
+    add_servers(T);
+add_servers([{inet, {_, _, _, _} = IPAddr, udp, Port}| T]) ->
+    Spec = {udp_inet, {erldns_udp_server, start_link, [udp_inet, inet, IPAddr, Port]},
         permanent, 5000, worker, [erldns_udp_server]},
-    R2 = supervisor:start_child(erldns_server_sup, SpecUDP),
-    lager:info("Result: ~p, ~p", [R1, R2]),
+    supervisor:start_child(erldns_server_sup, Spec),
+    add_servers(T);
+add_servers([{inet6, {_, _, _, _, _, _, _, _} = IPAddr, udp, Port}| T]) ->
+    Spec = {udp_inet6, {erldns_udp_server, start_link, [udp_inet6, inet6, IPAddr, Port]},
+    permanent, 5000, worker, [erldns_udp_server]},
+    supervisor:start_child(erldns_server_sup, Spec),
     add_servers(T).

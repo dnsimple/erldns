@@ -17,7 +17,7 @@
 -behavior(gen_nb_server).
 
 % API
--export([start_link/3]).
+-export([start_link/4]).
 
 % Gen server hooks
 -export([init/1,
@@ -38,8 +38,7 @@
 -record(state, {port}).
 
 %% Public API
-start_link(_Name, Family, Addr) ->
-  Port = erldns_config:get_port(),
+start_link(_Name, Family, Addr, Port) ->
   lager:info("Starting TCP server for ~p on port ~p", [Family, Port]),
   gen_nb_server:start_link(?MODULE, Addr, Port, []).
 
