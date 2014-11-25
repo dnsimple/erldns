@@ -173,6 +173,6 @@ get_env(storage) ->
              {pass, undefined},
              {host, undefined},
              {port, undefined}];
-        Env ->
+        {ok, Env} ->
             Env
     end.
