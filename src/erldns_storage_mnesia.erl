@@ -30,14 +30,20 @@
 
 -spec create(atom()) -> ok.
 create(schema) ->
+    ok = ensure_mnesia_started(),
+    case application:get_env(mnesia, dir) of
+        {ok, Dir} ->
+            filelib:ensure_dir(Dir);
+        undefined ->
+            lager:error("You need to add a directory for mnesia in erldns.config"),
+            exit(-1)
+    end,
     case application:stop(mnesia) of
         ok ->
             ok;
         {error, Reason} ->
             lager:warning("Could not stop mnesia for reason ~p~n", [Reason])
     end,
-    filelib:ensure_dir("db/zone.DCD"),
-    application:set_env(mnesia, dir, "db"),
     case mnesia:create_schema([node()]) of
         {error, {_, {already_exists, _}}} ->
             lager:warning("The schema already exists on node ~p.~n", [node()]),
