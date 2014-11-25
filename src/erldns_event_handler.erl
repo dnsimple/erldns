@@ -36,7 +36,9 @@ handle_event(start_servers, State) ->
     false ->
       % Start up the UDP and TCP servers
       lager:info("Starting the UDP and TCP supervisor"),
-      erldns_server_sup:start_link(),
+        {ok, _Pid} = erldns_server_sup:start_link(),
+        Configs = erldns_config:get_servers(),
+        add_servers(Configs),
       erldns_events:notify(servers_started),
       {ok, State#state{servers_running = true}};
     _ ->
@@ -68,3 +70,17 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, _State) ->
   ok.
+
+add_servers([]) ->
+    ok;
+add_servers([{Type, Addr} | T]) ->
+    TCPName = list_to_atom("tcp_" ++ atom_to_list(Type)),
+    SpecTCP = {TCPName, {erldns_tcp_server, start_link, [TCPName, Type, Addr]},
+        permanent, 5000, worker, [erldns_tcp_server]},
+    R1 = supervisor:start_child(erldns_server_sup, SpecTCP),
+    UDPName = list_to_atom("udp_" ++ atom_to_list(Type)),
+    SpecUDP = {UDPName, {erldns_udp_server, start_link, [UDPName, Type, Addr]},
+        permanent, 5000, worker, [erldns_udp_server]},
+    R2 = supervisor:start_child(erldns_server_sup, SpecUDP),
+    lager:info("Result: ~p, ~p", [R1, R2]),
+    add_servers(T).

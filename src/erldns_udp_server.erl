@@ -17,7 +17,7 @@
 -behavior(gen_server).
 
 % API
--export([start_link/2, is_running/0]).
+-export([start_link/3, is_running/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -38,9 +38,9 @@
 % Public API
 
 %% @doc Start the UDP server process
--spec start_link(atom(), inet | inet6) -> {ok, pid()} | ignore | {error, term()}.
-start_link(Name, InetFamily) ->
-  gen_server:start_link({local, Name}, ?MODULE, [InetFamily], []).
+-spec start_link(atom(), inet | inet6, inet:ip_address()) -> {ok, pid()} | ignore | {error, term()}.
+start_link(Name, InetFamily, Addr) ->
+  gen_server:start_link({local, Name}, ?MODULE, [InetFamily, Addr], []).
 
 %% @doc Return true if the UDP server process is running
 -spec is_running() -> boolean().
@@ -53,9 +53,9 @@ is_running() ->
 
 
 %% gen_server hooks
-init([InetFamily]) ->
+init([InetFamily, Addr]) ->
   Port = erldns_config:get_port(),
-  {ok, Socket} = start(Port, InetFamily),
+  {ok, Socket} = start(Port, InetFamily, Addr),
   {ok, #state{port = Port, socket = Socket, workers = make_workers(queue:new())}}.
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
@@ -77,11 +77,11 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 %% Internal functions
 %% Start a UDP server.
-start(Port, InetFamily) ->
+start(Port, InetFamily, Addr) ->
   lager:info("Starting UDP server for ~p on port ~p", [InetFamily, Port]),
-  case gen_udp:open(Port, [binary, {active, once}, {read_packets, 1000}, {ip, erldns_config:get_address(InetFamily)}, InetFamily]) of
+  case gen_udp:open(Port, [binary, {active, once}, {read_packets, 1000}, {ip, Addr}, InetFamily]) of
     {ok, Socket} -> 
-      lager:info("UDP server (~p) opened socket: ~p", [InetFamily, Socket]),
+      lager:info("UDP server (~p) on IP ~p opened socket: ~p", [InetFamily, Addr, Socket]),
       {ok, Socket};
     {error, eacces} ->
       lager:error("Failed to open UDP socket. Need to run as sudo?"),

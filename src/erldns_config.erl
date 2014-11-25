@@ -16,6 +16,7 @@
 -module(erldns_config).
 
 -export([
+         get_servers/0,
          get_address/1,
          get_port/0,
          get_num_workers/0
@@ -60,16 +61,22 @@
 %%
 %% IPv4 default: 127.0.0.1
 %% IPv6 default: ::1
--spec get_address(inet | inet6) -> inet:ip_address().
+-spec get_address(none()) -> inet:ip_address().
+get_servers() ->
+    lists:foldl(fun(Type, Acc) ->
+        Addr = get_address(Type),
+        [{Type, hd(Addr)} | Acc]
+    end, [], [inet,inet6]).
+
 get_address(inet) ->
   case application:get_env(erldns, inet4) of
-    {ok, Address} -> parse_address(Address);
-    _ -> ?DEFAULT_IPV4_ADDRESS
+    {ok, Address} -> parse(Address);
+    _ -> [?DEFAULT_IPV4_ADDRESS]
   end;
 get_address(inet6) ->
   case application:get_env(erldns, inet6) of
-    {ok, Address} -> parse_address(Address);
-    _ -> ?DEFAULT_IPV6_ADDRESS
+    {ok, Address} -> parse(Address);
+    _ -> [?DEFAULT_IPV6_ADDRESS]
   end.
 
 %% @doc The the port that the DNS server should listen on.
@@ -100,11 +107,29 @@ use_root_hints() ->
   end.
 
 % Private functions
+parse(IPList) ->
+    parse(IPList, []).
 
+parse([], Acc) ->
+    Acc;
+parse([{_,_,_,_} = IP | Tail], Acc) ->
+    parse(Tail, [IP | Acc]);
+parse([{_,_,_,_,_,_,_,_} = IP | Tail], Acc) ->
+    parse(Tail, [IP | Acc]);
+parse([IP | Tail], Acc) when is_binary(IP) ->
+    parse(Tail, [parse_address(IP) | Acc]);
+parse([IP | Tail], Acc) when is_list(IP) andalso length(IP) > 1 ->
+    parse(Tail, [parse_address(IP) | Acc]);
+parse(IP, Acc) when is_list(IP) ->
+    [parse_address(IP) | Acc].
+
+parse_address(Address) when is_binary(Address) ->
+    parse_address(binary_to_list(Address));
 parse_address(Address) when is_list(Address) ->
   {ok, Tuple} = inet_parse:address(Address),
   Tuple;
-parse_address(Address) -> Address.
+parse_address({_,_,_,_,_,_,_,_} = Address) -> Address;
+parse_address({_,_,_,_} = Address) -> Address.
 
 zone_server_env() ->
   {ok, ZoneServerEnv} = application:get_env(erldns, zone_server),
