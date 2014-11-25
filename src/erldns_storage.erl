@@ -107,12 +107,14 @@ delete(Table, Key) ->
     Module:delete(Table, Key).
 
 %% @doc Backup the table to the JSON file.
+%% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_table(atom()) -> ok | {error, Reason :: term()}.
 backup_table(Table)->
     Module = mod(Table),
     Module:backup_table(Table).
 
 %% @doc Backup the tables to the JSON file.
+%% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_tables() -> ok | {error, Reason :: term()}.
 backup_tables() ->
     Module = mod(),

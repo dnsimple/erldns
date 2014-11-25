@@ -107,14 +107,14 @@ delete(Table, Key)->
     ok = mnesia:activity(transaction, Delete),
     ok.
 
-
+%% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_table(atom()) -> ok | {error, Reason :: term()}.
 backup_table(_Table)->
     Backup = fun() -> mnesia:backup(mnesia:schema()) end,
     ok = mnesia:activity(transaction, Backup),
     ok.
 
-
+%% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_tables() -> ok | {error, Reason :: term()}.
 backup_tables()->
     ok.

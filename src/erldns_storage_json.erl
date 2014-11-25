@@ -79,10 +79,12 @@ delete(Table, Key) ->
     true = ets:delete(Table, Key),
     ok.
 
+%% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_table(atom()) -> ok | {error, Reason:: term()}.
 backup_table(_Table)->
     ok.
 
+%% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_tables() -> ok | {error, Reason :: term()}.
 backup_tables() ->
     ok.
