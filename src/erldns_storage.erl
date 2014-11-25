@@ -31,6 +31,9 @@
          foldl/3,
          empty_table/1]).
 
+-export([load_zones/0,
+    load_zones/1]).
+
 %% gen_server callbacks
 -export([init/1,
          handle_call/3,
@@ -39,8 +42,6 @@
          terminate/2,
          code_change/3]).
 
--export([load_zones/0,
-         load_zones/1]).
 
 -record(state, {}).
 
@@ -51,6 +52,7 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%% @doc Inits the module, and sends a "timeout" to handle_info to start the poller for table backup
 init([]) ->
     %%This call to handle_info starts the timer to backup tables in the given interval.
     {ok, #state{}, 0}.
@@ -144,12 +146,12 @@ empty_table(Table) ->
     Module = mod(Table),
     Module:empty_table(Table).
 
-%% @doc Load zones from a file. The default file name is "zones.json".
+%% @doc Load zones from a file. The default file name is "zones.json".(copied from erldns_zone_loader.erl)
 -spec load_zones() -> {ok, integer()} | {err,  atom()}.
 load_zones() ->
     load_zones(filename()).
 
-%% @doc Load zones from a file. The default file name is "zones.json".
+%% @doc Load zones from a file. The default file name is "zones.json".(copied from erldns_zone_loader.erl)
 -spec load_zones(list()) -> {ok, integer()} | {err,  atom()}.
 load_zones(Filename) when is_list(Filename) ->
     case file:read_file(Filename) of
@@ -170,6 +172,7 @@ load_zones(Filename) when is_list(Filename) ->
     end.
 
 % Internal API
+%% @doc Get file name from env, or return default (copied from erldns_zone_loader.erl)
 filename() ->
     case application:get_env(erldns, zones) of
         {ok, Filename} -> Filename;

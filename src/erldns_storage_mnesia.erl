@@ -29,6 +29,9 @@
          empty_table/1]).
 
 -spec create(atom()) -> ok.
+%% @doc Create the schema for mnesia, get the configuration from the config. Function sends 'ok'
+%% if schema is created, or if it already exists.
+%% @end
 create(schema) ->
     ok = ensure_mnesia_started(),
     case application:get_env(mnesia, dir) of
@@ -52,6 +55,13 @@ create(schema) ->
             ok
     end,
     application:start(mnesia);
+%% @doc Match the table names for every create. This enables different records to be used and
+%% attributes to be sent to the tables.
+%% @end
+
+%% @doc Zones table has a discrepancy between record name, and table name. Be sure to use necesssary
+%% functions for this difference.
+%% @end
 create(zones) ->
     ok = ensure_mnesia_started(),
     case mnesia:create_table(zones,
@@ -78,6 +88,7 @@ create(authorities) ->
             ok
     end.
 
+%% @doc Insert into specified table. zone_cache calls this by {name, #zone{}}
 insert(zones, #zone{} = Zone)->
     Write = fun() -> mnesia:write(zones, Zone, write) end,
     ok = mnesia:activity(transaction, Write),
@@ -91,6 +102,7 @@ insert(authorities, #authorities{} = Auth) ->
     ok = mnesia:activity(transaction, Write),
     ok.
 
+%% @doc delete the entire table.
 -spec delete_table(atom()) -> true | {aborted, any()}.
 delete_table(Table) ->
     {atomic, ok} = mnesia:delete_table(Table),
@@ -107,6 +119,7 @@ delete(Table, Key)->
     ok = mnesia:activity(transaction, Delete),
     ok.
 
+%% @doc Should backup the tables in the schema.
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_table(atom()) -> ok | {error, Reason :: term()}.
 backup_table(_Table)->
@@ -119,16 +132,19 @@ backup_table(_Table)->
 backup_tables()->
     ok.
 
+%% @doc Select based on key value.
 -spec select(Table :: atom(), Key :: term()) -> tuple().
 select(Table, Key)->
     Select = fun () -> mnesia:read({Table, Key}) end,
     mnesia:activity(transaction, Select).
 
+%% @doc Select using a match spec.
 -spec select(atom(), list(), integer()) -> tuple() | '$end_of_table'.
 select(_Table, MatchSpec, _Limit) ->
     MatchObject = fun() -> mnesia:match_object(MatchSpec) end,
     mnesia:activity(transaction, MatchObject).
 
+%% @doc Wrapper for foldl.
 -spec foldl(fun(), list(), atom())  -> Acc :: term() | {error, Reason :: term()}.
 foldl(Iterator, _Acc, Table) ->
     Exec = fun() -> mnesia:foldl(Iterator, [], Table) end,
@@ -139,12 +155,15 @@ foldl(Iterator, _Acc, Table) ->
         mnesia:activity(transaction, Exec)
     end.
 
+%% @doc Clear all objects from given table in mnesia DB.
 -spec empty_table(atom()) -> ok | {aborted, term()}.
 empty_table(Table) ->
     {atomic, ok} = mnesia:clear_table(Table),
     ok.
 
 %% Private
+%% @doc Checks if mnesia is started, if not if starts mnesia.
+-spec ensure_mnesia_started() -> ok | {error, any()}.
 ensure_mnesia_started() ->
     case application:start(mnesia) of
         ok ->
