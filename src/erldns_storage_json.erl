@@ -66,15 +66,18 @@ create(handler_registry) ->
 
 -spec insert(atom(), tuple()) -> ok.
 insert(Table, Value)->
-    true = ets:insert(Table, Value).
+    true = ets:insert(Table, Value),
+    ok.
 
 -spec delete_table(atom()) -> true.
 delete_table(Table)->
-    ets:delete(Table).
+    true = ets:delete(Table),
+    ok.
 
 -spec delete(atom(), term()) -> true.
 delete(Table, Key) ->
-    ets:delete(Table, Key).
+    true = ets:delete(Table, Key),
+    ok.
 
 -spec backup_table(atom()) -> ok | {error, Reason:: term()}.
 backup_table(_Table)->
