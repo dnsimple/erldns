@@ -133,7 +133,7 @@ select(Table, MatchSpec, Limit) ->
 -spec foldl(fun(), list(), atom())  -> Acc :: term() | {error, Reason :: term()}.
 foldl(Fun, Acc, Table) ->
     Module = mod(Table),
-    Module:foldl(Fun, Table, Acc).
+    Module:foldl(Fun, Acc, Table).
 
 %% @doc This function emptys the specified table of all values.
 -spec empty_table(atom()) -> ok.
