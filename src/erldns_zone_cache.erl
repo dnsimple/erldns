@@ -218,7 +218,12 @@ delete_zone(Name) ->
 %% @doc Initialize the zone cache.
 -spec init([]) -> {ok, #state{}}.
 init([]) ->
-  erldns_storage:create(schema),
+  case erldns_config:storage_type() of
+    erldns_storage_mnesia ->
+        erldns_storage:create(schema);
+    _ ->
+        ok
+  end,
   erldns_storage:create(zones),
   erldns_storage:create(authorities),
   {ok, #state{parsers = []}}.
