@@ -39,9 +39,13 @@
          terminate/2,
          code_change/3]).
 
+-export([load_zones/0,
+         load_zones/1]).
+
 -record(state, {}).
 
 -define(POLL_WAIT_HOURS, 1).
+-define(FILENAME, "zones.json").
 
 %% Gen Server Callbacks
 start_link() ->
@@ -72,7 +76,8 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%% API
+
+%% Public API
 %% @doc API for a module's function calls. Please note that all crashes should be handled at the
 %% lowest level of the API (ex. erldns_storage_json).
 
@@ -135,6 +140,51 @@ foldl(Fun, Acc, Table) ->
 empty_table(Table) ->
     Module = mod(Table),
     Module:empty_table(Table).
+
+%% @doc Load zones from a file. The default file name is "zones.json".
+load_zones(FileName) ->
+    case file:read_file(FileName) of
+        {ok, Binary} ->
+            lager:info("Parsing zones JSON"),
+            JsonZones = jsx:decode(Binary),
+            lager:info("Putting zones into cache"),
+            lists:foreach(
+                fun(JsonZone) ->
+                    Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
+                    erldns_zone_cache:put_zone(Zone)
+                end, JsonZones),
+            lager:info("Loaded ~p zones", [length(JsonZones)]),
+            {ok, length(JsonZones)};
+        {error, Reason} ->
+            lager:error("Failed to load zones: ~p", [Reason]),
+            {err, Reason}
+    end.
+
+-spec load_zones() -> {ok, integer()} | {err,  atom()}.
+load_zones() ->
+    case file:read_file(filename()) of
+        {ok, Binary} ->
+            lager:info("Parsing zones JSON"),
+            JsonZones = jsx:decode(Binary),
+            lager:info("Putting zones into cache"),
+            lists:foreach(
+                fun(JsonZone) ->
+                    Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
+                    erldns_zone_cache:put_zone(Zone)
+                end, JsonZones),
+            lager:info("Loaded ~p zones", [length(JsonZones)]),
+            {ok, length(JsonZones)};
+        {error, Reason} ->
+            lager:error("Failed to load zones: ~p", [Reason]),
+            {err, Reason}
+    end.
+
+% Internal API
+filename() ->
+    case application:get_env(erldns, zones) of
+        {ok, Filename} -> Filename;
+        _ -> ?FILENAME
+    end.
 
 %% @doc This function retrieves the module name to be used for a given application or table (ex. erldns_storage_json...)
 %% Matched tables are always going to use ets because they are either cached, or functionality

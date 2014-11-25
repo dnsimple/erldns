@@ -43,7 +43,7 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
   lager:info("Loading zones from local file"),
   case erldns_config:storage_type() of
   erldns_storage_json ->
-      erldns_zone_loader:load_zones();
+      erldns_storage:load_zones();
   erldns_storage_mnesia ->
       ok
   end,
