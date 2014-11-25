@@ -28,20 +28,45 @@
 
 -spec create(atom()) -> ok.
 create(zones) ->
-    zones = ets:new(zones, [set, public, named_table]);
+    case ets:info(zones) of
+        undefined ->
+               zones = ets:new(zones, [set, public, named_table]);
+        _InfoList ->
+            ok
+    end;
 create(authorities) ->
-    authorities = ets:new(authorities, [set, public, named_table]);
+    case ets:info(authorities) of
+        undefined ->
+            authorities = ets:new(authorities, [set, public, named_table]);
+        _InfoList ->
+            ok
+    end;
 %% These tables should always use ets.
 create(packet_cache) ->
-    packet_cache = ets:new(packet_cache, [set, named_table]);
+    case ets:info(packet_cache) of
+        undefined ->
+            packet_cache = ets:new(packet_cache, [set, public, named_table]);
+        _InfoList ->
+            ok
+    end;
 create(host_throttle) ->
-    host_throttle = ets:new(host_throttle, [set, named_table, public]);
+    case ets:info(host_throttle) of
+        undefined ->
+            host_throttle = ets:new(host_throttle, [set, public, named_table]);
+        _InfoList ->
+            ok
+    end;
 create(handler_registry) ->
-    handler_registry = ets:new(handler_registry, [set, named_table, public]).
+    case ets:info(handler_registry) of
+        undefined ->
+            handler_registry = ets:new(handler_registry, [set, public, named_table]);
+        _InfoList ->
+            ok
+    end.
 
 -spec insert(atom(), tuple()) -> ok.
-insert(Key, Value)->
-    true = ets:insert(Key, Value).
+insert(Table, Value)->
+    true = ets:insert(Table, Value).
 
 -spec delete_table(atom()) -> true.
 delete_table(Table)->
