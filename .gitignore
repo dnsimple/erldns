@@ -10,3 +10,5 @@ deps/*
 rel/erl-dns
 zones.json
 .eunit/
+test_logs/
+db/
