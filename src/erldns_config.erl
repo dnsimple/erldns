@@ -61,6 +61,11 @@
 %%
 %% IPv4 default: 127.0.0.1
 %% IPv6 default: ::1
+%% Build a configuration for the server to enable multiple instances of servers to be started.
+%% End config is something of [{{port, Port}, {listen, IPAddr}, {protocol, Proto}} | ....]
+%% These configs are passed to the event handerl and the server supervisors spawns children
+%% using these built configs.
+%% @end
 -spec get_address(none()) -> inet:ip_address().
 get_servers() ->
     ServerList = case application:get_env(erldns, servers) of
