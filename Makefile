@@ -1,3 +1,5 @@
+.PHONY: all test clean
+
 all: clean-all build-all
 
 build-all:
@@ -27,3 +29,15 @@ dialyzer-init:
 dialyzer:
 	dialyzer -r src --src
 
+test:
+	rm -f test/*beam
+	./rebar compile
+	ct_run -config erldns.config -dir test -suite erldns_SUITE -logdir test_logs -pa ebin/ deps/**/ebin/*
+
+test-clean-run:
+	rm -f test/*beam
+	./rebar clean compile
+	ct_run -dir test -suite erldns_SUITE -logdir test_logs -pa ebin/ deps/*/ebin/*
+
+test-clean:
+	rm -rf logs/*
