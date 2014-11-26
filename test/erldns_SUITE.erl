@@ -117,4 +117,26 @@ json_API_test(_Config) ->
     io:format("Test completed for json API~n").
 
 server_children_test(_Config) ->
+    {ok, IFAddrs} = inet:getifaddrs(),
+    Config = lists:foldl(fun(IFList, Acc) ->
+        {_, List} = IFList,
+        [List | Acc]
+             end, [], IFAddrs),
+    Addresses = lists:foldl(fun(Conf, Acc) ->
+        {addr, Addr} = lists:keyfind(addr, 1, Conf),
+        [{Addr, 8053} | Acc]
+        end, [], Config),
+
+    application:set_env(erldns, servers, [
+        [{port, 8053},
+            {listen, Addresses},
+            {protocol, [tcp, udp]},
+            {worker_pool, [
+                {size, 10}, {max_overflow, 20}
+            ]}]
+    ]),
+    application:stop(erldns_app),
+    application:start(erldns_app),
+    io:format("Loaded and started servers successfully~n"),
+    {ok, _} = inet_res:nnslookup("example.com", any, a, Addresses, 2000),
     io:format("Test completed for server_children~n").
