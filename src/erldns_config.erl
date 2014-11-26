@@ -77,7 +77,8 @@ get_servers() ->
     {Pools, Servers, _} =
         lists:foldl(fun(Server, {PoolAcc, ServerAcc, Inc}) ->
             {port, Port} = lists:keyfind(port, 1, Server),
-            {listen, IPList} = lists:keyfind(listen, 1, Server),
+            {listen, IPList0} = lists:keyfind(listen, 1, Server),
+            IPList = normalize_addresses(IPList0),
             {protocol, Proto} = lists:keyfind(protocol, 1, Server),
             {worker_pool, Pool} = lists:keyfind(worker_pool, 1, Server),
             PoolName = list_to_atom("erldns_tcp_worker_pool_" ++ integer_to_list(Inc)),
@@ -86,10 +87,30 @@ get_servers() ->
         end, {[], [], 0}, ServerList),
     {Pools, Servers}.
 
+normalize_addresses(IPList) ->
+    normalize_addresses(IPList, [] , [], [], []).
+
+normalize_addresses([], Globalv4, Globalv6, Localv4, Localv6) ->
+    Globalv4 ++ Globalv6 ++ Localv4 ++ Localv6;
+normalize_addresses([IP | Tail], Globalv4, Globalv6, Localv4, Localv6) ->
+    case parse_address(IP) of
+        {inet, {0, 0, 0, 0}} = Addr ->
+            normalize_addresses(Tail, [Addr], Globalv6, [], Localv6);
+        {inet6, {0, 0, 0, 0, 0, 0, 0, 0}} = Addr->
+            normalize_addresses(Tail, Globalv4, [Addr], Localv4, []);
+        {inet, _} =  Addr when Globalv4 =:= []->
+            normalize_addresses(Tail, Globalv4, Globalv6, [Addr | Localv4], Localv6);
+        {inet, _} ->
+            normalize_addresses(Tail, Globalv4, Globalv6, [], Localv6);
+        {inet6, _} = Addr when Globalv6 =:= [] ->
+            normalize_addresses(Tail, Globalv4, Globalv6, Localv4, [Addr | Localv6]);
+        {inet6, _} ->
+            normalize_addresses(Tail, Globalv4, Globalv6, Localv4, [])
+    end.
+
 parse_server([], _ProtocolList, _Port, _PoolName, Acc) ->
     Acc;
-parse_server([IP | Tail], ProtocolList, Port, PoolName, Acc0) ->
-    {IPType, IPAddr} = parse_address(IP),
+parse_server([{IPType, IPAddr} = _IP | Tail], ProtocolList, Port, PoolName, Acc0) ->
     Acc = add_protocols(ProtocolList, IPType, IPAddr, Port, PoolName, Acc0),
     parse_server(Tail, ProtocolList, Port, PoolName, Acc).
 
