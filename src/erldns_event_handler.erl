@@ -37,7 +37,8 @@ handle_event(start_servers, State) ->
       % Start up the UDP and TCP servers
       lager:info("Starting the UDP and TCP supervisor"),
         {ok, _Pid} = erldns_server_sup:start_link(),
-        Configs = erldns_config:get_servers(),
+        {Pools, Configs} = erldns_config:get_servers(),
+        add_pools(Pools),
         add_servers(Configs),
       erldns_events:notify(servers_started),
       {ok, State#state{servers_running = true}};
@@ -73,23 +74,40 @@ terminate(_Reason, _State) ->
 
 add_servers([]) ->
     ok;
-add_servers([{inet, {_, _, _, _} = IPAddr, tcp, Port}| T]) ->
-    Spec = {tcp_inet, {erldns_tcp_server, start_link, [tcp_inet, inet, IPAddr, Port]},
+add_servers([{inet, {_, _, _, _} = IPAddr, tcp, Port, PoolName}| T]) ->
+    Spec = {tcp_inet, {erldns_tcp_server, start_link, [tcp_inet, inet, IPAddr, Port, PoolName]},
         permanent, 5000, worker, [erldns_tcp_server]},
     supervisor:start_child(erldns_server_sup, Spec),
     add_servers(T);
-add_servers([{inet6, {_, _, _, _, _, _, _, _} = IPAddr, tcp, Port}| T]) ->
-    Spec = {tcp_inet6, {erldns_tcp_server, start_link, [tcp_inet6, inet6, IPAddr, Port]},
+add_servers([{inet6, {_, _, _, _, _, _, _, _} = IPAddr, tcp, Port, PoolName}| T]) ->
+    Spec = {tcp_inet6, {erldns_tcp_server, start_link, [tcp_inet6, inet6, IPAddr, Port, PoolName]},
         permanent, 5000, worker, [erldns_tcp_server]},
     supervisor:start_child(erldns_server_sup, Spec),
     add_servers(T);
-add_servers([{inet, {_, _, _, _} = IPAddr, udp, Port}| T]) ->
+add_servers([{inet, {_, _, _, _} = IPAddr, udp, Port, _}| T]) ->
     Spec = {udp_inet, {erldns_udp_server, start_link, [udp_inet, inet, IPAddr, Port]},
         permanent, 5000, worker, [erldns_udp_server]},
     supervisor:start_child(erldns_server_sup, Spec),
     add_servers(T);
-add_servers([{inet6, {_, _, _, _, _, _, _, _} = IPAddr, udp, Port}| T]) ->
+add_servers([{inet6, {_, _, _, _, _, _, _, _} = IPAddr, udp, Port, _}| T]) ->
     Spec = {udp_inet6, {erldns_udp_server, start_link, [udp_inet6, inet6, IPAddr, Port]},
     permanent, 5000, worker, [erldns_udp_server]},
     supervisor:start_child(erldns_server_sup, Spec),
     add_servers(T).
+
+add_pools([]) ->
+    ok;
+add_pools([Pool | Tail]) ->
+    Name = keyget(name, Pool),
+    Args = [{name, {local, Name}},
+            {worker_module, erldns_worker},
+            {size, keyget(size, Pool)},
+            {max_overflow, keyget(max_overflow, Pool)}],
+    Spec = poolboy:child_spec(Name, Args),
+    R = supervisor:start_child(erldns_server_sup, Spec),
+    lager:info("Start Pool: ~p", [R]),
+    add_pools(Tail).
+
+keyget(Key, Data) ->
+    {Key, Value} = lists:keyfind(Key, 1, Data),
+    Value.

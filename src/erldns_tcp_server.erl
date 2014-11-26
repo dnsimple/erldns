@@ -17,7 +17,7 @@
 -behavior(gen_nb_server).
 
 % API
--export([start_link/4]).
+-export([start_link/5]).
 
 % Gen server hooks
 -export([init/1,
@@ -31,26 +31,26 @@
         ]).
 
 % Internal API
--export([handle_request/2]).
+-export([handle_request/3]).
 
 -define(SERVER, ?MODULE).
 
--record(state, {port}).
+-record(state, {port, pool_name}).
 
 %% Public API
-start_link(_Name, Family, Addr, Port) ->
+start_link(_Name, Family, Addr, Port, PoolName) ->
   lager:info("Starting TCP server for ~p on port ~p", [Family, Port]),
-  gen_nb_server:start_link(?MODULE, Addr, Port, []).
+  gen_nb_server:start_link(?MODULE, Addr, Port, [PoolName]).
 
 %% gen_server hooks
-init([]) ->
-  {ok, #state{}}.
+init([PoolName]) ->
+  {ok, #state{pool_name = PoolName}}.
 handle_call(_Request, _From, State) ->
   {ok, State}.
 handle_cast(_Message, State) ->
   {noreply, State}.
-handle_info({tcp, Socket, Bin}, State) ->
-  folsom_metrics:histogram_timed_update(tcp_handoff_histogram, ?MODULE, handle_request, [Socket, Bin]),
+handle_info({tcp, Socket, Bin}, #state{pool_name = PoolName} = State) ->
+  folsom_metrics:histogram_timed_update(tcp_handoff_histogram, ?MODULE, handle_request, [PoolName, Socket, Bin]),
   {noreply, State};
 handle_info(_Message, State) ->
   {noreply, State}.
@@ -64,7 +64,7 @@ new_connection(Socket, State) ->
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
-handle_request(Socket, Bin) ->
-  poolboy:transaction(tcp_worker_pool, fun(Worker) ->
+handle_request(PoolName, Socket, Bin) ->
+  poolboy:transaction(PoolName, fun(Worker) ->
                                            gen_server:call(Worker, {tcp_query, Socket, Bin})
                                        end).

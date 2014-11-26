@@ -74,25 +74,30 @@ get_servers() ->
                     {ok, ServerList0} ->
                         ServerList0
                  end,
-    lists:foldl(fun(Server, Acc) ->
-        {port, Port} = lists:keyfind(port, 1, Server),
-        {listen, IPList} = lists:keyfind(listen, 1, Server),
-        {protocol, Proto} = lists:keyfind(protocol, 1, Server),
-        parse_server(IPList, Proto, Port, Acc)
-    end, [], ServerList).
+    {Pools, Servers, _} =
+        lists:foldl(fun(Server, {PoolAcc, ServerAcc, Inc}) ->
+            {port, Port} = lists:keyfind(port, 1, Server),
+            {listen, IPList} = lists:keyfind(listen, 1, Server),
+            {protocol, Proto} = lists:keyfind(protocol, 1, Server),
+            {worker_pool, Pool} = lists:keyfind(worker_pool, 1, Server),
+            PoolName = list_to_atom("erldns_tcp_worker_pool_" ++ integer_to_list(Inc)),
+            NewPools = [lists:append([{name, PoolName}], Pool) | PoolAcc],
+            {NewPools, parse_server(IPList, Proto, Port, PoolName, ServerAcc), Inc + 1}
+        end, {[], [], 0}, ServerList),
+    {Pools, Servers}.
 
-parse_server([], _ProtocolList, _Port, Acc) ->
+parse_server([], _ProtocolList, _Port, _PoolName, Acc) ->
     Acc;
-parse_server([IP | Tail], ProtocolList, Port, Acc0) ->
+parse_server([IP | Tail], ProtocolList, Port, PoolName, Acc0) ->
     {IPType, IPAddr} = parse_address(IP),
-    Acc = add_protocols(ProtocolList, IPType, IPAddr, Port, Acc0),
-    parse_server(Tail, ProtocolList, Port, Acc).
+    Acc = add_protocols(ProtocolList, IPType, IPAddr, Port, PoolName, Acc0),
+    parse_server(Tail, ProtocolList, Port, PoolName, Acc).
 
-add_protocols([], _IPType, _IPAddr, _Port, Acc) ->
+add_protocols([], _IPType, _IPAddr, _Port, _PoolName, Acc) ->
     Acc;
-add_protocols([Proto | Tail], IPType, IPAddr, Port, Acc0) ->
-    add_protocols(Tail, IPType, IPAddr, Port,
-        [{IPType, IPAddr, Proto, Port} | Acc0]).
+add_protocols([Proto | Tail], IPType, IPAddr, Port, PoolName, Acc0) ->
+    add_protocols(Tail, IPType, IPAddr, Port, PoolName,
+        [{IPType, IPAddr, Proto, Port, PoolName} | Acc0]).
 
 get_address(inet) ->
   case application:get_env(erldns, inet4) of
