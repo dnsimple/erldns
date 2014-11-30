@@ -109,5 +109,5 @@ public_key(_Key = [E, N, _D]) ->
 
 rewrite_rrsig_ttl(Authority) ->
   fun(R) ->
-      R#dns_rr{ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum}
+      erldns_records:minimum_soa_ttl(R, Authority#dns_rr.data)
   end.

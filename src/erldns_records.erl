@@ -87,7 +87,10 @@ default_priority(Priority) ->
     Value -> Value
   end.
 
-% Applies a minimum TTL based on the SOA minumum value.
+%% @doc Applies a minimum TTL based on the SOA minumum value.
+%%
+%% The first argument is the Record that is being updated.
+%% The second argument is the SOA RR Data.
 -spec minimum_soa_ttl(dns:dns_rr(), dns:dns_rrdata_soa()) -> dns:dns_rr().
 minimum_soa_ttl(Record, Data) when is_record(Data, dns_rrdata_soa) -> Record#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, Record#dns_rr.ttl)};
 minimum_soa_ttl(Record, _) -> Record.
