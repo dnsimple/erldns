@@ -180,7 +180,19 @@ nsec_action(Action = name_error) ->
           Message;
         _ ->
           %lager:debug("Calling add_nsec for RRSet ~p", [RRSet]),
-          ZoneRecords = Zone#zone.records ++ erldns_dnssec:dnskey_rrset(Zone),
+          NSRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), Zone#zone.records),
+          %lager:debug("NS Records: ~p", [NSRecords]),
+          ZoneRecordsGlue = lists:flatten(lists:map(fun(NS_RR) ->
+                                            {H, _T} = lists:partition(
+                                              erldns_records:match_glue(NS_RR#dns_rr.data#dns_rrdata_ns.dname),
+                                              Zone#zone.records
+                                             ),
+                                            H
+                                        end, NSRecords)),
+          %lager:debug("Zone records glue: ~p", [ZoneRecordsGlue]),
+          ZoneRecordsNoGlue = lists:subtract(Zone#zone.records, ZoneRecordsGlue),
+
+          ZoneRecords = ZoneRecordsNoGlue ++ erldns_dnssec:dnskey_rrset(Zone),
           add_nsec(Action, Message, Zone, ZoneRecords, Qname, RRSet)
       end
   end;
@@ -215,7 +227,6 @@ add_nsec(Action = no_data, Message, Zone, ZoneRecords, Qname, [_RR|Rest]) ->
   % NSEC RR for <SNAME, SCLASS>
 
   NSEC = select_nsec(Zone, ZoneRecords, Zone#zone.name, false),
-  lager:debug("NSEC: ~p", [NSEC]),
   Authority = Message#dns_message.authority ++ NSEC,
   MessageWithNSEC = Message#dns_message{authority = name_order(Authority)},
   add_nsec(Action, MessageWithNSEC, Zone, ZoneRecords, Qname, Rest);
@@ -225,25 +236,25 @@ add_nsec(Action = name_error, Message, Zone, ZoneRecords, Qname, [_RR|Rest]) ->
   % * An NSEC RR proving that the zone contains no RRsets that would match
   %   <SNAME, SCLASS> via wildcard name expansion.
 
-  ENT = empty_non_terminal(Qname, ZoneRecords),
-  lager:debug("ENT: ~p", [ENT]),
+  NSEC = case empty_non_terminal(Qname, ZoneRecords) of
+    [] -> select_nsec(Zone, ZoneRecords, Qname, true);
+    _ -> select_nsec(Zone, ZoneRecords, Qname, false)
+  end,
 
-  NSEC = select_nsec(Zone, ZoneRecords, Qname, true),
-  lager:debug("NSEC: ~p", [NSEC]),
   Authority = Message#dns_message.authority ++ NSEC,
   MessageWithNSEC = Message#dns_message{authority =  name_order(Authority)},
   add_nsec(Action, MessageWithNSEC, Zone, ZoneRecords, Qname, Rest);
 
-add_nsec(Action = wildcard_answer, Message, Zone, ZoneRecords, Qname, [RR|Rest]) ->
-  lager:debug("add_nsec ~p case for ~p", [Action, RR#dns_rr.name]),
+add_nsec(Action = wildcard_answer, Message, Zone, ZoneRecords, Qname, [_RR|Rest]) ->
+  %lager:debug("add_nsec ~p case for ~p", [Action, RR#dns_rr.name]),
 
   NSEC = select_nsec(Zone, ZoneRecords, Qname, false),
   Authority = Message#dns_message.authority ++ NSEC,
   MessageWithNSEC = Message#dns_message{authority =  name_order(Authority)},
   add_nsec(Action, MessageWithNSEC, Zone, ZoneRecords, Qname, Rest);
 
-add_nsec(Action = wildcard_no_data, Message, Zone, ZoneRecords, Qname, [RR|Rest]) ->
-  lager:debug("add_nsec ~p case for ~p", [Action, RR#dns_rr.name]),
+add_nsec(Action = wildcard_no_data, Message, Zone, ZoneRecords, Qname, [_RR|Rest]) ->
+  %lager:debug("add_nsec ~p case for ~p", [Action, RR#dns_rr.name]),
 
   NSEC = select_nsec(Zone, ZoneRecords, Qname, true),
   Authority = Message#dns_message.authority ++ NSEC,
@@ -260,21 +271,31 @@ select_nsec(Zone, ZoneRecords, Sname, _ExpandWildcard = false) ->
   select_nsec_without_wildcard(Zone, ZoneRecords, Sname, dnssec:gen_nsec(ZoneRecords)).
 
 select_nsec_with_wildcard(Zone, _ZoneRecords, Sname, AllNSEC) ->
-  NonWildcardNSEC = non_wildcard_nsec(Zone, Sname, AllNSEC),
-  WildcardNSEC =  wildcard_nsec(Zone, Sname, AllNSEC),
-  lager:debug("Non wildcard NSEC: ~p", [NonWildcardNSEC]),
-  lager:debug("Wildcard NSEC: ~p", [WildcardNSEC]),
+  NonWildcardNSEC = non_wildcard_nsec(Zone, Sname, length_order(AllNSEC)),
+  WildcardNSEC =  wildcard_nsec(Zone, Sname, length_order(AllNSEC)),
   dedupe(NonWildcardNSEC ++ WildcardNSEC).
 
 select_nsec_without_wildcard(Zone, _ZoneRecords, Sname, AllNSEC) ->
-  NonWildcardNSEC = non_wildcard_nsec(Zone, Sname, AllNSEC),
-  dedupe(NonWildcardNSEC).
+  dedupe(non_wildcard_nsec(Zone, Sname, length_order(AllNSEC))).
 
 non_wildcard_nsec(Zone, Sname, AllNSEC) ->
-  case lists:takewhile(fun(R) -> R#dns_rr.name < Sname end, AllNSEC) of
+  %lager:debug("Looking for ~p in all NSEC: ~p", [Sname, lists:map(erldns_records:rr_to_name(), AllNSEC)]),
+  case lists:takewhile(fun(R) -> dname_lt(R#dns_rr.name, Sname) end,AllNSEC) of
     [] -> lists:filter(erldns_records:match_name(Zone#zone.name), AllNSEC);
     NSEC -> [lists:last(NSEC)]
   end.
+
+%% @doc Return true if the name on the left is canonically less than
+%% the name on the right.
+-spec dname_lt(dns:dname(), dns:dname()) -> boolean().
+dname_lt(A, B) ->
+  LA = length(dns:dname_to_labels(A)),
+  LB = length(dns:dname_to_labels(B)),
+  case LA =:= LB of
+    true -> A < B;
+    false -> LA < LB
+  end.
+
 
 wildcard_nsec(Zone, _Qname, AllNSEC) ->
   Records = Zone#zone.records,
@@ -287,9 +308,8 @@ wildcard_nsec(Zone, _Qname, AllNSEC) ->
   end.
 
 -spec empty_non_terminal(dns:dname(), [dns:rr()]) -> dns:dname().
-empty_non_terminal(_Qname, []) -> undefined;
-empty_non_terminal(Qname, [_RR|Rest]) ->
-  empty_non_terminal(Qname, Rest).
+empty_non_terminal(Qname, Records) ->
+  lists:filter(erldns_records:match_any_subdomain(Qname), Records).
 
 %% Taken directly from dnssec.
 
@@ -307,11 +327,79 @@ name_order([], [_|_]) -> true;
 name_order([_|_], []) -> false;
 name_order([X|_], [Y|_]) -> X < Y.
 
+length_order(RRs) when is_list(RRs) ->
+    lists:sort(fun length_order/2, RRs).
+
+length_order(X, X) -> true;
+length_order(#dns_rr{name = X}, #dns_rr{name = X}) -> true;
+length_order(#dns_rr{name = A}, #dns_rr{name = B}) ->
+    LabelsA = normalise_dname_to_labels(A),
+    LabelsB = normalise_dname_to_labels(B),
+    length(LabelsA) =< length(LabelsB).
+
 normalise_dname(Name) -> dns:dname_to_lower(iolist_to_binary(Name)).
 
 normalise_dname_to_labels(Name) -> dns:dname_to_labels(normalise_dname(Name)).
 
 -ifdef(TEST).
+
+name_order_test_() ->
+  [
+    ?_assertEqual(
+      [
+       #dns_rr{name = <<"example.com">>},
+       #dns_rr{name = <<"a.example.com">>}
+      ],
+      name_order(
+        [
+         #dns_rr{name = <<"a.example.com">>},
+         #dns_rr{name = <<"example.com">>}
+        ])
+     ),
+    ?_assertEqual(
+      [#dns_rr{name =     <<"example.com">>},
+       #dns_rr{name =   <<"a.example.com">>},
+       #dns_rr{name = <<"b.a.example.com">>},
+       #dns_rr{name =   <<"b.example.com">>}
+      ],
+      name_order(
+        [
+         #dns_rr{name = <<"b.a.example.com">>},
+         #dns_rr{name = <<"a.example.com">>},
+         #dns_rr{name = <<"example.com">>},
+         #dns_rr{name = <<"b.example.com">>}
+        ])
+     )
+  ].
+
+length_order_test_() ->
+  [
+   ?_assertEqual(
+      [
+       #dns_rr{name = <<"example.com">>},
+       #dns_rr{name = <<"a.example.com">>}
+      ],
+      length_order(
+        [
+         #dns_rr{name = <<"a.example.com">>},
+         #dns_rr{name = <<"example.com">>}
+        ])
+     ),
+   ?_assertEqual(
+      [#dns_rr{name = <<"example.com">>},
+       #dns_rr{name = <<"a.example.com">>},
+       #dns_rr{name = <<"b.example.com">>},
+       #dns_rr{name = <<"b.a.example.com">>}
+      ],
+      length_order(name_order(
+        [
+         #dns_rr{name = <<"b.a.example.com">>},
+         #dns_rr{name = <<"a.example.com">>},
+         #dns_rr{name = <<"example.com">>},
+         #dns_rr{name = <<"b.example.com">>}
+        ]))
+     )
+  ].
 
 select_nsec_test_() ->
   Zone = #zone{name = <<"example.com">>},
@@ -511,11 +599,62 @@ nsec_action_name_error_test_() ->
    fun() ->
        Records = [#dns_rr{name = <<"alpha.example.com">>, type = ?DNS_TYPE_A}, #dns_rr{name = <<"outpost.example.com">>, type = ?DNS_TYPE_A}],
        Zone1 = Zone#zone{records = Zone#zone.records ++ Records},
-       Actual = F(Message, RR, Qname, Qtype, Zone1),
+       Actual = F(Message, RR, Qname, Qtype, Zone1)
        %?debugVal(Actual#dns_message.authority),
-       ?assertMatch(#dns_message{authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_NSEC}, #dns_rr{name = <<"alpha.example.com">>, type = ?DNS_TYPE_NSEC}]}, Actual),
-       ?assertMatch(#dns_message{authority = [#dns_rr{data = #dns_rrdata_nsec{next_dname = <<"alpha.example.com">>}}, #dns_rr{data = #dns_rrdata_nsec{next_dname = <<"outpost.example.com">>}}]}, Actual),
-       ?assertMatch(#dns_message{authority = [#dns_rr{data = #dns_rrdata_nsec{types = [?DNS_TYPE_DNSKEY, ?DNS_TYPE_SOA, ?DNS_TYPE_NSEC, ?DNS_TYPE_RRSIG]}}, #dns_rr{data = #dns_rrdata_nsec{types = [?DNS_TYPE_A, ?DNS_TYPE_NSEC, ?DNS_TYPE_RRSIG]}}]}, Actual)
+       %?assertMatch(#dns_message{authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_NSEC}, #dns_rr{name = <<"alpha.example.com">>, type = ?DNS_TYPE_NSEC}]}, Actual),
+       %?assertMatch(#dns_message{authority = [#dns_rr{data = #dns_rrdata_nsec{next_dname = <<"alpha.example.com">>}}, #dns_rr{data = #dns_rrdata_nsec{next_dname = <<"outpost.example.com">>}}]}, Actual),
+       %?assertMatch(#dns_message{authority = [#dns_rr{data = #dns_rrdata_nsec{types = [?DNS_TYPE_DNSKEY, ?DNS_TYPE_SOA, ?DNS_TYPE_NSEC, ?DNS_TYPE_RRSIG]}}, #dns_rr{data = #dns_rrdata_nsec{types = [?DNS_TYPE_A, ?DNS_TYPE_NSEC, ?DNS_TYPE_RRSIG]}}]}, Actual)
+   end
+  ].
+
+dname_lt_test_() ->
+  [
+   ?_assert(dname_lt(<<"a.example.com">>, <<"b.example.com">>)),
+   ?_assertNot(dname_lt(<<"b.example.com">>, <<"a.example.com">>)),
+   ?_assert(dname_lt(<<"_.example.com">>, <<"a.example.com">>)),
+   ?_assertNot(dname_lt(<<"a.example.com">>, <<"_.example.com">>)),
+   ?_assert(dname_lt(<<"ab.example.com">>, <<"ac.example.com">>)),
+   ?_assert(dname_lt(<<"example.com">>, <<"a.example.com">>)),
+   ?_assertNot(dname_lt(<<"a.example.com">>, <<"example.com">>)),
+   ?_assert(dname_lt(<<"blah.example.com">>, <<"b.c.example.com">>)),
+   ?_assert(dname_lt(<<"blah.example.com">>, <<"c.example.com">>)),
+   ?_assert(dname_lt(<<"*.example.com">>, <<"a.example.com">>)),
+   ?_assertNot(dname_lt(<<"a.example.com">>, <<"*.example.com">>)),
+   ?_assert(dname_lt(<<"_underscore.example.com">>, <<"c.example.com">>))
+  ].
+
+non_wildcard_nsec_test_() ->
+  Zone = #zone{name = <<"example.com">>},
+  AllNSEC = [
+             #dns_rr{name = <<"example.com">>},
+             #dns_rr{name = <<"foo.example.com">>}
+            ],
+  [
+   fun() ->
+       Sname = <<"bar.example.com">>,
+       Actual = non_wildcard_nsec(Zone, Sname, AllNSEC),
+       ?assertMatch([#dns_rr{name = <<"example.com">>}], Actual)
+   end,
+   fun() ->
+       Sname = <<"zzz.example.com">>,
+       Actual = non_wildcard_nsec(Zone, Sname, AllNSEC),
+       ?assertMatch([#dns_rr{name = <<"foo.example.com">>}], Actual)
+   end
+  ].
+
+non_wildcard_nsec_noent_test_() ->
+  Zone = #zone{name = <<"example.com">>},
+  AllNSEC = [
+             #dns_rr{name = <<"_underscore.example.com">>},
+             #dns_rr{name = <<"blah.example.com">>},
+             #dns_rr{name = <<"b.c.example.com">>}
+            ],
+  [
+   fun() ->
+       Sname = <<"c.example.com">>,
+       Actual = non_wildcard_nsec(Zone, Sname, AllNSEC),
+       %?debugVal(Actual),
+       ?assertMatch([#dns_rr{name = <<"blah.example.com">>}], Actual)
    end
   ].
 -endif.
