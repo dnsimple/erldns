@@ -32,7 +32,7 @@ dialyzer:
 test:
 	rm -f test/*beam
 	./rebar compile
-	ct_run -config erldns.config -dir test -suite erldns_SUITE -logdir test_logs -pa ebin/ deps/**/ebin/*
+	ct_run -config erldns.config -dir test -suite erldns_SUITE -logdir test_logs -pa ebin deps/**/ebin/ -s erldns
 
 test-clean-run:
 	rm -f test/*beam
