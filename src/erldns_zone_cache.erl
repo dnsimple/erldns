@@ -106,16 +106,18 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
 -spec get_zone(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
 get_zone(Name) ->
   NormalizedName = normalize_name(Name),
-  case ets:lookup(zones, NormalizedName) of
-    [{NormalizedName, Zone}] -> {ok, Zone#zone{name = NormalizedName, records = [], records_by_name=trimmed}};
-    _ -> {error, zone_not_found}
+  case erldns_storage:select(zones, NormalizedName) of
+    [{NormalizedName, Zone}] ->
+        {ok, Zone#zone{name = NormalizedName, records = [], records_by_name=trimmed}};
+    _Res ->
+        {error, zone_not_found}
   end.
 
 %% @doc Get a zone for the specific name, including the records for the zone.
 -spec get_zone_with_records(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
 get_zone_with_records(Name) ->
   NormalizedName = normalize_name(Name),
-  case ets:lookup(zones, NormalizedName) of
+  case erldns_storage:select(zones, NormalizedName) of
     [{NormalizedName, Zone}] -> {ok, Zone};
     _ -> {error, zone_not_found}
   end.
@@ -173,7 +175,7 @@ in_zone(Name) ->
 %% for the zone.
 -spec zone_names_and_versions() -> [{dns:dname(), binary()}].
 zone_names_and_versions() ->
-  ets:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones).
+  erldns_storage:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones).
 
 % ----------------------------------------------------------------------------------------------------
 % Write API
@@ -184,25 +186,25 @@ zone_names_and_versions() ->
 %% This function will build the necessary Zone record before interting.
 -spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone({Name, Sha, Records}) ->
-  ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   ok.
 
 %% @doc Put a zone into the cache and wait for a response.
 -spec put_zone(binary(), #zone{}) -> ok.
 put_zone(Name, Zone) ->
-  ets:insert(zones, {normalize_name(Name), Zone}),
+  erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok.
 put_zone_async({Name, Sha, Records}) ->
-  ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async(binary(), #zone{}) -> ok.
 put_zone_async(Name, Zone) ->
-  ets:insert(zones, {normalize_name(Name), Zone}),
+  erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   ok.
 
 %% @doc Remove a zone from the cache without waiting for a response.
@@ -218,8 +220,14 @@ delete_zone(Name) ->
 %% @doc Initialize the zone cache.
 -spec init([]) -> {ok, #state{}}.
 init([]) ->
-  ets:new(zones, [set, public, named_table]),
-  ets:new(authorities, [set, public, named_table]),
+  case erldns_config:storage_type() of
+    erldns_storage_mnesia ->
+        erldns_storage:create(schema);
+    _ ->
+        ok
+  end,
+  erldns_storage:create(zones),
+  erldns_storage:create(authorities),
   {ok, #state{parsers = []}}.
 
 % ----------------------------------------------------------------------------------------------------
@@ -227,23 +235,23 @@ init([]) ->
 
 %% @doc Write the zone into the cache.
 handle_call({put, Name, Zone}, _From, State) ->
-  ets:insert(zones, {normalize_name(Name), Zone}),
+  erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   {reply, ok, State};
 
 handle_call({put, Name, Sha, Records}, _From, State) ->
-  ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   {reply, ok, State}.
 
 handle_cast({put, Name, Zone}, State) ->
-  ets:insert(zones, {normalize_name(Name), Zone}),
+  erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   {noreply, State};
 
 handle_cast({put, Name, Sha, Records}, State) ->
-  ets:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   {noreply, State};
 
 handle_cast({delete, Name}, State) ->
-  ets:delete(zones, normalize_name(Name)),
+  erldns_storage:delete(zones, normalize_name(Name)),
   {noreply, State};
 
 handle_cast(Message, State) ->
@@ -278,7 +286,7 @@ find_zone_in_cache(Qname) ->
     [] -> {error, zone_not_found};
     [_] -> {error, zone_not_found};
     [_|Labels] ->
-      case ets:lookup(zones, Name) of
+      case erldns_storage:select(zones, Name) of
         [{Name, Zone}] -> {ok, Zone};
         _ -> find_zone_in_cache(dns:labels_to_dname(Labels))
       end

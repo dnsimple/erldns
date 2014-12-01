@@ -71,14 +71,6 @@ gc_registered(ProcessName) ->
 
 %% Callbacks
 init(_Args) ->
-  {ok, AppPools} = application:get_env(erldns, pools),
-  AppPoolSpecs = lists:map(fun({PoolName, WorkerModule, PoolConfig}) ->
-                               Args = [{name, {local, PoolName}},
-                                       {worker_module, WorkerModule}]
-                               ++ PoolConfig,
-                               poolboy:child_spec(PoolName, Args)
-                           end, AppPools),
-
   SysProcs = [
               ?CHILD(erldns_events, worker, []),
               ?CHILD(erldns_zone_cache, worker, []),
@@ -87,8 +79,8 @@ init(_Args) ->
               ?CHILD(erldns_packet_cache, worker, []),
               ?CHILD(erldns_query_throttle, worker, []),
               ?CHILD(erldns_handler, worker, []),
-
-              ?CHILD(sample_custom_handler, worker, [])
+              ?CHILD(sample_custom_handler, worker, []),
+              ?CHILD(erldns_storage, worker, [])
              ],
 
-  {ok, {{one_for_one, 20, 10}, SysProcs ++ AppPoolSpecs}}.
+  {ok, {{one_for_one, 20, 10}, SysProcs}}.

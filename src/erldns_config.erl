@@ -16,6 +16,7 @@
 -module(erldns_config).
 
 -export([
+         get_servers/0,
          get_address/1,
          get_port/0,
          get_num_workers/0
@@ -38,6 +39,15 @@
          websocket_path/0,
          websocket_url/0
         ]).
+-export([
+         storage_env/0,
+         storage_type/0,
+         storage_user/0,
+         storage_pass/0,
+         storage_host/0,
+         storage_port/0,
+         storage_dir/0
+        ]).
 
 -define(DEFAULT_IPV4_ADDRESS, {127,0,0,1}).
 -define(DEFAULT_IPV6_ADDRESS, {0,0,0,0,0,0,0,1}).
@@ -51,16 +61,74 @@
 %%
 %% IPv4 default: 127.0.0.1
 %% IPv6 default: ::1
--spec get_address(inet | inet6) -> inet:ip_address().
+%% Build a configuration for the server to enable multiple instances of servers to be started.
+%% End config is something of [{{port, Port}, {listen, IPAddr}, {protocol, Proto}} | ....]
+%% These configs are passed to the event handerl and the server supervisors spawns children
+%% using these built configs.
+%% @end
+-spec get_address(none()) -> inet:ip_address().
+get_servers() ->
+    ServerList = case application:get_env(erldns, servers) of
+                    undefined ->
+                        [];
+                    {ok, ServerList0} ->
+                        ServerList0
+                 end,
+    {Pools, Servers, _} =
+        lists:foldl(fun(Server, {PoolAcc, ServerAcc, Inc}) ->
+            {port, Port} = lists:keyfind(port, 1, Server),
+            {listen, IPList0} = lists:keyfind(listen, 1, Server),
+            IPList = normalize_addresses(IPList0),
+            {protocol, Proto} = lists:keyfind(protocol, 1, Server),
+            {worker_pool, Pool} = lists:keyfind(worker_pool, 1, Server),
+            PoolName = list_to_atom("erldns_tcp_worker_pool_" ++ integer_to_list(Inc)),
+            NewPools = [lists:append([{name, PoolName}], Pool) | PoolAcc],
+            {NewPools, parse_server(IPList, Proto, Port, PoolName, ServerAcc), Inc + 1}
+        end, {[], [], 0}, ServerList),
+    {Pools, Servers}.
+
+normalize_addresses(IPList) ->
+    normalize_addresses(IPList, [] , [], [], []).
+
+normalize_addresses([], Globalv4, Globalv6, Localv4, Localv6) ->
+    Globalv4 ++ Globalv6 ++ Localv4 ++ Localv6;
+normalize_addresses([IP | Tail], Globalv4, Globalv6, Localv4, Localv6) ->
+    case parse_address(IP) of
+        {inet, {0, 0, 0, 0}} = Addr ->
+            normalize_addresses(Tail, [Addr], Globalv6, [], Localv6);
+        {inet6, {0, 0, 0, 0, 0, 0, 0, 0}} = Addr->
+            normalize_addresses(Tail, Globalv4, [Addr], Localv4, []);
+        {inet, _} =  Addr when Globalv4 =:= []->
+            normalize_addresses(Tail, Globalv4, Globalv6, [Addr | Localv4], Localv6);
+        {inet, _} ->
+            normalize_addresses(Tail, Globalv4, Globalv6, [], Localv6);
+        {inet6, _} = Addr when Globalv6 =:= [] ->
+            normalize_addresses(Tail, Globalv4, Globalv6, Localv4, [Addr | Localv6]);
+        {inet6, _} ->
+            normalize_addresses(Tail, Globalv4, Globalv6, Localv4, [])
+    end.
+
+parse_server([], _ProtocolList, _Port, _PoolName, Acc) ->
+    Acc;
+parse_server([{IPType, IPAddr} = _IP | Tail], ProtocolList, Port, PoolName, Acc0) ->
+    Acc = add_protocols(ProtocolList, IPType, IPAddr, Port, PoolName, Acc0),
+    parse_server(Tail, ProtocolList, Port, PoolName, Acc).
+
+add_protocols([], _IPType, _IPAddr, _Port, _PoolName, Acc) ->
+    Acc;
+add_protocols([Proto | Tail], IPType, IPAddr, Port, PoolName, Acc0) ->
+    add_protocols(Tail, IPType, IPAddr, Port, PoolName,
+        [{IPType, IPAddr, Proto, Port, PoolName} | Acc0]).
+
 get_address(inet) ->
   case application:get_env(erldns, inet4) of
-    {ok, Address} -> parse_address(Address);
-    _ -> ?DEFAULT_IPV4_ADDRESS
+    {ok, Address} -> parse(Address);
+    _ -> [?DEFAULT_IPV4_ADDRESS]
   end;
 get_address(inet6) ->
   case application:get_env(erldns, inet6) of
-    {ok, Address} -> parse_address(Address);
-    _ -> ?DEFAULT_IPV6_ADDRESS
+    {ok, Address} -> parse(Address);
+    _ -> [?DEFAULT_IPV6_ADDRESS]
   end.
 
 %% @doc The the port that the DNS server should listen on.
@@ -91,11 +159,31 @@ use_root_hints() ->
   end.
 
 % Private functions
+parse(IPList) ->
+    parse(IPList, []).
 
+parse([], Acc) ->
+    Acc;
+parse([{_,_,_,_} = IP | Tail], Acc) ->
+    parse(Tail, [IP | Acc]);
+parse([{_,_,_,_,_,_,_,_} = IP | Tail], Acc) ->
+    parse(Tail, [IP | Acc]);
+parse([IP | Tail], Acc) when is_binary(IP) ->
+    parse(Tail, [parse_address(IP) | Acc]);
+parse([IP | Tail], Acc) when is_list(IP) andalso length(IP) > 1 ->
+    parse(Tail, [parse_address(IP) | Acc]);
+parse(IP, Acc) when is_list(IP) ->
+    [parse_address(IP) | Acc].
+
+parse_address(Address) when is_binary(Address) ->
+    parse_address(binary_to_list(Address));
 parse_address(Address) when is_list(Address) ->
   {ok, Tuple} = inet_parse:address(Address),
-  Tuple;
-parse_address(Address) -> Address.
+  parse_address(Tuple);
+parse_address({_,_,_,_,_,_,_,_} = Address) ->
+    {inet6, Address};
+parse_address({_,_,_,_} = Address) ->
+    {inet, Address}.
 
 zone_server_env() ->
   {ok, ZoneServerEnv} = application:get_env(erldns, zone_server),
@@ -130,3 +218,45 @@ websocket_path() ->
 
 websocket_url() ->
   atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
+
+storage_type() ->
+    storage_get(type).
+
+storage_dir() ->
+    storage_get(dir).
+
+storage_user() ->
+    storage_get(user).
+
+storage_pass() ->
+    storage_get(pass).
+
+storage_host() ->
+    storage_get(host).
+
+storage_port() ->
+    storage_get(port).
+
+storage_env() ->
+    get_env(storage).
+
+storage_get(Key) ->
+    case lists:keyfind(Key, 1, get_env(storage)) of
+        false ->
+            undefined;
+        {Key, Value} ->
+            Value
+    end.
+
+get_env(storage) ->
+    case application:get_env(erldns, storage) of
+        undefined ->
+            [{type, erldns_storage_json},
+             {dir, undefined},
+             {user, undefined},
+             {pass, undefined},
+             {host, undefined},
+             {port, undefined}];
+        {ok, Env} ->
+            Env
+    end.
