@@ -122,11 +122,15 @@ server_children_test(_Config) ->
         {_, List} = IFList,
         [List | Acc]
              end, [], IFAddrs),
-    Addresses = lists:foldl(fun(Conf, Acc) ->
+    AddressesWithPorts = lists:foldl(fun(Conf, Acc) ->
         {addr, Addr} = lists:keyfind(addr, 1, Conf),
         [{Addr, 8053} | Acc]
         end, [], Config),
-
+    Addresses = lists:foldl(fun({Addr, _Port} = _Element, Acc) ->
+        [Addr| Acc]
+    end, [], AddressesWithPorts),
+    io:format("AddressPort: ~p~n", [AddressesWithPorts]),
+    io:format("Address: ~p~n", [Addresses]),
     application:set_env(erldns, servers, [
         [{port, 8053},
             {listen, Addresses},
@@ -135,8 +139,10 @@ server_children_test(_Config) ->
                 {size, 10}, {max_overflow, 20}
             ]}]
     ]),
-    application:stop(erldns_app),
-    application:start(erldns_app),
+    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "db"}]),
+    erldns_storage_mnesia = erldns_config:storage_type(),
+    ok = erldns:start(),
     io:format("Loaded and started servers successfully~n"),
-    {ok, _} = inet_res:nnslookup("example.com", any, a, Addresses, 2000),
+    timer:sleep(1000),
+    {ok, _} = inet_res:nnslookup("example.com", any, a, AddressesWithPorts, 10000),
     io:format("Test completed for server_children~n").
