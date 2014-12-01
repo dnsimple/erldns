@@ -175,7 +175,9 @@ in_zone(Name) ->
 %% for the zone.
 -spec zone_names_and_versions() -> [{dns:dname(), binary()}].
 zone_names_and_versions() ->
-  erldns_storage:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones).
+  erldns_storage:foldl(fun(#zone{name = Name, version = Version}, NamesAndShas) ->
+                         [{Name, Version} | NamesAndShas]
+                       end, [], zones).
 
 % ----------------------------------------------------------------------------------------------------
 % Write API
@@ -191,7 +193,7 @@ put_zone({Name, Sha, Records}) ->
 
 %% @doc Put a zone into the cache and wait for a response.
 -spec put_zone(binary(), #zone{}) -> ok.
-put_zone(Name, Zone) ->
+put_zone(Name, #zone{} = Zone) ->
   erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   ok.
 
