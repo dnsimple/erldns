@@ -41,6 +41,16 @@ resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_
 
 %% With the extracted Qname and Qtype in hand, find the nearest zone
 %% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
+resolve(Message, _AuthorityRecords, Qname, ?DNS_TYPE_AXFR = _Qtype, _ClientIP) ->
+    %% NOTE, RFC-5936 states that the question must be in the response
+    %% NOTE, response must include SOA in the beginning and end.
+    %% NOTE, must be TCP
+    %% Refer to rfc-5936 2.1.1 for correct query values
+    {ok, Zone} = erldns_zone_cache:get_zone_with_records(Qname), % Zone lookup
+    RecordsSOA = Zone#zone.records,
+    {Records0, SOA} = normalize_dns_rr_list(RecordsSOA),
+    Response = Message#dns_message{answers = [SOA] ++ Records0},
+    Response;
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), % Zone lookup
   Records = resolve(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
@@ -485,3 +495,17 @@ requires_additional_processing([Answer|Rest], RequiresAdditional) ->
             _ -> []
           end,
   requires_additional_processing(Rest, RequiresAdditional ++ Names).
+
+-spec normalize_dns_rr_list([#dns_rr{}]) -> {[#dns_rr{}], #dns_rr{}}.
+normalize_dns_rr_list(DNSRRList) ->
+    normalize_dns_rr_list(DNSRRList, [], []).
+
+normalize_dns_rr_list([], Records, SOA) ->
+    {Records, SOA};
+normalize_dns_rr_list([#dns_rr{data = Data} = Head | Tail], Records, SOA) ->
+    case Data of
+        #dns_rrdata_soa{} ->
+            normalize_dns_rr_list(Tail, Records, Head);
+        _ ->
+            normalize_dns_rr_list(Tail, [Head | Records], SOA)
+    end.

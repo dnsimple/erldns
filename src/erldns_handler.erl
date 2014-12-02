@@ -150,10 +150,10 @@ handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
 safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
   case application:get_env(erldns, catch_exceptions) of
     {ok, false} ->
-      Response = erldns_resolver_v2:resolve(Message, AuthorityRecords, Host),
+      Response = erldns_resolver:resolve(Message, AuthorityRecords, Host),
       maybe_cache_packet(Response, Response#dns_message.aa);
     _ ->
-      try erldns_resolver_v2:resolve(Message, AuthorityRecords, Host) of
+      try erldns_resolver:resolve(Message, AuthorityRecords, Host) of
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
         Exception:Reason ->
