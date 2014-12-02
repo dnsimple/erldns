@@ -24,7 +24,7 @@
 
 -export([start_link/0, register_handler/2, get_handlers/0, handle/2]).
 
--export([do_handle/2]).
+-export([do_handle/3]).
 
 % Gen server hooks
 -export([init/1,
@@ -36,7 +36,7 @@
         ]).
 
 % Internal API
--export([handle_message/2]).
+-export([handle_message/3]).
 
 -record(state, {handlers}).
 
@@ -83,12 +83,12 @@ code_change(_PreviousVersion, State, _Extra) ->
 handle({trailing_garbage, Message, _}, Context) ->
   handle(Message, Context);
 %% Handle the message, checking to see if it is throttled.
-handle(Message, Context = {_, Host}) when is_record(Message, dns_message) ->
-  handle(Message, Host, erldns_query_throttle:throttle(Message, Context));
+handle(Message, _Context = {_Data, ClientIP, ServerIP}) when is_record(Message, dns_message) ->
+  handle(Message, ClientIP, ServerIP, erldns_query_throttle:throttle(Message, {_Data, ClientIP}));
 %% The message was bad so just return it.
 %% TODO: consider just throwing away the message
-handle(BadMessage, {_, Host}) ->
-  lager:error("Received a bad message: ~p from ~p", [BadMessage, Host]),
+handle(BadMessage, {_, ClientIP, _ServerIP}) ->
+  lager:error("Received a bad message: ~p from ~p", [BadMessage, ClientIP]),
   BadMessage.
 
 %% We throttle ANY queries to discourage use of our authoritative name servers
@@ -96,7 +96,7 @@ handle(BadMessage, {_, Host}) ->
 %%
 %% Note: this should probably be changed to return the original packet without
 %% any answer data and with TC bit set to 1.
-handle(Message, Host, {throttled, Host, _ReqCount}) ->
+handle(Message, ClientIP, _ServerIP, {throttled, ClientIP, _ReqCount}) ->
   folsom_metrics:notify({request_throttled_counter, {inc, 1}}),
   folsom_metrics:notify({request_throttled_meter, 1}),
   Message#dns_message{tc = true, aa = true, rc = ?DNS_RCODE_NOERROR};
@@ -104,35 +104,35 @@ handle(Message, Host, {throttled, Host, _ReqCount}) ->
 %% Message was not throttled, so handle it, then do EDNS handling, optionally
 %% append the SOA record if it is a zone transfer and complete the response
 %% by filling out count-related header fields.
-handle(Message, Host, _) ->
+handle(Message, ClientIP, ServerIP, _) ->
   %lager:debug("Questions: ~p", [Message#dns_message.questions]),
-  erldns_events:notify({start_handle, [{host, Host}, {message, Message}]}),
-  Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, Host]),
-  erldns_events:notify({end_handle, [{host, Host}, {message, Message}, {response, Response}]}),
+  erldns_events:notify({start_handle, [{host, ClientIP}, {message, Message}]}),
+  Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, ClientIP, ServerIP]),
+  erldns_events:notify({end_handle, [{host, ClientIP}, {message, Message}, {response, Response}]}),
   Response.
 
-do_handle(Message, Host) ->
-  NewMessage = handle_message(Message, Host),
+do_handle(Message, ClientIP, ServerIP) ->
+  NewMessage = handle_message(Message, ClientIP, ServerIP),
   complete_response(erldns_axfr:optionally_append_soa(erldns_edns:handle(NewMessage))).
 
 %% Handle the message by hitting the packet cache and either
 %% using the cached packet or continuing with the lookup process.
 %%
 %% If the cache is missed, then the SOA (Start of Authority) is discovered here.
-handle_message(Message, Host) ->
-  case erldns_packet_cache:get(Message#dns_message.questions, Host) of
+handle_message(Message, ClientIP, ServerIP) ->
+  case erldns_packet_cache:get(Message#dns_message.questions, ClientIP) of
     {ok, CachedResponse} ->
-      erldns_events:notify({packet_cache_hit, [{host, Host}, {message, Message}]}),
+      erldns_events:notify({packet_cache_hit, [{host, ClientIP}, {message, Message}]}),
       CachedResponse#dns_message{id=Message#dns_message.id};
     {error, Reason} ->
-      erldns_events:notify({packet_cache_miss, [{reason, Reason}, {host, Host}, {message, Message}]}),
-      handle_packet_cache_miss(Message, get_authority(Message), Host) % SOA lookup
+      erldns_events:notify({packet_cache_miss, [{reason, Reason}, {host, ClientIP}, {message, Message}]}),
+      handle_packet_cache_miss(Message, get_authority(Message), ClientIP, ServerIP) % SOA lookup
   end.
 
 %% If the packet is not in the cache and we are not authoritative (because there
 %% is no SOA record for this zone), then answer immediately setting the AA flag to false.
 %% If erldns is configured to use root hints then those will be added to the response.
-handle_packet_cache_miss(Message, [], _Host) ->
+handle_packet_cache_miss(Message, [], _ClientIP, _ServerIP) ->
   case erldns_config:use_root_hints() of
     true ->
       {Authority, Additional} = erldns_records:root_hints(),
@@ -144,16 +144,16 @@ handle_packet_cache_miss(Message, [], _Host) ->
 %% The packet is not in the cache yet we are authoritative, so try to resolve
 %% the request. This is the point the request moves on to the erldns_resolver
 %% module.
-handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
-  safe_handle_packet_cache_miss(Message#dns_message{ra = false}, AuthorityRecords, Host).
+handle_packet_cache_miss(Message, AuthorityRecords, ClientIP, ServerIP) ->
+  safe_handle_packet_cache_miss(Message#dns_message{ra = false}, AuthorityRecords, ClientIP, ServerIP).
 
-safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
+safe_handle_packet_cache_miss(Message, AuthorityRecords, ClientIP, ServerIP) ->
   case application:get_env(erldns, catch_exceptions) of
     {ok, false} ->
-      Response = erldns_resolver:resolve(Message, AuthorityRecords, Host),
+      Response = erldns_resolver:resolve(Message, AuthorityRecords, {ClientIP, ServerIP}),
       maybe_cache_packet(Response, Response#dns_message.aa);
     _ ->
-      try erldns_resolver:resolve(Message, AuthorityRecords, Host) of
+      try erldns_resolver:resolve(Message, AuthorityRecords, {ClientIP, ServerIP}) of
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
         Exception:Reason ->

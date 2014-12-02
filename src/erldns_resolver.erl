@@ -22,26 +22,26 @@
 
 %% @doc Resolve the questions in the message.
 -spec resolve(dns:message(), [dns:rr()], dns:ip()) -> dns:message().
-resolve(Message, AuthorityRecords, ClientIP) ->
-  resolve(Message, AuthorityRecords, ClientIP, Message#dns_message.questions).
+resolve(Message, AuthorityRecords, {ClientIP, ServerIP}) ->
+  resolve(Message, AuthorityRecords, {ClientIP, ServerIP}, Message#dns_message.questions).
 
 
 %% There were no questions in the message so just return it.
--spec resolve(dns:message(), [dns:rr()], dns:ip(), [dns:question()]) -> dns:message().
-resolve(Message, _AuthorityRecords, _ClientIP, []) -> Message;
+-spec resolve(dns:message(), [dns:rr()], dns:ip(), dns:ip(), [dns:question()]) -> dns:message().
+resolve(Message, _AuthorityRecords, {_ClientIP, _ServerIP}, []) -> Message;
 %% There is one question in the message; resolve it.
-resolve(Message, AuthorityRecords, ClientIP, [Question]) -> resolve(Message, AuthorityRecords, ClientIP, Question);
+resolve(Message, AuthorityRecords, {ClientIP, ServerIP}, [Question]) -> resolve(Message, AuthorityRecords, {ClientIP, ServerIP}, Question);
 %% Resolve the first question. Additional questions will be thrown away for now.
-resolve(Message, AuthorityRecords, ClientIP, [Question|_]) -> resolve(Message, AuthorityRecords, ClientIP, Question);
+resolve(Message, AuthorityRecords, {ClientIP, ServerIP}, [Question|_]) -> resolve(Message, AuthorityRecords, {ClientIP, ServerIP}, Question);
 
 %% Start the resolution process on the given question.
 %% Step 1: Set the RA bit to false as we do not handle recursive queries.
-resolve(Message, AuthorityRecords, ClientIP, Question) when is_record(Question, dns_query) ->
-  resolve(Message#dns_message{ra = false}, AuthorityRecords, Question#dns_query.name, Question#dns_query.type, ClientIP).
+resolve(Message, AuthorityRecords, {ClientIP, ServerIP}, Question) when is_record(Question, dns_query) ->
+  resolve(Message#dns_message{ra = false}, AuthorityRecords, Question#dns_query.name, Question#dns_query.type, {ClientIP, ServerIP}).
 
 %% With the extracted Qname and Qtype in hand, find the nearest zone
 %% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
-resolve(Message, _AuthorityRecords, Qname, ?DNS_TYPE_AXFR = _Qtype, _ClientIP) ->
+resolve(Message, _AuthorityRecords, Qname, ?DNS_TYPE_AXFR = _Qtype, {_ClientIP, _ServerIP}) ->
     %% NOTE, RFC-5936 states that the question must be in the response
     %% NOTE, response must include SOA in the beginning and end.
     %% NOTE, must be TCP
@@ -51,7 +51,7 @@ resolve(Message, _AuthorityRecords, Qname, ?DNS_TYPE_AXFR = _Qtype, _ClientIP) -
     {Records0, SOA} = normalize_dns_rr_list(RecordsSOA),
     Response = Message#dns_message{answers = [SOA] ++ Records0},
     Response;
-resolve(Message, AuthorityRecords, Qname, Qtype, ClientIP) ->
+resolve(Message, AuthorityRecords, Qname, Qtype, {ClientIP, _ServerIP}) ->
   Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), % Zone lookup
   Records = resolve(Message, Qname, Qtype, Zone, ClientIP, _CnameChain = []),
   additional_processing(rewrite_soa_ttl(Records), ClientIP, Zone).

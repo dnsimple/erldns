@@ -41,8 +41,8 @@ start_link(Args) ->
 init(_Args) ->
   {ok, #state{}}.
 
-handle_call({tcp_query, Socket, Bin}, _From, State) ->
-  {reply, handle_tcp_dns_query(Socket, Bin), State};
+handle_call({tcp_query, ServerIP, Socket, Bin}, _From, State) ->
+  {reply, handle_tcp_dns_query(ServerIP, Socket, Bin), State};
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
@@ -59,35 +59,35 @@ code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
 
 %% @doc Handle DNS query that comes in over TCP
--spec handle_tcp_dns_query(gen_tcp:socket(), iodata())  -> ok.
-handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>) ->
-  {ok, {Address, _Port}} = inet:peername(Socket),
-  erldns_events:notify({start_tcp, [{host, Address}]}),
+-spec handle_tcp_dns_query(inet:ip_address(), gen_tcp:socket(), iodata())  -> ok.
+handle_tcp_dns_query(ServerIP, Socket, <<_Len:16, Bin/binary>>) ->
+  {ok, {ClientIP, _Port}} = inet:peername(Socket),
+  erldns_events:notify({start_tcp, [{host, ClientIP}]}),
   case Bin of
     <<>> -> ok;
     _ ->
       case dns:decode_message(Bin) of
         {truncated, _, _} ->
-          lager:info("received truncated request from ~p", [Address]),
+          lager:info("received truncated request from ~p", [ClientIP]),
           ok;
         {trailing_garbage, DecodedMessage, _} ->
-          handle_decoded_tcp_message(DecodedMessage, Socket, Address);
+          handle_decoded_tcp_message(DecodedMessage, Socket, ClientIP, ServerIP);
         {_Error, _, _} ->
           ok;
         DecodedMessage ->
-          handle_decoded_tcp_message(DecodedMessage, Socket, Address)
+          handle_decoded_tcp_message(DecodedMessage, Socket, ClientIP, ServerIP)
       end
   end,
-  erldns_events:notify({end_tcp, [{host, Address}]}),
+  erldns_events:notify({end_tcp, [{host, ClientIP}]}),
   gen_tcp:close(Socket);
-handle_tcp_dns_query(Socket, BadPacket) ->
+handle_tcp_dns_query(_ServerIP, Socket, BadPacket) ->
   lager:error("Received bad packet ~p", BadPacket),
   gen_tcp:close(Socket).
 
-handle_decoded_tcp_message(DecodedMessage, Socket, Address) ->
-  erldns_events:notify({start_handle, tcp, [{host, Address}]}),
-  Response = erldns_handler:handle(DecodedMessage, {tcp, Address}),
-  erldns_events:notify({end_handle, tcp, [{host, Address}]}),
+handle_decoded_tcp_message(DecodedMessage, Socket, ClientIP, ServerIP) ->
+  erldns_events:notify({start_handle, tcp, [{host, ClientIP}]}),
+  Response = erldns_handler:handle(DecodedMessage, {tcp, ClientIP, ServerIP}),
+  erldns_events:notify({end_handle, tcp, [{host, ClientIP}]}),
   case erldns_encoder:encode_message(Response) of
     {false, EncodedMessage} ->
       send_tcp_message(Socket, EncodedMessage);
