@@ -89,6 +89,7 @@ create(authorities) ->
     end.
 
 %% @doc Insert into specified table. zone_cache calls this by {name, #zone{}}
+-spec insert(atom(), any()) -> any().
 insert(zones, #zone{} = Zone)->
     Write = fun() -> mnesia:write(zones, Zone, write) end,
     ok = mnesia:activity(transaction, Write),
@@ -105,27 +106,22 @@ insert(authorities, #authorities{} = Auth) ->
 %% @doc delete the entire table.
 -spec delete_table(atom()) -> true | {aborted, any()}.
 delete_table(Table) ->
-    {atomic, ok} = mnesia:delete_table(Table),
-    ok.
-
+    mnesia:delete_table(Table).
 %% @doc Delete a mnesia record, have to do things different for zones since we specified {record_name, zone}
 %% in the table creation.
--spec delete(Table :: atom(), Key :: term()) -> true | any().
+-spec delete(Table :: atom(), Key :: term()) -> ok | any().
 delete(zones, Key)->
-    ok = mnesia:dirty_delete({zones, Key}),
-    ok;
+    mnesia:dirty_delete({zones, Key});
 delete(Table, Key)->
    Delete = fun() -> mnesia:delete({Table, Key}) end,
-    ok = mnesia:activity(transaction, Delete),
-    ok.
+    mnesia:activity(transaction, Delete).
 
 %% @doc Should backup the tables in the schema.
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_table(atom()) -> ok | {error, Reason :: term()}.
 backup_table(_Table)->
     Backup = fun() -> mnesia:backup(mnesia:schema()) end,
-    ok = mnesia:activity(transaction, Backup),
-    ok.
+    mnesia:activity(transaction, Backup).
 
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_tables() -> ok | {error, Reason :: term()}.

@@ -67,22 +67,20 @@ create(handler_registry) ->
     end.
 
 %% @doc Insert value in ets table.
--spec insert(atom(), tuple()) -> ok.
+-spec insert(atom(), tuple()) -> true | {error, term()}.
 insert(Table, Value)->
-    true = ets:insert(Table, Value),
-    ok.
+    ets:insert(Table, Value).
+
 
 %% @doc Delete entire ets table.
--spec delete_table(atom()) -> true.
+-spec delete_table(atom()) -> true | {error, term()}.
 delete_table(Table)->
-    true = ets:delete(Table),
-    ok.
+    ets:delete(Table).
 
 %% @doc Delete an entry in the ets table.
--spec delete(atom(), term()) -> true.
+-spec delete(atom(), term()) -> true | {error, term()}.
 delete(Table, Key) ->
-    true = ets:delete(Table, Key),
-    ok.
+    ets:delete(Table, Key).
 
 %% @doc Backup a specific ets table.
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
@@ -112,6 +110,6 @@ foldl(Fun, Acc, Table) ->
     ets:foldl(Fun, Acc, Table).
 
 %% @doc Empty ets table.
--spec empty_table(atom()) -> ok.
+-spec empty_table(atom()) -> true.
 empty_table(Table) ->
     ets:delete_all_objects(Table).
