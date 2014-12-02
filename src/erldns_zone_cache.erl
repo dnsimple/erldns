@@ -151,15 +151,18 @@ get_delegations(Name) ->
 %% @doc Return the record set for the given dname.
 -spec get_records_by_name(dns:dname()) -> [dns:rr()].
 get_records_by_name(Name) ->
-  case find_zone_in_cache(Name) of
-    {ok, Zone} ->
-      case dict:find(normalize_name(Name), Zone#zone.records_by_name) of
-        {ok, RecordSet} -> RecordSet;
-        _ -> []
-      end;
-    _ ->
-      []
-  end.
+    case find_zone_in_cache(Name) of
+        {ok, Zone} ->
+%%             lager:info("~p-> found zone: ~p~n~n", [?MODULE, Zone]),
+            case dict:find(normalize_name(Name), Zone#zone.records_by_name) of
+                {ok, RecordSet} ->
+%%                     lager:info("~p-> Record Set: ~p", [?MODULE, RecordSet]),
+                    RecordSet;
+                _ -> []
+            end;
+        _ ->
+            []
+    end.
 
 %% @doc Check if the name is in a zone.
 -spec in_zone(binary()) -> boolean().
