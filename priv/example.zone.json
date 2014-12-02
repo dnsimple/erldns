@@ -41,6 +41,22 @@
                 }
             },
             {
+                "name": "_allow_notify.example.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "127.0.0.1"
+                }
+            },
+            {
+                "name": "_allow_axfr.example.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "127.0.0.1"
+                }
+            },
+            {
                 "name": "example.com",
                 "type": "MX",
                 "ttl": 3600,
