@@ -26,6 +26,14 @@
             },
             {
                 "name": "example.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "12.12.13.14"
+                }
+            },
+            {
+                "name": "example.com",
                 "type": "AAAA",
                 "ttl": 3600,
                 "data": {
