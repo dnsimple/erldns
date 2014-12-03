@@ -56,7 +56,12 @@ resolve(Message, _AuthorityRecords, Qname, ?DNS_TYPE_AXFR = _Qtype, {ClientIP, S
             Response = Message#dns_message{answers = [SOA] ++ Records0},
             Response;
         false ->
-            lager:warning("Client IP ~p not allowed for AXFR", [ClientIP]),
+            case lists:member(ClientIP, AllowedAXFR) of
+                false ->
+                    lager:warning("Client IP ~p not allowed for AXFR", [ClientIP]);
+                true ->
+                    lager:warning("Server IP ~p not allowed for NOTIFY", [ServerIP])
+            end,
             Message
     end;
 resolve(Message, AuthorityRecords, Qname, Qtype, {ClientIP, _ServerIP}) ->
