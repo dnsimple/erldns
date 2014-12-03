@@ -22,12 +22,13 @@
 -export([mnesia_API_test/1,
          json_API_test/1,
          server_children_test/1,
-         test_zone_modify/1]).
+         test_zone_modify/1,
+         query_tests/1]).
 
 -include("../include/erldns.hrl").
 -include("../deps/dns/include/dns.hrl").
 all() ->
-    [mnesia_API_test, json_API_test, server_children_test, test_zone_modify].
+    [mnesia_API_test, json_API_test, server_children_test, test_zone_modify, query_tests].
 
 init_per_suite(Config) ->
     application:start(erldns_app),
@@ -46,6 +47,8 @@ init_per_testcase(json_API_test, Config) ->
 init_per_testcase(server_children_test, Config) ->
     Config;
 init_per_testcase(test_zone_modify, Config) ->
+    Config;
+init_per_testcase(query_tests, Config) ->
     Config.
 
 mnesia_API_test(_Config) ->
@@ -159,3 +162,29 @@ test_zone_modify(_Config) ->
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}),
     ok = erldns_zone_cache:delete_record(<<"example.com">>,
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}).
+
+query_tests(_Config) ->
+    io:format("ERLDNS Should already be started from previous test~n"),
+    timer:sleep(1000),
+    io:format("You have to have the examples.zone.json file for this to work~n"),
+    {ok, _} = erldns_storage:load_zones("/opt/erl-dns/priv/example.zone.json"),
+    {ok, IFAddrs} = inet:getifaddrs(),
+    Config = lists:foldl(fun(IFList, Acc) ->
+        {_, List} = IFList,
+        [List | Acc]
+    end, [], IFAddrs),
+    AddressesWithPorts = lists:foldl(fun(Conf, Acc) ->
+        {addr, Addr} = lists:keyfind(addr, 1, Conf),
+        [{Addr, 8053} | Acc]
+    end, [], Config),
+    {ok, _} = inet_res:nnslookup("example.com", any, a, AddressesWithPorts, 10000),
+    {ok, _} = inet_res:nnslookup("example.com", any, aaaa, AddressesWithPorts, 10000),
+    {ok, _} = inet_res:nnslookup("example.com", any, srv, AddressesWithPorts, 10000),
+    {ok, _} = inet_res:nnslookup("example.com", any, cname, AddressesWithPorts, 10000),
+    {ok, _} = inet_res:nnslookup("example.com", any, ns, AddressesWithPorts, 10000),
+    {ok, _} = inet_res:nnslookup("example.com", any, mx, AddressesWithPorts, 10000),
+    {ok, _} = inet_res:nnslookup("example.com", any, spf, AddressesWithPorts, 10000),
+    {ok, _} = inet_res:nnslookup("example.com", any, txt, AddressesWithPorts, 10000),
+    {ok, _} = inet_res:nnslookup("example.com", any, soa, AddressesWithPorts, 10000),
+    {ok, _} = inet_res:nnslookup("example.com", any, naptr, AddressesWithPorts, 10000),
+    {ok, _} = inet_res:nnslookup("example.com", any, axfr, AddressesWithPorts, 10000).
