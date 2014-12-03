@@ -192,22 +192,22 @@ zone_names_and_versions() ->
 %% used to determine if the zone requires updating.
 %%
 %% This function will build the necessary Zone record before interting.
--spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok.
+-spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok | {error, Reason :: term()}.
 put_zone({Name, Sha, Records}) ->
   erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}).
 
 %% @doc Put a zone into the cache and wait for a response.
--spec put_zone(binary(), #zone{}) -> ok.
+-spec put_zone(binary(), #zone{}) -> ok | {error, Reason :: term()}.
 put_zone(Name, #zone{} = Zone) ->
   erldns_storage:insert(zones, {normalize_name(Name), Zone}).
 
 %% @doc Put a zone into the cache without waiting for a response.
--spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok.
+-spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok | {error, Reason :: term()}.
 put_zone_async({Name, Sha, Records}) ->
   erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}).
 
 %% @doc Put a zone into the cache without waiting for a response.
--spec put_zone_async(binary(), #zone{}) -> ok.
+-spec put_zone_async(binary(), #zone{}) -> ok | {error, Reason :: term()}.
 put_zone_async(Name, Zone) ->
   erldns_storage:insert(zones, {normalize_name(Name), Zone}).
 
