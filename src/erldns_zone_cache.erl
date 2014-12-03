@@ -45,7 +45,10 @@
          put_zone/2,
          put_zone_async/1,
          put_zone_async/2,
-         delete_zone/1
+         delete_zone/1,
+         add_record/2,
+         delete_record/2,
+         update_record/3
         ]).
 
 % Gen server hooks
@@ -213,8 +216,56 @@ put_zone_async(Name, Zone) ->
 delete_zone(Name) ->
   gen_server:cast(?SERVER, {delete, Name}).
 
+%% @doc Add a record to a particular zone.
+-spec add_record(binary(), #dns_rr{}) -> ok | {error, term()}.
+add_record(ZoneName, #dns_rr{} = Record) ->
+    {ok, Zone0} = get_zone_with_records(normalize_name(ZoneName)),
+    Records0 = Zone0#zone.records,
+    %% Ensure no exact duplicates are found
+    [true = Record =/= X || X <- Records0],
+    Records = [Record] ++ Records0,
+    %% Update serial number
+    Authorities0 = hd(Zone0#zone.authority),
+    SOA0 = Authorities0#dns_rr.data,
+    Serial = SOA0#dns_rrdata_soa.serial,
+    SOA = SOA0#dns_rrdata_soa{serial = Serial + 1},
+    Authorities = Authorities0#dns_rr{data = SOA},
+    Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities]),
+    %% Put zone back into cache.
+    put_zone(ZoneName, Zone).
 
+%% @doc Delete a record from a particular zone.
+-spec delete_record(binary(), #dns_rr{}) -> ok | {error, term()}.
+delete_record(ZoneName, #dns_rr{} = Record) ->
+    {ok, Zone0} = get_zone_with_records(normalize_name(ZoneName)),
+    Records0 = Zone0#zone.records,
+    Records = lists:delete(Record, Records0),
+    %% Update serial number
+    Authorities0 = hd(Zone0#zone.authority),
+    SOA0 = Authorities0#dns_rr.data,
+    Serial = SOA0#dns_rrdata_soa.serial,
+    SOA = SOA0#dns_rrdata_soa{serial = Serial + 1},
+    Authorities = Authorities0#dns_rr{data = SOA},
+    Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities]),
+    %% Put zone back into cache.
+    put_zone(ZoneName, Zone).
 
+%% @doc Update a record in a zone.
+-spec update_record(binary(), #dns_rr{}, #dns_rr{}) -> ok | {error, term()}.
+update_record(ZoneName, #dns_rr{} = OldRecord, #dns_rr{} = UpdatedRecord) ->
+    {ok, Zone0} = get_zone_with_records(normalize_name(ZoneName)),
+    Records0 = Zone0#zone.records,
+    Records1 = lists:delete(OldRecord, Records0),
+    Records = [UpdatedRecord] ++ Records1,
+    %% Update serial number
+    Authorities0 = hd(Zone0#zone.authority),
+    SOA0 = Authorities0#dns_rr.data,
+    Serial = SOA0#dns_rrdata_soa.serial,
+    SOA = SOA0#dns_rrdata_soa{serial = Serial + 1},
+    Authorities = Authorities0#dns_rr{data = SOA},
+    Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities]),
+    %% Put zone back into cache.
+    put_zone(ZoneName, Zone).
 % ----------------------------------------------------------------------------------------------------
 % Gen server init
 
