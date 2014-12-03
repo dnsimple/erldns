@@ -66,7 +66,7 @@ handle_cast(_Msg, State) ->
 %% @doc Backups the tables in the given period
 handle_info(timeout, State) ->
     Before = now(),
-    ok = backup_tables(),
+    {error, not_implemented} = backup_tables(),
     TimeSpentMs = timer:now_diff(now(), Before) div 1000,
     {noreply, State, max((?POLL_WAIT_HOURS * 60000) - TimeSpentMs, 0)};
 handle_info(_Info, State) ->
@@ -85,25 +85,25 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 
 %% @doc Call to a module's create. Creates a new table.
--spec create(atom()) -> ok.
+-spec create(atom()) -> ok | {error, Reason :: term()}.
 create(Table) ->
     Module = mod(Table),
     Module:create(Table).
 
 %% @doc Call to a module's insert. Inserts a value into the table.
--spec insert(atom(), tuple()) -> ok.
+-spec insert(atom(), tuple()) -> ok | {error, Reason :: term()}.
 insert(Table, Value)->
     Module = mod(Table),
     Module:insert(Table, Value).
 
 %% @doc Call to a module's delete_table. Deletes the entire table.
--spec delete_table(atom()) -> true.
+-spec delete_table(atom()) -> ok | {error, Reason :: term()}.
 delete_table(Table)->
     Module = mod(Table),
     Module:delete_table(Table).
 
 %% @doc Call to a module's delete. Deletes a key value from a table.
--spec delete(atom(), term()) -> true.
+-spec delete(atom(), term()) -> ok | {error, Reason :: term()}.
 delete(Table, Key) ->
     Module = mod(Table),
     Module:delete(Table, Key).
@@ -141,7 +141,7 @@ foldl(Fun, Acc, Table) ->
     Module:foldl(Fun, Acc, Table).
 
 %% @doc This function emptys the specified table of all values.
--spec empty_table(atom()) -> ok.
+-spec empty_table(atom()) -> ok | {error, Reason :: term()}.
 empty_table(Table) ->
     Module = mod(Table),
     Module:empty_table(Table).

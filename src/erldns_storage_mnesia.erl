@@ -36,8 +36,7 @@ create(schema) ->
     ok = ensure_mnesia_started(),
     case erldns_config:storage_dir() of
         undefined ->
-            lager:error("You need to add a directory for mnesia in erldns.config"),
-            exit(-1);
+            lager:error("You need to add a directory for mnesia in erldns.config");
         Dir ->
             filelib:ensure_dir(Dir)
     end,
@@ -73,7 +72,9 @@ create(zones) ->
                 [node()]),
             ok;
         {atomic, ok} ->
-            ok
+            ok;
+        Error ->
+            {error, Error}
     end;
 create(authorities) ->
     ok = ensure_mnesia_started(),
@@ -85,33 +86,72 @@ create(authorities) ->
                 [node()]),
             ok;
         {atomic, ok} ->
-            ok
+            ok;
+        Error ->
+            {error, Error}
     end.
 
 %% @doc Insert into specified table. zone_cache calls this by {name, #zone{}}
 -spec insert(atom(), any()) -> any().
 insert(zones, #zone{} = Zone)->
     Write = fun() -> mnesia:write(zones, Zone, write) end,
-    mnesia:activity(transaction, Write);
+    case mnesia:activity(transaction, Write) of
+        ok ->
+            ok;
+        Error ->
+            {error, Error}
+    end;
 insert(zones, {_N, #zone{} = Zone})->
     Write = fun() -> mnesia:write(zones, Zone, write) end,
-    mnesia:activity(transaction, Write);
+    case mnesia:activity(transaction, Write) of
+        ok ->
+            ok;
+        Error ->
+            {error, Error}
+    end;
 insert(authorities, #authorities{} = Auth) ->
     Write = fun() -> mnesia:write(authorities, Auth, write) end,
-    mnesia:activity(transaction, Write).
+    case mnesia:activity(transaction, Write) of
+        ok ->
+            ok;
+        Error ->
+            {error, Error}
+    end.
 
 %% @doc delete the entire table.
 -spec delete_table(atom()) -> true | {aborted, any()}.
 delete_table(Table) ->
-    mnesia:delete_table(Table).
+    case mnesia:delete_table(Table) of
+        {atomic, ok} ->
+            ok;
+        {aborted, Reason} ->
+            {error, Reason}
+    end.
+
 %% @doc Delete a mnesia record, have to do things different for zones since we specified {record_name, zone}
 %% in the table creation.
 -spec delete(Table :: atom(), Key :: term()) -> ok | any().
 delete(zones, Key)->
-    mnesia:dirty_delete({zones, Key});
+    case mnesia:dirty_delete({zones, Key}) of
+        ok ->
+            ok;
+        Error ->
+            {error, Error}
+    end;
 delete(Table, Key)->
-   Delete = fun() -> mnesia:delete({Table, Key}) end,
-    mnesia:activity(transaction, Delete).
+   case mnesia:is_transaction() of
+       true ->
+           Delete = fun() -> mnesia:delete({Table, Key}) end,
+           mnesia:activity(transaction, Delete);
+       false ->
+            case mnesia:dirty_delete({Table, Key}) of
+            ok ->
+                ok;
+            Error ->
+                {error, Error}
+            end
+    end.
+
 
 %% @doc Should backup the tables in the schema.
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
@@ -123,7 +163,7 @@ backup_table(_Table)->
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_tables() -> ok | {error, Reason :: term()}.
 backup_tables()->
-    ok.
+    {error, not_implemented}.
 
 %% @doc Select based on key value.
 -spec select(Table :: atom(), Key :: term()) -> tuple().
@@ -156,8 +196,12 @@ foldl(Iterator, _Acc, Table) ->
 %% @doc Clear all objects from given table in mnesia DB.
 -spec empty_table(atom()) -> ok | {aborted, term()}.
 empty_table(Table) ->
-    {atomic, ok} = mnesia:clear_table(Table),
-    ok.
+    case mnesia:clear_table(Table) of
+        {atomic, ok} ->
+            ok;
+        {aborted, Reason} ->
+            {error, Reason}
+    end.
 
 %% Private
 %% @doc Checks if mnesia is started, if not if starts mnesia.
