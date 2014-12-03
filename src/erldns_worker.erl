@@ -46,8 +46,8 @@ handle_call({tcp_query, ServerIP, Socket, Bin}, _From, State) ->
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
-handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
-  handle_udp_dns_query(Socket, Host, Port, Bin),
+handle_cast({udp_query, Socket, Host, Port, Bin, ServerIP}, State) ->
+  handle_udp_dns_query(Socket, Host, Port, Bin, ServerIP),
   {noreply, State};
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -106,30 +106,29 @@ send_tcp_message(Socket, EncodedMessage) ->
 
 
 %% @doc Handle DNS query that comes in over UDP
--spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary()) -> ok.
-handle_udp_dns_query(Socket, Host, Port, Bin) ->
+-spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary(), inet:ip_address()) -> ok.
+handle_udp_dns_query(Socket, Host, Port, Bin, ServerIP) ->
   %lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
   erldns_events:notify({start_udp, [{host, Host}]}),
   case dns:decode_message(Bin) of
     {trailing_garbage, DecodedMessage, _} ->
-      handle_decoded_udp_message(DecodedMessage, Socket, Host, Port);
+      handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, ServerIP);
     {_Error, _, _} ->
       ok;
     DecodedMessage ->
-      handle_decoded_udp_message(DecodedMessage, Socket, Host, Port)
+      handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, ServerIP)
   end,
   erldns_events:notify({end_udp, [{host, Host}]}),
   ok.
 
--spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number()) ->
+-spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number(), inet:ip_address()) ->
   ok | {error, not_owner | inet:posix()}.
-handle_decoded_udp_message(DecodedMessage, Socket, Host, Port) ->
-  Response = erldns_handler:handle(DecodedMessage, {udp, Host}),
+handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, ServerIP) ->
+  Response = erldns_handler:handle(DecodedMessage, {udp, Host, ServerIP}),
   DestHost = case ?REDIRECT_TO_LOOPBACK of
                true -> ?LOOPBACK_DEST;
                _ -> Host
              end,
-
   case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
     {false, EncodedMessage} ->
       %lager:debug("Sending encoded response to ~p", [DestHost]),

@@ -33,7 +33,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {port, socket, workers}).
+-record(state, {port, server_ip, socket, workers}).
 
 % Public API
 
@@ -55,7 +55,7 @@ is_running() ->
 %% gen_server hooks
 init([InetFamily, Addr, Port]) ->
   {ok, Socket} = start(Port, InetFamily, Addr),
-  {ok, #state{port = Port, socket = Socket, workers = make_workers(queue:new())}}.
+  {ok, #state{port = Port, server_ip = Addr, socket = Socket, workers = make_workers(queue:new())}}.
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 handle_cast(_Message, State) ->
@@ -93,7 +93,7 @@ start(Port, InetFamily, Addr) ->
 handle_request(Socket, Host, Port, Bin, State) ->
   case queue:out(State#state.workers) of
     {{value, Worker}, Queue} ->
-      gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin}),
+      gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin, State#state.server_ip}),
       {noreply, State#state{workers = queue:in(Worker, Queue)}};
     {empty, _Queue} ->
       folsom_metrics:notify({packet_dropped_empty_queue_counter, {inc, 1}}),
