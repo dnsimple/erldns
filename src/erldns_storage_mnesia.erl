@@ -92,16 +92,13 @@ create(authorities) ->
 -spec insert(atom(), any()) -> any().
 insert(zones, #zone{} = Zone)->
     Write = fun() -> mnesia:write(zones, Zone, write) end,
-    ok = mnesia:activity(transaction, Write),
-    ok;
+    mnesia:activity(transaction, Write);
 insert(zones, {_N, #zone{} = Zone})->
     Write = fun() -> mnesia:write(zones, Zone, write) end,
-    ok = mnesia:activity(transaction, Write),
-    ok;
+    mnesia:activity(transaction, Write);
 insert(authorities, #authorities{} = Auth) ->
     Write = fun() -> mnesia:write(authorities, Auth, write) end,
-    ok = mnesia:activity(transaction, Write),
-    ok.
+    mnesia:activity(transaction, Write).
 
 %% @doc delete the entire table.
 -spec delete_table(atom()) -> true | {aborted, any()}.
