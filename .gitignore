@@ -12,3 +12,5 @@ zones.json
 .eunit/
 test_logs/
 db/
+Mnesia.nonode@nohost/
+run
