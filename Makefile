@@ -7,3 +7,6 @@ build:
 clean:
 	rm -Rf deps
 	./rebar clean
+
+test:
+	./rebar eunit skip_deps=true

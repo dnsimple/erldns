@@ -34,11 +34,24 @@ start_link() ->
   supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
 init(_Args) ->
-  ServerProcs = [
-                 {udp_inet, {erldns_udp_server, start_link, [udp_inet, inet]}, permanent, 5000, worker, [erldns_udp_server]},
-                 {udp_inet6, {erldns_udp_server, start_link, [udp_inet6, inet6]}, permanent, 5000, worker, [erldns_udp_server]},
-                 {tcp_inet, {erldns_tcp_server, start_link, [tcp_inet, inet]}, permanent, 5000, worker, [erldns_tcp_server]},
-                 {tcp_inet6, {erldns_tcp_server, start_link, [tcp_inet6, inet6]}, permanent, 5000, worker, [erldns_tcp_server]}
-                ],
+  ServerProcs = case erldns_config:get_servers() of
+                  [] ->
+                    [
+                     {udp_inet, {erldns_udp_server, start_link, [udp_inet, inet]}, permanent, 5000, worker, [erldns_udp_server]},
+                     {udp_inet6, {erldns_udp_server, start_link, [udp_inet6, inet6]}, permanent, 5000, worker, [erldns_udp_server]},
+                     {tcp_inet, {erldns_tcp_server, start_link, [tcp_inet, inet]}, permanent, 5000, worker, [erldns_tcp_server]},
+                     {tcp_inet6, {erldns_tcp_server, start_link, [tcp_inet6, inet6]}, permanent, 5000, worker, [erldns_tcp_server]}
+                    ];
+
+                  Servers ->
+                    lists:flatten(lists:map(fun(_Server = [{name, Name}, {address, Address}, {port, Port}, {family, Family}]) ->
+                                  UDPName = list_to_atom(lists:concat([udp_, Name])),
+                                  TCPName = list_to_atom(lists:concat([tcp_, Name])),
+                                  [
+                                   {UDPName, {erldns_udp_server, start_link, [UDPName, Family, Address, Port]}, permanent, 5000, worker, [UDPName]},
+                                   {TCPName, {erldns_tcp_server, start_link, [TCPName, Family, Address, Port]}, permanent, 5000, worker, [TCPName]}
+                                  ]
+                              end, Servers))
+                end,
 
   {ok, {{one_for_one, 20, 10}, ServerProcs}}.

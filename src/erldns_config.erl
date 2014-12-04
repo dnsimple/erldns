@@ -16,6 +16,7 @@
 -module(erldns_config).
 
 -export([
+         get_servers/0,
          get_address/1,
          get_port/0,
          get_num_workers/0
@@ -39,12 +40,54 @@
          websocket_url/0
         ]).
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -define(DEFAULT_IPV4_ADDRESS, {127,0,0,1}).
 -define(DEFAULT_IPV6_ADDRESS, {0,0,0,0,0,0,0,1}).
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_NUM_WORKERS, 10).
 -define(DEFAULT_ZONE_SERVER_PORT, 443).
 -define(DEFAULT_WEBSOCKET_PATH, "/ws").
+
+get_servers() ->
+  case application:get_env(erldns, servers) of
+    {ok, Servers} ->
+      %% Note: This is currently brittle, since it expects the order of the tuples in the list
+      %% to match exactly. Eventually switch it to a proplist.
+      lists:map(fun([{name, Name}, {address, Address}, {port, Port}, {family, Family}]) ->
+                    [{name, Name}, {address, parse_address(Address)}, {port, Port}, {family, Family}]
+                end, Servers);
+    _ -> []
+  end.
+
+-ifdef(TEST).
+get_servers_undefined_test() ->
+  ?assertEqual([], get_servers()).
+
+get_servers_empty_list_test() ->
+  application:set_env(erldns, servers, []),
+  ?assertEqual([], get_servers()).
+
+
+get_servers_single_server_test() ->
+  application:set_env(erldns, servers, [[{name, example}, {address, "127.0.0.1"}, {port, 8053}, {family, inet}]]),
+  ?assertEqual([
+                [{name, example}, {address, {127,0,0,1}}, {port, 8053}, {family, inet}]
+               ], get_servers()).
+
+get_servers_multiple_servers_test() ->
+  application:set_env(erldns, servers, [
+                                        [{name, example_inet}, {address, "127.0.0.1"}, {port, 8053}, {family, inet}],
+                                        [{name, example_inet6}, {address, "::1"}, {port, 8053}, {family, inet6}]
+                                       ]),
+  ?assertEqual([
+                [{name, example_inet}, {address, {127,0,0,1}}, {port, 8053}, {family, inet}],
+                [{name, example_inet6}, {address, {0,0,0,0,0,0,0,1}}, {port, 8053}, {family, inet6}]
+               ], get_servers()).
+
+-endif.
 
 %% @doc Get the IP address (either IPv4 or IPv6) that the DNS server
 %% should listen on.
