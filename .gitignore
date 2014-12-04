@@ -14,3 +14,4 @@ test_logs/
 db/
 Mnesia.nonode@nohost/
 run
+ebin/erldns.app
