@@ -232,7 +232,8 @@ add_record(ZoneName, #dns_rr{} = Record) ->
     Authorities = Authorities0#dns_rr{data = SOA},
     Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities]),
     %% Put zone back into cache.
-    put_zone(ZoneName, Zone).
+    put_zone(ZoneName, Zone),
+    send_notify(ZoneName, Zone).
 
 %% @doc Delete a record from a particular zone.
 -spec delete_record(binary(), #dns_rr{}) -> ok | {error, term()}.
@@ -248,7 +249,8 @@ delete_record(ZoneName, #dns_rr{} = Record) ->
     Authorities = Authorities0#dns_rr{data = SOA},
     Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities]),
     %% Put zone back into cache.
-    put_zone(ZoneName, Zone).
+    put_zone(ZoneName, Zone),
+    send_notify(ZoneName, Zone).
 
 %% @doc Update a record in a zone.
 -spec update_record(binary(), #dns_rr{}, #dns_rr{}) -> ok | {error, term()}.
@@ -265,7 +267,8 @@ update_record(ZoneName, #dns_rr{} = OldRecord, #dns_rr{} = UpdatedRecord) ->
     Authorities = Authorities0#dns_rr{data = SOA},
     Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities]),
     %% Put zone back into cache.
-    put_zone(ZoneName, Zone).
+    put_zone(ZoneName, Zone),
+    send_notify(ZoneName, Zone).
 % ----------------------------------------------------------------------------------------------------
 % Gen server init
 
@@ -361,3 +364,76 @@ build_named_index([R|Rest], Idx) ->
 
 normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
 normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
+
+%% The primary master name server determines which servers are the slaves for the zone by looking at
+%% the list of NS records in the zone and taking out the record that points to the name server listed
+%% in the MNAME field of the zone's SOA record as well as the domain name of the local host.
+
+%% RFC 1996
+%% NOTIFY SET
+%% set of servers to be notified of changes to some
+%% zone.  Default is all servers named in the NS RRset,
+%% except for any server also named in the SOA MNAME.
+%% Some implementations will permit the name server
+%% administrator to override this set or add elements to
+%% it (such as, for example, stealth servers).
+send_notify(ZoneName, Zone) ->
+    Records = Zone#zone.records,
+    erldns_log:info("Records ~p", [Records]),
+    NotifySet = get_notify_set(Records),
+    erldns_log:info("Notify set: ~p", [NotifySet]),
+    %%Find the A record for this name server to get the ip(s)
+    NotifySetIPs = get_ips_for_notify_set(Records, NotifySet),
+    erldns_log:info("Notify IPs: ~p", [NotifySetIPs]),
+    %% Now send the notify message out to the set of IPs
+    %% TODO Finish this
+    %% QUESTIONS; HOW DO I GET MY PORT AND BIND IP
+    lists:foldl(fun(IP, Acc) ->
+        [gen_server:cast(erldns_manager, {send_notify, {{127, 0, 0, 1}, IP, 8053, ZoneName, ?DNS_CLASS_IN}}) | Acc]
+        end, [], NotifySetIPs).
+
+get_notify_set(Records) ->
+    get_notify_set(Records, [], []).
+
+get_notify_set([], SOA, NameServers) ->
+    %% Remove mnames, and duplicates from final result
+    exclude_mname_duplicates(SOA, NameServers);
+get_notify_set([Head | Tail], SOA, NameServers) ->
+    case Head#dns_rr.data of
+        #dns_rrdata_soa{}  = Authority ->
+            get_notify_set(Tail, Authority, NameServers);
+        #dns_rrdata_ns{} = NS ->
+            get_notify_set(Tail, SOA, [NS | NameServers]);
+        _ ->
+            get_notify_set(Tail, SOA, NameServers)
+    end.
+
+exclude_mname_duplicates(SOA, NameServers) ->
+    MName = SOA#dns_rrdata_soa.mname,
+    lists:foldl(fun(NameServer, Acc0) ->
+        case NameServer#dns_rrdata_ns.dname =:= MName of
+            true ->
+                %% Found a NS record that is also a mname of an SOA, exclude it
+                Acc0;
+            false ->
+                [NameServer | Acc0]
+        end
+    end, [], NameServers).
+
+get_ips_for_notify_set(Records, NotifySet) ->
+    get_ips_for_notify_set(Records, NotifySet, []).
+
+get_ips_for_notify_set(_Records, [], IPs) ->
+    IPs;
+get_ips_for_notify_set(Records, [Head | Tail], IPs) ->
+    DName = Head#dns_rrdata_ns.dname,
+    ARecord0 = lists:keyfind(DName, 2, Records),
+    ARecord = ARecord0#dns_rr.data,
+    erldns_log:info("A record: ~p", [ARecord]),
+    case ARecord of
+        #dns_rrdata_a{} ->
+            get_ips_for_notify_set(Records, Tail, [ARecord#dns_rrdata_a.ip | IPs]);
+        #dns_rrdata_aaaa{} ->
+            get_ips_for_notify_set(Records, Tail, [ARecord#dns_rrdata_aaaa.ip | IPs])
+    end.
+

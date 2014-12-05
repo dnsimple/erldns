@@ -55,50 +55,9 @@ handle_cast({send_notify, {BindIP, DestinationIP, Port, ZoneName, ZoneClass} = _
     send_notify(BindIP, DestinationIP, Port, ZoneName, ZoneClass),
     {noreply, State};
 handle_cast({handle_notify, {Message, ClientIP, ServerIP}}, State) ->
-    %% Get the zone in your cache
-    ZoneName0 = hd(Message#dns_message.questions),
-    ZoneName = normalize_name(ZoneName0#dns_query.name),
-    {ok, Zone} = erldns_zone_cache:get_zone_with_records(ZoneName),
-    {SOA, AllowedNotify} = get_soa_allow_notify(ZoneName, Zone#zone.records),
-    %% Check if the sender is authorative to send a notify request before doing anything
-    case lists:keyfind(ClientIP, 1, AllowedNotify) of
-        false ->
-            exit(normal);
-        _ ->
-            ok
-    end,
-    %% Request SOA from master
-    Request = #dns_message{id = dns:random_id(),
-                           oc = ?DNS_OPCODE_QUERY,
-                           rd = true,
-                           qc = 1,
-                           questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_ANY, type = ?DNS_TYPE_SOA}]},
-    {ok, Recv} = case erldns_encoder:encode_message(Request) of
-                     {false, EncodedMessage} ->
-                         send_tcp_message(ServerIP, hd(AllowedNotify), EncodedMessage);
-                     {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-                         send_tcp_message(ServerIP, hd(AllowedNotify), EncodedMessage);
-                     {false, EncodedMessage, _TsigMac} ->
-                         send_tcp_message(ServerIP, hd(AllowedNotify),EncodedMessage);
-                     {true, EncodedMessage, _TsigMac, _Message} ->
-                         send_tcp_message(ServerIP, hd(AllowedNotify), EncodedMessage)
-                     end,
-    erldns_log:info("Recieved SOA from master: ~p", [dns:decode_message(Recv)]),
-    Authority = dns:decode_message(Recv),
-    %% Check the serial and send axfr request if you are the authority for it
-    StoredSerial = SOA#dns_rr.data#dns_rrdata_soa.serial,
-    MasterSerial0 = hd(Authority#dns_message.answers),
-    MasterSerial = MasterSerial0#dns_rr.data#dns_rrdata_soa.serial,
-    case StoredSerial =/= MasterSerial of
-        true ->
-            send_axfr();
-        false ->
-            lager:info("Dont need to: ~p == ~p", [StoredSerial, MasterSerial]),
-            ok
-    end,
+    handle_notify(Message, ClientIP, ServerIP),
     {noreply, State};
 handle_cast(_Request, State) ->
-%%     erldns_log:info("Some other message: ~p", [_Request]),
     {noreply, State}.
 
 handle_info(_Info, State) ->
@@ -135,10 +94,79 @@ send_notify(BindIP, DestinationIP, Port, ZoneName, ZoneClass) ->
     erldns_log:info("Recived NOTIFY ack from slave ~p", [dns:decode_message(_Recv)]),
     exit(normal).
 
-send_axfr() ->
-    lager:info("Sending an axfr request!"),
-    ok.
+handle_notify(Message, ClientIP, ServerIP) ->
+    %% Get the zone in your cache
+    ZoneName0 = hd(Message#dns_message.questions),
+    ZoneName = normalize_name(ZoneName0#dns_query.name),
+    {ok, Zone} = erldns_zone_cache:get_zone_with_records(ZoneName),
+    {SOA, AllowedNotify} = get_soa_allow_notify(ZoneName, Zone#zone.records),
+    %% Check if the sender is authorative to send a notify request before doing anything
+    case lists:keyfind(ClientIP, 1, AllowedNotify) of
+        false ->
+            exit(normal);
+        _ ->
+            ok
+    end,
+    %% Request SOA from master
+    Request = #dns_message{id = dns:random_id(),
+        oc = ?DNS_OPCODE_QUERY,
+        rd = true,
+        qc = 1,
+        questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_ANY, type = ?DNS_TYPE_SOA}]},
+    {ok, Recv} = case erldns_encoder:encode_message(Request) of
+                     {false, EncodedMessage} ->
+                         send_tcp_message(ServerIP, hd(AllowedNotify), EncodedMessage);
+                     {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
+                         send_tcp_message(ServerIP, hd(AllowedNotify), EncodedMessage);
+                     {false, EncodedMessage, _TsigMac} ->
+                         send_tcp_message(ServerIP, hd(AllowedNotify),EncodedMessage);
+                     {true, EncodedMessage, _TsigMac, _Message} ->
+                         send_tcp_message(ServerIP, hd(AllowedNotify), EncodedMessage)
+                 end,
+    erldns_log:info("Recieved SOA from master: ~p", [dns:decode_message(Recv)]),
+    Authority = dns:decode_message(Recv),
+    %% Check the serial and send axfr request if you are the authority for it
+    StoredSerial = SOA#dns_rr.data#dns_rrdata_soa.serial,
+    MasterSerial0 = hd(Authority#dns_message.answers),
+    MasterSerial = MasterSerial0#dns_rr.data#dns_rrdata_soa.serial,
+    case StoredSerial =/= MasterSerial of
+        true ->
+            %% TODO dont hard code port
+            send_axfr(ZoneName, ServerIP, ClientIP, 8053);
+        false ->
+            lager:info("Dont need to: ~p == ~p", [StoredSerial, MasterSerial]),
+            ok
+    end,
+    exit(normal).
 
+send_axfr(ZoneName, BindIP, DestinationIP, Port) ->
+    lager:info("Sending an axfr request!"),
+%%     {dns_message, 27085, false,0, false, false, true, false, true, false,0, 1,0,0,1, [{dns_query, <<"example.com">>, 1,6}], [],[], [{dns_optrr, 4096,0, 0, false, []}]}
+    Packet =  #dns_message{id = dns:random_id(),
+                            oc = ?DNS_OPCODE_QUERY,
+                            rd = true,
+                            ad = true,
+                            rc = ?DNS_RCODE_NOERROR,
+                            aa = true,
+                            qc = 1,
+                            adc = 1,
+                            questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_IN, type = ?DNS_TYPE_AXFR}]},
+    {ok, _Recv} = case erldns_encoder:encode_message(Packet) of
+                      {false, EncodedMessage} ->
+                          send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage);
+                      {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
+                          send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage);
+                      {false, EncodedMessage, _TsigMac} ->
+                          send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage);
+                      {true, EncodedMessage, _TsigMac, _Message} ->
+                          send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage)
+                  end,
+    erldns_log:info("Recived NOTIFY ack from slave ~p", [dns:decode_message(_Recv)]),
+    exit(normal).
+
+%%%===================================================================
+%%% Utility functions
+%%%===================================================================
 %% RFC 1996
 %% 3.5. If TCP is used, both master and slave must continue to offer
 %% name service during the transaction, even when the TCP transaction is

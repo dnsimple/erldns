@@ -75,6 +75,7 @@ handle_tcp_dns_query(ServerIP, Socket, <<_Len:16, Bin/binary>>) ->
         {_Error, _, _} ->
           ok;
         DecodedMessage ->
+          erldns_log:info("Decoded Message: ~p", [DecodedMessage]),
           handle_decoded_tcp_message(DecodedMessage, Socket, ClientIP, ServerIP)
       end
   end,
