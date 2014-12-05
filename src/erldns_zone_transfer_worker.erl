@@ -44,7 +44,9 @@ start_link(Operation, Args) ->
 %%% gen_server callbacks
 %%%===================================================================
 init([Operation, Args]) ->
-    gen_server:cast(self(), {Operation, Args}),
+    Pid = self(),
+%%     lager:info("Passing the info along........... ~p ~p sending to pid: ~p", [Operation, Args, Pid]),
+    gen_server:cast(Pid, {Operation, Args}),
     {ok, #state{}}.
 
 handle_call(_Request, _From, State) ->
@@ -53,7 +55,45 @@ handle_call(_Request, _From, State) ->
 handle_cast({send_notify, {BindIP, DestinationIP, Port, ZoneName, ZoneClass} = _Args}, State) ->
     send_notify(BindIP, DestinationIP, Port, ZoneName, ZoneClass),
     {noreply, State};
+handle_cast({handle_notify, {Message, {ClientIP, _Port}, ServerIP}}, State) ->
+    lager:info("Handling NOTIFY -> {~p, {~p, ~p}, ~p}", [Message, ClientIP, _Port, ServerIP]),
+    %% Get the zone in your cache
+    ZoneName0 = hd(Message#dns_message.questions),
+    ZoneName = normalize_name(ZoneName0#dns_query.name),
+    {ok, Zone} = erldns_zone_cache:get_zone_with_records(ZoneName),
+    {_SOA, AllowedNotify} = get_soa_allow_notify(Zone#zone.records),
+    %% Check if the sender is authorative to send a notify request before doing anything
+    case lists:member(ClientIP, AllowedNotify) of
+        true ->
+            ok;
+        false ->
+            exit(normal)
+    end,
+    %% Request SOA from master
+%%     {dns_message,2,false,0,false,false,true,false,false,false,0,1,0,0,0,[{dns_query,<<"example.com">>,255,6}],[],[],[]}
+    Request = #dns_message{id = dns:random_id(),
+                           oc = ?DNS_OPCODE_QUERY,
+                           rd = true,
+                           qc = 1,
+                           questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_ANY, type = ?DNS_TYPE_SOA}]},
+%%     {ok, Socket} = gen_tcp:connect(ClientIP, 8053, [binary, {active, once}, {ip, ServerIP}]),
+    {ok, Recv} = case erldns_encoder:encode_message(Request) of
+                     {false, EncodedMessage} ->
+                         send_tcp_message(ServerIP, ClientIP, 8053, EncodedMessage);
+                     {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
+                         send_tcp_message(ServerIP, ClientIP, 8053, EncodedMessage);
+                     {false, EncodedMessage, _TsigMac} ->
+                         send_tcp_message(ServerIP, ClientIP, 8053, EncodedMessage);
+                     {true, EncodedMessage, _TsigMac, _Message} ->
+                         send_tcp_message(ServerIP, ClientIP, 8053, EncodedMessage)
+                     end,
+    Authority = dns:decode_message(Recv),
+    lager:info("Here is my decoded request! ~p", [Authority]),
+    %% Check the serial and send axfr request if you are the authority for it
+%%     Serial = SOA#dns_rrdata_soa.serial,
+    {noreply, State};
 handle_cast(_Request, State) ->
+    lager:info("Some other message: ~p", [_Request]),
     {noreply, State}.
 
 handle_info(_Info, State) ->
@@ -78,7 +118,7 @@ send_notify(BindIP, DestinationIP, Port, ZoneName, ZoneClass) ->
         qc = 1,
         questions = [#dns_query{name = ZoneName, class = ZoneClass, type = ?DNS_TYPE_SOA}]},
     lager:info("Packet ~p", [Packet]),
-    case erldns_encoder:encode_message(Packet) of
+    {ok, Recv} = case erldns_encoder:encode_message(Packet, [{max_size, 65535}]) of
         {false, EncodedMessage} ->
             send_tcp_message(BindIP, DestinationIP, Port, EncodedMessage);
         {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
@@ -88,6 +128,7 @@ send_notify(BindIP, DestinationIP, Port, ZoneName, ZoneClass) ->
         {true, EncodedMessage, _TsigMac, _Message} ->
             send_tcp_message(BindIP, DestinationIP, Port, EncodedMessage)
     end,
+    lager:info("Got it: ~p", [dns:decode_message(Recv)]),
     exit(normal).
 
 %% send_axfr() ->
@@ -108,7 +149,51 @@ send_tcp_message(BindIP, DestinationIP, Port, EncodedMessage) ->
 send_recv(BindIP, DestinationIP, Port, TcpEncodedMessage) ->
     {ok, Socket} = gen_tcp:connect(DestinationIP, Port, [binary, {active, false}, {ip, BindIP}]),
     ok = gen_tcp:send(Socket, TcpEncodedMessage),
-    {ok, Packet} =  gen_tcp:recv(Socket, 0, 5000),
-    lager:info("Got it: ~p", [dns:decode_message(Packet)]),
-    gen_tcp:close(Socket).
+%%     do_recv(Socket, <<>>).
+    Res = gen_tcp:recv(Socket, 0),
+    lager:info("Binary: ~p", [Res]),
+    gen_tcp:close(Socket),
+    Res.
 
+
+%% do_recv(Socket, Acc) ->
+%%     case gen_tcp:recv(Socket, 0, 5000) of
+%%         {ok, Bin} ->
+%%             do_recv(Socket, <<Acc/binary, Bin/binary>>);
+%%         {error, closed} ->
+%%             {ok, Acc};
+%%         {error, _} = Error ->
+%%             Error
+%%     end.
+
+
+normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
+normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
+
+-spec get_soa_allow_notify([#dns_rr{}]) -> {#dns_rr{}, [inet:ip_address()]}.
+get_soa_allow_notify(DNSRRList) ->
+    get_soa_allow_notify(DNSRRList, [], []).
+
+get_soa_allow_notify([], SOA, AllowedNOTIFY) ->
+    {SOA, AllowedNOTIFY};
+get_soa_allow_notify([#dns_rr{data = Data} = Head | Tail], SOA, AllowedNOTIFY) ->
+    case Data of
+        #dns_rrdata_soa{} ->
+            get_soa_allow_notify(Tail, Head, AllowedNOTIFY);
+        #dns_rrdata_a{} ->
+            case Head#dns_rr.name of
+                <<"_allow_notify", _/binary>> ->
+                    get_soa_allow_notify(Tail, SOA, [Data#dns_rrdata_a.ip | AllowedNOTIFY]);
+                _ ->
+                    get_soa_allow_notify(Tail, SOA, AllowedNOTIFY)
+            end;
+        #dns_rrdata_aaaa{} ->
+            case Head#dns_rr.name of
+                <<"_allow_notify", _/binary>> ->
+                    get_soa_allow_notify(Tail, SOA, [Data#dns_rrdata_a.ip | AllowedNOTIFY]);
+                _ ->
+                    get_soa_allow_notify(Tail, SOA, AllowedNOTIFY)
+            end;
+        _ ->
+            get_soa_allow_notify(Tail, SOA, AllowedNOTIFY)
+    end.

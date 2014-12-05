@@ -83,8 +83,8 @@ code_change(_PreviousVersion, State, _Extra) ->
 handle({trailing_garbage, Message, _}, Context) ->
   handle(Message, Context);
 %% Handle the message, checking to see if it is throttled.
-handle(Message, _Context = {_Data, ClientIP, ServerIP}) when is_record(Message, dns_message) ->
-  handle(Message, ClientIP, ServerIP, erldns_query_throttle:throttle(Message, {_Data, ClientIP}));
+handle(Message, _Context = {_Data, {ClientIP, Port}, ServerIP}) when is_record(Message, dns_message) ->
+  handle(Message, {ClientIP, Port}, ServerIP, erldns_query_throttle:throttle(Message, {_Data, ClientIP}));
 %% The message was bad so just return it.
 %% TODO: consider just throwing away the message
 handle(BadMessage, {_, ClientIP, _ServerIP}) ->
@@ -96,7 +96,7 @@ handle(BadMessage, {_, ClientIP, _ServerIP}) ->
 %%
 %% Note: this should probably be changed to return the original packet without
 %% any answer data and with TC bit set to 1.
-handle(Message, ClientIP, _ServerIP, {throttled, ClientIP, _ReqCount}) ->
+handle(Message, {ClientIP, _Port}, _ServerIP, {throttled, ClientIP, _ReqCount}) ->
   folsom_metrics:notify({request_throttled_counter, {inc, 1}}),
   folsom_metrics:notify({request_throttled_meter, 1}),
   Message#dns_message{tc = true, aa = true, rc = ?DNS_RCODE_NOERROR};
@@ -104,14 +104,17 @@ handle(Message, ClientIP, _ServerIP, {throttled, ClientIP, _ReqCount}) ->
 %% Message was not throttled, so handle it, then do EDNS handling, optionally
 %% append the SOA record if it is a zone transfer and complete the response
 %% by filling out count-related header fields.
-handle(Message, ClientIP, ServerIP, _) ->
+handle(Message, {ClientIP, Port}, ServerIP, _) ->
   %lager:debug("Questions: ~p", [Message#dns_message.questions]),
   erldns_events:notify({start_handle, [{host, ClientIP}, {message, Message}]}),
-  Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, ClientIP, ServerIP]),
+  Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, {ClientIP, Port}, ServerIP]),
   erldns_events:notify({end_handle, [{host, ClientIP}, {message, Message}, {response, Response}]}),
   Response.
 
-do_handle(Message, ClientIP, ServerIP) ->
+do_handle(Message, {ClientIP, Port}, ServerIP) when Message#dns_message.oc =:= ?DNS_OPCODE_NOTIFY ->
+    gen_server:cast(erldns_manager, {handle_notify, {Message, {ClientIP, Port}, ServerIP}}),
+    Message#dns_message{qr = true};
+do_handle(Message, {ClientIP, _Port}, ServerIP) ->
   NewMessage = handle_message(Message, ClientIP, ServerIP),
   complete_response(erldns_axfr:optionally_append_soa(erldns_edns:handle(NewMessage))).
 

@@ -48,11 +48,17 @@ handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 handle_cast({send_notify, {_BindIP, _DestinationIP, _Port, _ZoneName, _ZoneClass} = Args}, State) ->
-    Spec = {erldns_zone_transfer_worker, {erldns_zone_transfer_worker, start_link, [send_notify, Args]},
+    Spec = {{erldns_zone_transfer_worker, now()}, {erldns_zone_transfer_worker, start_link, [send_notify, Args]},
             temporary, 5000, worker, [erldns_zone_transfer_worker]},
     supervisor:start_child(erldns_zone_transfer_sup, Spec),
     {noreply, State};
+handle_cast({handle_notify, {_Message, {_ClientIP, _Port}, _ServerIP} = Args}, State) ->
+    Spec = {{erldns_zone_transfer_worker, now()}, {erldns_zone_transfer_worker, start_link, [handle_notify, Args]},
+        temporary, 5000, worker, [erldns_zone_transfer_worker]},
+    supervisor:start_child(erldns_zone_transfer_sup, Spec),
+    {noreply, State};
 handle_cast(_Request, State) ->
+    lager:info("Some other message: ~p", [_Request]),
     {noreply, State}.
 
 handle_info(_Info, State) ->
