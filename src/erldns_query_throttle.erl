@@ -62,7 +62,7 @@ throttle(Message, {_, Host}) ->
         _ -> record_request(maybe_throttle(Host))
       end;
     _ ->
-      %lager:debug("Throttle not enabled"),
+      %erldns_log:debug("Throttle not enabled"),
       ok
   end.
 

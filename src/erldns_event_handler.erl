@@ -35,7 +35,7 @@ handle_event(start_servers, State) ->
   case State#state.servers_running of
     false ->
       % Start up the UDP and TCP servers
-      lager:info("Starting the UDP and TCP supervisor"),
+      erldns_log:info("Starting the UDP and TCP supervisor"),
         {ok, _Pid} = erldns_server_sup:start_link(),
         {Pools, Configs} = erldns_config:get_servers(),
         add_pools(Pools),
@@ -105,7 +105,7 @@ add_pools([Pool | Tail]) ->
             {max_overflow, keyget(max_overflow, Pool)}],
     Spec = poolboy:child_spec(Name, Args),
     R = supervisor:start_child(erldns_server_sup, Spec),
-    lager:info("Start Pool: ~p", [R]),
+    erldns_log:info("Start Pool: ~p", [R]),
     add_pools(Tail).
 
 keyget(Key, Data) ->

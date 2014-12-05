@@ -39,7 +39,7 @@
 
 %% Public API
 start_link(_Name, Family, ServerIP, Port, PoolName) ->
-  lager:info("Starting TCP server for ~p on port ~p", [Family, Port]),
+  erldns_log:info("Starting TCP server for ~p on port ~p", [Family, Port]),
   gen_nb_server:start_link(?MODULE, ServerIP, Port, [Port, ServerIP, PoolName]).
 
 %% gen_server hooks

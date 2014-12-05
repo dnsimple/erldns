@@ -77,10 +77,10 @@ get(Question, _Host) ->
 put(Question, Response) ->
   case ?ENABLED of
     true ->
-      %lager:debug("Set packet in cache for ~p", [Question]),
+      %erldns_log:debug("Set packet in cache for ~p", [Question]),
       gen_server:call(?SERVER, {set_packet, [Question, Response]});
     _ ->
-      %lager:debug("Packet cache not enabled (Q: ~p)", [Question]),
+      %erldns_log:debug("Packet cache not enabled (Q: ~p)", [Question]),
       ok
   end.
 

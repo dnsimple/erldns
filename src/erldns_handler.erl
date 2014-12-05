@@ -59,11 +59,11 @@ get_handlers() ->
 % gen_server callbacks
 
 init([]) ->
-  %lager:info("Initialized the handler_registry"),
+  %erldns_log:info("Initialized the handler_registry"),
   {ok, #state{handlers=[]}}.
 
 handle_call({register_handler, RecordTypes, Module}, _, State) ->
-  %lager:info("Registered handler ~p for types ~p", [Module, RecordTypes]),
+  %erldns_log:info("Registered handler ~p for types ~p", [Module, RecordTypes]),
   {reply, ok, State#state{handlers = State#state.handlers ++ [{Module, RecordTypes}]}};
 handle_call({get_handlers}, _, State) ->
   {reply, State#state.handlers, State}.
@@ -88,7 +88,7 @@ handle(Message, _Context = {_Data, {ClientIP, Port}, ServerIP}) when is_record(M
 %% The message was bad so just return it.
 %% TODO: consider just throwing away the message
 handle(BadMessage, {_, ClientIP, _ServerIP}) ->
-  lager:error("Received a bad message: ~p from ~p", [BadMessage, ClientIP]),
+  erldns_log:error("Received a bad message: ~p from ~p", [BadMessage, ClientIP]),
   BadMessage.
 
 %% We throttle ANY queries to discourage use of our authoritative name servers
@@ -105,7 +105,7 @@ handle(Message, {ClientIP, _Port}, _ServerIP, {throttled, ClientIP, _ReqCount}) 
 %% append the SOA record if it is a zone transfer and complete the response
 %% by filling out count-related header fields.
 handle(Message, {ClientIP, Port}, ServerIP, _) ->
-  %lager:debug("Questions: ~p", [Message#dns_message.questions]),
+  %erldns_log:debug("Questions: ~p", [Message#dns_message.questions]),
   erldns_events:notify({start_handle, [{host, ClientIP}, {message, Message}]}),
   Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, {ClientIP, Port}, ServerIP]),
   erldns_events:notify({end_handle, [{host, ClientIP}, {message, Message}, {response, Response}]}),
@@ -160,7 +160,7 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, ClientIP, ServerIP) ->
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
         Exception:Reason ->
-          lager:error("Error answering request: ~p (~p)", [Exception, Reason]),
+          erldns_log:error("Error answering request: ~p (~p)", [Exception, Reason]),
           Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
       end
   end.

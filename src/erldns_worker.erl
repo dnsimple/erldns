@@ -68,7 +68,7 @@ handle_tcp_dns_query(ServerIP, Socket, <<_Len:16, Bin/binary>>) ->
     _ ->
       case dns:decode_message(Bin) of
         {truncated, _, _} ->
-          lager:info("received truncated request from ~p", [ClientIP]),
+          erldns_log:info("received truncated request from ~p", [ClientIP]),
           ok;
         {trailing_garbage, DecodedMessage, _} ->
           handle_decoded_tcp_message(DecodedMessage, Socket, {ClientIP, Port}, ServerIP);
@@ -81,14 +81,14 @@ handle_tcp_dns_query(ServerIP, Socket, <<_Len:16, Bin/binary>>) ->
   erldns_events:notify({end_tcp, [{host, ClientIP}]}),
   gen_tcp:close(Socket);
 handle_tcp_dns_query(_ServerIP, Socket, BadPacket) ->
-  lager:error("Received bad packet ~p", BadPacket),
+  erldns_log:error("Received bad packet ~p", BadPacket),
   gen_tcp:close(Socket).
 
 handle_decoded_tcp_message(DecodedMessage, Socket, {ClientIP, Port}, ServerIP) ->
   erldns_events:notify({start_handle, tcp, [{host, ClientIP}]}),
   Response = erldns_handler:handle(DecodedMessage, {tcp, {ClientIP, Port}, ServerIP}),
   erldns_events:notify({end_handle, tcp, [{host, ClientIP}]}),
-  lager:info("Sending Response: ~p", [Response]),
+  erldns_log:info("Sending Response: ~p", [Response]),
   case erldns_encoder:encode_message(Response, [{max_size, 65535}]) of
     {false, EncodedMessage} ->
       send_tcp_message(Socket, EncodedMessage);
@@ -103,14 +103,14 @@ handle_decoded_tcp_message(DecodedMessage, Socket, {ClientIP, Port}, ServerIP) -
 send_tcp_message(Socket, EncodedMessage) ->
   BinLength = byte_size(EncodedMessage),
   TcpEncodedMessage = <<BinLength:16, EncodedMessage/binary>>,
-  lager:info("Sending Response: ~p", [TcpEncodedMessage]),
+  erldns_log:info("Sending Response: ~p", [TcpEncodedMessage]),
   gen_tcp:send(Socket, TcpEncodedMessage).
 
 
 %% @doc Handle DNS query that comes in over UDP
 -spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary(), inet:ip_address()) -> ok.
 handle_udp_dns_query(Socket, Host, Port, Bin, ServerIP) ->
-  %lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
+  %erldns_log:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
   erldns_events:notify({start_udp, [{host, Host}]}),
   case dns:decode_message(Bin) of
     {trailing_garbage, DecodedMessage, _} ->
@@ -133,7 +133,7 @@ handle_decoded_udp_message(DecodedMessage, Socket, ClientIP, Port, ServerIP) ->
              end,
   case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
     {false, EncodedMessage} ->
-      %lager:debug("Sending encoded response to ~p", [DestHost]),
+      %erldns_log:debug("Sending encoded response to ~p", [DestHost]),
       gen_udp:send(Socket, DestHost, Port, EncodedMessage);
     {true, EncodedMessage, Message} when is_record(Message, dns_message)->
       gen_udp:send(Socket, DestHost, Port, EncodedMessage);

@@ -52,13 +52,13 @@ zone_to_json(Zone) ->
 %% @doc Register a list of encoder modules.
 -spec register_encoders([module()]) -> ok.
 register_encoders(Modules) ->
-  lager:info("Registering custom encoders: ~p", [Modules]),
+  erldns_log:info("Registering custom encoders: ~p", [Modules]),
   gen_server:call(?SERVER, {register_encoders, Modules}).
 
 %% @doc Register a single encoder module.
 -spec register_encoder(module()) -> ok.
 register_encoder(Module) ->
-  lager:info("Registering customer encoder: ~p", [Module]),
+  erldns_log:info("Registering customer encoder: ~p", [Module]),
   gen_server:call(?SERVER, {register_encoder, Module}).
 
 
@@ -121,10 +121,10 @@ encode(Encoders) ->
   end.
 
 encode_record(Record, Encoders) ->
-  lager:debug("Encoding record ~p", [Record]),
+  erldns_log:debug("Encoding record ~p", [Record]),
   case encode_record(Record) of
     [] ->
-      lager:debug("Trying custom encoders: ~p", [Encoders]),
+      erldns_log:debug("Trying custom encoders: ~p", [Encoders]),
       try_custom_encoders(Record, Encoders);
     EncodedRecord -> EncodedRecord
   end.
@@ -154,7 +154,7 @@ encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SRV, Ttl, Data}) ->
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_NAPTR, Ttl, Data}) ->
   encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
-  lager:debug("Unable to encode record: ~p", [Record]),
+  erldns_log:debug("Unable to encode record: ~p", [Record]),
   [].
 
 encode_record(Name, Type, Ttl, Data) ->
@@ -169,7 +169,7 @@ encode_record(Name, Type, Ttl, Data) ->
 try_custom_encoders(_Record, []) ->
   {};
 try_custom_encoders(Record, [Encoder|Rest]) ->
-  lager:debug("Trying custom encoder ~p", [Encoder]),
+  erldns_log:debug("Trying custom encoder ~p", [Encoder]),
   case Encoder:encode_record(Record) of
     [] -> try_custom_encoders(Record, Rest);
     EncodedData -> EncodedData
@@ -201,5 +201,5 @@ encode_data({dns_rrdata_srv, Priority, Weight, Port, Dname}) ->
 encode_data({dns_rrdata_naptr, Order, Preference, Flags, Services, Regexp, Replacements}) ->
   erlang:iolist_to_binary(io_lib:format("~w ~w ~s ~s ~s ~s", [Order, Preference, Flags, Services, Regexp, Replacements]));
 encode_data(Data) ->
-  lager:debug("Unable to encode data: ~p", [Data]),
+  erldns_log:debug("Unable to encode data: ~p", [Data]),
   {}.

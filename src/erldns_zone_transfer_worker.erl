@@ -45,7 +45,7 @@ start_link(Operation, Args) ->
 %%%===================================================================
 init([Operation, Args]) ->
     Pid = self(),
-%%     lager:info("Passing the info along........... ~p ~p sending to pid: ~p", [Operation, Args, Pid]),
+%%     erldns_log:info("Passing the info along........... ~p ~p sending to pid: ~p", [Operation, Args, Pid]),
     gen_server:cast(Pid, {Operation, Args}),
     {ok, #state{}}.
 
@@ -56,7 +56,7 @@ handle_cast({send_notify, {BindIP, DestinationIP, Port, ZoneName, ZoneClass} = _
     send_notify(BindIP, DestinationIP, Port, ZoneName, ZoneClass),
     {noreply, State};
 handle_cast({handle_notify, {Message, {ClientIP, _Port}, ServerIP}}, State) ->
-    lager:info("Handling NOTIFY -> {~p, {~p, ~p}, ~p}", [Message, ClientIP, _Port, ServerIP]),
+    erldns_log:info("Handling NOTIFY -> {~p, {~p, ~p}, ~p}", [Message, ClientIP, _Port, ServerIP]),
     %% Get the zone in your cache
     ZoneName0 = hd(Message#dns_message.questions),
     ZoneName = normalize_name(ZoneName0#dns_query.name),
@@ -88,12 +88,12 @@ handle_cast({handle_notify, {Message, {ClientIP, _Port}, ServerIP}}, State) ->
                          send_tcp_message(ServerIP, ClientIP, 8053, EncodedMessage)
                      end,
     Authority = dns:decode_message(Recv),
-    lager:info("Here is my decoded request! ~p", [Authority]),
+    erldns_log:info("Here is my decoded request! ~p", [Authority]),
     %% Check the serial and send axfr request if you are the authority for it
 %%     Serial = SOA#dns_rrdata_soa.serial,
     {noreply, State};
 handle_cast(_Request, State) ->
-    lager:info("Some other message: ~p", [_Request]),
+    erldns_log:info("Some other message: ~p", [_Request]),
     {noreply, State}.
 
 handle_info(_Info, State) ->
@@ -117,7 +117,7 @@ send_notify(BindIP, DestinationIP, Port, ZoneName, ZoneClass) ->
         aa = true,
         qc = 1,
         questions = [#dns_query{name = ZoneName, class = ZoneClass, type = ?DNS_TYPE_SOA}]},
-    lager:info("Packet ~p", [Packet]),
+    erldns_log:info("Packet ~p", [Packet]),
     {ok, Recv} = case erldns_encoder:encode_message(Packet, [{max_size, 65535}]) of
         {false, EncodedMessage} ->
             send_tcp_message(BindIP, DestinationIP, Port, EncodedMessage);
@@ -128,7 +128,7 @@ send_notify(BindIP, DestinationIP, Port, ZoneName, ZoneClass) ->
         {true, EncodedMessage, _TsigMac, _Message} ->
             send_tcp_message(BindIP, DestinationIP, Port, EncodedMessage)
     end,
-    lager:info("Got it: ~p", [dns:decode_message(Recv)]),
+    erldns_log:info("Got it: ~p", [dns:decode_message(Recv)]),
     exit(normal).
 
 %% send_axfr() ->
@@ -151,7 +151,7 @@ send_recv(BindIP, DestinationIP, Port, TcpEncodedMessage) ->
     ok = gen_tcp:send(Socket, TcpEncodedMessage),
 %%     do_recv(Socket, <<>>).
     Res = gen_tcp:recv(Socket, 0),
-    lager:info("Binary: ~p", [Res]),
+    erldns_log:info("Binary: ~p", [Res]),
     gen_tcp:close(Socket),
     Res.
 

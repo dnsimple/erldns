@@ -59,13 +59,13 @@ zone_to_erlang(Zone) ->
 %% @doc Register a list of custom parser modules.
 -spec register_parsers([module()]) -> ok.
 register_parsers(Modules) ->
-  lager:info("Registering custom parsers: ~p", [Modules]),
+  erldns_log:info("Registering custom parsers: ~p", [Modules]),
   gen_server:call(?SERVER, {register_parsers, Modules}).
 
 %% @doc Regiaer a custom parser module.
 -spec register_parser(module()) -> ok.
 register_parser(Module) ->
-  lager:info("Registering custom parser: ~p", [Module]),
+  erldns_log:info("Registering custom parser: ~p", [Module]),
   gen_server:call(?SERVER, {register_parser, Module}).
 
 -spec list_parsers() -> [module()].
@@ -125,7 +125,7 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
               end, JsonRecords),
   FilteredRecords = lists:filter(record_filter(), Records),
   DistinctRecords = lists:usort(FilteredRecords),
-  % lager:debug("After parsing for ~p: ~p", [Name, DistinctRecords]),
+  % erldns_log:debug("After parsing for ~p: ~p", [Name, DistinctRecords]),
   {Name, Sha, DistinctRecords}.
 
 record_filter() ->
@@ -190,7 +190,7 @@ try_custom_parsers(Data, [Parser|Rest]) ->
 
 % Internal converters
 json_record_to_erlang([Name, Type, _Ttl, null, _]) ->
-  lager:error("record name=~p type=~p has null data", [Name, Type]),
+  erldns_log:error("record name=~p type=~p has null data", [Name, Type]),
   {};
 
 json_record_to_erlang([Name, <<"SOA">>, Ttl, Data, _Context]) ->
@@ -223,7 +223,7 @@ json_record_to_erlang([Name, <<"A">>, Ttl, Data, _Context]) ->
     {ok, Address} ->
       #dns_rr{name = Name, type = ?DNS_TYPE_A, data = #dns_rrdata_a{ip = Address}, ttl = Ttl};
     {error, Reason} ->
-      lager:error("Failed to parse A record address ~p: ~p", [Ip, Reason]),
+      erldns_log:error("Failed to parse A record address ~p: ~p", [Ip, Reason]),
       {}
   end;
 
@@ -233,7 +233,7 @@ json_record_to_erlang([Name, <<"AAAA">>, Ttl, Data, _Context]) ->
     {ok, Address} ->
       #dns_rr{name = Name, type = ?DNS_TYPE_AAAA, data = #dns_rrdata_aaaa{ip = Address}, ttl = Ttl};
     {error, Reason} ->
-      lager:error("Failed to parse AAAA record address ~p: ~p", [Ip, Reason]),
+      erldns_log:error("Failed to parse AAAA record address ~p: ~p", [Ip, Reason]),
       {}
   end;
 
@@ -285,7 +285,7 @@ json_record_to_erlang([Name, <<"TXT">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      lager:error("Error parsing TXT ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason])
+      erldns_log:error("Error parsing TXT ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason])
   end;
 
 
@@ -318,7 +318,7 @@ json_record_to_erlang([Name, <<"SSHFP">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      lager:error("Error parsing SSHFP ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason]),
+      erldns_log:error("Error parsing SSHFP ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason]),
       {}
   end;
 
@@ -349,7 +349,7 @@ json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data, _Context]) ->
      ttl = Ttl};
 
 json_record_to_erlang(_Data) ->
-  %lager:debug("Cannot convert ~p", [Data]),
+  %erldns_log:debug("Cannot convert ~p", [Data]),
   {}.
 
 hex_to_bin(Bin) when is_binary(Bin) ->

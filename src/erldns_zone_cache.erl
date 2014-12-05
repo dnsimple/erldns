@@ -156,10 +156,10 @@ get_delegations(Name) ->
 get_records_by_name(Name) ->
     case find_zone_in_cache(Name) of
         {ok, Zone} ->
-%%             lager:info("~p-> found zone: ~p~n~n", [?MODULE, Zone]),
+%%             erldns_log:info("~p-> found zone: ~p~n~n", [?MODULE, Zone]),
             case dict:find(normalize_name(Name), Zone#zone.records_by_name) of
                 {ok, RecordSet} ->
-%%                     lager:info("~p-> Record Set: ~p", [?MODULE, RecordSet]),
+%%                     erldns_log:info("~p-> Record Set: ~p", [?MODULE, RecordSet]),
                     RecordSet;
                 _ -> []
             end;
@@ -307,7 +307,7 @@ handle_cast({delete, Name}, State) ->
   {noreply, State};
 
 handle_cast(Message, State) ->
-  lager:debug("Received unsupported message: ~p", [Message]),
+  erldns_log:debug("Received unsupported message: ~p", [Message]),
   {noreply, State}.
 
 handle_info(_Message, State) ->

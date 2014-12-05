@@ -58,7 +58,7 @@ handle_cast({handle_notify, {_Message, {_ClientIP, _Port}, _ServerIP} = Args}, S
     supervisor:start_child(erldns_zone_transfer_sup, Spec),
     {noreply, State};
 handle_cast(_Request, State) ->
-    lager:info("Some other message: ~p", [_Request]),
+    erldns_log:info("Some other message: ~p", [_Request]),
     {noreply, State}.
 
 handle_info(_Info, State) ->
@@ -82,7 +82,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%     ok.
 
 %% handle_decoded_tcp_message(DecodedMessage, Socket, ClientIP, ServerIP) when DecodedMessage#dns_message.oc =:= 4 ->
-%%     lager:info("Handling a NOTIFY!"),
+%%     erldns_log:info("Handling a NOTIFY!"),
 %%     spawn_link(fun() -> handle_notify(DecodedMessage, ClientIP, ServerIP) end),
 %%     erldns_events:notify({start_handle, tcp, [{host, ClientIP}]}),
 %%     Response = erldns_handler:handle(DecodedMessage, {tcp, ClientIP, ServerIP}),

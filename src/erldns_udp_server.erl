@@ -61,7 +61,7 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Message, State) ->
   {noreply, State}.
 handle_info(timeout, State) ->
-  %lager:info("UDP instance timed out"),
+  %erldns_log:info("UDP instance timed out"),
   {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
   Response = folsom_metrics:histogram_timed_update(udp_handoff_histogram, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]),
@@ -77,13 +77,13 @@ code_change(_PreviousVersion, State, _Extra) ->
 %% Internal functions
 %% Start a UDP server.
 start(Port, InetFamily, Addr) ->
-  lager:info("Starting UDP server for ~p on port ~p", [InetFamily, Port]),
+  erldns_log:info("Starting UDP server for ~p on port ~p", [InetFamily, Port]),
   case gen_udp:open(Port, [binary, {active, once}, {read_packets, 1000}, {ip, Addr}, InetFamily]) of
     {ok, Socket} -> 
-      lager:info("UDP server (~p) on IP ~p opened socket: ~p", [InetFamily, Addr, Socket]),
+      erldns_log:info("UDP server (~p) on IP ~p opened socket: ~p", [InetFamily, Addr, Socket]),
       {ok, Socket};
     {error, eacces} ->
-      lager:error("Failed to open UDP socket. Need to run as sudo?"),
+      erldns_log:error("Failed to open UDP socket. Need to run as sudo?"),
       {error, eacces}
   end.
 
@@ -98,7 +98,7 @@ handle_request(Socket, Host, Port, Bin, State) ->
     {empty, _Queue} ->
       folsom_metrics:notify({packet_dropped_empty_queue_counter, {inc, 1}}),
       folsom_metrics:notify({packet_dropped_empty_queue_meter, 1}),
-      lager:info("Queue is empty, dropping packet"),
+      erldns_log:info("Queue is empty, dropping packet"),
       {noreply, State}
   end.
 
