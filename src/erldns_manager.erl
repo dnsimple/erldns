@@ -52,7 +52,7 @@ handle_cast({send_notify, {_BindIP, _DestinationIP, _Port, _ZoneName, _ZoneClass
             temporary, 5000, worker, [erldns_zone_transfer_worker]},
     supervisor:start_child(erldns_zone_transfer_sup, Spec),
     {noreply, State};
-handle_cast({handle_notify, {_Message, {_ClientIP, _Port}, _ServerIP} = Args}, State) ->
+handle_cast({handle_notify, {_Message, _ClientIP, _ServerIP} = Args}, State) ->
     Spec = {{erldns_zone_transfer_worker, now()}, {erldns_zone_transfer_worker, start_link, [handle_notify, Args]},
         temporary, 5000, worker, [erldns_zone_transfer_worker]},
     supervisor:start_child(erldns_zone_transfer_sup, Spec),

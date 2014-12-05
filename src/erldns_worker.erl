@@ -61,7 +61,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc Handle DNS query that comes in over TCP
 -spec handle_tcp_dns_query(inet:ip_address(), gen_tcp:socket(), iodata())  -> ok.
 handle_tcp_dns_query(ServerIP, Socket, <<_Len:16, Bin/binary>>) ->
-  {ok, {ClientIP, Port}} = inet:peername(Socket),
+  {ok, {ClientIP, _Port}} = inet:peername(Socket),
   erldns_events:notify({start_tcp, [{host, ClientIP}]}),
   case Bin of
     <<>> -> ok;
@@ -71,11 +71,11 @@ handle_tcp_dns_query(ServerIP, Socket, <<_Len:16, Bin/binary>>) ->
           erldns_log:info("received truncated request from ~p", [ClientIP]),
           ok;
         {trailing_garbage, DecodedMessage, _} ->
-          handle_decoded_tcp_message(DecodedMessage, Socket, {ClientIP, Port}, ServerIP);
+          handle_decoded_tcp_message(DecodedMessage, Socket, ClientIP, ServerIP);
         {_Error, _, _} ->
           ok;
         DecodedMessage ->
-          handle_decoded_tcp_message(DecodedMessage, Socket, {ClientIP, Port}, ServerIP)
+          handle_decoded_tcp_message(DecodedMessage, Socket, ClientIP, ServerIP)
       end
   end,
   erldns_events:notify({end_tcp, [{host, ClientIP}]}),
@@ -84,12 +84,11 @@ handle_tcp_dns_query(_ServerIP, Socket, BadPacket) ->
   erldns_log:error("Received bad packet ~p", BadPacket),
   gen_tcp:close(Socket).
 
-handle_decoded_tcp_message(DecodedMessage, Socket, {ClientIP, Port}, ServerIP) ->
+handle_decoded_tcp_message(DecodedMessage, Socket, ClientIP, ServerIP) ->
   erldns_events:notify({start_handle, tcp, [{host, ClientIP}]}),
-  Response = erldns_handler:handle(DecodedMessage, {tcp, {ClientIP, Port}, ServerIP}),
+  Response = erldns_handler:handle(DecodedMessage, {tcp, ClientIP, ServerIP}),
   erldns_events:notify({end_handle, tcp, [{host, ClientIP}]}),
-  erldns_log:info("Sending Response: ~p", [Response]),
-  case erldns_encoder:encode_message(Response, [{max_size, 65535}]) of
+  case erldns_encoder:encode_message(Response) of
     {false, EncodedMessage} ->
       send_tcp_message(Socket, EncodedMessage);
     {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
@@ -103,7 +102,6 @@ handle_decoded_tcp_message(DecodedMessage, Socket, {ClientIP, Port}, ServerIP) -
 send_tcp_message(Socket, EncodedMessage) ->
   BinLength = byte_size(EncodedMessage),
   TcpEncodedMessage = <<BinLength:16, EncodedMessage/binary>>,
-  erldns_log:info("Sending Response: ~p", [TcpEncodedMessage]),
   gen_tcp:send(Socket, TcpEncodedMessage).
 
 
