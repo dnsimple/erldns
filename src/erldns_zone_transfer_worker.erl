@@ -99,10 +99,12 @@ handle_notify(Message, ClientIP, ServerIP) ->
     ZoneName0 = hd(Message#dns_message.questions),
     ZoneName = normalize_name(ZoneName0#dns_query.name),
     {ok, Zone} = erldns_zone_cache:get_zone_with_records(ZoneName),
-    {SOA, AllowedNotify} = get_soa_allow_notify(ZoneName, Zone#zone.records),
+    SOA = get_soa(ZoneName, Zone#zone.records),
     %% Check if the sender is authorative to send a notify request before doing anything
-    case lists:keyfind(ClientIP, 1, AllowedNotify) of
+    case lists:member(ClientIP, Zone#zone.allow_notify) of
         false ->
+            erldns_log:warning("sender ~p not allowed to NOTIFY", [ClientIP]),
+            erldns_log:warning("Allowed to notify: ~p", [Zone#zone.allow_notify]),
             exit(normal);
         _ ->
             ok
@@ -190,24 +192,16 @@ send_recv(BindIP, DestinationIP, Port, TcpEncodedMessage) ->
 normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
 normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
 
--spec get_soa_allow_notify([#dns_rr{}], binary()) -> {#dns_rr{}, [inet:ip_address()]}.
-get_soa_allow_notify(ZoneName, DNSRRList) ->
-    get_soa_allow_notify(ZoneName, DNSRRList, [], []).
+-spec get_soa([#dns_rr{}], binary()) -> #dns_rr{}.
+get_soa(ZoneName, DNSRRList) ->
+    get_soa(ZoneName, DNSRRList, []).
 
-get_soa_allow_notify(_ZoneName, [], SOA, AllowedNOTIFY) ->
-    {SOA, AllowedNOTIFY};
-get_soa_allow_notify( ZoneName, [#dns_rr{data = Data} = Head | Tail], SOA, AllowedNOTIFY) ->
+get_soa(_ZoneName, [], SOA) ->
+    SOA;
+get_soa( ZoneName, [#dns_rr{data = Data} = Head | Tail], SOA) ->
     case Data of
         #dns_rrdata_soa{} ->
-            get_soa_allow_notify(ZoneName, Tail, Head, AllowedNOTIFY);
-        #dns_rrdata_srv{} ->
-            case Head#dns_rr.name of
-                <<"_allow_notify.", ZoneName/binary>> ->
-                    {ok, Address} = inet_parse:address(binary_to_list(Data#dns_rrdata_srv.target)),
-                    get_soa_allow_notify(ZoneName, Tail, SOA, [{Address, Data#dns_rrdata_srv.port} | AllowedNOTIFY]);
-                _ ->
-                    get_soa_allow_notify(ZoneName, Tail, SOA, AllowedNOTIFY)
-            end;
+            get_soa(ZoneName, Tail, Head);
         _ ->
-            get_soa_allow_notify(ZoneName, Tail, SOA, AllowedNOTIFY)
+            get_soa(ZoneName, Tail, SOA)
     end.

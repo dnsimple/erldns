@@ -48,15 +48,15 @@ resolve(Message, _AuthorityRecords, Qname, ?DNS_TYPE_AXFR = _Qtype, {ClientIP, S
     %% Refer to rfc-5936 2.1.1 for correct query values
     {ok, Zone} = erldns_zone_cache:get_zone_with_records(Qname), % Zone lookup
     RecordsSOA = Zone#zone.records,
-    {Records0, SOA, AllowedAXFR, AllowedNOTIFY} = normalize_dns_rr_list(RecordsSOA),
+    {Records0, SOA} = get_soa(RecordsSOA),
     %%  Check to make sure the requester is allowed the axfr, and that the server is the master for
     %%  the zone
-    case lists:member(ClientIP, AllowedAXFR) andalso lists:member(ServerIP, AllowedNOTIFY) of
+    case lists:member(ClientIP, Zone#zone.allow_transfer) andalso lists:member(ServerIP, Zone#zone.allow_notify) of
         true ->
             Response = Message#dns_message{answers = [SOA] ++ Records0},
             Response;
         false ->
-            case lists:member(ClientIP, AllowedAXFR) of
+            case lists:member(ClientIP, Zone#zone.allow_transfer) of
                 false ->
                     erldns_log:warning("Client IP ~p not allowed for AXFR", [ClientIP]);
                 true ->
@@ -512,34 +512,16 @@ requires_additional_processing([Answer|Rest], RequiresAdditional) ->
 %% @doc Returns a list of #dns_rr records for and axfr request, also returns the ips of allow notify
 %% and allow axfr
 %% @end
--spec normalize_dns_rr_list([#dns_rr{}]) -> {[#dns_rr{}], #dns_rr{}, [inet:ip_address()], [inet:ip_address()]}.
-normalize_dns_rr_list(DNSRRList) ->
-    normalize_dns_rr_list(DNSRRList, [], [], [], []).
+-spec get_soa([#dns_rr{}]) -> {[#dns_rr{}], #dns_rr{}, [inet:ip_address()], [inet:ip_address()]}.
+get_soa(DNSRRList) ->
+    get_soa(DNSRRList, [], []).
 
-normalize_dns_rr_list([], Records, SOA, AllowedAXFR, AllowedNOTIFY) ->
-    {Records, SOA, AllowedAXFR, AllowedNOTIFY};
-normalize_dns_rr_list([#dns_rr{data = Data} = Head | Tail], Records, SOA, AllowedAXFR, AllowedNOTIFY) ->
+get_soa([], Records, SOA) ->
+    {Records, SOA};
+get_soa([#dns_rr{data = Data} = Head | Tail], Records, SOA) ->
     case Data of
         #dns_rrdata_soa{} ->
-            normalize_dns_rr_list(Tail, Records, Head, AllowedAXFR, AllowedNOTIFY);
-        #dns_rrdata_a{} ->
-            case Head#dns_rr.name of
-                <<"_allow_axfr", _/binary>> ->
-                    normalize_dns_rr_list(Tail, [Head | Records], SOA, [Data#dns_rrdata_a.ip | AllowedAXFR], AllowedNOTIFY);
-                <<"_allow_notify", _/binary>> ->
-                    normalize_dns_rr_list(Tail, [Head | Records], SOA, AllowedAXFR, [Data#dns_rrdata_a.ip | AllowedNOTIFY]);
-                _ ->
-                    normalize_dns_rr_list(Tail, [Head | Records], SOA, AllowedAXFR, AllowedNOTIFY)
-            end;
-        #dns_rrdata_aaaa{} ->
-            case Head#dns_rr.name of
-                <<"_allow_axfr", _/binary>> ->
-                    normalize_dns_rr_list(Tail, [Head | Records], SOA, [Data#dns_rrdata_aaaa.ip | AllowedAXFR], AllowedNOTIFY);
-                <<"_allow_notify", _/binary>> ->
-                    normalize_dns_rr_list(Tail, [Head | Records], SOA, AllowedAXFR, [Data#dns_rrdata_aaaa.ip | AllowedNOTIFY]);
-                _ ->
-                    normalize_dns_rr_list(Tail, [Head | Records], SOA, AllowedAXFR, AllowedNOTIFY)
-            end;
+            get_soa(Tail, Records, Head);
         _ ->
-            normalize_dns_rr_list(Tail, [Head | Records], SOA, AllowedAXFR, AllowedNOTIFY)
+            get_soa(Tail, [Head | Records], SOA)
     end.

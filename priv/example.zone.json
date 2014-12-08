@@ -54,28 +54,6 @@
                 }
             },
             {
-                "name": "_allow_notify.example.com",
-                "type": "SRV",
-                "ttl": 3600,
-                "data": {
-                    "priority": 0,
-                    "weight": 100,
-                    "port": 8053,
-                    "target": "127.0.0.1"
-                }
-            },
-            {
-                "name": "_allow_axfr.example.com",
-                "type": "SRV",
-                "ttl": 3600,
-                "data": {
-                    "priority": 0,
-                    "weight": 100,
-                    "port": 8053,
-                    "target": "127.0.0.1"
-                }
-            },
-            {
                 "name": "example.com",
                 "type": "MX",
                 "ttl": 3600,
