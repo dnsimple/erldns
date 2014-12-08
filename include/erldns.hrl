@@ -10,6 +10,17 @@
 -type edns_gb_tree() :: gb_tree().
 -endif.
 
+-record(partial_zone, {
+    name :: dns:dname(),
+    allow_notify = [] :: [inet:ip_address()],
+    allow_transfer = [] :: [inet:ip_address()],
+    allow_update = [] :: [inet:ip_address()],
+    also_notify = [] :: [inet:ip_address()],
+    notify_source = {127,0,0,1} :: inet:ip_address(),
+    records = [] :: [dns:rr()],
+    sha = <<>> :: binary()
+}).
+
 -record(zone, {
     name :: dns:dname(),
     allow_notify :: [inet:ip_address()],

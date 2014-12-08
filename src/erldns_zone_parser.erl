@@ -101,55 +101,55 @@ terminate(_, _State) ->
 code_change(_, State, _) ->
   {ok, State}.
 
-
-
 % Internal API
-json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
-    json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, []},
-        {<<"allow_transfer">>, []}, {<<"allow_update">>, []},
-        {<<"also_notify">>, []}, {<<"notify_source">>, <<"">>},{<<"sha">>, <<>>},
-        {<<"records">>, JsonRecords}], Parsers);
-json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, AllowNotifyList},
-                {<<"allow_transfer">>, AllowTransferList}, {<<"allow_update">>, AllowUpdateList},
-                {<<"also_notify">>, AlsoNotifyList}, {<<"notify_source">>, NotifySourceIP},
-                {<<"records">>, JsonRecords}], Parsers) ->
-  json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, AllowNotifyList},
-      {<<"allow_transfer">>, AllowTransferList}, {<<"allow_update">>, AllowUpdateList},
-      {<<"also_notify">>, AlsoNotifyList}, {<<"notify_source">>, NotifySourceIP}, {<<"sha">>, <<>>},
-      {<<"records">>, JsonRecords}], Parsers);
+json_to_erlang(Zone, Parsers) ->
+    json_to_erlang(Zone, Parsers, #partial_zone{}).
 
-json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, AllowNotifyList},
-    {<<"allow_transfer">>, AllowTransferList}, {<<"allow_update">>, AllowUpdateList},
-    {<<"also_notify">>, AlsoNotifyList}, {<<"notify_source">>, NotifySourceIP0}, {<<"sha">>, Sha},
-    {<<"records">>, JsonRecords}], Parsers) ->
-  Records = lists:map(
-              fun(JsonRecord) ->
-                  Data = json_record_to_list(JsonRecord),
-
-                  % Filter by context
-                  case apply_context_options(Data) of
-                    pass ->
-                      case json_record_to_erlang(Data) of
-                        {} -> try_custom_parsers(Data, Parsers);
-                        ParsedRecord -> ParsedRecord
-                      end;
-                    _ ->
-                      {}
-                  end
-              end, JsonRecords),
-  FilteredRecords = lists:filter(record_filter(), Records),
-  DistinctRecords = lists:usort(FilteredRecords),
-  %erldns_log:debug("After parsing for ~p: ~p", [Name, DistinctRecords]),
-    NotifySourceIP = case NotifySourceIP0 of
-                        <<>> ->
-                            <<>>;
-                         IP ->
-                             {ok, Addr} = inet_parse:address(binary_to_list(IP)),
-                             Addr
-                     end,
-  {Name, Sha, DistinctRecords,  binary_ip_to_erlang(AllowNotifyList),
-      binary_ip_to_erlang(AllowTransferList), binary_ip_to_erlang(AllowUpdateList),
-      binary_ip_to_erlang(AlsoNotifyList), NotifySourceIP}.
+json_to_erlang([], _Parsers, #partial_zone{name = Name,
+                                            allow_notify = AllowNotify,
+                                            allow_transfer = AllowTransfer,
+                                            allow_update = AllowUpdate,
+                                            also_notify = AlsoNotify,
+                                            notify_source = NotifySource,
+                                            records = Records,
+                                            sha = Sha}) ->
+    {Name, Sha, Records,  AllowNotify,
+     AllowTransfer, AllowUpdate, AlsoNotify, NotifySource};
+json_to_erlang([Head | Tail], Parsers, #partial_zone{} = Zone) ->
+    case Head of
+        {<<"name">>, Value} ->
+            json_to_erlang(Tail, Parsers, Zone#partial_zone{name = Value});
+        {<<"allow_notify">>, Value} ->
+            json_to_erlang(Tail, Parsers, Zone#partial_zone{allow_notify = ip_binaries_to_tuples(Value)});
+        {<<"allow_transfer">>, Value} ->
+            json_to_erlang(Tail, Parsers, Zone#partial_zone{allow_transfer = ip_binaries_to_tuples(Value)});
+        {<<"allow_update">>, Value} ->
+            json_to_erlang(Tail, Parsers, Zone#partial_zone{allow_update = ip_binaries_to_tuples(Value)});
+        {<<"also_notify">>, Value} ->
+            json_to_erlang(Tail, Parsers, Zone#partial_zone{also_notify = ip_binaries_to_tuples(Value)});
+        {<<"notify_source">>, Value} ->
+            json_to_erlang(Tail, Parsers, Zone#partial_zone{notify_source = ip_binaries_to_tuples(Value)});
+        {<<"sha">>, Value} ->
+            json_to_erlang(Tail, Parsers, Zone#partial_zone{sha = Value});
+        {<<"records">>, Value} ->
+            Records = lists:map(
+                   fun(JsonRecord) ->
+                       Data = json_record_to_list(JsonRecord),
+                       %% Filter by context
+                       case apply_context_options(Data) of
+                           pass ->
+                               case json_record_to_erlang(Data) of
+                                   {} -> try_custom_parsers(Data, Parsers);
+                                   ParsedRecord -> ParsedRecord
+                               end;
+                           _ ->
+                               {}
+                           end
+                   end, Value),
+            FilteredRecords = lists:filter(record_filter(), Records),
+            DistinctRecords = lists:usort(FilteredRecords),
+            json_to_erlang(Tail, Parsers, Zone#partial_zone{records = DistinctRecords})
+    end.
 
 record_filter() ->
   fun(R) ->
@@ -211,17 +211,20 @@ try_custom_parsers(Data, [Parser|Rest]) ->
     Record -> Record
   end.
 
-% Internal converters
-binary_ip_to_erlang([]) ->
-    [];
-binary_ip_to_erlang(IPList) ->
-    binary_ip_to_erlang(IPList, []).
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Internal converters
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-binary_ip_to_erlang([], Acc) ->
+ip_binaries_to_tuples(Bin) when is_binary(Bin) ->
+    hd(ip_binaries_to_tuples([Bin], []));
+ip_binaries_to_tuples(Bin) ->
+    ip_binaries_to_tuples(Bin, []).
+
+ip_binaries_to_tuples([], Acc) ->
     Acc;
-binary_ip_to_erlang([IP0 | Tail], Acc) ->
-    {ok, IP} = inet_parse:address(binary_to_list(IP0)),
-    binary_ip_to_erlang(Tail, [IP | Acc]).
+ip_binaries_to_tuples([H | T], Acc) ->
+    {ok, Addr} = inet_parse:address(binary_to_list(H)),
+    ip_binaries_to_tuples(T, [Addr | Acc]).
 
 json_record_to_erlang([Name, Type, _Ttl, null, _]) ->
   erldns_log:error("record name=~p type=~p has null data", [Name, Type]),
