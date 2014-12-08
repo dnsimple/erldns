@@ -394,12 +394,9 @@ normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(bina
 %% it (such as, for example, stealth servers).
 send_notify(ZoneName, Zone) ->
     Records = Zone#zone.records,
-    erldns_log:info("Records ~p", [Records]),
     NotifySet = get_notify_set(Records),
-    erldns_log:info("Notify set: ~p", [NotifySet]),
     %%Find the A record for this name server to get the ip(s)
     NotifySetIPs = get_ips_for_notify_set(Records, NotifySet),
-    erldns_log:info("Notify IPs: ~p", [NotifySetIPs]),
     %% Now send the notify message out to the set of IPs
     BindIP = case Zone#zone.notify_source of
                  <<>> ->
@@ -449,7 +446,6 @@ get_ips_for_notify_set(Records, [Head | Tail], IPs) ->
     DName = Head#dns_rrdata_ns.dname,
     ARecord0 = lists:keyfind(DName, 2, Records),
     ARecord = ARecord0#dns_rr.data,
-    erldns_log:info("A record: ~p", [ARecord]),
     case ARecord of
         #dns_rrdata_a{} ->
             get_ips_for_notify_set(Records, Tail, [ARecord#dns_rrdata_a.ip | IPs]);
