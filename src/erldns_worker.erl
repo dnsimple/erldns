@@ -125,7 +125,7 @@ handle_udp_dns_query(Socket, Host, Port, Bin, ServerIP) ->
 -spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number(), inet:ip_address()) ->
   ok | {error, not_owner | inet:posix()}.
 handle_decoded_udp_message(DecodedMessage, Socket, ClientIP, Port, ServerIP) ->
-  Response = erldns_handler:handle(DecodedMessage, {udp, {ClientIP, Port}, ServerIP}),
+  Response = erldns_handler:handle(DecodedMessage, {udp, ClientIP, ServerIP}),
   DestHost = case ?REDIRECT_TO_LOOPBACK of
                true -> ?LOOPBACK_DEST;
                _ -> ClientIP
