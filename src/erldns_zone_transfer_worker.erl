@@ -51,8 +51,8 @@ init([Operation, Args]) ->
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
-handle_cast({send_notify, {BindIP, DestinationIP, Port, ZoneName, ZoneClass} = _Args}, State) ->
-    send_notify(BindIP, DestinationIP, Port, ZoneName, ZoneClass),
+handle_cast({send_notify, {BindIP, DestinationIP, ZoneName, ZoneClass} = _Args}, State) ->
+    send_notify(BindIP, DestinationIP, ZoneName, ZoneClass),
     {noreply, State};
 handle_cast({handle_notify, {Message, ClientIP, ServerIP}}, State) ->
     handle_notify(Message, ClientIP, ServerIP),
@@ -73,8 +73,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 %% @doc Sends the notify message to the given nameservers. Restrict to TCP to allow proper query throttling.
--spec send_notify(inet:ip_address(), inet:ip_address(), inet:port_number(), binary(), dns:class()) -> ok.
-send_notify(BindIP, DestinationIP, Port, ZoneName, ZoneClass) ->
+-spec send_notify(inet:ip_address(), inet:ip_address(), binary(), dns:class()) -> ok.
+send_notify(BindIP, DestinationIP, ZoneName, ZoneClass) ->
     Packet =  #dns_message{id = dns:random_id(),
         oc = ?DNS_OPCODE_NOTIFY,
         rc = ?DNS_RCODE_NOERROR,
@@ -83,13 +83,13 @@ send_notify(BindIP, DestinationIP, Port, ZoneName, ZoneClass) ->
         questions = [#dns_query{name = ZoneName, class = ZoneClass, type = ?DNS_TYPE_SOA}]},
     {ok, _Recv} = case erldns_encoder:encode_message(Packet) of
                      {false, EncodedMessage} ->
-                         send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage);
+                         send_tcp_message(BindIP, DestinationIP, EncodedMessage);
                      {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-                         send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage);
+                         send_tcp_message(BindIP, DestinationIP, EncodedMessage);
                      {false, EncodedMessage, _TsigMac} ->
-                         send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage);
+                         send_tcp_message(BindIP, DestinationIP, EncodedMessage);
                      {true, EncodedMessage, _TsigMac, _Message} ->
-                         send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage)
+                         send_tcp_message(BindIP, DestinationIP, EncodedMessage)
                  end,
     exit(normal).
 
@@ -116,13 +116,13 @@ handle_notify(Message, ClientIP, ServerIP) ->
         questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_ANY, type = ?DNS_TYPE_SOA}]},
     {ok, Recv} = case erldns_encoder:encode_message(Request) of
                      {false, EncodedMessage} ->
-                         send_tcp_message(ServerIP, {ClientIP, ?DNS_LISTEN_PORT}, EncodedMessage);
+                         send_tcp_message(ServerIP, ClientIP, EncodedMessage);
                      {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-                         send_tcp_message(ServerIP, {ClientIP, ?DNS_LISTEN_PORT}, EncodedMessage);
+                         send_tcp_message(ServerIP, ClientIP, EncodedMessage);
                      {false, EncodedMessage, _TsigMac} ->
-                         send_tcp_message(ServerIP, {ClientIP, ?DNS_LISTEN_PORT}, EncodedMessage);
+                         send_tcp_message(ServerIP, ClientIP, EncodedMessage);
                      {true, EncodedMessage, _TsigMac, _Message} ->
-                         send_tcp_message(ServerIP, {ClientIP, ?DNS_LISTEN_PORT}, EncodedMessage)
+                         send_tcp_message(ServerIP, ClientIP, EncodedMessage)
                  end,
     Authority = dns:decode_message(Recv),
     %% Check the serial and send axfr request if you are the authority for it
@@ -131,13 +131,13 @@ handle_notify(Message, ClientIP, ServerIP) ->
     MasterSerial = MasterSerial0#dns_rr.data#dns_rrdata_soa.serial,
     case StoredSerial =/= MasterSerial of
         true ->
-            send_axfr(ZoneName, ServerIP, ClientIP, ?DNS_LISTEN_PORT);
+            send_axfr(ZoneName, ServerIP, ClientIP);
         false ->
             ok
     end,
     exit(normal).
 
-send_axfr(ZoneName, BindIP, DestinationIP, Port) ->
+send_axfr(ZoneName, BindIP, DestinationIP) ->
     Packet =  #dns_message{id = dns:random_id(),
                             oc = ?DNS_OPCODE_QUERY,
                             rd = true,
@@ -149,13 +149,13 @@ send_axfr(ZoneName, BindIP, DestinationIP, Port) ->
                             questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_IN, type = ?DNS_TYPE_AXFR}]},
     {ok, Recv} = case erldns_encoder:encode_message(Packet) of
                       {false, EncodedMessage} ->
-                          send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage);
+                          send_tcp_message(BindIP, DestinationIP, EncodedMessage);
                       {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-                          send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage);
+                          send_tcp_message(BindIP, DestinationIP, EncodedMessage);
                       {false, EncodedMessage, _TsigMac} ->
-                          send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage);
+                          send_tcp_message(BindIP, DestinationIP, EncodedMessage);
                       {true, EncodedMessage, _TsigMac, _Message} ->
-                          send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage)
+                          send_tcp_message(BindIP, DestinationIP, EncodedMessage)
                   end,
     %% Get new records from answer, delete old zone and replace it with the new zone
     NewRecords0 = dns:decode_message(Recv),
@@ -177,13 +177,14 @@ send_axfr(ZoneName, BindIP, DestinationIP, Port) ->
 %% "timeout" is said to have occurred if no NOTIFY response is received
 %% within a reasonable interval.
 -spec send_tcp_message(inet:ip_address(), {inet:ip_address(), inet:port_number()}, binary()) -> ok | {error, Reason :: term()}.
-send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage) ->
+send_tcp_message(BindIP, DestinationIP, EncodedMessage) ->
     BinLength = byte_size(EncodedMessage),
     TcpEncodedMessage = <<BinLength:16, EncodedMessage/binary>>,
-    send_recv(BindIP, DestinationIP, Port, TcpEncodedMessage).
+    send_recv(BindIP, DestinationIP, TcpEncodedMessage).
 
-send_recv(BindIP, DestinationIP, Port, TcpEncodedMessage) ->
-    {ok, Socket} = gen_tcp:connect(DestinationIP, Port, [binary, {active, false}, {ip, BindIP}]),
+send_recv(BindIP, DestinationIP, TcpEncodedMessage) ->
+    erldns_log:info("send_recv(~p, ~p,  ~p)", [BindIP, DestinationIP, TcpEncodedMessage]),
+    {ok, Socket} = gen_tcp:connect(DestinationIP, ?DNS_LISTEN_PORT, [binary, {active, false}, {ip, BindIP}]),
     ok = gen_tcp:send(Socket, TcpEncodedMessage),
     %% Remove the size header.
     {ok, <<_Len:16, Res/binary>>} = gen_tcp:recv(Socket, 0),

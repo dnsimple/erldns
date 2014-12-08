@@ -405,7 +405,7 @@ send_notify(ZoneName, Zone) ->
                      IP
              end,
     lists:foldl(fun(IP, Acc) ->
-        [gen_server:cast(erldns_manager, {send_notify, {BindIP, IP, ?DNS_LISTEN_PORT,
+        [gen_server:cast(erldns_manager, {send_notify, {BindIP, IP,
             ZoneName, ?DNS_CLASS_IN}}) | Acc]
         end, [], NotifySetIPs).
 

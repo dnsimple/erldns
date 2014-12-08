@@ -137,7 +137,7 @@ server_children_test(_Config) ->
     end, [], AddressesWithPorts),
     io:format("AddressPort: ~p~n", [AddressesWithPorts]),
     io:format("Address: ~p~n", [Addresses]),
-    application:set_env(erldns, servers, [
+    ok = application:set_env(erldns, servers, [
         [{port, 8053},
             {listen, Addresses},
             {protocol, [tcp, udp]},
@@ -145,7 +145,7 @@ server_children_test(_Config) ->
                 {size, 10}, {max_overflow, 20}
             ]}]
     ]),
-    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "db"}]),
+    ok = application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "db"}]),
     erldns_storage_mnesia = erldns_config:storage_type(),
     ok = erldns:start(),
     io:format("Loaded and started servers successfully~n"),
