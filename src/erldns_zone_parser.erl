@@ -120,7 +120,7 @@ json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, AllowNotifyList},
 
 json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, AllowNotifyList},
     {<<"allow_transfer">>, AllowTransferList}, {<<"allow_update">>, AllowUpdateList},
-    {<<"also_notify">>, AlsoNotifyList}, {<<"notify_source">>, NotifySourceIP}, {<<"sha">>, Sha},
+    {<<"also_notify">>, AlsoNotifyList}, {<<"notify_source">>, NotifySourceIP0}, {<<"sha">>, Sha},
     {<<"records">>, JsonRecords}], Parsers) ->
   Records = lists:map(
               fun(JsonRecord) ->
@@ -140,8 +140,16 @@ json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, AllowNotifyList},
   FilteredRecords = lists:filter(record_filter(), Records),
   DistinctRecords = lists:usort(FilteredRecords),
   %erldns_log:debug("After parsing for ~p: ~p", [Name, DistinctRecords]),
-  {Name, Sha, DistinctRecords, AllowNotifyList,
-      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP}.
+    NotifySourceIP = case NotifySourceIP0 of
+                        <<>> ->
+                            <<>>;
+                         IP ->
+                             {ok, Addr} = inet_parse:address(binary_to_list(IP)),
+                             Addr
+                     end,
+  {Name, Sha, DistinctRecords,  binary_ip_to_erlang(AllowNotifyList),
+      binary_ip_to_erlang(AllowTransferList), binary_ip_to_erlang(AllowUpdateList),
+      binary_ip_to_erlang(AlsoNotifyList), NotifySourceIP}.
 
 record_filter() ->
   fun(R) ->
@@ -204,6 +212,17 @@ try_custom_parsers(Data, [Parser|Rest]) ->
   end.
 
 % Internal converters
+binary_ip_to_erlang([]) ->
+    [];
+binary_ip_to_erlang(IPList) ->
+    binary_ip_to_erlang(IPList, []).
+
+binary_ip_to_erlang([], Acc) ->
+    Acc;
+binary_ip_to_erlang([IP0 | Tail], Acc) ->
+    {ok, IP} = inet_parse:address(binary_to_list(IP0)),
+    binary_ip_to_erlang(Tail, [IP | Acc]).
+
 json_record_to_erlang([Name, Type, _Ttl, null, _]) ->
   erldns_log:error("record name=~p type=~p has null data", [Name, Type]),
   {};
