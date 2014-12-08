@@ -155,12 +155,12 @@ server_children_test(_Config) ->
 
 test_zone_modify(_Config) ->
     {ok, _} = erldns_storage:load_zones("/opt/erl-dns/priv/example.zone.json"),
-    ok = erldns_zone_cache:add_record(<<"example.com">>,
+    [ok] = erldns_zone_cache:add_record(<<"example.com">>,
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{7,7,7,7}}}),
-    ok = erldns_zone_cache:update_record(<<"example.com">>,
+    [ok] = erldns_zone_cache:update_record(<<"example.com">>,
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{7,7,7,7}}},
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}),
-    ok = erldns_zone_cache:delete_record(<<"example.com">>,
+    [ok] = erldns_zone_cache:delete_record(<<"example.com">>,
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}).
 
 query_tests(_Config) ->
