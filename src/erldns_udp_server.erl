@@ -39,8 +39,8 @@
 
 %% @doc Start the UDP server process
 -spec start_link(atom(), inet | inet6, inet:ip_address(), non_neg_integer()) -> {ok, pid()} | ignore | {error, term()}.
-start_link(Name, InetFamily, Addr, Port) ->
-  gen_server:start_link({local, Name}, ?MODULE, [InetFamily, Addr, Port], []).
+start_link(_Name, InetFamily, Addr, Port) ->
+  gen_server:start_link(?MODULE, [InetFamily, Addr, Port], []).
 
 %% @doc Return true if the UDP server process is running
 -spec is_running() -> boolean().
