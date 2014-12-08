@@ -105,9 +105,23 @@ code_change(_, State, _) ->
 
 % Internal API
 json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
-  json_to_erlang([{<<"name">>, Name}, {<<"sha">>, <<>>}, {<<"records">>, JsonRecords}], Parsers);
+    json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, [<<"127.0.0.1">>]},
+        {<<"allow_transfer">>, [<<"127.0.0.1">>]}, {<<"allow_update">>, [<<"127.0.0.1">>]},
+        {<<"also_notify">>, [<<"127.0.0.1">>]}, {<<"notify_source">>, <<"127.0.0.1">>},{<<"sha">>, <<>>},
+        {<<"records">>, JsonRecords}], Parsers);
+json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, AllowNotifyList},
+                {<<"allow_transfer">>, AllowTransferList}, {<<"allow_update">>, AllowUpdateList},
+                {<<"also_notify">>, AlsoNotifyList}, {<<"notify_source">>, NotifySourceIP},
+                {<<"records">>, JsonRecords}], Parsers) ->
+  json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, AllowNotifyList},
+      {<<"allow_transfer">>, AllowTransferList}, {<<"allow_update">>, AllowUpdateList},
+      {<<"also_notify">>, AlsoNotifyList}, {<<"notify_source">>, NotifySourceIP}, {<<"sha">>, <<>>},
+      {<<"records">>, JsonRecords}], Parsers);
 
-json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}], Parsers) ->
+json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, AllowNotifyList},
+    {<<"allow_transfer">>, AllowTransferList}, {<<"allow_update">>, AllowUpdateList},
+    {<<"also_notify">>, AlsoNotifyList}, {<<"notify_source">>, NotifySourceIP}, {<<"sha">>, Sha},
+    {<<"records">>, JsonRecords}], Parsers) ->
   Records = lists:map(
               fun(JsonRecord) ->
                   Data = json_record_to_list(JsonRecord),
@@ -125,8 +139,13 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
               end, JsonRecords),
   FilteredRecords = lists:filter(record_filter(), Records),
   DistinctRecords = lists:usort(FilteredRecords),
-  % erldns_log:debug("After parsing for ~p: ~p", [Name, DistinctRecords]),
-  {Name, Sha, DistinctRecords}.
+  %erldns_log:debug("After parsing for ~p: ~p", [Name, DistinctRecords]),
+  erldns_log:info("allow_notify: ~p, allow_transfer: ~p,
+                   allow_update: ~p, also_notify: ~p,
+                   notify_source: ~p", [AllowNotifyList,AllowTransferList, AllowUpdateList,
+                                        AlsoNotifyList, NotifySourceIP]),
+  {Name, Sha, DistinctRecords, AllowNotifyList,
+      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP}.
 
 record_filter() ->
   fun(R) ->

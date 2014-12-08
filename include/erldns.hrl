@@ -12,6 +12,11 @@
 
 -record(zone, {
     name :: dns:dname(),
+    allow_notify :: [inet:ip_address()],
+    allow_transfer :: [inet:ip_address()],
+    allow_update :: [inet:ip_address()],
+    also_notify :: [inet:ip_address()],
+    notify_source :: inet:ip_address(),
     version :: binary(),
     authority = [] :: [dns:rr()],
     record_count = 0 :: non_neg_integer(),
@@ -32,3 +37,5 @@
     expiry,
     nxdomain
 }).
+
+-define(DNS_LISTEN_PORT, 8053).

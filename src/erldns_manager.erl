@@ -74,26 +74,3 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-
-%% handle_notify(_DecodedMessage, _ClientIP, _ServerIP) ->
-%%     %% Check is the serial in the SOA is changed.
-%%     %%If serial is changed, request AXFR
-%%     %%Else, drop it.
-%%     ok.
-
-%% handle_decoded_tcp_message(DecodedMessage, Socket, ClientIP, ServerIP) when DecodedMessage#dns_message.oc =:= 4 ->
-%%     erldns_log:info("Handling a NOTIFY!"),
-%%     spawn_link(fun() -> handle_notify(DecodedMessage, ClientIP, ServerIP) end),
-%%     erldns_events:notify({start_handle, tcp, [{host, ClientIP}]}),
-%%     Response = erldns_handler:handle(DecodedMessage, {tcp, ClientIP, ServerIP}),
-%%     erldns_events:notify({end_handle, tcp, [{host, ClientIP}]}),
-%%     case erldns_encoder:encode_message(Response) of
-%%         {false, EncodedMessage} ->
-%%             send_tcp_message(Socket, EncodedMessage);
-%%         {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-%%             send_tcp_message(Socket, EncodedMessage);
-%%         {false, EncodedMessage, _TsigMac} ->
-%%             send_tcp_message(Socket, EncodedMessage);
-%%         {true, EncodedMessage, _TsigMac, _Message} ->
-%%             send_tcp_message(Socket, EncodedMessage)
-%%     end;

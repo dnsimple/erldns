@@ -193,8 +193,10 @@ zone_names_and_versions() ->
 %%
 %% This function will build the necessary Zone record before interting.
 -spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok | {error, Reason :: term()}.
-put_zone({Name, Sha, Records}) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}).
+put_zone({Name, Sha, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
+    NotifySourceIP}) ->
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, AllowNotifyList,
+      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP)}).
 
 %% @doc Put a zone into the cache and wait for a response.
 -spec put_zone(binary(), #zone{}) -> ok | {error, Reason :: term()}.
@@ -203,8 +205,10 @@ put_zone(Name, #zone{} = Zone) ->
 
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok | {error, Reason :: term()}.
-put_zone_async({Name, Sha, Records}) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}).
+put_zone_async({Name, Sha, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
+    NotifySourceIP}) ->
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, AllowNotifyList,
+      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP)}).
 
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async(binary(), #zone{}) -> ok | {error, Reason :: term()}.
@@ -230,7 +234,8 @@ add_record(ZoneName, #dns_rr{} = Record) ->
     Serial = SOA0#dns_rrdata_soa.serial,
     SOA = SOA0#dns_rrdata_soa{serial = Serial + 1},
     Authorities = Authorities0#dns_rr{data = SOA},
-    Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities]),
+    Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities], Zone0#zone.allow_notify,
+    Zone0#zone.allow_transfer, Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source),
     %% Put zone back into cache.
     put_zone(ZoneName, Zone),
     send_notify(ZoneName, Zone).
@@ -247,7 +252,8 @@ delete_record(ZoneName, #dns_rr{} = Record) ->
     Serial = SOA0#dns_rrdata_soa.serial,
     SOA = SOA0#dns_rrdata_soa{serial = Serial + 1},
     Authorities = Authorities0#dns_rr{data = SOA},
-    Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities]),
+    Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities], Zone0#zone.allow_notify,
+    Zone0#zone.allow_transfer, Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source),
     %% Put zone back into cache.
     put_zone(ZoneName, Zone),
     send_notify(ZoneName, Zone).
@@ -265,7 +271,8 @@ update_record(ZoneName, #dns_rr{} = OldRecord, #dns_rr{} = UpdatedRecord) ->
     Serial = SOA0#dns_rrdata_soa.serial,
     SOA = SOA0#dns_rrdata_soa{serial = Serial + 1},
     Authorities = Authorities0#dns_rr{data = SOA},
-    Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities]),
+    Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities], Zone0#zone.allow_notify,
+    Zone0#zone.allow_transfer, Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source),
     %% Put zone back into cache.
     put_zone(ZoneName, Zone),
     send_notify(ZoneName, Zone).
@@ -293,16 +300,20 @@ handle_call({put, Name, Zone}, _From, State) ->
   erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   {reply, ok, State};
 
-handle_call({put, Name, Sha, Records}, _From, State) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+handle_call({put, Name, Sha, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
+    NotifySourceIP}, _From, State) ->
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, AllowNotifyList,
+      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP)}),
   {reply, ok, State}.
 
 handle_cast({put, Name, Zone}, State) ->
   erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   {noreply, State};
 
-handle_cast({put, Name, Sha, Records}, State) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+handle_cast({put, Name, Sha, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
+    NotifySourceIP}, State) ->
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, AllowNotifyList,
+      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP)}),
   {noreply, State};
 
 handle_cast({delete, Name}, State) ->
@@ -347,10 +358,13 @@ find_zone_in_cache(Qname) ->
       end
   end.
 
-build_zone(Qname, Version, Records) ->
+build_zone(Qname, Version, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
+    NotifySourceIP) ->
   RecordsByName = build_named_index(Records),
   Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
-  #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
+  #zone{name = Qname, allow_notify = AllowNotifyList, allow_transfer = AllowTransferList,
+      allow_update = AllowUpdateList, also_notify = AlsoNotifyList, notify_source = NotifySourceIP,
+      version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;
@@ -388,8 +402,9 @@ send_notify(ZoneName, Zone) ->
     %% Now send the notify message out to the set of IPs
     %% TODO Finish this
     %% QUESTIONS; HOW DO I GET MY PORT AND BIND IP
+    BindIP = gen_server:call(tcp_inet, get_addr),
     lists:foldl(fun(IP, Acc) ->
-        [gen_server:cast(erldns_manager, {send_notify, {{127, 0, 0, 1}, IP, 8053, ZoneName, ?DNS_CLASS_IN}}) | Acc]
+        [gen_server:cast(erldns_manager, {send_notify, {BindIP, IP, ?DNS_LISTEN_PORT, ZoneName, ?DNS_CLASS_IN}}) | Acc]
         end, [], NotifySetIPs).
 
 get_notify_set(Records) ->

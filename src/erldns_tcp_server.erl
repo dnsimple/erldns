@@ -45,22 +45,31 @@ start_link(_Name, Family, ServerIP, Port, PoolName) ->
 %% gen_server hooks
 init([Port, ServerIP, PoolName]) ->
   {ok, #state{port = Port, server_ip = ServerIP, pool_name = PoolName}}.
+
+handle_call(get_addr, _From, State) ->
+    {reply, State#state.server_ip, State};
 handle_call(_Request, _From, State) ->
   {ok, State}.
+
 handle_cast(_Message, State) ->
   {noreply, State}.
+
 handle_info({tcp, Socket, Bin}, #state{server_ip = ServerIP, pool_name = PoolName} = State) ->
   folsom_metrics:histogram_timed_update(tcp_handoff_histogram, ?MODULE, handle_request, [ServerIP, PoolName, Socket, Bin]),
   {noreply, State};
 handle_info(_Message, State) ->
   {noreply, State}.
+
 terminate(_Reason, _State) ->
   ok.
+
 sock_opts() ->
   [binary].
+
 new_connection(Socket, State) ->
   inet:setopts(Socket, [{active, once}]),
   {ok, State}.
+
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
