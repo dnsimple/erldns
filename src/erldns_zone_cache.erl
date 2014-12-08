@@ -402,9 +402,8 @@ send_notify(ZoneName, Zone) ->
     %% Now send the notify message out to the set of IPs
     %% TODO Finish this
     %% QUESTIONS; HOW DO I GET MY PORT AND BIND IP
-    BindIP = gen_server:call(tcp_inet, get_addr),
     lists:foldl(fun(IP, Acc) ->
-        [gen_server:cast(erldns_manager, {send_notify, {BindIP, IP, ?DNS_LISTEN_PORT, ZoneName, ?DNS_CLASS_IN}}) | Acc]
+        [gen_server:cast(erldns_manager, {send_notify, {{127, 0, 0, 1}, IP, ?DNS_LISTEN_PORT, ZoneName, ?DNS_CLASS_IN}}) | Acc]
         end, [], NotifySetIPs).
 
 get_notify_set(Records) ->

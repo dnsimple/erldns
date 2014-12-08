@@ -105,9 +105,9 @@ code_change(_, State, _) ->
 
 % Internal API
 json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
-    json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, [<<"127.0.0.1">>]},
-        {<<"allow_transfer">>, [<<"127.0.0.1">>]}, {<<"allow_update">>, [<<"127.0.0.1">>]},
-        {<<"also_notify">>, [<<"127.0.0.1">>]}, {<<"notify_source">>, <<"127.0.0.1">>},{<<"sha">>, <<>>},
+    json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, []},
+        {<<"allow_transfer">>, []}, {<<"allow_update">>, []},
+        {<<"also_notify">>, []}, {<<"notify_source">>, <<"">>},{<<"sha">>, <<>>},
         {<<"records">>, JsonRecords}], Parsers);
 json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, AllowNotifyList},
                 {<<"allow_transfer">>, AllowTransferList}, {<<"allow_update">>, AllowUpdateList},
@@ -140,10 +140,6 @@ json_to_erlang([{<<"name">>, Name}, {<<"allow_notify">>, AllowNotifyList},
   FilteredRecords = lists:filter(record_filter(), Records),
   DistinctRecords = lists:usort(FilteredRecords),
   %erldns_log:debug("After parsing for ~p: ~p", [Name, DistinctRecords]),
-  erldns_log:info("allow_notify: ~p, allow_transfer: ~p,
-                   allow_update: ~p, also_notify: ~p,
-                   notify_source: ~p", [AllowNotifyList,AllowTransferList, AllowUpdateList,
-                                        AlsoNotifyList, NotifySourceIP]),
   {Name, Sha, DistinctRecords, AllowNotifyList,
       AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP}.
 
