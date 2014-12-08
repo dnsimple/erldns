@@ -1,10 +1,10 @@
 [
     {
         "name": "example.com",
-        "allow_notify": ["127.0.0.1"],
-        "allow_transfer": ["127.0.0.1"],
-        "allow_update": ["127.0.0.1"],
-        "also_notify": ["127.0.0.1"],
+        "allow_notify": ["127.0.0.1", "10.1.10.51"],
+        "allow_transfer": ["127.0.0.1", "10.1.10.51"],
+        "allow_update": ["127.0.0.1", "10.1.10.51"],
+        "also_notify": ["127.0.0.1", "10.1.10.51"],
         "notify_source": "127.0.0.1",
         "records": [
             {

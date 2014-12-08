@@ -183,7 +183,6 @@ send_tcp_message(BindIP, DestinationIP, EncodedMessage) ->
     send_recv(BindIP, DestinationIP, TcpEncodedMessage).
 
 send_recv(BindIP, DestinationIP, TcpEncodedMessage) ->
-    erldns_log:info("send_recv(~p, ~p,  ~p)", [BindIP, DestinationIP, TcpEncodedMessage]),
     {ok, Socket} = gen_tcp:connect(DestinationIP, ?DNS_LISTEN_PORT, [binary, {active, false}, {ip, BindIP}]),
     ok = gen_tcp:send(Socket, TcpEncodedMessage),
     %% Remove the size header.

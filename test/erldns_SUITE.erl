@@ -132,7 +132,7 @@ server_children_test(_Config) ->
         {addr, Addr} = lists:keyfind(addr, 1, Conf),
         [{Addr, 8053} | Acc]
         end, [], Config),
-    Addresses = lists:foldl(fun({Addr, _Port} = _Element, Acc) ->
+    Addresses = lists:foldr(fun({Addr, _Port} = _Element, Acc) ->
         [Addr| Acc]
     end, [], AddressesWithPorts),
     io:format("AddressPort: ~p~n", [AddressesWithPorts]),
