@@ -91,7 +91,6 @@ send_notify(BindIP, DestinationIP, Port, ZoneName, ZoneClass) ->
                      {true, EncodedMessage, _TsigMac, _Message} ->
                          send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage)
                  end,
-    erldns_log:info("Recived NOTIFY ack from slave ~p", [dns:decode_message(_Recv)]),
     exit(normal).
 
 handle_notify(Message, ClientIP, ServerIP) ->
@@ -117,15 +116,14 @@ handle_notify(Message, ClientIP, ServerIP) ->
         questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_ANY, type = ?DNS_TYPE_SOA}]},
     {ok, Recv} = case erldns_encoder:encode_message(Request) of
                      {false, EncodedMessage} ->
-                         send_tcp_message(ServerIP, hd(AllowedNotify), EncodedMessage);
+                         send_tcp_message(ServerIP, {ClientIP, ?DNS_LISTEN_PORT}, EncodedMessage);
                      {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-                         send_tcp_message(ServerIP, hd(AllowedNotify), EncodedMessage);
+                         send_tcp_message(ServerIP, {ClientIP, ?DNS_LISTEN_PORT}, EncodedMessage);
                      {false, EncodedMessage, _TsigMac} ->
-                         send_tcp_message(ServerIP, hd(AllowedNotify),EncodedMessage);
+                         send_tcp_message(ServerIP, {ClientIP, ?DNS_LISTEN_PORT}, EncodedMessage);
                      {true, EncodedMessage, _TsigMac, _Message} ->
-                         send_tcp_message(ServerIP, hd(AllowedNotify), EncodedMessage)
+                         send_tcp_message(ServerIP, {ClientIP, ?DNS_LISTEN_PORT}, EncodedMessage)
                  end,
-    erldns_log:info("Recieved SOA from master: ~p", [dns:decode_message(Recv)]),
     Authority = dns:decode_message(Recv),
     %% Check the serial and send axfr request if you are the authority for it
     StoredSerial = SOA#dns_rr.data#dns_rrdata_soa.serial,
@@ -133,17 +131,13 @@ handle_notify(Message, ClientIP, ServerIP) ->
     MasterSerial = MasterSerial0#dns_rr.data#dns_rrdata_soa.serial,
     case StoredSerial =/= MasterSerial of
         true ->
-            %% TODO dont hard code port
-            send_axfr(ZoneName, ServerIP, ClientIP, 8053);
+            send_axfr(ZoneName, ServerIP, ClientIP, ?DNS_LISTEN_PORT);
         false ->
-            lager:info("Dont need to: ~p == ~p", [StoredSerial, MasterSerial]),
             ok
     end,
     exit(normal).
 
 send_axfr(ZoneName, BindIP, DestinationIP, Port) ->
-    lager:info("Sending an axfr request!"),
-%%     {dns_message, 27085, false,0, false, false, true, false, true, false,0, 1,0,0,1, [{dns_query, <<"example.com">>, 1,6}], [],[], [{dns_optrr, 4096,0, 0, false, []}]}
     Packet =  #dns_message{id = dns:random_id(),
                             oc = ?DNS_OPCODE_QUERY,
                             rd = true,
@@ -153,7 +147,7 @@ send_axfr(ZoneName, BindIP, DestinationIP, Port) ->
                             qc = 1,
                             adc = 1,
                             questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_IN, type = ?DNS_TYPE_AXFR}]},
-    {ok, _Recv} = case erldns_encoder:encode_message(Packet) of
+    {ok, Recv} = case erldns_encoder:encode_message(Packet) of
                       {false, EncodedMessage} ->
                           send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage);
                       {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
@@ -163,7 +157,14 @@ send_axfr(ZoneName, BindIP, DestinationIP, Port) ->
                       {true, EncodedMessage, _TsigMac, _Message} ->
                           send_tcp_message(BindIP, {DestinationIP, Port}, EncodedMessage)
                   end,
-    erldns_log:info("Recived NOTIFY ack from slave ~p", [dns:decode_message(_Recv)]),
+    %% Get new records from answer, delete old zone and replace it with the new zone
+    NewRecords0 = dns:decode_message(Recv),
+    NewRecords = NewRecords0#dns_message.answers,
+    {ok, Zone} = erldns_zone_cache:get_zone_with_records(ZoneName),
+    NewZone = erldns_zone_cache:build_zone(ZoneName, Zone#zone.version, NewRecords, Zone#zone.allow_notify,
+        Zone#zone.allow_transfer, Zone#zone.allow_update, Zone#zone.also_notify, Zone#zone.notify_source),
+    ok = erldns_storage:delete(zones, normalize_name(ZoneName)),
+    ok = erldns_zone_cache:put_zone(ZoneName, NewZone),
     exit(normal).
 
 %%%===================================================================

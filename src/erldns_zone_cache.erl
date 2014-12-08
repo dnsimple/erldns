@@ -41,6 +41,7 @@
 
 % Write APIs
 -export([
+         build_zone/8,
          put_zone/1,
          put_zone/2,
          put_zone_async/1,
@@ -215,10 +216,10 @@ put_zone_async({Name, Sha, Records, AllowNotifyList, AllowTransferList, AllowUpd
 put_zone_async(Name, Zone) ->
   erldns_storage:insert(zones, {normalize_name(Name), Zone}).
 
-%% @doc Remove a zone from the cache without waiting for a response.
--spec delete_zone(binary()) -> any().
+%% @doc Remove a zone from the cache.
+-spec delete_zone(binary()) -> ok | {error, term()}.
 delete_zone(Name) ->
-  gen_server:cast(?SERVER, {delete, Name}).
+    erldns_storage:delete(zones, Name).
 
 %% @doc Add a record to a particular zone.
 -spec add_record(binary(), #dns_rr{}) -> ok | {error, term()}.
