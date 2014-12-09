@@ -88,6 +88,22 @@
             },
             {
                 "name": "example.com",
+                "type": "NS",
+                "ttl": 3600,
+                "data": {
+                    "dname": "ns3.example.com"
+                }
+            },
+            {
+                "name": "ns3.example.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "10.1.10.51"
+                }
+            },
+            {
+                "name": "example.com",
                 "type": "TXT",
                 "ttl": 3600,
                 "data": {
