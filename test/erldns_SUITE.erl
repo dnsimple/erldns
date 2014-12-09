@@ -162,7 +162,7 @@ test_zone_modify(_Config) ->
     ok = erldns_storage:create(zones),
     {ok, _} = erldns_storage:load_zones("/opt/erl-dns/priv/example.zone.json"),
     [ok,ok] = erldns_zone_cache:add_record(<<"example.com">>,
-        {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{7,7,7,7}}}),
+        {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{7,7,7,7}}}, true),
     [ok,ok] = erldns_zone_cache:update_record(<<"example.com">>,
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{7,7,7,7}}},
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}),

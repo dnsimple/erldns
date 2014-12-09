@@ -22,7 +22,7 @@
 
 %% API
 -export([start_link/2]).
-
+-export([query_for_records/3]).
 %% gen_server callbacks
 -export([init/1,
     handle_call/3,
@@ -40,6 +40,11 @@
 %%%===================================================================
 start_link(Operation, Args) ->
     gen_server:start_link(?MODULE, [Operation, Args], []).
+
+query_for_records(DestinationIP, BindIP, DNSRRList) ->
+    Questions = build_questions(DNSRRList),
+    query_server_for_answers(DestinationIP, BindIP, Questions).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -206,3 +211,54 @@ get_soa( ZoneName, [#dns_rr{data = Data} = Head | Tail], SOA) ->
         _ ->
             get_soa(ZoneName, Tail, SOA)
     end.
+
+%% @doc Takes a list of dns_rrs and converts them to a list of dns_querys
+-spec build_questions([dns:rr()]) -> dns:questions().
+build_questions(DNSRRList) ->
+    build_questions(DNSRRList, []).
+
+build_questions([], Acc) ->
+    %% Remove duplicate questions from the list.
+    Set = sets:from_list(Acc),
+    sets:to_list(Set);
+build_questions([Record | Tail], Acc) ->
+    build_questions(Tail, [#dns_query{name = Record#dns_rr.name, class = Record#dns_rr.class,
+        type = Record#dns_rr.type} | Acc]).
+
+%% @doc Since erl-dns does not handle recursive queries, we need to do a query for every question.
+%% annoying but this will have to do for now...
+%% @end
+-spec query_server_for_answers(inet:ip_address(), inet:ip_address(), dns:questions()) -> [dns:rr()].
+query_server_for_answers(DestinationIP, BindIP, Questions) ->
+    query_server_for_answers(DestinationIP, BindIP, Questions, []).
+
+query_server_for_answers(_DestinationIP, _BindIP, [], Acc) ->
+    Acc;
+query_server_for_answers(DestinationIP, BindIP, [Question | Tail], Acc) ->
+    Packet = #dns_message{id = dns:random_id(),
+        qr = false,
+        oc = ?DNS_OPCODE_QUERY,
+        aa = false,
+        tc = false,
+        rd = true,
+        ra = false,
+        ad = true,
+        cd = false,
+        rc = ?DNS_RCODE_NOERROR,
+        qc = 1,
+        adc = 1,
+        questions = [Question],
+        additional = [#dns_optrr{udp_payload_size = 4096, ext_rcode = ?DNS_ERCODE_NOERROR,
+            version = 0, dnssec = false, data = []}]},
+    {ok, Recv} = case erldns_encoder:encode_message(Packet) of
+                     {false, EncodedMessage} ->
+                         send_tcp_message(DestinationIP, BindIP, EncodedMessage);
+                     {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
+                         send_tcp_message(BindIP, DestinationIP, EncodedMessage);
+                     {false, EncodedMessage, _TsigMac} ->
+                         send_tcp_message(BindIP, DestinationIP, EncodedMessage);
+                     {true, EncodedMessage, _TsigMac, _Message} ->
+                         send_tcp_message(BindIP, DestinationIP, EncodedMessage)
+                 end,
+    DecodedMessage = dns:decode_message(Recv),
+    lists:flatten(query_server_for_answers(DestinationIP, BindIP, Tail, [DecodedMessage#dns_message.answers | Acc])).

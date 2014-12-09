@@ -53,7 +53,7 @@
          put_zone_async/1,
          put_zone_async/2,
          delete_zone/1,
-         add_record/2,
+         add_record/3,
          delete_record/2,
          update_record/3
         ]).
@@ -215,7 +215,6 @@ get_delegations(Name) ->
       []
   end.
 
-%% TODO If retrieved records are expired, query master for new records.
 %% @doc Return the record set for the given dname.
 -spec get_records_by_name(dns:dname()) -> [dns:rr()].
 get_records_by_name(Name) ->
@@ -225,7 +224,7 @@ get_records_by_name(Name) ->
             case dict:find(normalize_name(Name), Zone#zone.records_by_name) of
                 {ok, RecordSet} ->
 %%                      erldns_log:info("~p-> Record Set: ~p", [?MODULE, RecordSet]),
-                    RecordSet;
+                    remove_expiry(RecordSet);
                 _ -> []
             end;
         _ ->
@@ -235,24 +234,41 @@ get_records_by_name(Name) ->
 %% @doc This fuction retrieves the most up to date records from master if needed. Otherswise,
 %% it returns what was given to it.
 %% @end
--spec retrieve_updated_records(inet:ip_address(), inet:ip_address(), [] | [dns:rr()]) -> [] | [dns:rr()].
-retrieve_updated_records(_ClientIP, _ServerIP, []) ->
-    [];
-retrieve_updated_records(ClientIP, ServerIP, [Record | _Tail] = RecordList) ->
-    case ServerIP =:= get_zone_notify_source(Record#dns_rr.name) of
+-spec retrieve_updated_records(inet:ip_address(), inet:ip_address(), dns:dname()) -> [] | [dns:rr()].
+retrieve_updated_records(ClientIP, ServerIP, Qname) ->
+    Name = normalize_name(Qname),
+    case ServerIP =:= get_zone_notify_source(Name) of
         true ->
             %% We are master, just return the records you have
-            RecordList;
+            get_records_by_name(Name);
         false ->
-            retrieve_updated_records(ClientIP, ServerIP, RecordList, [], [])
+            %% We are slave, get the zone in the cache and the records from the dict with expirys.
+            case find_zone_in_cache(Name) of
+                {ok, Zone} ->
+                    case dict:find(Name, Zone#zone.records_by_name) of
+                        {ok, RecordSet} ->
+                            retrieve_updated_records(Name, ClientIP, ServerIP, RecordSet, [], []);
+                        _ -> []
+                    end;
+                _ ->
+                    []
+            end
     end.
 
-retrieve_updated_records(ClientIP, ServerIP, [], Acc, QueryAcc) ->
-    lists:flatten(query_master_for_records(ClientIP, ServerIP, QueryAcc), Acc);
-retrieve_updated_records(_ClientIP, _ServerIP, [Record | _Tail], _Acc, _QueryAcc) ->
+retrieve_updated_records(ZoneName, ClientIP, ServerIP, [], Acc, QueryAcc) ->
+    %%Query server for records that needed to be updated, and merge them with records that didn't.
+    NewRecords = query_master_for_records(ClientIP, ServerIP, QueryAcc),
+    [add_record(ZoneName, R, false) || R <- NewRecords],
+    lists:flatten(NewRecords, Acc);
+retrieve_updated_records(ZoneName, ClientIP, ServerIP, [{Expiry, Record} | Tail], Acc, QueryAcc) ->
     %% Get the timestamp of the record
-    _TTL = Record#dns_rr.ttl,
-    ok.
+    case timestamp() < Expiry of
+        true ->
+            retrieve_updated_records(ZoneName, ClientIP, ServerIP, Tail, [Record | Acc], QueryAcc);
+        false ->
+            retrieve_updated_records(ZoneName, ClientIP, ServerIP, Tail, Acc, [Record | QueryAcc])
+    end.
+
 %% @doc This function takes a list of records, builds a query and sends it to master for updated
 %% records
 %% @end
@@ -260,12 +276,8 @@ retrieve_updated_records(_ClientIP, _ServerIP, [Record | _Tail], _Acc, _QueryAcc
 query_master_for_records(_ClientIP, _ServerIP, []) ->
     [];
 query_master_for_records(ClientIP, ServerIP, QueryList) ->
-    query_master_for_records(ClientIP, ServerIP, QueryList, []).
+    erldns_zone_transfer_worker:query_for_records(ClientIP, ServerIP, QueryList).
 
-query_master_for_records(_ClientIP, _ServerIP, [], Acc) ->
-    Acc;
-query_master_for_records(_ClientIP, _ServerIP, [_Query | _Head], _Acc) ->
-    ok.
 
 %% @doc Check if the name is in a zone.
 -spec in_zone(binary()) -> boolean().
@@ -321,8 +333,8 @@ delete_zone(Name) ->
     erldns_storage:delete(zones, Name).
 
 %% @doc Add a record to a particular zone.
--spec add_record(binary(), #dns_rr{}) -> ok | {error, term()}.
-add_record(ZoneName, #dns_rr{} = Record) ->
+-spec add_record(binary(), #dns_rr{}, boolean()) -> ok | {error, term()}.
+add_record(ZoneName, #dns_rr{} = Record, SendNotify) ->
     {ok, Zone0} = get_zone_with_records(normalize_name(ZoneName)),
     Records0 = Zone0#zone.records,
     %% Ensure no exact duplicates are found
@@ -336,9 +348,14 @@ add_record(ZoneName, #dns_rr{} = Record) ->
     Authorities = Authorities0#dns_rr{data = SOA},
     Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities], Zone0#zone.allow_notify,
     Zone0#zone.allow_transfer, Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source),
-    %% Put zone back into cache.
-    put_zone(ZoneName, Zone),
-    send_notify(ZoneName, Zone).
+    %% Put zone back into cache. And send notify if needed.
+    case SendNotify of
+        false ->
+            put_zone(ZoneName, Zone);
+        true ->
+            put_zone(ZoneName, Zone),
+            send_notify(ZoneName, Zone)
+    end.
 
 %% @doc Delete a record from a particular zone.
 -spec delete_record(binary(), #dns_rr{}) -> ok | {error, term()}.
@@ -435,6 +452,18 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 
 % Internal API
+%% @doc Removes the expiration timestamp from the list of dns_rrs stored in the dict.
+-spec remove_expiry([{non_neg_integer(), dns:rr()}] | []) -> [] | [dns:rr()].
+remove_expiry([]) ->
+    [];
+remove_expiry(RecordSet) ->
+    remove_expiry(RecordSet, []).
+
+remove_expiry([], Acc) ->
+    Acc;
+remove_expiry([{_Expiry, Record} | Tail], Acc) ->
+    remove_expiry(Tail, [Record | Acc]).
+
 is_name_in_zone(Name, Zone) ->
   case dict:is_key(normalize_name(Name), Zone#zone.records_by_name) of
     true -> true;
@@ -469,11 +498,12 @@ build_zone(Qname, Version, Records, AllowNotifyList, AllowTransferList, AllowUpd
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;
 build_named_index([R|Rest], Idx) ->
+  Expiry = timestamp() + R#dns_rr.ttl,
   case dict:find(R#dns_rr.name, Idx) of
     {ok, Records} ->
-      build_named_index(Rest, dict:store(normalize_name(R#dns_rr.name), Records ++ [R], Idx));
+      build_named_index(Rest, dict:store(normalize_name(R#dns_rr.name), Records ++ [{Expiry, R}], Idx));
     error ->
-      build_named_index(Rest, dict:store(normalize_name(R#dns_rr.name), [R], Idx))
+      build_named_index(Rest, dict:store(normalize_name(R#dns_rr.name), [{Expiry, R}], Idx))
   end.
 
 normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
@@ -552,3 +582,6 @@ get_ips_for_notify_set(Records, [Head | Tail], IPs) ->
             get_ips_for_notify_set(Records, Tail, [ARecord#dns_rrdata_aaaa.ip | IPs])
     end.
 
+timestamp() ->
+    {TM, TS, _} = os:timestamp(),
+    (TM * 1000000) + TS.
