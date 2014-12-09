@@ -36,7 +36,13 @@
          get_delegations/1,
          get_records_by_name/1,
          in_zone/1,
-         zone_names_and_versions/0
+         zone_names_and_versions/0,
+         retrieve_updated_records/3,
+         get_zone_allow_notify/1,
+         get_zone_allow_transfer/1,
+         get_zone_allow_update/1,
+         get_zone_also_notify/1,
+         get_zone_notify_source/1
         ]).
 
 % Write APIs
@@ -126,6 +132,61 @@ get_zone_with_records(Name) ->
     _ -> {error, zone_not_found}
   end.
 
+%% @doc Retrieve the allow_notify option from zone.
+-spec get_zone_allow_notify(binary()) -> [inet:ip_address()] | {error, zone_not_found}.
+get_zone_allow_notify(ZoneName) ->
+    NormalizedName = normalize_name(ZoneName),
+    case erldns_storage:select(zones, NormalizedName) of
+      [{NormalizedName, Zone}] ->
+          Zone#zone.allow_notify;
+       _ ->
+           {error, zone_not_found}
+    end.
+
+%% @doc Retrieve the allow_transfer option from zone.
+-spec get_zone_allow_transfer(binary()) -> [inet:ip_address()] | {error, zone_not_found}.
+get_zone_allow_transfer(ZoneName) ->
+    NormalizedName = normalize_name(ZoneName),
+    case erldns_storage:select(zones, NormalizedName) of
+        [{NormalizedName, Zone}] ->
+            Zone#zone.allow_transfer;
+        _ ->
+            {error, zone_not_found}
+    end.
+
+%% @doc Retrieve the allow_update option from zone.
+-spec get_zone_allow_update(binary()) -> [inet:ip_address()] | {error, zone_not_found}.
+get_zone_allow_update(ZoneName) ->
+    NormalizedName = normalize_name(ZoneName),
+    case erldns_storage:select(zones, NormalizedName) of
+        [{NormalizedName, Zone}] ->
+            Zone#zone.allow_update;
+        _ ->
+            {error, zone_not_found}
+    end.
+
+%% @doc Retrieve the also_notify option from zone.
+-spec get_zone_allow_update(binary()) -> [inet:ip_address()] | {error, zone_not_found}.
+get_zone_also_notify(ZoneName) ->
+    NormalizedName = normalize_name(ZoneName),
+    case erldns_storage:select(zones, NormalizedName) of
+        [{NormalizedName, Zone}] ->
+            Zone#zone.also_notify;
+        _ ->
+            {error, zone_not_found}
+    end.
+
+%% @doc Retrieve the notify-source option from zone.
+-spec get_zone_notify_source(binary()) -> inet:ip_address() | {error, zone_not_found}.
+get_zone_notify_source(ZoneName) ->
+    NormalizedName = normalize_name(ZoneName),
+    case erldns_storage:select(zones, NormalizedName) of
+        [{NormalizedName, Zone}] ->
+            Zone#zone.notify_source;
+        _ ->
+            {error, zone_not_found}
+    end.
+
 %% @doc Find the SOA record for the given DNS question.
 -spec get_authority(dns:message() | dns:dname()) -> {error, no_question} | {error, no_authority} | {ok, dns:rr()}.
 get_authority(Message) when is_record(Message, dns_message) ->
@@ -167,6 +228,36 @@ get_records_by_name(Name) ->
         _ ->
             []
     end.
+
+%% @doc This fuction retrieves the most up to date records from master if needed. Otherswise,
+%% it returns what was given to it.
+%% @end
+-spec retrieve_updated_records(inet:ip_address(), inet:ip_address(), [] | [dns:rr()]) -> [] | [dns:rr()].
+retrieve_updated_records(ClientIP, ServerIP, []) ->
+    [];
+retrieve_updated_records(ClientIP, ServerIP, RecordList) ->
+    case ServerIP =:=
+    retrieve_updated_records(ClientIP, ServerIP, RecordList, [], []).
+
+retrieve_updated_records(ClientIP, ServerIP, [], Acc, QueryAcc) ->
+    lists:flatten(query_master_for_records(ClientIP, ServerIP, QueryAcc), Acc);
+retrieve_updated_records(_ClientIP, _ServerIP, [Record | Tail], Acc, QueryAcc) ->
+    %% Get the timestamp of the record
+    TTL = Record#dns_rr.ttl,
+    ok.
+%% @doc This function takes a list of records, builds a query and sends it to master for updated
+%% records
+%% @end
+-spec query_master_for_records(inet:ip_address(), inet:ip_address(), [] | [dns:rr()]) -> [] | [dns:rr()].
+query_master_for_records(_ClientIP, _ServerIP, []) ->
+    [];
+query_master_for_records(ClientIP, ServerIP, QueryList) ->
+    query_master_for_records(ClientIP, ServerIP, QueryList, []).
+
+query_master_for_records(ClientIP, ServerIP, [], Acc) ->
+    Acc;
+query_master_for_records(_ClientIP, _ServerIP, [Query | Head], Acc) ->
+    ok.
 
 %% @doc Check if the name is in a zone.
 -spec in_zone(binary()) -> boolean().
