@@ -40,6 +40,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(mnesia_API_test, Config) ->
     application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "db"}]),
+    application:set_env(mnesia, dir, "/opt/erl-dns/test/test_db"),
     Config;
 init_per_testcase(json_API_test, Config) ->
     application:set_env(erldns, storage, [{type, erldns_storage_json}]),
@@ -47,6 +48,8 @@ init_per_testcase(json_API_test, Config) ->
 init_per_testcase(server_children_test, Config) ->
     Config;
 init_per_testcase(test_zone_modify, Config) ->
+    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "db"}]),
+    application:set_env(mnesia, dir, "/opt/erl-dns/test/test_db1"),
     Config;
 init_per_testcase(query_tests, Config) ->
     Config.
@@ -154,13 +157,16 @@ server_children_test(_Config) ->
     io:format("Test completed for server_children~n").
 
 test_zone_modify(_Config) ->
+    erldns_storage_mnesia = erldns_config:storage_type(),
+    ok = erldns_storage:create(schema),
+    ok = erldns_storage:create(zones),
     {ok, _} = erldns_storage:load_zones("/opt/erl-dns/priv/example.zone.json"),
-    [ok] = erldns_zone_cache:add_record(<<"example.com">>,
+    [ok,ok] = erldns_zone_cache:add_record(<<"example.com">>,
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{7,7,7,7}}}),
-    [ok] = erldns_zone_cache:update_record(<<"example.com">>,
+    [ok,ok] = erldns_zone_cache:update_record(<<"example.com">>,
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{7,7,7,7}}},
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}),
-    [ok] = erldns_zone_cache:delete_record(<<"example.com">>,
+    [ok,ok] = erldns_zone_cache:delete_record(<<"example.com">>,
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}).
 
 query_tests(_Config) ->
