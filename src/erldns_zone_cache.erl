@@ -80,13 +80,13 @@ start_link() ->
 % Read API
 
 %% @doc Find a zone for a given qname.
--spec find_zone(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found} | {error, not_authoritative}.
+-spec find_zone(dns:dname()) -> {ok, #zone{}} | {error, {zone_not_found, binary()}} | {error, not_authoritative}.
 find_zone(Qname) ->
   find_zone(normalize_name(Qname), get_authority(Qname)).
 
 %% @doc Find a zone for a given qname.
 -spec find_zone(dns:dname(), {error, any()} | {ok, dns:rr()} | [dns:rr()] | dns:rr()) ->
-  {ok, #zone{}} | {error, zone_not_found} | {error, not_authoritative}.
+  {ok, #zone{}} | {error, {zone_not_found, binary()}} | {error, not_authoritative}.
 find_zone(Qname, {error, _}) ->
   find_zone(Qname, []);
 find_zone(Qname, {ok, Authority}) ->
@@ -98,14 +98,14 @@ find_zone(Qname, Authorities) when is_list(Authorities) ->
 find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
   Name = normalize_name(Qname),
   case dns:dname_to_labels(Name) of
-    [] -> {error, zone_not_found};
-    [_] -> {error, zone_not_found};
+    [] -> {error, {zone_not_found, Name}};
+    [_] -> {error, {zone_not_found, Name}};
     [_|Labels] ->
       case get_zone(Name) of
         {ok, Zone} -> Zone;
-        {error, zone_not_found} ->
+        {error, {zone_not_found, Name}} ->
           case Name =:= Authority#dns_rr.name of
-            true -> {error, zone_not_found};
+            true -> {error, {zone_not_found, Name}};
             false -> find_zone(dns:labels_to_dname(Labels), Authority)
           end
       end
@@ -113,78 +113,80 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
 
 %% @doc Get a zone for the specific name. This function will not attempt to resolve
 %% the dname in any way, it will simply look up the name in the underlying data store.
--spec get_zone(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
+-spec get_zone(dns:dname()) -> {ok, #zone{}} | {error, {zone_not_found, binary()}}.
 get_zone(Name) ->
   NormalizedName = normalize_name(Name),
   case erldns_storage:select(zones, NormalizedName) of
     [{NormalizedName, Zone}] ->
         {ok, Zone#zone{name = NormalizedName, records = [], records_by_name=trimmed}};
     _Res ->
-        {error, zone_not_found}
+        {error, {zone_not_found, NormalizedName}}
   end.
 
 %% @doc Get a zone for the specific name, including the records for the zone.
--spec get_zone_with_records(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
+-spec get_zone_with_records(dns:dname()) -> {ok, #zone{}} | {error, {zone_not_found, binary()}}.
 get_zone_with_records(Name) ->
   NormalizedName = normalize_name(Name),
   case erldns_storage:select(zones, NormalizedName) of
     [{NormalizedName, Zone}] -> {ok, Zone};
-    _ -> {error, zone_not_found}
+    _Error ->
+        erldns_log:error("Error getting zone ~p: ~p", [NormalizedName, _Error]),
+        {error, {zone_not_found, NormalizedName}}
   end.
 
 %% @doc Retrieve the allow_notify option from zone.
--spec get_zone_allow_notify(binary()) -> [inet:ip_address()] | {error, zone_not_found}.
+-spec get_zone_allow_notify(binary()) -> [inet:ip_address()] | {error, {zone_not_found, binary()}}.
 get_zone_allow_notify(ZoneName) ->
     NormalizedName = normalize_name(ZoneName),
     case erldns_storage:select(zones, NormalizedName) of
       [{NormalizedName, Zone}] ->
           Zone#zone.allow_notify;
        _ ->
-           {error, zone_not_found}
+           {error, {zone_not_found, NormalizedName}}
     end.
 
 %% @doc Retrieve the allow_transfer option from zone.
--spec get_zone_allow_transfer(binary()) -> [inet:ip_address()] | {error, zone_not_found}.
+-spec get_zone_allow_transfer(binary()) -> [inet:ip_address()] | {error, {zone_not_found, binary()}}.
 get_zone_allow_transfer(ZoneName) ->
     NormalizedName = normalize_name(ZoneName),
     case erldns_storage:select(zones, NormalizedName) of
         [{NormalizedName, Zone}] ->
             Zone#zone.allow_transfer;
         _ ->
-            {error, zone_not_found}
+            {error, {zone_not_found, NormalizedName}}
     end.
 
 %% @doc Retrieve the allow_update option from zone.
--spec get_zone_allow_update(binary()) -> [inet:ip_address()] | {error, zone_not_found}.
+-spec get_zone_allow_update(binary()) -> [inet:ip_address()] | {error, {zone_not_found, binary()}}.
 get_zone_allow_update(ZoneName) ->
     NormalizedName = normalize_name(ZoneName),
     case erldns_storage:select(zones, NormalizedName) of
         [{NormalizedName, Zone}] ->
             Zone#zone.allow_update;
         _ ->
-            {error, zone_not_found}
+            {error, {zone_not_found, NormalizedName}}
     end.
 
 %% @doc Retrieve the also_notify option from zone.
--spec get_zone_allow_update(binary()) -> [inet:ip_address()] | {error, zone_not_found}.
+-spec get_zone_also_notify(binary()) -> [inet:ip_address()] | {error, {zone_not_found, binary()}}.
 get_zone_also_notify(ZoneName) ->
     NormalizedName = normalize_name(ZoneName),
     case erldns_storage:select(zones, NormalizedName) of
         [{NormalizedName, Zone}] ->
             Zone#zone.also_notify;
         _ ->
-            {error, zone_not_found}
+            {error, {zone_not_found, NormalizedName}}
     end.
 
 %% @doc Retrieve the notify-source option from zone.
--spec get_zone_notify_source(binary()) -> inet:ip_address() | {error, zone_not_found}.
+-spec get_zone_notify_source(binary()) -> inet:ip_address() | {error, {zone_not_found, binary()}}.
 get_zone_notify_source(ZoneName) ->
     NormalizedName = normalize_name(ZoneName),
     case erldns_storage:select(zones, NormalizedName) of
         [{NormalizedName, Zone}] ->
             Zone#zone.notify_source;
         _ ->
-            {error, zone_not_found}
+            {error, {zone_not_found, NormalizedName}}
     end.
 
 %% @doc Find the SOA record for the given DNS question.
@@ -446,8 +448,8 @@ is_name_in_zone(Name, Zone) ->
 find_zone_in_cache(Qname) ->
   Name = normalize_name(Qname),
   case dns:dname_to_labels(Name) of
-    [] -> {error, zone_not_found};
-    [_] -> {error, zone_not_found};
+    [] -> {error, {zone_not_found, Name}};
+    [_] -> {error, {zone_not_found, Name}};
     [_|Labels] ->
       case erldns_storage:select(zones, Name) of
         [{Name, Zone}] -> {ok, Zone};
