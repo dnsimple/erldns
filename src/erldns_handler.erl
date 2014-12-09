@@ -123,14 +123,14 @@ do_handle(Message, ClientIP, ServerIP) ->
 %%
 %% If the cache is missed, then the SOA (Start of Authority) is discovered here.
 handle_message(Message, ClientIP, ServerIP) ->
-  case erldns_packet_cache:get(Message#dns_message.questions, ClientIP) of
-    {ok, CachedResponse} ->
-      erldns_events:notify({packet_cache_hit, [{host, ClientIP}, {message, Message}]}),
-      CachedResponse#dns_message{id=Message#dns_message.id};
-    {error, Reason} ->
-      erldns_events:notify({packet_cache_miss, [{reason, Reason}, {host, ClientIP}, {message, Message}]}),
-      handle_packet_cache_miss(Message, get_authority(Message), ClientIP, ServerIP) % SOA lookup
-  end.
+%%   case erldns_packet_cache:get(Message#dns_message.questions, ClientIP) of
+%%     {ok, CachedResponse} ->
+%%       erldns_events:notify({packet_cache_hit, [{host, ClientIP}, {message, Message}]}),
+%%       CachedResponse#dns_message{id=Message#dns_message.id};
+%%     {error, Reason} ->
+%%       erldns_events:notify({packet_cache_miss, [{reason, Reason}, {host, ClientIP}, {message, Message}]}),
+      handle_packet_cache_miss(Message, get_authority(Message), ClientIP, ServerIP). % SOA lookup
+%%   end.
 
 %% If the packet is not in the cache and we are not authoritative (because there
 %% is no SOA record for this zone), then answer immediately setting the AA flag to false.
@@ -167,7 +167,7 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, ClientIP, ServerIP) ->
 
 %% We are authoritative so cache the packet and return the message.
 maybe_cache_packet(Message, true) ->
-  erldns_packet_cache:put(Message#dns_message.questions, Message),
+%%   erldns_packet_cache:put(Message#dns_message.questions, Message),
   Message;
 
 %% We are not authoritative so just return the message.
