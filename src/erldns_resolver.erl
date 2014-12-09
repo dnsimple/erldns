@@ -64,14 +64,16 @@ resolve(Message, _AuthorityRecords, Qname, ?DNS_TYPE_AXFR = _Qtype, {ClientIP, S
             end,
             Message
     end;
-resolve(Message, AuthorityRecords, Qname, Qtype, {ClientIP, _ServerIP}) ->
+%% TODO Check record expiry and ask master for record if it is expired. Then check SOA, and
+%% send AXFR if zone is expired
+resolve(Message, AuthorityRecords, Qname, Qtype, {ClientIP, ServerIP}) ->
   Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), % Zone lookup
-  Records = resolve(Message, Qname, Qtype, Zone, ClientIP, _CnameChain = []),
+  Records = resolve(Message, Qname, Qtype, Zone, {ClientIP, ServerIP}, _CnameChain = []),
   additional_processing(rewrite_soa_ttl(Records), ClientIP, Zone).
 
 %% No SOA was found for the Qname so we return the root hints
 %% Note: it seems odd that we are indicating we are authoritative here.
-resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _ClientIP, _CnameChain) ->
+resolve(Message, _Qname, _Qtype, {error, not_authoritative}, {_ClientIP, _ServerIP}, _CnameChain) ->
   case erldns_config:use_root_hints() of
     true ->
       {Authority, Additional} = erldns_records:root_hints(),
@@ -82,8 +84,10 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _ClientIP, _CnameCh
 
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
-resolve(Message, Qname, Qtype, Zone, ClientIP, CnameChain) ->
-  resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), ClientIP, CnameChain, Zone).
+resolve(Message, Qname, Qtype, Zone, {ClientIP, ServerIP}, CnameChain) ->
+    Records0 = erldns_zone_cache:get_records_by_name(Qname),
+    Records = erldns_zone_cache:retrieve_updated_records(ClientIP, ServerIP, Records0),
+  resolve(Message, Qname, Qtype, Records, ClientIP, CnameChain, Zone).
 
 %% There were no exact matches on name, so move to the best-match resolution.
 resolve(Message, Qname, Qtype, _MatchedRecords = [], ClientIP, CnameChain, Zone) ->

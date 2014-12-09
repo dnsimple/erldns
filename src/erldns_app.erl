@@ -41,6 +41,7 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
   end,
 
   erldns_log:info("Loading zones from local file"),
+  %% TODO Here we can determine who is slave or master
   case erldns_config:storage_type() of
   erldns_storage_json ->
       erldns_storage:load_zones();

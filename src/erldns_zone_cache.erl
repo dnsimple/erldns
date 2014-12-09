@@ -215,15 +215,16 @@ get_delegations(Name) ->
       []
   end.
 
+%% TODO If retrieved records are expired, query master for new records.
 %% @doc Return the record set for the given dname.
 -spec get_records_by_name(dns:dname()) -> [dns:rr()].
 get_records_by_name(Name) ->
     case find_zone_in_cache(Name) of
         {ok, Zone} ->
-%%             erldns_log:info("~p-> found zone: ~p~n~n", [?MODULE, Zone]),
+%%              erldns_log:info("~p-> found zone: ~p~n~n", [?MODULE, Zone]),
             case dict:find(normalize_name(Name), Zone#zone.records_by_name) of
                 {ok, RecordSet} ->
-%%                     erldns_log:info("~p-> Record Set: ~p", [?MODULE, RecordSet]),
+%%                      erldns_log:info("~p-> Record Set: ~p", [?MODULE, RecordSet]),
                     RecordSet;
                 _ -> []
             end;
@@ -235,7 +236,7 @@ get_records_by_name(Name) ->
 %% it returns what was given to it.
 %% @end
 -spec retrieve_updated_records(inet:ip_address(), inet:ip_address(), [] | [dns:rr()]) -> [] | [dns:rr()].
-retrieve_updated_records(ClientIP, ServerIP, []) ->
+retrieve_updated_records(_ClientIP, _ServerIP, []) ->
     [];
 retrieve_updated_records(ClientIP, ServerIP, [Record | _Tail] = RecordList) ->
     case ServerIP =:= get_zone_notify_source(Record#dns_rr.name) of
@@ -248,9 +249,9 @@ retrieve_updated_records(ClientIP, ServerIP, [Record | _Tail] = RecordList) ->
 
 retrieve_updated_records(ClientIP, ServerIP, [], Acc, QueryAcc) ->
     lists:flatten(query_master_for_records(ClientIP, ServerIP, QueryAcc), Acc);
-retrieve_updated_records(_ClientIP, _ServerIP, [Record | Tail], Acc, QueryAcc) ->
+retrieve_updated_records(_ClientIP, _ServerIP, [Record | _Tail], _Acc, _QueryAcc) ->
     %% Get the timestamp of the record
-    TTL = Record#dns_rr.ttl,
+    _TTL = Record#dns_rr.ttl,
     ok.
 %% @doc This function takes a list of records, builds a query and sends it to master for updated
 %% records
@@ -261,9 +262,9 @@ query_master_for_records(_ClientIP, _ServerIP, []) ->
 query_master_for_records(ClientIP, ServerIP, QueryList) ->
     query_master_for_records(ClientIP, ServerIP, QueryList, []).
 
-query_master_for_records(ClientIP, ServerIP, [], Acc) ->
+query_master_for_records(_ClientIP, _ServerIP, [], Acc) ->
     Acc;
-query_master_for_records(_ClientIP, _ServerIP, [Query | Head], Acc) ->
+query_master_for_records(_ClientIP, _ServerIP, [_Query | _Head], _Acc) ->
     ok.
 
 %% @doc Check if the name is in a zone.
