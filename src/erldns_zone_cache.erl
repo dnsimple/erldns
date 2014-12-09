@@ -235,9 +235,14 @@ get_records_by_name(Name) ->
 -spec retrieve_updated_records(inet:ip_address(), inet:ip_address(), [] | [dns:rr()]) -> [] | [dns:rr()].
 retrieve_updated_records(ClientIP, ServerIP, []) ->
     [];
-retrieve_updated_records(ClientIP, ServerIP, RecordList) ->
-    case ServerIP =:=
-    retrieve_updated_records(ClientIP, ServerIP, RecordList, [], []).
+retrieve_updated_records(ClientIP, ServerIP, [Record | _Tail] = RecordList) ->
+    case ServerIP =:= get_zone_notify_source(Record#dns_rr.name) of
+        true ->
+            %% We are master, just return the records you have
+            RecordList;
+        false ->
+            retrieve_updated_records(ClientIP, ServerIP, RecordList, [], [])
+    end.
 
 retrieve_updated_records(ClientIP, ServerIP, [], Acc, QueryAcc) ->
     lists:flatten(query_master_for_records(ClientIP, ServerIP, QueryAcc), Acc);
