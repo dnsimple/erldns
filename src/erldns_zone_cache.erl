@@ -37,7 +37,7 @@
          get_records_by_name/1,
          in_zone/1,
          zone_names_and_versions/0,
-         retrieve_updated_records/2,
+         retrieve_records/2,
          get_zone_allow_notify/1,
          get_zone_allow_transfer/1,
          get_zone_allow_update/1,
@@ -190,7 +190,7 @@ get_zone_notify_source(ZoneName) ->
     end.
 
 %% @doc Find the SOA record for the given DNS question.
--spec get_authority(dns:message() | dns:dname()) -> {error, no_question} | {error, no_authority} | {ok, dns:rr()}.
+-spec get_authority(dns:message() | dns:dname()) -> {error, no_question} | {error, authority_not_found} | {ok, dns:rr()}.
 get_authority(Message) when is_record(Message, dns_message) ->
   case Message#dns_message.questions of
     [] -> {error, no_question};
@@ -235,8 +235,8 @@ get_records_by_name(Name) ->
 %% @doc This fuction retrieves the most up to date records from master if needed. Otherswise,
 %% it returns what was given to it.
 %% @end
--spec retrieve_updated_records(inet:ip_address(), dns:dname()) -> [] | [dns:rr()].
-retrieve_updated_records(ServerIP, Qname) ->
+-spec retrieve_records(inet:ip_address(), dns:dname()) -> [] | [dns:rr()].
+retrieve_records(ServerIP, Qname) ->
     Name = normalize_name(Qname),
     case ServerIP =:= get_zone_notify_source(Name) of
         true ->
@@ -249,7 +249,7 @@ retrieve_updated_records(ServerIP, Qname) ->
                 {ok, Zone} ->
                     case dict:find(Name, Zone#zone.records_by_name) of
                         {ok, RecordSet} ->
-                            retrieve_updated_records(Name, Zone#zone.notify_source, ServerIP, RecordSet, [], []);
+                            retrieve_records(Name, Zone#zone.notify_source, ServerIP, RecordSet, [], []);
                         _ -> []
                     end;
                 _ ->
@@ -257,21 +257,21 @@ retrieve_updated_records(ServerIP, Qname) ->
             end
     end.
 
-retrieve_updated_records(ZoneName, MasterIP, ServerIP, [], Acc, QueryAcc) ->
+retrieve_records(ZoneName, MasterIP, ServerIP, [], Acc, QueryAcc) ->
     %%Query server for records that needed to be updated, and merge them with records that didn't.
     NewRecords = query_master_for_records(MasterIP, ServerIP, QueryAcc),
     [delete_record(ZoneName, OldRecord, false) || OldRecord <- QueryAcc],
     [add_record(ZoneName, R, false) || R <- NewRecords],
     lists:flatten(NewRecords, Acc);
-retrieve_updated_records(ZoneName, MasterIP, ServerIP, [{Expiry, Record} | Tail], Acc, QueryAcc) ->
+retrieve_records(ZoneName, MasterIP, ServerIP, [{Expiry, Record} | Tail], Acc, QueryAcc) ->
     %% Get the timestamp of the record
     case timestamp() < Expiry of
         true ->
             erldns_log:debug("Record ~p with expire ~p at time ~p is NOT expired", [Record, Expiry, timestamp()]),
-            retrieve_updated_records(ZoneName, MasterIP, ServerIP, Tail, [Record | Acc], QueryAcc);
+            retrieve_records(ZoneName, MasterIP, ServerIP, Tail, [Record | Acc], QueryAcc);
         false ->
             erldns_log:debug("Record ~p with expire ~p at time ~p is expired", [Record, Expiry, timestamp()]),
-            retrieve_updated_records(ZoneName, MasterIP, ServerIP, Tail, Acc, [Record | QueryAcc])
+            retrieve_records(ZoneName, MasterIP, ServerIP, Tail, Acc, [Record | QueryAcc])
     end.
 
 %% @doc This function takes a list of records, builds a query and sends it to master for updated

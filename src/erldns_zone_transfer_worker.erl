@@ -38,6 +38,7 @@
 start_link(Operation, Args) ->
     gen_server:start_link(?MODULE, [Operation, Args], []).
 
+-spec query_for_records(inet:ip_address(), inet:ip_address(), [dns:rr()]) -> dns:answers().
 query_for_records(MasterIP, BindIP, DNSRRList) ->
     Questions = build_questions(DNSRRList),
     erldns_log:debug("Getting updated records from master using questions: ~p", [Questions]),
