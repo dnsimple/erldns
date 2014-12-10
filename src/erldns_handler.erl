@@ -177,7 +177,8 @@ maybe_cache_packet(Message, false) ->
 %% Get the SOA authority for the current query.
 get_authority(MessageOrName) ->
   case erldns_zone_cache:get_authority(MessageOrName) of
-    {ok, Authority} -> [Authority];
+    {ok, Authority} ->
+        [Authority];
     {error, _} -> []
   end.
 

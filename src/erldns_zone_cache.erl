@@ -200,7 +200,8 @@ get_authority(Message) when is_record(Message, dns_message) ->
   end;
 get_authority(Name) ->
   case find_zone_in_cache(normalize_name(Name)) of
-    {ok, Zone} -> {ok, Zone#zone.authority};
+    {ok, Zone} ->
+        {ok, Zone#zone.authority};
     _ -> {error, authority_not_found}
   end.
 
@@ -505,10 +506,14 @@ find_zone_in_cache(Qname) ->
 build_zone(Qname, Version, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
     NotifySourceIP) ->
   RecordsByName = build_named_index(Records),
-  Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
+  Authorities0 = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
+  Authorities = lists:foldl(fun(A, Acc) ->
+                    SOA = A#dns_rr.data,
+                    [{timestamp() + SOA#dns_rrdata_soa.expire, A} | Acc]
+                        end, [], Authorities0),
   #zone{name = Qname, allow_notify = AllowNotifyList, allow_transfer = AllowTransferList,
       allow_update = AllowUpdateList, also_notify = AlsoNotifyList, notify_source = NotifySourceIP,
-      version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
+      version = Version, record_count = length(Records), authority = lists:flatten(Authorities), records = Records, records_by_name = RecordsByName}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;

@@ -61,6 +61,9 @@ handle_cast({send_notify, {BindIP, DestinationIP, ZoneName, ZoneClass} = _Args},
 handle_cast({handle_notify, {Message, ClientIP, ServerIP}}, State) ->
     handle_notify(Message, ClientIP, ServerIP),
     {noreply, State};
+handle_cast({send_axfr, {ZoneName, BindIP}}, State) ->
+    send_axfr(ZoneName, BindIP),
+    {noreply, State};
 handle_cast(_Request, State) ->
     {noreply, State}.
 
@@ -142,6 +145,16 @@ handle_notify(Message, ClientIP, ServerIP) ->
             ok
     end,
     exit(normal).
+
+send_axfr(ZoneName, BindIP) ->
+    {ok, Zone} = erldns_zone_cache:get_zone(ZoneName),
+    case BindIP =/= Zone#zone.notify_source of
+        true ->
+            send_axfr(ZoneName, BindIP, Zone#zone.notify_source);
+        false ->
+            erldns_log:debug("We are master, no need to send AFXR"),
+            exit(normal)
+    end.
 
 send_axfr(ZoneName, BindIP, DestinationIP) ->
     Packet =  #dns_message{id = dns:random_id(),

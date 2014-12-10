@@ -64,12 +64,21 @@ resolve(Message, _AuthorityRecords, Qname, ?DNS_TYPE_AXFR = _Qtype, {ClientIP, S
             end,
             Message
     end;
-%% TODO Check record expiry and ask master for record if it is expired. Then check SOA, and
-%% send AXFR if zone is expired
+
 resolve(Message, AuthorityRecords, Qname, Qtype, {ClientIP, ServerIP}) ->
-  Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), % Zone lookup
-  Records = resolve(Message, Qname, Qtype, Zone, {ClientIP, ServerIP}, _CnameChain = []),
-  additional_processing(rewrite_soa_ttl(Records), ClientIP, Zone).
+    Timestamp = timestamp(),
+  Authority = case hd(AuthorityRecords) of
+      [{Expire, Authority0}] when Expire < Timestamp ->
+          %% cast for zone transfer
+          erldns_log:debug("Zone is expired, sending AXFR"),
+          gen_server:cast(erldns_manager, {send_axfr, {Authority0#dns_rr.name, ServerIP}}),
+        Authority0;
+      [{_, Authority0}] ->
+          Authority0
+  end,
+    Zone = erldns_zone_cache:find_zone(Qname, Authority), % Zone lookup
+    Records = resolve(Message, Qname, Qtype, Zone, {ClientIP, ServerIP}, _CnameChain = []),
+    additional_processing(rewrite_soa_ttl(Records), ClientIP, Zone).
 
 %% No SOA was found for the Qname so we return the root hints
 %% Note: it seems odd that we are indicating we are authoritative here.
@@ -528,3 +537,7 @@ get_soa([#dns_rr{data = Data} = Head | Tail], Records, SOA) ->
         _ ->
             get_soa(Tail, [Head | Records], SOA)
     end.
+
+timestamp() ->
+    {TM, TS, _} = os:timestamp(),
+    (TM * 1000000) + TS.
