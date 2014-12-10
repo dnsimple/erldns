@@ -39,8 +39,7 @@ end_per_suite(Config) ->
     Config.
 
 init_per_testcase(mnesia_API_test, Config) ->
-    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "db"}]),
-    application:set_env(mnesia, dir, "/opt/erl-dns/test/test_db"),
+    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "test_db"}]),
     Config;
 init_per_testcase(json_API_test, Config) ->
     application:set_env(erldns, storage, [{type, erldns_storage_json}]),
@@ -48,8 +47,7 @@ init_per_testcase(json_API_test, Config) ->
 init_per_testcase(server_children_test, Config) ->
     Config;
 init_per_testcase(test_zone_modify, Config) ->
-    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "db"}]),
-    application:set_env(mnesia, dir, "/opt/erl-dns/test/test_db1"),
+    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "test_db1"}]),
     Config;
 init_per_testcase(query_tests, Config) ->
     Config.
