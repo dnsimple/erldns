@@ -41,13 +41,13 @@ start_link(Args) ->
 init(_Args) ->
   {ok, #state{}}.
 
-handle_call({tcp_query, ServerIP, Socket, Bin}, _From, State) ->
-  {reply, handle_tcp_dns_query(ServerIP, Socket, Bin), State};
+handle_call({tcp_query, Socket, Bin}, _From, State) ->
+  {reply, handle_tcp_dns_query(Socket, Bin), State};
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
-handle_cast({udp_query, Socket, Host, Port, Bin, ServerIP}, State) ->
-  handle_udp_dns_query(Socket, Host, Port, Bin, ServerIP),
+handle_cast({udp_query, Socket, ClientIP, Port, Bin}, State) ->
+  handle_udp_dns_query(Socket, ClientIP, Port, Bin),
   {noreply, State};
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -59,13 +59,15 @@ code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
 
 %% @doc Handle DNS query that comes in over TCP
--spec handle_tcp_dns_query(inet:ip_address(), gen_tcp:socket(), iodata())  -> ok.
-handle_tcp_dns_query(ServerIP, Socket, <<_Len:16, Bin/binary>>) ->
-  {ok, {ClientIP, _Port}} = inet:peername(Socket),
+-spec handle_tcp_dns_query(gen_tcp:socket(), iodata())  -> ok.
+handle_tcp_dns_query(Socket, <<Len:16, Bin0/binary>>) ->
+  {ok, {ClientIP, _ClientPort}} = inet:peername(Socket),
+  {ok, {ServerIP, _ServerPort}} = inet:sockname(Socket),
   erldns_events:notify({start_tcp, [{host, ClientIP}]}),
-  case Bin of
+  case Bin0 of
     <<>> -> ok;
-    _ ->
+    <<Bin:Len/binary, _/binary>> ->
+      %% We only read data of specified length
       case dns:decode_message(Bin) of
         {truncated, _, _} ->
           erldns_log:info("received truncated request from ~p", [ClientIP]),
@@ -80,7 +82,7 @@ handle_tcp_dns_query(ServerIP, Socket, <<_Len:16, Bin/binary>>) ->
   end,
   erldns_events:notify({end_tcp, [{host, ClientIP}]}),
   gen_tcp:close(Socket);
-handle_tcp_dns_query(_ServerIP, Socket, BadPacket) ->
+handle_tcp_dns_query(Socket, BadPacket) ->
   erldns_log:error("Received bad packet ~p", BadPacket),
   gen_tcp:close(Socket).
 
@@ -106,24 +108,25 @@ send_tcp_message(Socket, EncodedMessage) ->
 
 
 %% @doc Handle DNS query that comes in over UDP
--spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary(), inet:ip_address()) -> ok.
-handle_udp_dns_query(Socket, Host, Port, Bin, ServerIP) ->
+-spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary()) -> ok.
+handle_udp_dns_query(Socket, ClientIP, Port, Bin) ->
   %erldns_log:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
-  erldns_events:notify({start_udp, [{host, Host}]}),
+  erldns_events:notify({start_udp, [{host, ClientIP}]}),
   case dns:decode_message(Bin) of
     {trailing_garbage, DecodedMessage, _} ->
-      handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, ServerIP);
+      handle_decoded_udp_message(DecodedMessage, Socket, ClientIP, Port);
     {_Error, _, _} ->
       ok;
     DecodedMessage ->
-      handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, ServerIP)
+      handle_decoded_udp_message(DecodedMessage, Socket, ClientIP, Port)
   end,
-  erldns_events:notify({end_udp, [{host, Host}]}),
+  erldns_events:notify({end_udp, [{host, ClientIP}]}),
   ok.
 
--spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number(), inet:ip_address()) ->
+-spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number()) ->
   ok | {error, not_owner | inet:posix()}.
-handle_decoded_udp_message(DecodedMessage, Socket, ClientIP, Port, ServerIP) ->
+handle_decoded_udp_message(DecodedMessage, Socket, ClientIP, Port) ->
+  {ok, {ServerIP, _Port}} = inet:sockname(Socket),
   Response = erldns_handler:handle(DecodedMessage, {udp, ClientIP, ServerIP}),
   DestHost = case ?REDIRECT_TO_LOOPBACK of
                true -> ?LOOPBACK_DEST;

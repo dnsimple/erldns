@@ -190,8 +190,10 @@ send_tcp_message(BindIP, DestinationIP, EncodedMessage) ->
 send_recv(BindIP, DestinationIP, TcpEncodedMessage) ->
     {ok, Socket} = gen_tcp:connect(DestinationIP, ?DNS_LISTEN_PORT, [binary, {active, false}, {ip, BindIP}]),
     ok = gen_tcp:send(Socket, TcpEncodedMessage),
-    %% Remove the size header.
-    {ok, <<_Len:16, Res/binary>>} = gen_tcp:recv(Socket, 0),
+    %% Extract the size header
+    {ok, <<Length:16, Res0/binary>>} = gen_tcp:recv(Socket, 0),
+    %% Only return data up to specified length
+    <<Res:Length/binary, _/binary>> = Res0,
     ok = gen_tcp:close(Socket),
     {ok, Res}.
 

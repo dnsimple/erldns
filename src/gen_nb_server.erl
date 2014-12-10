@@ -146,7 +146,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Port = integer()
 %% Result = {ok, port()} | {error, any()}
 listen_on(CallbackModule, IpAddr, Port) ->
-  SockOpts = [{ip, IpAddr}|CallbackModule:sock_opts()],
+    SockOpts = [{ip, IpAddr} | CallbackModule:sock_opts()],
   case gen_tcp:listen(Port, SockOpts) of
     {ok, LSock} ->
       {ok, _Ref} = prim_inet:async_accept(LSock, -1),

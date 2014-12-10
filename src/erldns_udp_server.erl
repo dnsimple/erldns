@@ -33,14 +33,14 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {port, server_ip, socket, workers}).
+-record(state, {port, listen_ip, socket, workers}).
 
 % Public API
 
 %% @doc Start the UDP server process
 -spec start_link(atom(), inet | inet6, inet:ip_address(), non_neg_integer()) -> {ok, pid()} | ignore | {error, term()}.
-start_link(_Name, InetFamily, Addr, Port) ->
-  gen_server:start_link(?MODULE, [InetFamily, Addr, Port], []).
+start_link(_Name, InetFamily, ListenIP, Port) ->
+  gen_server:start_link(?MODULE, [InetFamily, ListenIP, Port], []).
 
 %% @doc Return true if the UDP server process is running
 -spec is_running() -> boolean().
@@ -53,9 +53,9 @@ is_running() ->
 
 
 %% gen_server hooks
-init([InetFamily, Addr, Port]) ->
-  {ok, Socket} = start(Port, InetFamily, Addr),
-  {ok, #state{port = Port, server_ip = Addr, socket = Socket, workers = make_workers(queue:new())}}.
+init([InetFamily, ListenIP, Port]) ->
+  {ok, Socket} = start(Port, InetFamily, ListenIP),
+  {ok, #state{port = Port, listen_ip = ListenIP, socket = Socket, workers = make_workers(queue:new())}}.
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 handle_cast(_Message, State) ->
@@ -63,8 +63,8 @@ handle_cast(_Message, State) ->
 handle_info(timeout, State) ->
   %erldns_log:info("UDP instance timed out"),
   {noreply, State};
-handle_info({udp, Socket, Host, Port, Bin}, State) ->
-  Response = folsom_metrics:histogram_timed_update(udp_handoff_histogram, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]),
+handle_info({udp, Socket, ClientIP, Port, Bin}, State) ->
+  Response = folsom_metrics:histogram_timed_update(udp_handoff_histogram, ?MODULE, handle_request, [Socket, ClientIP, Port, Bin, State]),
   inet:setopts(State#state.socket, [{active, once}]),
   Response;
 handle_info(_Message, State) ->
@@ -76,11 +76,11 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 %% Internal functions
 %% Start a UDP server.
-start(Port, InetFamily, Addr) ->
+start(Port, InetFamily, ListenIP) ->
   erldns_log:info("Starting UDP server for ~p on port ~p", [InetFamily, Port]),
-  case gen_udp:open(Port, [binary, {active, once}, {read_packets, 1000}, {ip, Addr}, InetFamily]) of
+  case gen_udp:open(Port, [binary, {active, once}, {read_packets, 1000}, {ip, ListenIP}, InetFamily]) of
     {ok, Socket} -> 
-      erldns_log:info("UDP server (~p) on IP ~p opened socket: ~p", [InetFamily, Addr, Socket]),
+      erldns_log:info("UDP server (~p) on IP ~p opened socket: ~p", [InetFamily, ListenIP, Socket]),
       {ok, Socket};
     {error, eacces} ->
       erldns_log:error("Failed to open UDP socket. Need to run as sudo?"),
@@ -90,10 +90,10 @@ start(Port, InetFamily, Addr) ->
 %% This function executes in a single process and thus
 %% must return very fast. The execution time of this function
 %% will determine the overall QPS of the system.
-handle_request(Socket, Host, Port, Bin, State) ->
+handle_request(Socket, ClientIP, Port, Bin, State) ->
   case queue:out(State#state.workers) of
     {{value, Worker}, Queue} ->
-      gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin, State#state.server_ip}),
+      gen_server:cast(Worker, {udp_query, Socket, ClientIP, Port, Bin}),
       {noreply, State#state{workers = queue:in(Worker, Queue)}};
     {empty, _Queue} ->
       folsom_metrics:notify({packet_dropped_empty_queue_counter, {inc, 1}}),

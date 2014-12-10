@@ -31,31 +31,31 @@
         ]).
 
 % Internal API
--export([handle_request/4]).
+-export([handle_request/3]).
 
 -define(SERVER, ?MODULE).
 
--record(state, {port, server_ip, pool_name}).
+-record(state, {port, listen_ip, pool_name}).
 
 %% Public API
-start_link(_Name, Family, ServerIP, Port, PoolName) ->
-  erldns_log:info("Starting TCP server for ~p on port ~p, IP ~p", [Family, Port, ServerIP]),
-  gen_nb_server:start_link(?MODULE, ServerIP, Port, [Port, ServerIP, PoolName]).
+start_link(_Name, Family, ListenIP, Port, PoolName) ->
+  erldns_log:info("Starting TCP server for ~p on port ~p, IP ~p", [Family, Port, ListenIP]),
+  gen_nb_server:start_link(?MODULE, ListenIP, Port, [Port, ListenIP, PoolName]).
 
 %% gen_server hooks
-init([Port, ServerIP, PoolName]) ->
-  {ok, #state{port = Port, server_ip = ServerIP, pool_name = PoolName}}.
+init([Port, ListenIP, PoolName]) ->
+  {ok, #state{port = Port, listen_ip = ListenIP, pool_name = PoolName}}.
 
 handle_call(get_addr, _From, State) ->
-    {reply, State#state.server_ip, State};
+    {reply, State#state.listen_ip, State};
 handle_call(_Request, _From, State) ->
   {ok, State}.
 
 handle_cast(_Message, State) ->
   {noreply, State}.
 
-handle_info({tcp, Socket, Bin}, #state{server_ip = ServerIP, pool_name = PoolName} = State) ->
-  folsom_metrics:histogram_timed_update(tcp_handoff_histogram, ?MODULE, handle_request, [ServerIP, PoolName, Socket, Bin]),
+handle_info({tcp, Socket, Bin}, #state{listen_ip = _ListenIP, pool_name = PoolName} = State) ->
+  folsom_metrics:histogram_timed_update(tcp_handoff_histogram, ?MODULE, handle_request, [PoolName, Socket, Bin]),
   {noreply, State};
 handle_info(_Message, State) ->
   {noreply, State}.
@@ -73,7 +73,7 @@ new_connection(Socket, State) ->
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
-handle_request(ServerIP, PoolName, Socket, Bin) ->
+handle_request(PoolName, Socket, Bin) ->
   poolboy:transaction(PoolName, fun(Worker) ->
-                                           gen_server:call(Worker, {tcp_query, ServerIP, Socket, Bin})
+                                           gen_server:call(Worker, {tcp_query, Socket, Bin})
                                        end).
