@@ -85,7 +85,7 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, {_ClientIP, _Server
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
 resolve(Message, Qname, Qtype, Zone, {ClientIP, ServerIP}, CnameChain) ->
-  Records = erldns_zone_cache:retrieve_updated_records(ClientIP, ServerIP, Qname),
+  Records = erldns_zone_cache:retrieve_updated_records(ServerIP, Qname),
   resolve(Message, Qname, Qtype, Records, ClientIP, CnameChain, Zone).
 
 %% There were no exact matches on name, so move to the best-match resolution.

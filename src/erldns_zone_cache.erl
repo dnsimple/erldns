@@ -37,7 +37,7 @@
          get_records_by_name/1,
          in_zone/1,
          zone_names_and_versions/0,
-         retrieve_updated_records/3,
+         retrieve_updated_records/2,
          get_zone_allow_notify/1,
          get_zone_allow_transfer/1,
          get_zone_allow_update/1,
@@ -54,8 +54,8 @@
          put_zone_async/2,
          delete_zone/1,
          add_record/3,
-         delete_record/2,
-         update_record/3
+         delete_record/3,
+         update_record/4
         ]).
 
 % Gen server hooks
@@ -234,12 +234,13 @@ get_records_by_name(Name) ->
 %% @doc This fuction retrieves the most up to date records from master if needed. Otherswise,
 %% it returns what was given to it.
 %% @end
--spec retrieve_updated_records(inet:ip_address(), inet:ip_address(), dns:dname()) -> [] | [dns:rr()].
-retrieve_updated_records(ClientIP, ServerIP, Qname) ->
+-spec retrieve_updated_records(inet:ip_address(), dns:dname()) -> [] | [dns:rr()].
+retrieve_updated_records(ServerIP, Qname) ->
     Name = normalize_name(Qname),
     case ServerIP =:= get_zone_notify_source(Name) of
         true ->
             %% We are master, just return the records you have
+            erldns_log:debug("We are master, no need to get updated records."),
             get_records_by_name(Name);
         false ->
             %% We are slave, get the zone in the cache and the records from the dict with expirys.
@@ -247,7 +248,7 @@ retrieve_updated_records(ClientIP, ServerIP, Qname) ->
                 {ok, Zone} ->
                     case dict:find(Name, Zone#zone.records_by_name) of
                         {ok, RecordSet} ->
-                            retrieve_updated_records(Name, ClientIP, ServerIP, RecordSet, [], []);
+                            retrieve_updated_records(Name, Zone#zone.notify_source, ServerIP, RecordSet, [], []);
                         _ -> []
                     end;
                 _ ->
@@ -255,28 +256,31 @@ retrieve_updated_records(ClientIP, ServerIP, Qname) ->
             end
     end.
 
-retrieve_updated_records(ZoneName, ClientIP, ServerIP, [], Acc, QueryAcc) ->
+retrieve_updated_records(ZoneName, MasterIP, ServerIP, [], Acc, QueryAcc) ->
     %%Query server for records that needed to be updated, and merge them with records that didn't.
-    NewRecords = query_master_for_records(ClientIP, ServerIP, QueryAcc),
+    NewRecords = query_master_for_records(MasterIP, ServerIP, QueryAcc),
+    [delete_record(ZoneName, OldRecord, false) || OldRecord <- QueryAcc],
     [add_record(ZoneName, R, false) || R <- NewRecords],
     lists:flatten(NewRecords, Acc);
-retrieve_updated_records(ZoneName, ClientIP, ServerIP, [{Expiry, Record} | Tail], Acc, QueryAcc) ->
+retrieve_updated_records(ZoneName, MasterIP, ServerIP, [{Expiry, Record} | Tail], Acc, QueryAcc) ->
     %% Get the timestamp of the record
     case timestamp() < Expiry of
         true ->
-            retrieve_updated_records(ZoneName, ClientIP, ServerIP, Tail, [Record | Acc], QueryAcc);
+            erldns_log:debug("Record ~p with expire ~p at time ~p is NOT expired", [Record, Expiry, timestamp()]),
+            retrieve_updated_records(ZoneName, MasterIP, ServerIP, Tail, [Record | Acc], QueryAcc);
         false ->
-            retrieve_updated_records(ZoneName, ClientIP, ServerIP, Tail, Acc, [Record | QueryAcc])
+            erldns_log:debug("Record ~p with expire ~p at time ~p is expired", [Record, Expiry, timestamp()]),
+            retrieve_updated_records(ZoneName, MasterIP, ServerIP, Tail, Acc, [Record | QueryAcc])
     end.
 
 %% @doc This function takes a list of records, builds a query and sends it to master for updated
 %% records
 %% @end
 -spec query_master_for_records(inet:ip_address(), inet:ip_address(), [] | [dns:rr()]) -> [] | [dns:rr()].
-query_master_for_records(_ClientIP, _ServerIP, []) ->
+query_master_for_records(_MasterIP, _ServerIP, []) ->
     [];
-query_master_for_records(ClientIP, ServerIP, QueryList) ->
-    erldns_zone_transfer_worker:query_for_records(ClientIP, ServerIP, QueryList).
+query_master_for_records(MasterIP, ServerIP, QueryList) ->
+    erldns_zone_transfer_worker:query_for_records(MasterIP, ServerIP, QueryList).
 
 
 %% @doc Check if the name is in a zone.
@@ -335,6 +339,7 @@ delete_zone(Name) ->
 %% @doc Add a record to a particular zone.
 -spec add_record(binary(), #dns_rr{}, boolean()) -> ok | {error, term()}.
 add_record(ZoneName, #dns_rr{} = Record, SendNotify) ->
+    erldns_log:debug("Adding record ~p, send-notify: ~p", [Record, SendNotify]),
     {ok, Zone0} = get_zone_with_records(normalize_name(ZoneName)),
     Records0 = Zone0#zone.records,
     %% Ensure no exact duplicates are found
@@ -358,8 +363,8 @@ add_record(ZoneName, #dns_rr{} = Record, SendNotify) ->
     end.
 
 %% @doc Delete a record from a particular zone.
--spec delete_record(binary(), #dns_rr{}) -> ok | {error, term()}.
-delete_record(ZoneName, #dns_rr{} = Record) ->
+-spec delete_record(binary(), #dns_rr{}, boolean()) -> ok | {error, term()}.
+delete_record(ZoneName, #dns_rr{} = Record, SendNotify) ->
     {ok, Zone0} = get_zone_with_records(normalize_name(ZoneName)),
     Records0 = Zone0#zone.records,
     Records = lists:delete(Record, Records0),
@@ -372,12 +377,17 @@ delete_record(ZoneName, #dns_rr{} = Record) ->
     Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities], Zone0#zone.allow_notify,
     Zone0#zone.allow_transfer, Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source),
     %% Put zone back into cache.
-    put_zone(ZoneName, Zone),
-    send_notify(ZoneName, Zone).
+    case SendNotify of
+        false ->
+            put_zone(ZoneName, Zone);
+        true ->
+            put_zone(ZoneName, Zone),
+            send_notify(ZoneName, Zone)
+    end.
 
 %% @doc Update a record in a zone.
--spec update_record(binary(), #dns_rr{}, #dns_rr{}) -> ok | {error, term()}.
-update_record(ZoneName, #dns_rr{} = OldRecord, #dns_rr{} = UpdatedRecord) ->
+-spec update_record(binary(), #dns_rr{}, #dns_rr{}, boolean()) -> ok | {error, term()}.
+update_record(ZoneName, #dns_rr{} = OldRecord, #dns_rr{} = UpdatedRecord, SendNotify) ->
     {ok, Zone0} = get_zone_with_records(normalize_name(ZoneName)),
     Records0 = Zone0#zone.records,
     Records1 = lists:delete(OldRecord, Records0),
@@ -391,8 +401,13 @@ update_record(ZoneName, #dns_rr{} = OldRecord, #dns_rr{} = UpdatedRecord) ->
     Zone = build_zone(ZoneName, Zone0#zone.version, Records ++ [Authorities], Zone0#zone.allow_notify,
     Zone0#zone.allow_transfer, Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source),
     %% Put zone back into cache.
-    put_zone(ZoneName, Zone),
-    send_notify(ZoneName, Zone).
+    case SendNotify of
+        false ->
+            put_zone(ZoneName, Zone);
+        true ->
+            put_zone(ZoneName, Zone),
+            send_notify(ZoneName, Zone)
+    end.
 % ----------------------------------------------------------------------------------------------------
 % Gen server init
 

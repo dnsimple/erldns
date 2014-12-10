@@ -14,7 +14,6 @@
 
 -module(erldns_zone_transfer_worker).
 
-
 -behaviour(gen_server).
 
 -include_lib("dns/include/dns.hrl").
@@ -31,8 +30,6 @@
     terminate/2,
     code_change/3]).
 
--define(SERVER, ?MODULE).
-
 -record(state, {}).
 
 %%%===================================================================
@@ -41,9 +38,11 @@
 start_link(Operation, Args) ->
     gen_server:start_link(?MODULE, [Operation, Args], []).
 
-query_for_records(DestinationIP, BindIP, DNSRRList) ->
+query_for_records(MasterIP, BindIP, DNSRRList) ->
     Questions = build_questions(DNSRRList),
-    query_server_for_answers(DestinationIP, BindIP, Questions).
+    erldns_log:debug("Getting updated records from master using questions: ~p", [Questions]),
+    erldns_log:debug("Destination: ~p, Bind ~p", [MasterIP, BindIP]),
+    query_server_for_answers(MasterIP, BindIP, Questions).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -80,6 +79,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc Sends the notify message to the given nameservers. Restrict to TCP to allow proper query throttling.
 -spec send_notify(inet:ip_address(), inet:ip_address(), binary(), dns:class()) -> ok.
 send_notify(BindIP, DestinationIP, ZoneName, ZoneClass) ->
+    erldns_log:debug("Sending a NOTIFY! MyIP: ~p, To: ~p", [BindIP, DestinationIP]),
     Packet =  #dns_message{id = dns:random_id(),
         oc = ?DNS_OPCODE_NOTIFY,
         rc = ?DNS_RCODE_NOERROR,
@@ -99,6 +99,7 @@ send_notify(BindIP, DestinationIP, ZoneName, ZoneClass) ->
     exit(normal).
 
 handle_notify(Message, ClientIP, ServerIP) ->
+    erldns_log:debug("Handling a NOTIFY! MyIP: ~p, From: ~p", [ClientIP, ServerIP]),
     %% Get the zone in your cache
     ZoneName0 = hd(Message#dns_message.questions),
     ZoneName = normalize_name(ZoneName0#dns_query.name),
@@ -188,6 +189,7 @@ send_tcp_message(BindIP, DestinationIP, EncodedMessage) ->
     send_recv(BindIP, DestinationIP, TcpEncodedMessage).
 
 send_recv(BindIP, DestinationIP, TcpEncodedMessage) ->
+    erldns_log:debug("Connecting to ~p using bind IP ~p", [DestinationIP, BindIP]),
     {ok, Socket} = gen_tcp:connect(DestinationIP, ?DNS_LISTEN_PORT, [binary, {active, false}, {ip, BindIP}]),
     ok = gen_tcp:send(Socket, TcpEncodedMessage),
     %% Extract the size header
@@ -254,7 +256,7 @@ query_server_for_answers(DestinationIP, BindIP, [Question | Tail], Acc) ->
             version = 0, dnssec = false, data = []}]},
     {ok, Recv} = case erldns_encoder:encode_message(Packet) of
                      {false, EncodedMessage} ->
-                         send_tcp_message(DestinationIP, BindIP, EncodedMessage);
+                         send_tcp_message(BindIP, DestinationIP, EncodedMessage);
                      {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
                          send_tcp_message(BindIP, DestinationIP, EncodedMessage);
                      {false, EncodedMessage, _TsigMac} ->
@@ -263,4 +265,5 @@ query_server_for_answers(DestinationIP, BindIP, [Question | Tail], Acc) ->
                          send_tcp_message(BindIP, DestinationIP, EncodedMessage)
                  end,
     DecodedMessage = dns:decode_message(Recv),
+    erldns_log:debug("Got new record from master ~p", [DecodedMessage#dns_message.answers]),
     lists:flatten(query_server_for_answers(DestinationIP, BindIP, Tail, [DecodedMessage#dns_message.answers | Acc])).
