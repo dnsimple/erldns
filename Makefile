@@ -35,11 +35,15 @@ test:
 	ct_run -config erldns.config -dir test -suite erldns_SUITE -logdir test_logs -pa ebin deps/**/ebin/ -s erldns
 
 test-master:
+	echo "You need to have a slave running before running this test! < ./test_slave.sh >"
+	echo "Make sure you have configured correct IP for (master.config, slave.config)"
 	rm -f test/*beam
 	./rebar compile
 	ct_run -config master.config -dir test -suite master_SUITE -logdir test_logs -pa ebin deps/**/ebin/ -s erldns
 
 test-slave:
+	echo "You need to have a master running before running this test! < ./test_master.sh >"
+	echo "Make sure you have configured correct IP for (master.config, slave.config)"
 	rm -f test/*beam
 	./rebar compile
 	ct_run -config slave.config -dir test -suite slave_SUITE -logdir test_logs -pa ebin deps/**/ebin/ -s erldns
