@@ -38,7 +38,7 @@ create(schema) ->
         undefined ->
             erldns_log:error("You need to add a directory for mnesia in erldns.config");
         Dir ->
-            filelib:ensure_dir(Dir),
+            ok = filelib:ensure_dir(Dir),
             ok = application:set_env(mnesia, dir, Dir)
     end,
     case application:stop(mnesia) of
