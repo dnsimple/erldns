@@ -19,49 +19,28 @@
     end_per_suite/1,
     init_per_testcase/2]).
 
--export([query_tests/1]).
+-export([query_for_updated_records/1]).
 
 -include("../include/erldns.hrl").
 -include("../deps/dns/include/dns.hrl").
 all() ->
-    [query_tests].
+    [query_for_updated_records].
 
 init_per_suite(Config) ->
-    application:start(erldns_app),
+    ok = erldns:start(),
+    timer:sleep(2000),
     Config.
 
 end_per_suite(Config) ->
     application:stop(erldns_app),
     Config.
 
-init_per_testcase(query_tests, Config) ->
+init_per_testcase(query_for_updated_records, Config) ->
     Config.
 
-
-query_tests(_Config) ->
-    ok = erldns:start(),
-    %% This test will initiate a query from master, we should have set the expire
-    io:format("ERLDNS Should already be started from previous test~n"),
-    timer:sleep(1000),
-    io:format("You have to have the examples.zone.json file for this to work~n"),
+query_for_updated_records(_Config) ->
     {ok, _} = erldns_storage:load_zones("/opt/erl-dns/priv/example.zone.json"),
-    {ok, IFAddrs} = inet:getifaddrs(),
-    Config = lists:foldl(fun(IFList, Acc) ->
-        {_, List} = IFList,
-        [List | Acc]
-    end, [], IFAddrs),
-    AddressesWithPorts = lists:foldl(fun(Conf, Acc) ->
-        {addr, Addr} = lists:keyfind(addr, 1, Conf),
-        [{Addr, 8053} | Acc]
-    end, [], Config),
-    {ok, _} = inet_res:nnslookup("example.com", any, a, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, aaaa, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, srv, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, cname, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, ns, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, mx, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, spf, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, txt, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, soa, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, naptr, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, axfr, AddressesWithPorts, 10000).
+    Records = erldns_zone_cache:get_records_by_name(<<"example.com">>),
+    {ok, Zone} = erldns_zone_cache:get_zone(<<"example.com">>),
+    NewRecords = erldns_zone_transfer_worker:query_for_records(Zone#zone.notify_source, hd(erldns_config:get_address(inet)), Records),
+    true = length(NewRecords) > 0.
