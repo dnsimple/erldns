@@ -13,6 +13,7 @@
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 -module(master_SUITE).
+
 %% API
 -export([all/0,
     init_per_suite/1,
