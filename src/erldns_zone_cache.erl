@@ -340,22 +340,19 @@ delete_zone(Name) ->
 %% @doc Add a record to a particular zone.
 -spec add_record(binary(), #dns_rr{}, boolean()) -> ok | {error, term()}.
 add_record(ZoneName, #dns_rr{} = Record, SendNotify) ->
-    erldns_log:debug("Adding record ~p, send-notify: ~p", [Record, SendNotify]),
     {ok, Zone0} = get_zone_with_records(normalize_name(ZoneName)),
     Records0 = Zone0#zone.records,
     %% Ensure no exact duplicates are found
     [true = Record =/= X || X <- Records0],
     Records = [Record | Records0],
     %% Update serial number
-    {_Expiry, Authorities0} = hd(Zone0#zone.authority),
-    SOA0 = Authorities0#dns_rr.data,
+    Authority = hd(Zone0#zone.authority),
+    SOA0 = Authority#dns_rr.data,
     Serial = SOA0#dns_rrdata_soa.serial,
     SOA = SOA0#dns_rrdata_soa{serial = Serial + 1},
-    Authorities = Authorities0#dns_rr{data = SOA},
-    Zone = #zone{name = ZoneName, allow_notify = Zone0#zone.allow_notify, allow_transfer = Zone0#zone.allow_transfer,
-        allow_update = Zone0#zone.allow_update, also_notify = Zone0#zone.also_notify, notify_source = Zone0#zone.notify_source,
-        version = Zone0#zone.version, record_count = length(Records), authority = Authorities,
-        records = Records, records_by_name = build_named_index(Records)},
+    Zone = build_zone(ZoneName, Zone0#zone.allow_notify, Zone0#zone.allow_transfer,
+        Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source, Zone0#zone.version,
+        [Authority#dns_rr{data = SOA}],  Records),
     %% Put zone back into cache. And send notify if needed.
     case SendNotify of
         false ->
@@ -372,15 +369,13 @@ delete_record(ZoneName, #dns_rr{} = Record, SendNotify) ->
     Records0 = Zone0#zone.records,
     Records = lists:delete(Record, Records0),
     %% Update serial number
-    {_Expire, Authorities0} = hd(Zone0#zone.authority),
-    SOA0 = Authorities0#dns_rr.data,
+    Authority = hd(Zone0#zone.authority),
+    SOA0 = Authority#dns_rr.data,
     Serial = SOA0#dns_rrdata_soa.serial,
     SOA = SOA0#dns_rrdata_soa{serial = Serial + 1},
-    Authorities = Authorities0#dns_rr{data = SOA},
-    Zone = #zone{name = ZoneName, allow_notify = Zone0#zone.allow_notify, allow_transfer = Zone0#zone.allow_transfer,
-        allow_update = Zone0#zone.allow_update, also_notify = Zone0#zone.also_notify, notify_source = Zone0#zone.notify_source,
-        version = Zone0#zone.version, record_count = length(Records), authority = lists:flatten(Authorities),
-        records = Records, records_by_name = build_named_index(Records)},
+    Zone = build_zone(ZoneName, Zone0#zone.allow_notify, Zone0#zone.allow_transfer,
+        Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source, Zone0#zone.version,
+        [Authority#dns_rr{data = SOA}],  Records),
     %% Put zone back into cache.
     case SendNotify of
         false ->
@@ -398,15 +393,13 @@ update_record(ZoneName, #dns_rr{} = OldRecord, #dns_rr{} = UpdatedRecord, SendNo
     Records1 = lists:delete(OldRecord, Records0),
     Records = [UpdatedRecord | Records1],
     %% Update serial number
-    {_Expiry, Authorities0} = hd(Zone0#zone.authority),
-    SOA0 = Authorities0#dns_rr.data,
+    Authority = hd(Zone0#zone.authority),
+    SOA0 = Authority#dns_rr.data,
     Serial = SOA0#dns_rrdata_soa.serial,
     SOA = SOA0#dns_rrdata_soa{serial = Serial + 1},
-    Authorities = Authorities0#dns_rr{data = SOA},
-    Zone = #zone{name = ZoneName, allow_notify = Zone0#zone.allow_notify, allow_transfer = Zone0#zone.allow_transfer,
-        allow_update = Zone0#zone.allow_update, also_notify = Zone0#zone.also_notify, notify_source = Zone0#zone.notify_source,
-        version = Zone0#zone.version, record_count = length(Records), authority = lists:flatten(Authorities),
-        records = Records, records_by_name = build_named_index(Records)},
+    Zone = build_zone(ZoneName, Zone0#zone.allow_notify, Zone0#zone.allow_transfer,
+        Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source, Zone0#zone.version,
+        [Authority#dns_rr{data = SOA}],  Records),
     %% Put zone back into cache.
     case SendNotify of
         false ->
@@ -512,14 +505,21 @@ find_zone_in_cache(Qname) ->
 build_zone(Qname, Version, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
     NotifySourceIP) ->
   RecordsByName = build_named_index(Records),
-  Authorities0 = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
-  Authorities = lists:foldl(fun(A, Acc) ->
-                    SOA = A#dns_rr.data,
-                    [{timestamp() + SOA#dns_rrdata_soa.expire, A} | Acc]
-                        end, [], Authorities0),
+  Authority = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
+%%   Authorities = lists:foldl(fun(A, Acc) ->
+%%                     SOA = A#dns_rr.data,
+%%                     [{timestamp() + SOA#dns_rrdata_soa.expire, A} | Acc]
+%%                         end, [], Authorities0),
   #zone{name = Qname, allow_notify = AllowNotifyList, allow_transfer = AllowTransferList,
       allow_update = AllowUpdateList, also_notify = AlsoNotifyList, notify_source = NotifySourceIP,
-      version = Version, record_count = length(Records), authority = lists:flatten(Authorities), records = Records, records_by_name = RecordsByName}.
+      version = Version, record_count = length(Records), authority = Authority, records = Records, records_by_name = RecordsByName}.
+
+build_zone(Qname, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
+    NotifySourceIP, Version, Authority, Records) ->
+    RecordsByName = build_named_index(Records),
+    #zone{name = Qname, allow_notify = AllowNotifyList, allow_transfer = AllowTransferList,
+        allow_update = AllowUpdateList, also_notify = AlsoNotifyList, notify_source = NotifySourceIP,
+        version = Version, record_count = length(Records), authority = Authority, records = Records, records_by_name = RecordsByName}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;
