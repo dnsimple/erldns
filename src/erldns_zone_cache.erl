@@ -48,6 +48,7 @@
 % Write APIs
 -export([
          build_zone/8,
+         build_zone/9,
          put_zone/1,
          put_zone/2,
          put_zone_async/1,
@@ -312,8 +313,8 @@ zone_names_and_versions() ->
 -spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok | {error, Reason :: term()}.
 put_zone({Name, Sha, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
     NotifySourceIP}) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, AllowNotifyList,
-      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP)}).
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, AllowNotifyList,
+      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP, Sha, Records)}).
 
 %% @doc Put a zone into the cache and wait for a response.
 -spec put_zone(binary(), #zone{}) -> ok | {error, Reason :: term()}.
@@ -324,8 +325,8 @@ put_zone(Name, #zone{} = Zone) ->
 -spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok | {error, Reason :: term()}.
 put_zone_async({Name, Sha, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
     NotifySourceIP}) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, AllowNotifyList,
-      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP)}).
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, AllowNotifyList,
+      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP, Sha, Records)}).
 
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async(binary(), #zone{}) -> ok | {error, Reason :: term()}.
@@ -434,8 +435,8 @@ handle_call({put, Name, Zone}, _From, State) ->
 
 handle_call({put, Name, Sha, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
     NotifySourceIP}, _From, State) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, AllowNotifyList,
-      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP)}),
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, AllowNotifyList,
+      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP, Sha, Records)}),
   {reply, ok, State}.
 
 handle_cast({put, Name, Zone}, State) ->
@@ -444,8 +445,8 @@ handle_cast({put, Name, Zone}, State) ->
 
 handle_cast({put, Name, Sha, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
     NotifySourceIP}, State) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, AllowNotifyList,
-      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP)}),
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, AllowNotifyList,
+      AllowTransferList, AllowUpdateList, AlsoNotifyList, NotifySourceIP, Sha, Records)}),
   {noreply, State};
 
 handle_cast({delete, Name}, State) ->
@@ -502,8 +503,8 @@ find_zone_in_cache(Qname) ->
       end
   end.
 
-build_zone(Qname, Version, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
-    NotifySourceIP) ->
+build_zone(Qname, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
+    NotifySourceIP, Version, Records) ->
   RecordsByName = build_named_index(Records),
   Authority = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
 %%   Authorities = lists:foldl(fun(A, Acc) ->
