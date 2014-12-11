@@ -353,13 +353,14 @@ add_record(ZoneName, #dns_rr{} = Record, SendNotify) ->
     SOA = SOA0#dns_rrdata_soa{serial = Serial + 1},
     Zone = build_zone(ZoneName, Zone0#zone.allow_notify, Zone0#zone.allow_transfer,
         Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source, Zone0#zone.version,
-        [Authority#dns_rr{data = SOA}],  Records),
+        [Authority#dns_rr{data = SOA}],  remove_old_soa_add_new(Records, Authority#dns_rr{data = SOA})),
     %% Put zone back into cache. And send notify if needed.
+    ok = delete_zone(ZoneName),
     case SendNotify of
         false ->
-            put_zone(ZoneName, Zone);
+            ok = put_zone(ZoneName, Zone);
         true ->
-            put_zone(ZoneName, Zone),
+            ok = put_zone(ZoneName, Zone),
             send_notify(ZoneName, Zone)
     end.
 
@@ -376,13 +377,14 @@ delete_record(ZoneName, #dns_rr{} = Record, SendNotify) ->
     SOA = SOA0#dns_rrdata_soa{serial = Serial + 1},
     Zone = build_zone(ZoneName, Zone0#zone.allow_notify, Zone0#zone.allow_transfer,
         Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source, Zone0#zone.version,
-        [Authority#dns_rr{data = SOA}],  Records),
+        [Authority#dns_rr{data = SOA}], remove_old_soa_add_new(Records, Authority#dns_rr{data = SOA})),
     %% Put zone back into cache.
+    ok = delete_zone(ZoneName),
     case SendNotify of
         false ->
-            put_zone(ZoneName, Zone);
+            ok = put_zone(ZoneName, Zone);
         true ->
-            put_zone(ZoneName, Zone),
+            ok = put_zone(ZoneName, Zone),
             send_notify(ZoneName, Zone)
     end.
 
@@ -400,13 +402,14 @@ update_record(ZoneName, #dns_rr{} = OldRecord, #dns_rr{} = UpdatedRecord, SendNo
     SOA = SOA0#dns_rrdata_soa{serial = Serial + 1},
     Zone = build_zone(ZoneName, Zone0#zone.allow_notify, Zone0#zone.allow_transfer,
         Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source, Zone0#zone.version,
-        [Authority#dns_rr{data = SOA}],  Records),
+        [Authority#dns_rr{data = SOA}],  remove_old_soa_add_new(Records, Authority#dns_rr{data = SOA})),
     %% Put zone back into cache.
+    ok = delete_zone(ZoneName),
     case SendNotify of
         false ->
-            put_zone(ZoneName, Zone);
+            ok = put_zone(ZoneName, Zone);
         true ->
-            put_zone(ZoneName, Zone),
+            ok = put_zone(ZoneName, Zone),
             send_notify(ZoneName, Zone)
     end.
 % ----------------------------------------------------------------------------------------------------
@@ -507,10 +510,6 @@ build_zone(Qname, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotif
     NotifySourceIP, Version, Records) ->
   RecordsByName = build_named_index(Records),
   Authority = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
-%%   Authorities = lists:foldl(fun(A, Acc) ->
-%%                     SOA = A#dns_rr.data,
-%%                     [{timestamp() + SOA#dns_rrdata_soa.expire, A} | Acc]
-%%                         end, [], Authorities0),
   #zone{name = Qname, allow_notify = AllowNotifyList, allow_transfer = AllowTransferList,
       allow_update = AllowUpdateList, also_notify = AlsoNotifyList, notify_source = NotifySourceIP,
       version = Version, record_count = length(Records), authority = Authority, records = Records, records_by_name = RecordsByName}.
@@ -618,3 +617,20 @@ get_ips_for_notify_set(Records, [Head | Tail], IPs) ->
 timestamp() ->
     {TM, TS, _} = os:timestamp(),
     (TM * 1000000) + TS.
+
+%% @doc This function takes a list of records and an authority records. Removes old authority in the
+%% record list and adds the new authority. Returns the new record list
+%% @end
+-spec remove_old_soa_add_new([dns:rr()], dns:rr()) -> [dns:rr()].
+remove_old_soa_add_new(Records, NewAuthority) ->
+    remove_old_soa_add_new(NewAuthority, Records,  []).
+
+remove_old_soa_add_new(_NewAuthority, [],  NewRecords) ->
+    NewRecords;
+remove_old_soa_add_new(NewAuthority, [Record | Records], NewRecords) ->
+    case Record#dns_rr.data of
+        #dns_rrdata_soa{} ->
+            remove_old_soa_add_new(NewAuthority, Records, [NewAuthority | NewRecords]);
+        _ ->
+            remove_old_soa_add_new(NewAuthority, Records, [Record | NewRecords])
+    end.
