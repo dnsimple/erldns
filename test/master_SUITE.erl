@@ -27,8 +27,6 @@ all() ->
     [test_zone_modify].
 
 init_per_suite(Config) ->
-    %% Give some time to start slave
-    timer:sleep(2000),
     application:start(erldns_app),
     Config.
 

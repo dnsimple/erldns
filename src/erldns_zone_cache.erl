@@ -538,7 +538,6 @@ normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(bina
 %% The primary master name server determines which servers are the slaves for the zone by looking at
 %% the list of NS records in the zone and taking out the record that points to the name server listed
 %% in the MNAME field of the zone's SOA record as well as the domain name of the local host.
-
 %% RFC 1996
 %% NOTIFY SET
 %% set of servers to be notified of changes to some

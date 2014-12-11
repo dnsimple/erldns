@@ -42,10 +42,6 @@ resolve(Message, AuthorityRecords, {ClientIP, ServerIP}, Question) when is_recor
 %% With the extracted Qname and Qtype in hand, find the nearest zone
 %% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
 resolve(Message, _AuthorityRecords, Qname, ?DNS_TYPE_AXFR = _Qtype, {ClientIP, ServerIP}) ->
-    %% NOTE, RFC-5936 states that the question must be in the response
-    %% NOTE, response must include SOA in the beginning and end.
-    %% NOTE, must be TCP
-    %% Refer to rfc-5936 2.1.1 for correct query values
     {ok, Zone} = erldns_zone_cache:get_zone_with_records(Qname), % Zone lookup
     RecordsSOA = Zone#zone.records,
     {Records0, SOA} = get_soa(RecordsSOA),
@@ -73,7 +69,7 @@ resolve(Message, AuthorityRecords, Qname, Qtype, {ClientIP, ServerIP}) ->
 %% No SOA was found for the Qname so we return the root hints
 %% Note: it seems odd that we are indicating we are authoritative here.
 resolve(Message, _Qname, _Qtype, {error, not_authoritative}, {_ClientIP, _ServerIP}, _CnameChain) ->
-    case erldns_config:use_root_hints() of
+  case erldns_config:use_root_hints() of
     true ->
       {Authority, Additional} = erldns_records:root_hints(),
       Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
@@ -111,7 +107,6 @@ exact_match_resolution(Message, Qname, Qtype, {ClientIP, ServerIP}, CnameChain, 
 %% CNAME records found in the records for the Qname
 exact_match_resolution(Message, _Qname, Qtype, {ClientIP, ServerIP}, CnameChain, MatchedRecords, Zone, CnameRecords) ->
   resolve_exact_match_with_cname(Message, Qtype, {ClientIP, ServerIP}, CnameChain, MatchedRecords, Zone, CnameRecords).
-
 
 
 
@@ -399,7 +394,6 @@ resolve_best_match_with_wildcard_cname(Message, _Qname, Qtype, {ClientIP, Server
 
 
 
-
 % There are referral records
 resolve_best_match_referral(Message, Qname, Qtype, {ClientIP, ServerIP}, CnameChain, BestMatchRecords, Zone, ReferralRecords) ->
   resolve_best_match_referral(Message, Qname, Qtype, {ClientIP, ServerIP}, CnameChain, BestMatchRecords, Zone, ReferralRecords, lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), BestMatchRecords)). % Lookup SOA in best match records
@@ -421,7 +415,6 @@ resolve_best_match_referral(Message, _Qname, ?DNS_TYPE_ANY, {_ClientIP, _ServerI
   Message;
 resolve_best_match_referral(Message, _Qname, _Qtype, {_ClientIP, _ServerIP}, _CnameChain, _BestMatchRecords, _Zone, _ReferralRecords, Authority) ->
   Message#dns_message{authority = Authority}.
-
 
 
 
@@ -511,10 +504,9 @@ requires_additional_processing([Answer|Rest], RequiresAdditional) ->
           end,
   requires_additional_processing(Rest, RequiresAdditional ++ Names).
 
-%% @doc Returns a list of #dns_rr records for and axfr request, also returns the ips of allow notify
-%% and allow axfr
+%% @doc Returns a list of #dns_rr records and the SOA
 %% @end
--spec get_soa([#dns_rr{}]) -> {[#dns_rr{}], #dns_rr{}, [inet:ip_address()], [inet:ip_address()]}.
+-spec get_soa([#dns_rr{}]) -> {[#dns_rr{}], #dns_rr{}}.
 get_soa(DNSRRList) ->
     get_soa(DNSRRList, [], []).
 
@@ -527,7 +519,3 @@ get_soa([#dns_rr{data = Data} = Head | Tail], Records, SOA) ->
         _ ->
             get_soa(Tail, [Head | Records], SOA)
     end.
-
-timestamp() ->
-    {TM, TS, _} = os:timestamp(),
-    (TM * 1000000) + TS.
