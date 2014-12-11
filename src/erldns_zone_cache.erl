@@ -565,6 +565,10 @@ send_notify(ZoneName, Zone) ->
             ZoneName, ?DNS_CLASS_IN}}) | Acc]
         end, [], NotifySetIPs).
 
+%% @doc This function returns a list of nameservers to notify for a zone. Returned list
+%% excludes the mname that is specified in the authority.
+%% @end
+-spec get_notify_set([dns:rr()]) -> [dns:rr()].
 get_notify_set(Records) ->
     get_notify_set(Records, [], []).
 
@@ -581,6 +585,10 @@ get_notify_set([Head | Tail], SOA, NameServers) ->
             get_notify_set(Tail, SOA, NameServers)
     end.
 
+%% @doc Takes an SOA, and a list of nameservers and returns a list of nameservers that are not
+%% include in the SOA's mname field.
+%% @end
+-spec exclude_mname_duplicates(dns:rr(), [dns:rr()]) -> [dns:rr()].
 exclude_mname_duplicates(SOA, NameServers) ->
     MName = SOA#dns_rrdata_soa.mname,
     lists:foldl(fun(NameServer, Acc0) ->
@@ -593,6 +601,10 @@ exclude_mname_duplicates(SOA, NameServers) ->
         end
     end, [], NameServers).
 
+%% @doc This function takes a list of nameservers, finds it's A/AAAA record in the given record set
+%% and returns the nameserver's IP address.
+%% @end
+-spec get_ips_for_notify_set([dns:rr()], [dns:rr()]) -> [inet:ip_address()].
 get_ips_for_notify_set(Records, NotifySet) ->
     get_ips_for_notify_set(Records, NotifySet, []).
 
@@ -614,10 +626,6 @@ get_ips_for_notify_set(Records, [Head | Tail], IPs) ->
             end
     end.
 
-timestamp() ->
-    {TM, TS, _} = os:timestamp(),
-    (TM * 1000000) + TS.
-
 %% @doc This function takes a list of records and an authority records. Removes old authority in the
 %% record list and adds the new authority. Returns the new record list
 %% @end
@@ -634,3 +642,7 @@ remove_old_soa_add_new(NewAuthority, [Record | Records], NewRecords) ->
         _ ->
             remove_old_soa_add_new(NewAuthority, Records, [Record | NewRecords])
     end.
+
+timestamp() ->
+    {TM, TS, _} = os:timestamp(),
+    (TM * 1000000) + TS.
