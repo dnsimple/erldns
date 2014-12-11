@@ -181,14 +181,28 @@ query_tests(_Config) ->
         {addr, Addr} = lists:keyfind(addr, 1, Conf),
         [{Addr, 8053} | Acc]
     end, [], Config),
-    {ok, _} = inet_res:nnslookup("example.com", any, a, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, aaaa, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, srv, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, cname, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, ns, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, mx, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, spf, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, txt, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, soa, AddressesWithPorts, 10000),
-    {ok, _} = inet_res:nnslookup("example.com", any, naptr, AddressesWithPorts, 10000).
-%%     {ok, _} = inet_res:nnslookup("example.com", any, axfr, AddressesWithPorts, 10000).
+    io:format("**************Starting Query Test**************"),
+    {ok, A} = inet_res:nnslookup("example.com", any, a, AddressesWithPorts, 10000),
+    {ok, B} = inet_res:nnslookup("example.com", any, aaaa, AddressesWithPorts, 10000),
+    {ok, C} = inet_res:nnslookup("example.com", any, srv, AddressesWithPorts, 10000),
+    {ok, D} = inet_res:nnslookup("example.com", any, cname, AddressesWithPorts, 10000),
+    {ok, E} = inet_res:nnslookup("example.com", any, ns, AddressesWithPorts, 10000),
+    {ok, F} = inet_res:nnslookup("example.com", any, mx, AddressesWithPorts, 10000),
+    {ok, G} = inet_res:nnslookup("example.com", any, spf, AddressesWithPorts, 10000),
+    {ok, H} = inet_res:nnslookup("example.com", any, txt, AddressesWithPorts, 10000),
+    {ok, I} = inet_res:nnslookup("example.com", any, soa, AddressesWithPorts, 10000),
+    {ok, J} = inet_res:nnslookup("example.com", any, naptr, AddressesWithPorts, 10000),
+    {ok, K} = inet_res:nnslookup("example.com", any, axfr, AddressesWithPorts, 10000),
+    io:format("Results: ~n"
+               "A: ~p~n"
+               "AAAA: ~p~n"
+               "SRV: ~p~n"
+               "CNAME: ~p~n"
+               "NS: ~p~n"
+               "MX: ~p~n"
+               "SPF: ~p~n"
+               "TXT: ~p~n"
+               "SOA: ~p~n"
+               "NAPTR: ~p~n"
+               "AFXR: ~p~n",
+               [A, B, C, D, E, F, G, H, I, J, K]).
