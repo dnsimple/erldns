@@ -35,8 +35,17 @@ end_per_suite(Config) ->
     Config.
 
 init_per_testcase(test_zone_modify, Config) ->
+    ok = application:set_env(erldns, servers, [
+        [{port, 8053},
+            {listen, [{10,1,10,51}]},
+            {protocol, [tcp, udp]},
+            {worker_pool, [
+                {size, 10}, {max_overflow, 20}
+            ]}]
+    ]),
     application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "master_db"}]),
     application:set_env(mnesia, dir, "/opt/erl-dns/test/test_db1"),
+    ok = erldns:start(),
     Config;
 init_per_testcase(query_tests, Config) ->
     Config.
