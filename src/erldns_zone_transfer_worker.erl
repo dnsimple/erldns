@@ -22,6 +22,8 @@
 %% API
 -export([start_link/2]).
 -export([query_for_records/3]).
+-export([send_axfr/3]).
+
 %% gen_server callbacks
 -export([init/1,
     handle_call/3,
@@ -135,14 +137,17 @@ handle_notify(Message, ClientIP, ServerIP) ->
                          send_tcp_message(ServerIP, ClientIP, EncodedMessage)
                  end,
     Authority = dns:decode_message(Recv),
+    erldns_log:debug("Retrieved authority after sending request for SOA: ~p", [Authority]),
     %% Check the serial and send axfr request if you are the authority for it
     StoredSerial = SOA#dns_rr.data#dns_rrdata_soa.serial,
     MasterSerial0 = hd(Authority#dns_message.answers),
     MasterSerial = MasterSerial0#dns_rr.data#dns_rrdata_soa.serial,
     case StoredSerial =/= MasterSerial of
         true ->
+            erldns_log:debug("Sending AFXR!"),
             send_axfr(ZoneName, ServerIP, ClientIP);
         false ->
+            erldns_log:debug("Didn't need to send AFXR, stored serial: ~p, master serial: ~p", [StoredSerial, MasterSerial]),
             ok
     end,
     exit(normal).
@@ -180,11 +185,18 @@ send_axfr(ZoneName, BindIP, DestinationIP) ->
     %% Get new records from answer, delete old zone and replace it with the new zone
     NewRecords0 = dns:decode_message(Recv),
     NewRecords = NewRecords0#dns_message.answers,
+    %% AFXR requests always have the authority at the beginning and end of the answer section.
+    [Authority | RestOfRecords] = NewRecords,
+    erldns_log:debug("Answer: ~p~n~n", [NewRecords]),
     {ok, Zone} = erldns_zone_cache:get_zone_with_records(ZoneName),
-    NewZone = erldns_zone_cache:build_zone(ZoneName, Zone#zone.version, NewRecords, Zone#zone.allow_notify,
-        Zone#zone.allow_transfer, Zone#zone.allow_update, Zone#zone.also_notify, Zone#zone.notify_source),
-    ok = erldns_storage:delete(zones, normalize_name(ZoneName)),
+    NewZone = erldns_zone_cache:build_zone(ZoneName, Zone#zone.allow_notify, Zone#zone.allow_transfer,
+        Zone#zone.allow_update, Zone#zone.also_notify, Zone#zone.notify_source, Zone#zone.version,
+        [Authority], RestOfRecords),
+    erldns_log:debug("AFXR Results"),
+    erldns_log:debug("Old Zone: ~p~n~n", [Zone]),
+    ok = erldns_zone_cache:delete_zone(normalize_name(ZoneName)),
     ok = erldns_zone_cache:put_zone(ZoneName, NewZone),
+    erldns_log:debug("New Zone: ~p~n~n", [erldns_zone_cache:get_zone_with_records(ZoneName)]),
     exit(normal).
 
 %%%===================================================================
