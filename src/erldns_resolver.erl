@@ -43,13 +43,13 @@ resolve(Message, AuthorityRecords, {ClientIP, ServerIP}, Question) when is_recor
 %% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
 resolve(Message, _AuthorityRecords, Qname, ?DNS_TYPE_AXFR = _Qtype, {ClientIP, ServerIP}) ->
     {ok, Zone} = erldns_zone_cache:get_zone_with_records(Qname), % Zone lookup
-    RecordsSOA = Zone#zone.records,
-    {Records0, SOA} = get_soa(RecordsSOA),
+    RecordsWithSOA = Zone#zone.records,
+    {RecordsNoSOA, SOA} = get_soa(RecordsWithSOA),
     %%  Check to make sure the requester is allowed the axfr, and that the server is the master for
     %%  the zone
     case lists:member(ClientIP, Zone#zone.allow_transfer) andalso lists:member(ServerIP, Zone#zone.allow_notify) of
         true ->
-            Response = Message#dns_message{answers = [SOA] ++ Records0},
+            Response = Message#dns_message{answers = [SOA] ++ RecordsNoSOA},
             Response;
         false ->
             case lists:member(ClientIP, Zone#zone.allow_transfer) of
