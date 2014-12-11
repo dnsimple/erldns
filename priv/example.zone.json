@@ -95,14 +95,6 @@
                 }
             },
             {
-                "name": "ns3.example.com",
-                "type": "A",
-                "ttl": 3600,
-                "data": {
-                    "ip": "10.1.10.51"
-                }
-            },
-            {
                 "name": "example.com",
                 "type": "TXT",
                 "ttl": 3600,
