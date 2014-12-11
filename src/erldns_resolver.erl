@@ -66,24 +66,14 @@ resolve(Message, _AuthorityRecords, Qname, ?DNS_TYPE_AXFR = _Qtype, {ClientIP, S
     end;
 
 resolve(Message, AuthorityRecords, Qname, Qtype, {ClientIP, ServerIP}) ->
-    Timestamp = timestamp(),
-  Authority = case hd(AuthorityRecords) of
-      [{Expire, Authority0}] when Expire < Timestamp ->
-          %% cast for zone transfer
-          erldns_log:debug("Zone is expired, sending AXFR"),
-          gen_server:cast(erldns_manager, {send_axfr, {Authority0#dns_rr.name, ServerIP}}),
-        Authority0;
-      [{_, Authority0}] ->
-          Authority0
-  end,
-    Zone = erldns_zone_cache:find_zone(Qname, Authority), % Zone lookup
+    Zone = erldns_zone_cache:find_zone(Qname, AuthorityRecords), % Zone lookup
     Records = resolve(Message, Qname, Qtype, Zone, {ClientIP, ServerIP}, _CnameChain = []),
     additional_processing(rewrite_soa_ttl(Records), ClientIP, Zone).
 
 %% No SOA was found for the Qname so we return the root hints
 %% Note: it seems odd that we are indicating we are authoritative here.
 resolve(Message, _Qname, _Qtype, {error, not_authoritative}, {_ClientIP, _ServerIP}, _CnameChain) ->
-  case erldns_config:use_root_hints() of
+    case erldns_config:use_root_hints() of
     true ->
       {Authority, Additional} = erldns_records:root_hints(),
       Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
@@ -184,7 +174,6 @@ resolve_exact_type_match(Message, Qname, Qtype, {ClientIP, ServerIP}, CnameChain
       NSRecord = lists:last(NSRecords),
       case erldns_zone_cache:get_authority(Qname) of
         {ok, [SoaRecord]} ->
-%%           erldns_zone_cache:check_for_soa_update(SoaRecord, ServerIP),
           case SoaRecord#dns_rr.name =:= NSRecord#dns_rr.name of
             true ->
               Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};

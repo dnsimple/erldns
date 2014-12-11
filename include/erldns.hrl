@@ -29,7 +29,7 @@
     also_notify :: [inet:ip_address()],
     notify_source :: inet:ip_address(),
     version :: binary(),
-    authority = [] :: [{non_neg_integer(), dns:rr()}],
+    authority = [] :: [dns:rr()],
     record_count = 0 :: non_neg_integer(),
     records = [] :: [dns:rr()],
     records_by_name :: [dns:rr()],
