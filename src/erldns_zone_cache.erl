@@ -550,6 +550,8 @@ normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(bina
 send_notify(ZoneName, Zone) ->
     Records = Zone#zone.records,
     NotifySet = get_notify_set(Records),
+    erldns_log:debug("NotifySet: ~p", [NotifySet]),
+    erldns_log:debug("Records: ~p", [Records]),
     %%Find the A record for this name server to get the ip(s)
     NotifySetIPs = get_ips_for_notify_set(Records, NotifySet),
     %% Now send the notify message out to the set of IPs
@@ -599,13 +601,18 @@ get_ips_for_notify_set(_Records, [], IPs) ->
     IPs;
 get_ips_for_notify_set(Records, [Head | Tail], IPs) ->
     DName = Head#dns_rrdata_ns.dname,
-    ARecord0 = lists:keyfind(DName, 2, Records),
-    ARecord = ARecord0#dns_rr.data,
-    case ARecord of
-        #dns_rrdata_a{} ->
-            get_ips_for_notify_set(Records, Tail, [ARecord#dns_rrdata_a.ip | IPs]);
-        #dns_rrdata_aaaa{} ->
-            get_ips_for_notify_set(Records, Tail, [ARecord#dns_rrdata_aaaa.ip | IPs])
+    case lists:keyfind(DName, 2, Records) of
+        false ->
+            get_ips_for_notify_set(Records, Tail, IPs);
+        ARecord0 ->
+            erldns_log:debug("Arecord ~p", [ARecord0]),
+            ARecord = ARecord0#dns_rr.data,
+            case ARecord of
+                #dns_rrdata_a{} ->
+                    get_ips_for_notify_set(Records, Tail, [ARecord#dns_rrdata_a.ip | IPs]);
+                #dns_rrdata_aaaa{} ->
+                    get_ips_for_notify_set(Records, Tail, [ARecord#dns_rrdata_aaaa.ip | IPs])
+            end
     end.
 
 timestamp() ->
