@@ -44,7 +44,7 @@ init_per_testcase(test_zone_modify, Config) ->
                 {size, 10}, {max_overflow, 20}
             ]}]
     ]),
-    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "master_db"}]),
+    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "/opt/erl-dns/test/test_db1"}]),
     application:set_env(mnesia, dir, "/opt/erl-dns/test/test_db1"),
     ok = erldns:start(),
     Config;
