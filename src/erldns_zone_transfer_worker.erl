@@ -144,7 +144,7 @@ handle_notify(Message, ClientIP, ServerIP) ->
     MasterSerial = MasterSerial0#dns_rr.data#dns_rrdata_soa.serial,
     case StoredSerial =/= MasterSerial of
         true ->
-            erldns_log:debug("Sending AFXR!"),
+            erldns_log:debug("Sending AXFR!"),
             send_axfr(ZoneName, ServerIP, ClientIP);
         false ->
             erldns_log:debug("Didn't need to send AFXR, stored serial: ~p, master serial: ~p", [StoredSerial, MasterSerial]),
@@ -158,7 +158,7 @@ send_axfr(ZoneName, BindIP) ->
         true ->
             send_axfr(ZoneName, BindIP, Zone#zone.notify_source);
         false ->
-            erldns_log:debug("We are master, no need to send AFXR"),
+            erldns_log:debug("We are master, no need to send AXFR"),
             exit(normal)
     end.
 
