@@ -539,8 +539,21 @@ build_named_index([#dns_rr{name = Name, ttl = TTL} = R |Rest], Idx) ->
             build_named_index(Rest, dict:store(normalize_name(Name), [{Expiry, R}], Idx))
     end.
 
-normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
-normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
+normalize_name(Name) when is_list(Name) -> bin_to_lower(list_to_binary(Name));
+normalize_name(Name) when is_binary(Name) -> bin_to_lower(Name).
+
+%% @doc Takes a binary messages, and transforms it to lower case. Self said!
+-spec bin_to_lower(Bin :: binary()) -> binary().
+bin_to_lower(Bin) ->
+    bin_to_lower(Bin, <<>>).
+
+bin_to_lower(<<>>, Acc) ->
+    Acc;
+bin_to_lower(<<H, T/binary>>, Acc) when H >= $A, H =< $Z ->
+    H2 = H + 32,
+    bin_to_lower(T, <<Acc/binary, H2>>);
+bin_to_lower(<<H, T/binary>>, Acc) ->
+    bin_to_lower(T, <<Acc/binary, H>>).
 
 %% @doc This function sends the NOTIFY message to all slaves of the zone.
 -spec send_notify(binary(), #zone{}) -> [ok].
