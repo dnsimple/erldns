@@ -34,7 +34,10 @@
 
 -define(SERVER, ?MODULE).
 -define(REFRESH_INTERVAL, 5000).
-
+%% Helper macro for declaring children of supervisor
+-define(TRANSFER_WORKER(Mod, Args),
+        {{erldns_zone_transfer_worker, now()}, {erldns_zone_transfer_worker, start_link, [Mod, Args]},
+         temporary, 5000, worker, [erldns_zone_transfer_worker]}).
 -record(state, {zone_expirations, orddict_size}).
 
 %%%===================================================================
@@ -54,21 +57,15 @@ handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 handle_cast({send_notify, {_BindIP, _DestinationIP, _ZoneName, _ZoneClass} = Args}, State) ->
-    Spec = {{erldns_zone_transfer_worker, now()},
-            {erldns_zone_transfer_worker, start_link, [send_notify, Args]}, temporary, 5000, worker,
-            [erldns_zone_transfer_worker]},
+    Spec = ?TRANSFER_WORKER(send_notify, Args),
     supervisor:start_child(erldns_zone_transfer_sup, Spec),
     {noreply, State, ?REFRESH_INTERVAL};
 handle_cast({handle_notify, {_Message, _ClientIP, _ServerIP} = Args}, State) ->
-    Spec = {{erldns_zone_transfer_worker, now()},
-            {erldns_zone_transfer_worker, start_link, [handle_notify, Args]}, temporary, 5000, worker,
-            [erldns_zone_transfer_worker]},
+    Spec = ?TRANSFER_WORKER(handle_notify, Args),
     supervisor:start_child(erldns_zone_transfer_sup, Spec),
     {noreply, State, ?REFRESH_INTERVAL};
 handle_cast({send_axfr, {_ZoneName, _ServerIP} = Args}, State) ->
-    Spec = {{erldns_zone_transfer_worker, now()},
-            {erldns_zone_transfer_worker, start_link, [send_axfr, Args]}, temporary, 5000, worker,
-            [erldns_zone_transfer_worker]},
+    Spec = ?TRANSFER_WORKER(send_axfr, Args),
     supervisor:start_child(erldns_zone_transfer_sup, Spec),
     {noreply, State, ?REFRESH_INTERVAL};
 handle_cast(_Request, State) ->
@@ -122,14 +119,16 @@ setup_zone_expiration_orddict() ->
                           end || {_, List} <- IFAddrs],
     NewOrrdict = lists:foldl(
                    fun({ZoneName, _ZoneVersion}, Orrdict) ->
-                           {ok, Zone} = erldns_zone_cache:get_zone_with_records(ZoneName),
-                           case Zone#zone.allow_transfer of
+                           {ok, #zone{allow_transfer = AllowTransfer, notify_source = NotifySource,
+                                      authority = [#dns_rr{data = ZoneAuth}]}}
+                               = erldns_zone_cache:get_zone_with_records(ZoneName),
+                           case AllowTransfer of
                                [] ->
                                    Orrdict;
                                _ ->
                                    MountedIP = hd(lists:sort([IP || IP <- MountedIPAddresses,
-                                                                    lists:member(IP, Zone#zone.allow_transfer)])),
-                                   case Zone#zone.notify_source =:= MountedIP of
+                                                                    lists:member(IP, AllowTransfer)])),
+                                   case NotifySource =:= MountedIP of
                                        true ->
                                            %% We are the zone Authority, we don't need to keep
                                            %% track of this zone.
@@ -137,8 +136,6 @@ setup_zone_expiration_orddict() ->
                                        false ->
                                            %% We are slave of a zone, we need to keep track of it
                                            %% and send afxr when it expires
-                                           [ZoneAuth0] = Zone#zone.authority,
-                                           ZoneAuth = ZoneAuth0#dns_rr.data,
                                            Expiration = ZoneAuth#dns_rrdata_soa.expire + timestamp(),
                                            ArgsToSendAXFR = {ZoneName, MountedIP},
                                            orddict:append(Expiration, ArgsToSendAXFR, Orrdict)
