@@ -20,19 +20,19 @@
 %% @doc Start the event process.
 -spec start_link() -> any().
 start_link() ->
-  gen_event:start_link({local, ?MODULE}).
+    gen_event:start_link({local, ?MODULE}).
 
 %% @doc Fire an event.
 -spec notify(any()) -> any().
 notify(Event) ->
-  gen_event:notify(?MODULE, Event).
+    gen_event:notify(?MODULE, Event).
 
 %% @doc Add an event handler.
 -spec add_handler(module()) -> any().
 add_handler(Module) ->
-  add_handler(Module, []).
+    add_handler(Module, []).
 
 %% @doc Add an event handler with arguments.
 -spec add_handler(module(), [term()]) -> any().
 add_handler(Module, Args) ->
-  gen_event:add_handler(?MODULE, Module, Args).
+    gen_event:add_handler(?MODULE, Module, Args).
