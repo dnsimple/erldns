@@ -2,7 +2,6 @@
 .idea
 *.beam
 *.dump
-erldns.config
 erldns.config*
 log/
 ebin/
@@ -11,12 +10,7 @@ rel/erl-dns
 zones.json
 .eunit/
 test_logs/
-db/
-Mnesia.nonode@nohost/
-run
 ebin/erldns.app
-MnesiaCore.slave@spawn_1418_253420_212143
 db_master/
 db_slave/
-test/test_db1/
-test/test_db2/
+db/
