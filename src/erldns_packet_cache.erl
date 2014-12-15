@@ -20,10 +20,16 @@
 
 -behavior(gen_server).
 
-% API
--export([start_link/0, get/1, get/2, put/2, sweep/0, clear/0, stop/0]).
+%% API
+-export([start_link/0,
+         get/1,
+         get/2,
+         put/2,
+         sweep/0,
+         clear/0,
+         stop/0]).
 
-% Gen server hooks
+%% Gen server hooks
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -41,99 +47,96 @@
           tref :: timer:tref()
          }).
 
-% Public API
-
+%% Public API
 %% @doc Start the cache.
 -spec start_link() -> any().
 start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %% @doc Try to retrieve a cached response for the given question.
 -spec get(dns:question()) -> {ok, dns:message()} | {error, cache_expired} | {error, cache_miss}.
 get(Question) ->
-  get(Question, unknown).
+    get(Question, unknown).
 
 %% @doc Try to retrieve a cached response for the given question sent
 %% by the given host.
 -spec get(dns:question(), dns:ip()) -> {ok, dns:message()} | {error, cache_expired} | {error, cache_miss}.
 get(Question, _Host) ->
-  case erldns_storage:select(packet_cache, Question) of
-    [{Question, {Response, ExpiresAt}}] ->
-      case timestamp() > ExpiresAt of
-        true ->
-          folsom_metrics:notify(cache_expired_meter, 1),
-          {error, cache_expired};
-        false ->
-          folsom_metrics:notify(cache_hit_meter, 1),
-          {ok, Response}
-      end;
-    _ ->
-      folsom_metrics:notify(cache_miss_meter, 1),
-      {error, cache_miss}
-  end.
+    case erldns_storage:select(packet_cache, Question) of
+        [{Question, {Response, ExpiresAt}}] ->
+            case timestamp() > ExpiresAt of
+                true ->
+                    folsom_metrics:notify(cache_expired_meter, 1),
+                    {error, cache_expired};
+                false ->
+                    folsom_metrics:notify(cache_hit_meter, 1),
+                    {ok, Response}
+            end;
+        _ ->
+            folsom_metrics:notify(cache_miss_meter, 1),
+            {error, cache_miss}
+    end.
 
 %% @doc Put the response in the cache for the given question.
 -spec put(dns:question(), dns:message()) -> ok.
 put(Question, Response) ->
-  case ?ENABLED of
-    true ->
-      %erldns_log:debug("Set packet in cache for ~p", [Question]),
-      gen_server:call(?SERVER, {set_packet, [Question, Response]});
-    _ ->
-      %erldns_log:debug("Packet cache not enabled (Q: ~p)", [Question]),
-      ok
-  end.
+    case ?ENABLED of
+        true ->
+            gen_server:call(?SERVER, {set_packet, [Question, Response]});
+        _ ->
+            ok
+    end.
 
 %% @doc Remove all old cached packets from the cache.
 -spec sweep() -> any().
 sweep() ->
-  gen_server:cast(?SERVER, sweep).
+    gen_server:cast(?SERVER, sweep).
 
 %% @doc Clean the cache
 -spec clear() -> any().
 clear() ->
-  gen_server:cast(?SERVER, clear).
+    gen_server:cast(?SERVER, clear).
 
 %% @doc Stop the cache
 -spec stop() -> any().
 stop() ->
-  gen_server:call(?SERVER, stop).
+    gen_server:call(?SERVER, stop).
 
 %% Gen server hooks
 -spec init([non_neg_integer()]) -> {ok, #state{}}.
 init([]) ->
-  init([20]);
+    init([20]);
 init([TTL]) ->
-  erldns_storage:create(packet_cache),
-  {ok, Tref} = timer:apply_interval(?SWEEP_INTERVAL, ?MODULE, sweep, []),
-  {ok, #state{ttl = TTL, tref = Tref}}.
+    erldns_storage:create(packet_cache),
+    {ok, Tref} = timer:apply_interval(?SWEEP_INTERVAL, ?MODULE, sweep, []),
+    {ok, #state{ttl = TTL, tref = Tref}}.
 
 handle_call({set_packet, [Question, Response]}, _From, State) ->
-  erldns_storage:insert(packet_cache, {Question, {Response, timestamp() + State#state.ttl}}),
-  {reply, ok, State};
+    erldns_storage:insert(packet_cache, {Question, {Response, timestamp() + State#state.ttl}}),
+    {reply, ok, State};
 
 handle_call(stop, _From, State) ->
-  {stop, normal, ok, State}.
+    {stop, normal, ok, State}.
 
 handle_cast(sweep, State) ->
-  Keys = erldns_storage:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}]),
-  lists:foreach(fun(K) -> erldns_storage:delete(packet_cache, K) end, Keys),
-  {noreply, State};
+    Keys = erldns_storage:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}]),
+    lists:foreach(fun(K) -> erldns_storage:delete(packet_cache, K) end, Keys),
+    {noreply, State};
 
 handle_cast(clear, State) ->
-  erldns_storage:empty_table(packet_cache),
-  {noreply, State}.
+    erldns_storage:empty_table(packet_cache),
+    {noreply, State}.
 
 handle_info(_Message, State) ->
-  {noreply, State}.
+    {noreply, State}.
 
 terminate(_Reason, _State) ->
-  erldns_storage:delete_table(packet_cache),
-  ok.
+    erldns_storage:delete_table(packet_cache),
+    ok.
 
 code_change(_PreviousVersion, State, _Extra) ->
-  {ok, State}.
+    {ok, State}.
 
 timestamp() ->
-  {TM, TS, _} = os:timestamp(),
-  (TM * 1000000) + TS.
+    {TM, TS, _} = os:timestamp(),
+    (TM * 1000000) + TS.
