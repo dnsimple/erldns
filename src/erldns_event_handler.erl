@@ -37,7 +37,7 @@ handle_event(start_servers, State) ->
       % Start up the UDP and TCP servers
       erldns_log:info("Starting the UDP and TCP supervisor"),
         {ok, _Pid} = erldns_server_sup:start_link(),
-        {Pools, Configs} = erldns_config:get_servers(),
+        {Pools, Configs} = erldns_config:get_server_configs(),
         erldns_log:info("Pools: ~p, Configs; ~p", [Pools, Configs]),
         add_pools(Pools),
         add_servers(Configs),
@@ -75,30 +75,30 @@ terminate(_Reason, _State) ->
 
 add_servers([]) ->
     ok;
-add_servers([{inet, {_, _, _, _} = IPAddr, tcp, Port, PoolName}| T]) ->
+add_servers([{inet, {_, _, _, _} = IPAddr, tcp, Port, PoolName}| Tail]) ->
     Spec = {{tcp_inet, IPAddr}, {erldns_tcp_server, start_link, [tcp_inet, inet, IPAddr, Port, PoolName]},
         permanent, 5000, worker, [erldns_tcp_server]},
-    erldns_log:info("Starting child with spec: ~p", [Spec]),
+    erldns_log:info("Starting server child with spec: ~p", [Spec]),
     ok = start_child(Spec),
-    add_servers(T);
-add_servers([{inet6, {_, _, _, _, _, _, _, _} = IPAddr, tcp, Port, PoolName}| T]) ->
+    add_servers(Tail);
+add_servers([{inet6, {_, _, _, _, _, _, _, _} = IPAddr, tcp, Port, PoolName}| Tail]) ->
     Spec = {{tcp_inet6, IPAddr}, {erldns_tcp_server, start_link, [tcp_inet6, inet6, IPAddr, Port, PoolName]},
         permanent, 5000, worker, [erldns_tcp_server]},
-    erldns_log:info("Starting child with spec: ~p", [Spec]),
+    erldns_log:info("Starting server child with spec: ~p", [Spec]),
     ok = start_child(Spec),
-    add_servers(T);
-add_servers([{inet, {_, _, _, _} = IPAddr, udp, Port, _}| T]) ->
+    add_servers(Tail);
+add_servers([{inet, {_, _, _, _} = IPAddr, udp, Port, _}| Tail]) ->
     Spec = {{udp_inet, IPAddr}, {erldns_udp_server, start_link, [udp_inet, inet, IPAddr, Port]},
         permanent, 5000, worker, [erldns_udp_server]},
-    erldns_log:info("Starting child with spec: ~p", [Spec]),
+    erldns_log:info("Starting server child with spec: ~p", [Spec]),
     ok = start_child(Spec),
-    add_servers(T);
-add_servers([{inet6, {_, _, _, _, _, _, _, _} = IPAddr, udp, Port, _}| T]) ->
+    add_servers(Tail);
+add_servers([{inet6, {_, _, _, _, _, _, _, _} = IPAddr, udp, Port, _}| Tail]) ->
     Spec = {{udp_inet6, IPAddr}, {erldns_udp_server, start_link, [udp_inet6, inet6, IPAddr, Port]},
     permanent, 5000, worker, [erldns_udp_server]},
-    erldns_log:info("Starting child with spec: ~p", [Spec]),
+    erldns_log:info("Starting server child with spec: ~p", [Spec]),
     ok = start_child(Spec),
-    add_servers(T).
+    add_servers(Tail).
 
 add_pools([]) ->
     ok;
@@ -109,8 +109,7 @@ add_pools([Pool | Tail]) ->
             {size, keyget(size, Pool)},
             {max_overflow, keyget(max_overflow, Pool)}],
     Spec = poolboy:child_spec(Name, Args),
-    R = supervisor:start_child(erldns_server_sup, Spec),
-    erldns_log:info("Start Pool: ~p", [R]),
+    ok = start_child(Spec),
     add_pools(Tail).
 
 keyget(Key, Data) ->
