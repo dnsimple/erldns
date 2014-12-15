@@ -19,3 +19,4 @@ MnesiaCore.slave@spawn_1418_253420_212143
 db_master/
 db_slave/
 test/test_db1/
+test/test_db2/
