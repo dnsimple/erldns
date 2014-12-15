@@ -24,7 +24,7 @@
 -export([start_link/0]).
 -export([zone_to_json/1, register_encoders/1, register_encoder/1]).
 
-% Gen server hooks
+%% Gen server hooks
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -37,169 +37,171 @@
 
 -record(state, {encoders}).
 
-% Public API
+%% Public API
 
 %% @doc Start the encoder process.
 -spec start_link() -> any().
 start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %% @doc Encode a Zone record into JSON.
 -spec zone_to_json(#zone{}) -> binary().
 zone_to_json(Zone) ->
-  gen_server:call(?SERVER, {encode_zone, Zone}).
+    gen_server:call(?SERVER, {encode_zone, Zone}).
 
 %% @doc Register a list of encoder modules.
 -spec register_encoders([module()]) -> ok.
 register_encoders(Modules) ->
-  erldns_log:info("Registering custom encoders: ~p", [Modules]),
-  gen_server:call(?SERVER, {register_encoders, Modules}).
+    erldns_log:info("Registering custom encoders: ~p", [Modules]),
+    gen_server:call(?SERVER, {register_encoders, Modules}).
 
 %% @doc Register a single encoder module.
 -spec register_encoder(module()) -> ok.
 register_encoder(Module) ->
-  erldns_log:info("Registering customer encoder: ~p", [Module]),
-  gen_server:call(?SERVER, {register_encoder, Module}).
+    erldns_log:info("Registering customer encoder: ~p", [Module]),
+    gen_server:call(?SERVER, {register_encoder, Module}).
 
 
-% Gen server hooks
+%%  Gen server hooks
 
 init([]) ->
-  {ok, #state{encoders = []}}.
+    {ok, #state{encoders = []}}.
 
 handle_call({encode_zone, Zone}, _From, State) ->
-  {reply, zone_to_json(Zone, State#state.encoders), State};
+    {reply, zone_to_json(Zone, State#state.encoders), State};
 
 handle_call({register_encoders, Modules}, _From, State) ->
-  {reply, ok, State#state{encoders = State#state.encoders ++ Modules}};
+    {reply, ok, State#state{encoders = State#state.encoders ++ Modules}};
 
 handle_call({register_encoder, Module}, _From, State) ->
-  {reply, ok, State#state{encoders = State#state.encoders ++ [Module]}}.
+    {reply, ok, State#state{encoders = State#state.encoders ++ [Module]}}.
 
 handle_cast(_, State) ->
-  {noreply, State}.
+    {noreply, State}.
 
 handle_info(_, State) ->
-  {noreply, State}.
+    {noreply, State}.
 
 terminate(_, _State) ->
-  ok.
+    ok.
 
 code_change(_, State, _) ->
-  {ok, State}.
+    {ok, State}.
 
 
-% Internal API
+%% Internal API
 
 zone_to_json(Zone, Encoders) ->
-  Records = records_to_json(Zone, Encoders),
-  FilteredRecords = lists:filter(record_filter(), Records),
-  jsx:encode([{<<"erldns">>,
-               [
-                {<<"zone">>, [
-                              {<<"name">>, Zone#zone.name},
-                              {<<"version">>, Zone#zone.version},
-                              {<<"records">>, FilteredRecords}
-                             ]}
-               ]
-              }]).
+    Records = records_to_json(Zone, Encoders),
+    FilteredRecords = lists:filter(record_filter(), Records),
+    jsx:encode([{<<"erldns">>,
+                 [
+                  {<<"zone">>, [
+                                {<<"name">>, Zone#zone.name},
+                                {<<"version">>, Zone#zone.version},
+                                {<<"records">>, FilteredRecords}
+                               ]}
+                 ]
+                }]).
 
 record_filter() ->
-  fun(R) ->
-      case R of
-        [] -> false;
-        _ -> true
-      end
-  end.
+    fun(R) ->
+            case R of
+                [] -> false;
+                _ -> true
+            end
+    end.
 
 records_to_json(Zone, Encoders) ->
-  lists:map(encode(Encoders), Zone#zone.records).
+    lists:map(encode(Encoders), Zone#zone.records).
 
 encode(Encoders) ->
-  fun(Record) ->
-      encode_record(Record, Encoders)
-  end.
+    fun(Record) ->
+            encode_record(Record, Encoders)
+    end.
 
 encode_record(Record, Encoders) ->
-  erldns_log:debug("Encoding record ~p", [Record]),
-  case encode_record(Record) of
-    [] ->
-      erldns_log:debug("Trying custom encoders: ~p", [Encoders]),
-      try_custom_encoders(Record, Encoders);
-    EncodedRecord -> EncodedRecord
-  end.
+    erldns_log:debug("Encoding record ~p", [Record]),
+    case encode_record(Record) of
+        [] ->
+            erldns_log:debug("Trying custom encoders: ~p", [Encoders]),
+            try_custom_encoders(Record, Encoders);
+        EncodedRecord -> EncodedRecord
+    end.
 
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SOA, Ttl, Data}) ->
-  encode_record(Name, Type, Ttl, Data);
+    encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_NS, Ttl, Data}) ->
-  encode_record(Name, Type, Ttl, Data);
+    encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_A, Ttl, Data}) ->
-  encode_record(Name, Type, Ttl, Data);
+    encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_AAAA, Ttl, Data}) ->
-  encode_record(Name, Type, Ttl, Data);
+    encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_CNAME, Ttl, Data}) ->
-  encode_record(Name, Type, Ttl, Data);
+    encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_MX, Ttl, Data}) ->
-  encode_record(Name, Type, Ttl, Data);
+    encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_HINFO, Ttl, Data}) ->
-  encode_record(Name, Type, Ttl, Data);
+    encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_TXT, Ttl, Data}) ->
-  encode_record(Name, Type, Ttl, Data);
+    encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SPF, Ttl, Data}) ->
-  encode_record(Name, Type, Ttl, Data);
+    encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SSHFP, Ttl, Data}) ->
-  encode_record(Name, Type, Ttl, Data);
+    encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SRV, Ttl, Data}) ->
-  encode_record(Name, Type, Ttl, Data);
+    encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_NAPTR, Ttl, Data}) ->
-  encode_record(Name, Type, Ttl, Data);
+    encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
-  erldns_log:debug("Unable to encode record: ~p", [Record]),
-  [].
+    erldns_log:debug("Unable to encode record: ~p", [Record]),
+    [].
 
 encode_record(Name, Type, Ttl, Data) ->
-  [
-   {<<"name">>, erlang:iolist_to_binary(io_lib:format("~s.", [Name]))},
-   {<<"type">>, dns:type_name(Type)},
-   {<<"ttl">>, Ttl},
-   {<<"content">>, encode_data(Data)}
-  ].
+    [
+     {<<"name">>, erlang:iolist_to_binary(io_lib:format("~s.", [Name]))},
+     {<<"type">>, dns:type_name(Type)},
+     {<<"ttl">>, Ttl},
+     {<<"content">>, encode_data(Data)}
+    ].
 
 
 try_custom_encoders(_Record, []) ->
-  {};
+    {};
 try_custom_encoders(Record, [Encoder|Rest]) ->
-  erldns_log:debug("Trying custom encoder ~p", [Encoder]),
-  case Encoder:encode_record(Record) of
-    [] -> try_custom_encoders(Record, Rest);
-    EncodedData -> EncodedData
-  end.
+    erldns_log:debug("Trying custom encoder ~p", [Encoder]),
+    case Encoder:encode_record(Record) of
+        [] -> try_custom_encoders(Record, Rest);
+        EncodedData -> EncodedData
+    end.
 
 encode_data({dns_rrdata_soa, Mname, Rname, Serial, Refresh, Retry, Expire, Minimum}) ->
-  erlang:iolist_to_binary(io_lib:format("~s. ~s. (~w ~w ~w ~w ~w)", [Mname, Rname, Serial, Refresh, Retry, Expire, Minimum]));
+    erlang:iolist_to_binary(io_lib:format("~s. ~s. (~w ~w ~w ~w ~w)", [Mname, Rname, Serial,
+                                                                       Refresh, Retry, Expire, Minimum]));
 encode_data({dns_rrdata_ns, Dname}) ->
-  erlang:iolist_to_binary(io_lib:format("~s.", [Dname]));
+    erlang:iolist_to_binary(io_lib:format("~s.", [Dname]));
 encode_data({dns_rrdata_a, Address}) ->
-  list_to_binary(inet_parse:ntoa(Address));
+    list_to_binary(inet_parse:ntoa(Address));
 encode_data({dns_rrdata_aaaa, Address}) ->
-  list_to_binary(inet_parse:ntoa(Address));
+    list_to_binary(inet_parse:ntoa(Address));
 encode_data({dns_rrdata_cname, Dname}) ->
-  erlang:iolist_to_binary(io_lib:format("~s.", [Dname]));
+    erlang:iolist_to_binary(io_lib:format("~s.", [Dname]));
 encode_data({dns_rrdata_mx, Preference, Dname}) ->
-  erlang:iolist_to_binary(io_lib:format("~w ~s.", [Preference, Dname]));
+    erlang:iolist_to_binary(io_lib:format("~w ~s.", [Preference, Dname]));
 encode_data({dns_rrdata_hinfo, Cpu, Os}) ->
-  erlang:iolist_to_binary(io_lib:format("~w ~w", [Cpu, Os]));
-% RP
+    erlang:iolist_to_binary(io_lib:format("~w ~w", [Cpu, Os]));
+                                                % RP
 encode_data({dns_rrdata_txt, Text}) ->
-  erlang:iolist_to_binary(io_lib:format("~s", [Text]));
+    erlang:iolist_to_binary(io_lib:format("~s", [Text]));
 encode_data({dns_rrdata_spf, [Data]}) ->
-  erlang:iolist_to_binary(io_lib:format("~s", [Data]));
+    erlang:iolist_to_binary(io_lib:format("~s", [Data]));
 encode_data({dns_rrdata_sshfp, Alg, Fptype, Fp}) ->
-  erlang:iolist_to_binary(io_lib:format("~w ~w ~s", [Alg, Fptype, Fp]));
+    erlang:iolist_to_binary(io_lib:format("~w ~w ~s", [Alg, Fptype, Fp]));
 encode_data({dns_rrdata_srv, Priority, Weight, Port, Dname}) ->
-  erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s.", [Priority, Weight, Port, Dname]));
+    erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s.", [Priority, Weight, Port, Dname]));
 encode_data({dns_rrdata_naptr, Order, Preference, Flags, Services, Regexp, Replacements}) ->
-  erlang:iolist_to_binary(io_lib:format("~w ~w ~s ~s ~s ~s", [Order, Preference, Flags, Services, Regexp, Replacements]));
+    erlang:iolist_to_binary(io_lib:format("~w ~w ~s ~s ~s ~s", [Order, Preference, Flags, Services,
+                                                                Regexp, Replacements]));
 encode_data(Data) ->
-  erldns_log:debug("Unable to encode data: ~p", [Data]),
-  {}.
+    erldns_log:debug("Unable to encode data: ~p", [Data]),
+    {}.
