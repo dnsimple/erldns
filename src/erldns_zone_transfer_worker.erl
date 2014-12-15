@@ -187,7 +187,7 @@ send_axfr(ZoneName, BindIP, DestinationIP) ->
                                            Zone#zone.allow_update, Zone#zone.also_notify,
                                            Zone#zone.notify_source, Zone#zone.version, [Authority],
                                            RestOfRecords),
-    ok = erldns_zone_cache:delete_zone(normalize_name(ZoneName)),
+    ok = erldns_zone_cache:delete_zone(ZoneName),
     ok = erldns_zone_cache:put_zone(ZoneName, NewZone),
     exit(normal).
 

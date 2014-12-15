@@ -342,7 +342,7 @@ put_zone_async(Name, Zone) ->
 %% @doc Remove a zone from the cache.
 -spec delete_zone(binary()) -> ok | {error, term()}.
 delete_zone(Name) ->
-    erldns_storage:delete(zones, Name).
+    erldns_storage:delete(zones, normalize_name(Name)).
 
 %% @doc Add a record to a particular zone.
 -spec add_record(binary(), #dns_rr{}, boolean()) -> ok | {error, term()}.
