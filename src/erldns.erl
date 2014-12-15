@@ -19,15 +19,15 @@
 
 -spec start() -> any().
 start() ->
-  inets:start(),
-  crypto:start(),
-  ssl:start(),
-  lager:start(),
-  application:start(observer),
-  application:start(bear),
-  application:start(folsom),
-  application:start(cowlib),
-  application:start(ranch),
-  application:start(cowboy),
-  application:start(hottub),
-  application:start(erldns).
+    inets:start(),
+    crypto:start(),
+    ssl:start(),
+    lager:start(),
+    application:start(observer),
+    application:start(bear),
+    application:start(folsom),
+    application:start(cowlib),
+    application:start(ranch),
+    application:start(cowboy),
+    application:start(hottub),
+    application:start(erldns).
