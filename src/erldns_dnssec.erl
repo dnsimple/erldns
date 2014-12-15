@@ -18,4 +18,4 @@
 -export([handle/1]).
 
 handle(Message) ->
-  Message.
+    Message.
