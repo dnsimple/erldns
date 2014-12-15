@@ -11,43 +11,43 @@
 -endif.
 
 -record(partial_zone, {
-    name :: dns:dname(),
-    allow_notify = [] :: [inet:ip_address()],
-    allow_transfer = [] :: [inet:ip_address()],
-    allow_update = [] :: [inet:ip_address()],
-    also_notify = [] :: [inet:ip_address()],
-    notify_source = {127,0,0,1} :: inet:ip_address(),
-    records = [] :: [dns:rr()],
-    sha = <<>> :: binary()
-}).
+          name :: dns:dname(),
+          allow_notify = [] :: [inet:ip_address()],
+          allow_transfer = [] :: [inet:ip_address()],
+          allow_update = [] :: [inet:ip_address()],
+          also_notify = [] :: [inet:ip_address()],
+          notify_source = {127,0,0,1} :: inet:ip_address(),
+          records = [] :: [dns:rr()],
+          sha = <<>> :: binary()
+         }).
 
 -record(zone, {
-    name :: dns:dname(),
-    allow_notify :: [inet:ip_address()],
-    allow_transfer :: [inet:ip_address()],
-    allow_update :: [inet:ip_address()],
-    also_notify :: [inet:ip_address()],
-    notify_source :: inet:ip_address(),
-    version :: binary(),
-    authority = [] :: [dns:rr()],
-    record_count = 0 :: non_neg_integer(),
-    records = [] :: [dns:rr()],
-    records_by_name :: [dns:rr()],
-    records_by_type :: [dns:rr()]
-  }).
+          name :: dns:dname(),
+          allow_notify :: [inet:ip_address()],
+          allow_transfer :: [inet:ip_address()],
+          allow_update :: [inet:ip_address()],
+          also_notify :: [inet:ip_address()],
+          notify_source :: inet:ip_address(),
+          version :: binary(),
+          authority = [] :: [dns:rr()],
+          record_count = 0 :: non_neg_integer(),
+          records = [] :: [dns:rr()],
+          records_by_name :: [dns:rr()],
+          records_by_type :: [dns:rr()]
+         }).
 
 -record(authorities, {
-    owner_name,
-    ttl,
-    class,
-    name_server,
-    email_addr,
-    serial_num,
-    refresh,
-    retry,
-    expiry,
-    nxdomain
-}).
+          owner_name,
+          ttl,
+          class,
+          name_server,
+          email_addr,
+          serial_num,
+          refresh,
+          retry,
+          expiry,
+          nxdomain
+         }).
 
 -define(DNS_LISTEN_PORT, 8053).
 -define(LOCAL_HOSTS, [{127, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 1}]).
