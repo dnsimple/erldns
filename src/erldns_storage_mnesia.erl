@@ -64,12 +64,12 @@ create(schema) ->
 create(zones) ->
     ok = ensure_mnesia_started(),
     case mnesia:create_table(zones,
-        [{attributes, record_info(fields, zone)},
-            {record_name, zone},
-            {disc_copies, [node()]}]) of
+                             [{attributes, record_info(fields, zone)},
+                              {record_name, zone},
+                              {disc_copies, [node()]}]) of
         {aborted, {already_exists, zones}} ->
             erldns_log:warning("The zone table already exists on node ~p.~n",
-                [node()]),
+                               [node()]),
             ok;
         {atomic, ok} ->
             ok;
@@ -79,11 +79,11 @@ create(zones) ->
 create(authorities) ->
     ok = ensure_mnesia_started(),
     case mnesia:create_table(authorities,
-        [{attributes, record_info(fields, authorities)},
-            {disc_copies, [node()]}]) of
+                             [{attributes, record_info(fields, authorities)},
+                              {disc_copies, [node()]}]) of
         {aborted, {already_exists, authorities}} ->
             erldns_log:warning("The zone table already exists on node ~p.~n",
-                [node()]),
+                               [node()]),
             ok;
         {atomic, ok} ->
             ok;
@@ -139,16 +139,16 @@ delete(zones, Key)->
             {error, Error}
     end;
 delete(Table, Key)->
-   case mnesia:is_transaction() of
-       true ->
-           Delete = fun() -> mnesia:delete({Table, Key}) end,
-           mnesia:activity(transaction, Delete);
-       false ->
+    case mnesia:is_transaction() of
+        true ->
+            Delete = fun() -> mnesia:delete({Table, Key}) end,
+            mnesia:activity(transaction, Delete);
+        false ->
             case mnesia:dirty_delete({Table, Key}) of
-            ok ->
-                ok;
-            Error ->
-                {error, Error}
+                ok ->
+                    ok;
+                Error ->
+                    {error, Error}
             end
     end.
 
@@ -169,11 +169,11 @@ backup_tables()->
 -spec select(Table :: atom(), Key :: term()) -> tuple().
 select(Table, Key)->
     Select = fun () ->
-                case mnesia:read({Table, Key}) of
-                    [Record] -> [{Key,Record}];
-                    _ -> []
-                end
-            end,
+                     case mnesia:read({Table, Key}) of
+                         [Record] -> [{Key,Record}];
+                         _ -> []
+                     end
+             end,
     mnesia:activity(transaction, Select).
 
 %% @doc Select using a match spec.
@@ -187,10 +187,10 @@ select(_Table, MatchSpec, _Limit) ->
 foldl(Iterator, _Acc, Table) ->
     Exec = fun() -> mnesia:foldl(Iterator, [], Table) end,
     case mnesia:is_transaction() of
-    true ->
-        Exec();
-    false ->
-        mnesia:activity(transaction, Exec)
+        true ->
+            Exec();
+        false ->
+            mnesia:activity(transaction, Exec)
     end.
 
 %% @doc Clear all objects from given table in mnesia DB.
