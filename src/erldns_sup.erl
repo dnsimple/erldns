@@ -17,7 +17,7 @@
 -module(erldns_sup).
 -behavior(supervisor).
 
-                                                % API
+%% API
 -export([start_link/0]).
 
 -export([
@@ -26,7 +26,7 @@
          gc_registered/1
         ]).
 
-                                                % Supervisor hooks
+%% Supervisor hooks
 -export([init/1]).
 
 -define(SUPERVISOR, ?MODULE).
