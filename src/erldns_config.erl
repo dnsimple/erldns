@@ -16,7 +16,7 @@
 -module(erldns_config).
 
 -export([
-         get_servers/0,
+         get_server_configs/0,
          get_address/1,
          get_port/0,
          get_num_workers/0
@@ -63,11 +63,11 @@
 %% IPv6 default: ::1
 %% Build a configuration for the server to enable multiple instances of servers to be started.
 %% End config is something of [{{port, Port}, {listen, IPAddr}, {protocol, Proto}} | ....]
-%% These configs are passed to the event handerl and the server supervisors spawns children
+%% These configs are passed to the event handler and the server supervisors spawns children
 %% using these built configs.
 %% @end
--spec get_address(none()) -> inet:ip_address().
-get_servers() ->
+-spec get_server_configs() -> {Pools :: term(), Servers :: term()}.
+get_server_configs() ->
     ServerList = case application:get_env(erldns, servers) of
                     undefined ->
                         [];
@@ -87,6 +87,10 @@ get_servers() ->
         end, {[], [], 0}, ServerList),
     {Pools, Servers}.
 
+%% @doc This function folds over a list of ip addresses (inet/inet6), if a address with all 0's
+%% is encountered, all addresses of that type are removed from the result list.
+%% @end
+-spec normalize_addresses([{inet:address_family(), inet:ip_address()}]) -> [inet:ip_address()].
 normalize_addresses(IPList) ->
     normalize_addresses(IPList, [] , [], [], []).
 
@@ -108,6 +112,9 @@ normalize_addresses([IP | Tail], Globalv4, Globalv6, Localv4, Localv6) ->
             normalize_addresses(Tail, Globalv4, Globalv6, Localv4, [])
     end.
 
+%% @doc This function takes several parameters and creates the config for the server.
+-spec parse_server([{inet:address_family(), inet:ip_address()}],[inet:socket_protocol()],
+    inet:port_number(), atom(), term()) -> term().
 parse_server([], _ProtocolList, _Port, _PoolName, Acc) ->
     Acc;
 parse_server([{IPType, IPAddr} = _IP | Tail], ProtocolList, Port, PoolName, Acc0) ->
