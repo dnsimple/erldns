@@ -17,7 +17,7 @@
 -module(erldns_sup).
 -behavior(supervisor).
 
-% API
+                                                % API
 -export([start_link/0]).
 
 -export([
@@ -26,7 +26,7 @@
          gc_registered/1
         ]).
 
-% Supervisor hooks
+                                                % Supervisor hooks
 -export([init/1]).
 
 -define(SUPERVISOR, ?MODULE).
@@ -37,52 +37,52 @@
 %% Public API
 -spec start_link() -> any().
 start_link() ->
-  supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
+    supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
 %% @doc Garbage collect all processes.
 -spec gc() -> integer().
 gc() ->
-  length(
-    lists:map(
-      fun(Pid) ->
-          garbage_collect(Pid)
-      end,
-      processes())
-   ).
+    length(
+      lists:map(
+        fun(Pid) ->
+                garbage_collect(Pid)
+        end,
+        processes())
+     ).
 
 %% @doc Garbage collect all registered processes.
 -spec gc_registered() -> integer().
 gc_registered() ->
-  length(
-    lists:map(
-      fun(ProcessName) ->
-          gc_registered(ProcessName)
-      end,
-      registered())
-   ).
+    length(
+      lists:map(
+        fun(ProcessName) ->
+                gc_registered(ProcessName)
+        end,
+        registered())
+     ).
 
 %% @doc Garbage collect a named process.
 -spec gc_registered(atom()) -> ok.
 gc_registered(ProcessName) ->
-  Pid = whereis(ProcessName),
-  garbage_collect(Pid),
-  ok.
+    Pid = whereis(ProcessName),
+    garbage_collect(Pid),
+    ok.
 
 
 %% Callbacks
 init(_Args) ->
-  SysProcs = [
-              ?CHILD(erldns_events, worker, []),
-              ?CHILD(erldns_zone_cache, worker, []),
-              ?CHILD(erldns_zone_parser, worker, []),
-              ?CHILD(erldns_zone_encoder, worker, []),
-              ?CHILD(erldns_packet_cache, worker, []),
-              ?CHILD(erldns_query_throttle, worker, []),
-              ?CHILD(erldns_handler, worker, []),
-              ?CHILD(sample_custom_handler, worker, []),
-              ?CHILD(erldns_storage, worker, []),
-              ?CHILD(erldns_manager, worker, []),
-              ?CHILD(erldns_zone_transfer_sup, supervisor, [])
-             ],
+    SysProcs = [
+                ?CHILD(erldns_events, worker, []),
+                ?CHILD(erldns_zone_cache, worker, []),
+                ?CHILD(erldns_zone_parser, worker, []),
+                ?CHILD(erldns_zone_encoder, worker, []),
+                ?CHILD(erldns_packet_cache, worker, []),
+                ?CHILD(erldns_query_throttle, worker, []),
+                ?CHILD(erldns_handler, worker, []),
+                ?CHILD(sample_custom_handler, worker, []),
+                ?CHILD(erldns_storage, worker, []),
+                ?CHILD(erldns_manager, worker, []),
+                ?CHILD(erldns_zone_transfer_sup, supervisor, [])
+               ],
 
-  {ok, {{one_for_one, 20, 10}, SysProcs}}.
+    {ok, {{one_for_one, 20, 10}, SysProcs}}.
