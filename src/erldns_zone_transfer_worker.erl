@@ -26,11 +26,11 @@
 
 %% gen_server callbacks
 -export([init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    code_change/3]).
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 -record(state, {}).
 
@@ -84,21 +84,22 @@ code_change(_OldVsn, State, _Extra) ->
 -spec send_notify(inet:ip_address(), inet:ip_address(), binary(), dns:class()) -> ok.
 send_notify(BindIP, DestinationIP, ZoneName, ZoneClass) ->
     Packet =  #dns_message{id = dns:random_id(),
-        oc = ?DNS_OPCODE_NOTIFY,
-        rc = ?DNS_RCODE_NOERROR,
-        aa = true,
-        qc = 1,
-        questions = [#dns_query{name = ZoneName, class = ZoneClass, type = ?DNS_TYPE_SOA}]},
+                           oc = ?DNS_OPCODE_NOTIFY,
+                           rc = ?DNS_RCODE_NOERROR,
+                           aa = true,
+                           qc = 1,
+                           questions = [#dns_query{name = ZoneName, class = ZoneClass,
+                                                   type = ?DNS_TYPE_SOA}]},
     {ok, _Recv} = case erldns_encoder:encode_message(Packet) of
-                     {false, EncodedMessage} ->
-                         send_tcp_message(BindIP, DestinationIP, EncodedMessage);
-                     {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-                         send_tcp_message(BindIP, DestinationIP, EncodedMessage);
-                     {false, EncodedMessage, _TsigMac} ->
-                         send_tcp_message(BindIP, DestinationIP, EncodedMessage);
-                     {true, EncodedMessage, _TsigMac, _Message} ->
-                         send_tcp_message(BindIP, DestinationIP, EncodedMessage)
-                 end,
+                      {false, EncodedMessage} ->
+                          send_tcp_message(BindIP, DestinationIP, EncodedMessage);
+                      {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
+                          send_tcp_message(BindIP, DestinationIP, EncodedMessage);
+                      {false, EncodedMessage, _TsigMac} ->
+                          send_tcp_message(BindIP, DestinationIP, EncodedMessage);
+                      {true, EncodedMessage, _TsigMac, _Message} ->
+                          send_tcp_message(BindIP, DestinationIP, EncodedMessage)
+                  end,
     exit(normal).
 
 handle_notify(Message, ClientIP, ServerIP) ->
@@ -118,10 +119,11 @@ handle_notify(Message, ClientIP, ServerIP) ->
     end,
     %% Request SOA from master
     Request = #dns_message{id = dns:random_id(),
-        oc = ?DNS_OPCODE_QUERY,
-        rd = true,
-        qc = 1,
-        questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_ANY, type = ?DNS_TYPE_SOA}]},
+                           oc = ?DNS_OPCODE_QUERY,
+                           rd = true,
+                           qc = 1,
+                           questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_ANY,
+                                                   type = ?DNS_TYPE_SOA}]},
     {ok, Recv} = case erldns_encoder:encode_message(Request) of
                      {false, EncodedMessage} ->
                          send_tcp_message(ServerIP, ClientIP, EncodedMessage);
@@ -156,24 +158,25 @@ send_axfr(ZoneName, BindIP) ->
 
 send_axfr(ZoneName, BindIP, DestinationIP) ->
     Packet =  #dns_message{id = dns:random_id(),
-                            oc = ?DNS_OPCODE_QUERY,
-                            rd = true,
-                            ad = true,
-                            rc = ?DNS_RCODE_NOERROR,
-                            aa = true,
-                            qc = 1,
-                            adc = 1,
-                            questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_IN, type = ?DNS_TYPE_AXFR}]},
+                           oc = ?DNS_OPCODE_QUERY,
+                           rd = true,
+                           ad = true,
+                           rc = ?DNS_RCODE_NOERROR,
+                           aa = true,
+                           qc = 1,
+                           adc = 1,
+                           questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_IN,
+                                                   type = ?DNS_TYPE_AXFR}]},
     {ok, Recv} = case erldns_encoder:encode_message(Packet) of
-                      {false, EncodedMessage} ->
-                          send_tcp_message(BindIP, DestinationIP, EncodedMessage);
-                      {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-                          send_tcp_message(BindIP, DestinationIP, EncodedMessage);
-                      {false, EncodedMessage, _TsigMac} ->
-                          send_tcp_message(BindIP, DestinationIP, EncodedMessage);
-                      {true, EncodedMessage, _TsigMac, _Message} ->
-                          send_tcp_message(BindIP, DestinationIP, EncodedMessage)
-                  end,
+                     {false, EncodedMessage} ->
+                         send_tcp_message(BindIP, DestinationIP, EncodedMessage);
+                     {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
+                         send_tcp_message(BindIP, DestinationIP, EncodedMessage);
+                     {false, EncodedMessage, _TsigMac} ->
+                         send_tcp_message(BindIP, DestinationIP, EncodedMessage);
+                     {true, EncodedMessage, _TsigMac, _Message} ->
+                         send_tcp_message(BindIP, DestinationIP, EncodedMessage)
+                 end,
     %% Get new records from answer, delete old zone and replace it with the new zone
     NewRecords0 = dns:decode_message(Recv),
     NewRecords = NewRecords0#dns_message.answers,
@@ -181,8 +184,9 @@ send_axfr(ZoneName, BindIP, DestinationIP) ->
     [Authority | RestOfRecords] = NewRecords,
     {ok, Zone} = erldns_zone_cache:get_zone_with_records(ZoneName),
     NewZone = erldns_zone_cache:build_zone(ZoneName, Zone#zone.allow_notify, Zone#zone.allow_transfer,
-        Zone#zone.allow_update, Zone#zone.also_notify, Zone#zone.notify_source, Zone#zone.version,
-        [Authority], RestOfRecords),
+                                           Zone#zone.allow_update, Zone#zone.also_notify,
+                                           Zone#zone.notify_source, Zone#zone.version, [Authority],
+                                           RestOfRecords),
     ok = erldns_zone_cache:delete_zone(normalize_name(ZoneName)),
     ok = erldns_zone_cache:put_zone(ZoneName, NewZone),
     exit(normal).
@@ -196,7 +200,8 @@ send_axfr(ZoneName, BindIP, DestinationIP) ->
 %% not making progress.  The NOTIFY request is sent once, and a
 %% "timeout" is said to have occurred if no NOTIFY response is received
 %% within a reasonable interval.
--spec send_tcp_message(inet:ip_address(), {inet:ip_address(), inet:port_number()}, binary()) -> ok | {error, Reason :: term()}.
+-spec send_tcp_message(inet:ip_address(), {inet:ip_address(), inet:port_number()}, binary()) ->
+                              ok | {error, Reason :: term()}.
 send_tcp_message(BindIP, DestinationIP, EncodedMessage) ->
     BinLength = byte_size(EncodedMessage),
     TcpEncodedMessage = <<BinLength:16, EncodedMessage/binary>>,
@@ -240,7 +245,7 @@ build_questions([], Acc) ->
     sets:to_list(Set);
 build_questions([Record | Tail], Acc) ->
     build_questions(Tail, [#dns_query{name = Record#dns_rr.name, class = Record#dns_rr.class,
-        type = Record#dns_rr.type} | Acc]).
+                                      type = Record#dns_rr.type} | Acc]).
 
 %% @doc Since erl-dns does not handle recursive queries, we need to do a query for every question.
 %% annoying but this will have to do for now...
@@ -253,20 +258,20 @@ query_server_for_answers(_DestinationIP, _BindIP, [], Acc) ->
     Acc;
 query_server_for_answers(DestinationIP, BindIP, [Question | Tail], Acc) ->
     Packet = #dns_message{id = dns:random_id(),
-        qr = false,
-        oc = ?DNS_OPCODE_QUERY,
-        aa = false,
-        tc = false,
-        rd = true,
-        ra = false,
-        ad = true,
-        cd = false,
-        rc = ?DNS_RCODE_NOERROR,
-        qc = 1,
-        adc = 1,
-        questions = [Question],
-        additional = [#dns_optrr{udp_payload_size = 4096, ext_rcode = ?DNS_ERCODE_NOERROR,
-            version = 0, dnssec = false, data = []}]},
+                          qr = false,
+                          oc = ?DNS_OPCODE_QUERY,
+                          aa = false,
+                          tc = false,
+                          rd = true,
+                          ra = false,
+                          ad = true,
+                          cd = false,
+                          rc = ?DNS_RCODE_NOERROR,
+                          qc = 1,
+                          adc = 1,
+                          questions = [Question],
+                          additional = [#dns_optrr{udp_payload_size = 4096, ext_rcode = ?DNS_ERCODE_NOERROR,
+                                                   version = 0, dnssec = false, data = []}]},
     {ok, Recv} = case erldns_encoder:encode_message(Packet) of
                      {false, EncodedMessage} ->
                          send_tcp_message(BindIP, DestinationIP, EncodedMessage);
