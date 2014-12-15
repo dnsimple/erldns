@@ -47,6 +47,7 @@
 
 %% Write APIs
 -export([
+         build_zone/1,
          build_zone/8,
          build_zone/9,
          put_zone/1,
@@ -508,32 +509,34 @@ find_zone_in_cache(Qname) ->
             end
     end.
 
+build_zone(#zone{records = Records} = Zone) ->
+    Zone#zone{authority = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
+        records_by_name = build_named_index(Records)}.
+
 build_zone(Qname, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
            NotifySourceIP, Version, Records) ->
-    RecordsByName = build_named_index(Records),
     Authority = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
     #zone{name = Qname, allow_notify = AllowNotifyList, allow_transfer = AllowTransferList,
           allow_update = AllowUpdateList, also_notify = AlsoNotifyList, notify_source = NotifySourceIP,
           version = Version, record_count = length(Records), authority = Authority, records = Records,
-          records_by_name = RecordsByName}.
+          records_by_name = build_named_index(Records)}.
 
 build_zone(Qname, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
            NotifySourceIP, Version, Authority, Records) ->
-    RecordsByName = build_named_index(Records),
     #zone{name = Qname, allow_notify = AllowNotifyList, allow_transfer = AllowTransferList,
           allow_update = AllowUpdateList, also_notify = AlsoNotifyList, notify_source = NotifySourceIP,
           version = Version, record_count = length(Records), authority = Authority, records = Records,
-          records_by_name = RecordsByName}.
+          records_by_name = build_named_index(Records)}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;
-build_named_index([R|Rest], Idx) ->
-    Expiry = timestamp() + R#dns_rr.ttl,
-    case dict:find(R#dns_rr.name, Idx) of
+build_named_index([#dns_rr{name = Name, ttl = TTL} = R |Rest], Idx) ->
+    Expiry = timestamp() + TTL,
+    case dict:find(Name, Idx) of
         {ok, Records} ->
-            build_named_index(Rest, dict:store(normalize_name(R#dns_rr.name), Records ++ [{Expiry, R}], Idx));
+            build_named_index(Rest, dict:store(normalize_name(Name), Records ++ [{Expiry, R}], Idx));
         error ->
-            build_named_index(Rest, dict:store(normalize_name(R#dns_rr.name), [{Expiry, R}], Idx))
+            build_named_index(Rest, dict:store(normalize_name(Name), [{Expiry, R}], Idx))
     end.
 
 normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
@@ -541,13 +544,9 @@ normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(bina
 
 %% @doc This function sends the NOTIFY message to all slaves of the zone.
 -spec send_notify(binary(), #zone{}) -> [ok].
-send_notify(ZoneName, Zone) ->
-    Records = Zone#zone.records,
-    NotifySet = get_notify_set(Records),
-    %%Find the A record for this name server to get the ip(s)
-    NotifySetIPs = get_ips_for_notify_set(Records, NotifySet),
+send_notify(ZoneName, #zone{notify_source = NotifySource, records = Records}) ->
     %% Now send the notify message out to the set of IPs
-    BindIP = case Zone#zone.notify_source of
+    BindIP = case NotifySource of
                  <<>> ->
                      {127, 0, 0, 1};
                  IP ->
@@ -556,7 +555,7 @@ send_notify(ZoneName, Zone) ->
     lists:foldl(fun(IP, Acc) ->
                         [gen_server:cast(erldns_manager, {send_notify, {BindIP, IP,
                                                                         ZoneName, ?DNS_CLASS_IN}}) | Acc]
-                end, [], NotifySetIPs).
+                end, [], get_ips_for_notify_set(Records)).
 
 %% @doc This function returns a list of nameservers to notify for a zone. Returned list
 %% excludes the mname that is specified in the authority.
@@ -568,8 +567,8 @@ get_notify_set(Records) ->
 get_notify_set([], SOA, NameServers) ->
     %% Remove mnames, and duplicates from final result
     exclude_mname_duplicates(SOA, NameServers);
-get_notify_set([Head | Tail], SOA, NameServers) ->
-    case Head#dns_rr.data of
+get_notify_set([#dns_rr{data = Data} | Tail], SOA, NameServers) ->
+    case Data of
         #dns_rrdata_soa{}  = Authority ->
             get_notify_set(Tail, Authority, NameServers);
         #dns_rrdata_ns{} = NS ->
@@ -582,10 +581,9 @@ get_notify_set([Head | Tail], SOA, NameServers) ->
 %% include in the SOA's mname field.
 %% @end
 -spec exclude_mname_duplicates(dns:rr(), [dns:rr()]) -> [dns:rr()].
-exclude_mname_duplicates(SOA, NameServers) ->
-    MName = SOA#dns_rrdata_soa.mname,
-    lists:foldl(fun(NameServer, Acc0) ->
-                        case NameServer#dns_rrdata_ns.dname =:= MName of
+exclude_mname_duplicates(#dns_rrdata_soa{mname = MName}, NameServers) ->
+    lists:foldl(fun(#dns_rrdata_ns{dname = DName} = NameServer, Acc0) ->
+                        case DName =:= MName of
                             true ->
                                 %% Found a NS record that is also a mname of an SOA, exclude it
                                 Acc0;
@@ -597,24 +595,22 @@ exclude_mname_duplicates(SOA, NameServers) ->
 %% @doc This function takes a list of nameservers, finds it's A/AAAA record in the given record set
 %% and returns the nameserver's IP address.
 %% @end
--spec get_ips_for_notify_set([dns:rr()], [dns:rr()]) -> [inet:ip_address()].
-get_ips_for_notify_set(Records, NotifySet) ->
-    get_ips_for_notify_set(Records, NotifySet, []).
+-spec get_ips_for_notify_set([dns:rr()]) -> [inet:ip_address()].
+get_ips_for_notify_set(Records) ->
+    get_ips_for_notify_set(Records, get_notify_set(Records), []).
 
 get_ips_for_notify_set(_Records, [], IPs) ->
     IPs;
-get_ips_for_notify_set(Records, [Head | Tail], IPs) ->
-    DName = Head#dns_rrdata_ns.dname,
+get_ips_for_notify_set(Records, [#dns_rrdata_ns{dname = DName} | Tail], IPs) ->
     case lists:keyfind(DName, 2, Records) of
         false ->
             get_ips_for_notify_set(Records, Tail, IPs);
-        ARecord0 ->
-            ARecord = ARecord0#dns_rr.data,
+        #dns_rr{data = ARecord}  ->
             case ARecord of
-                #dns_rrdata_a{} ->
-                    get_ips_for_notify_set(Records, Tail, [ARecord#dns_rrdata_a.ip | IPs]);
-                #dns_rrdata_aaaa{} ->
-                    get_ips_for_notify_set(Records, Tail, [ARecord#dns_rrdata_aaaa.ip | IPs])
+                #dns_rrdata_a{ip = IP} ->
+                    get_ips_for_notify_set(Records, Tail, [IP | IPs]);
+                #dns_rrdata_aaaa{ip = IP} ->
+                    get_ips_for_notify_set(Records, Tail, [IP | IPs])
             end
     end.
 
@@ -627,8 +623,8 @@ remove_old_soa_add_new(Records, NewAuthority) ->
 
 remove_old_soa_add_new(_NewAuthority, [],  NewRecords) ->
     NewRecords;
-remove_old_soa_add_new(NewAuthority, [Record | Records], NewRecords) ->
-    case Record#dns_rr.data of
+remove_old_soa_add_new(NewAuthority, [#dns_rr{data = Data} = Record | Records], NewRecords) ->
+    case Data of
         #dns_rrdata_soa{} ->
             remove_old_soa_add_new(NewAuthority, Records, [NewAuthority | NewRecords]);
         _ ->
