@@ -43,8 +43,6 @@ start_link(Operation, Args) ->
 -spec query_for_records(inet:ip_address(), inet:ip_address(), [dns:rr()]) -> dns:answers().
 query_for_records(MasterIP, BindIP, DNSRRList) ->
     Questions = build_questions(DNSRRList),
-    erldns_log:debug("Getting updated records from master using questions: ~p", [Questions]),
-    erldns_log:debug("Destination: ~p, Bind ~p", [MasterIP, BindIP]),
     query_server_for_answers(MasterIP, BindIP, Questions).
 
 %%%===================================================================
@@ -85,7 +83,6 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc Sends the notify message to the given nameservers. Restrict to TCP to allow proper query throttling.
 -spec send_notify(inet:ip_address(), inet:ip_address(), binary(), dns:class()) -> ok.
 send_notify(BindIP, DestinationIP, ZoneName, ZoneClass) ->
-    erldns_log:debug("Sending a NOTIFY! MyIP: ~p, To: ~p", [BindIP, DestinationIP]),
     Packet =  #dns_message{id = dns:random_id(),
         oc = ?DNS_OPCODE_NOTIFY,
         rc = ?DNS_RCODE_NOERROR,
@@ -105,7 +102,6 @@ send_notify(BindIP, DestinationIP, ZoneName, ZoneClass) ->
     exit(normal).
 
 handle_notify(Message, ClientIP, ServerIP) ->
-    erldns_log:debug("Handling a NOTIFY! MyIP: ~p, From: ~p", [ClientIP, ServerIP]),
     %% Get the zone in your cache
     ZoneName0 = hd(Message#dns_message.questions),
     ZoneName = normalize_name(ZoneName0#dns_query.name),
@@ -137,17 +133,14 @@ handle_notify(Message, ClientIP, ServerIP) ->
                          send_tcp_message(ServerIP, ClientIP, EncodedMessage)
                  end,
     Authority = dns:decode_message(Recv),
-    erldns_log:debug("Retrieved authority after sending request for SOA: ~p", [Authority]),
     %% Check the serial and send axfr request if you are the authority for it
     StoredSerial = SOA#dns_rr.data#dns_rrdata_soa.serial,
     MasterSerial0 = hd(Authority#dns_message.answers),
     MasterSerial = MasterSerial0#dns_rr.data#dns_rrdata_soa.serial,
     case StoredSerial =/= MasterSerial of
         true ->
-            erldns_log:debug("Sending AXFR!"),
             send_axfr(ZoneName, ServerIP, ClientIP);
         false ->
-            erldns_log:debug("Didn't need to send AFXR, stored serial: ~p, master serial: ~p", [StoredSerial, MasterSerial]),
             ok
     end,
     exit(normal).
@@ -158,7 +151,6 @@ send_axfr(ZoneName, BindIP) ->
         true ->
             send_axfr(ZoneName, BindIP, Zone#zone.notify_source);
         false ->
-            erldns_log:debug("We are master, no need to send AXFR"),
             exit(normal)
     end.
 
@@ -187,16 +179,12 @@ send_axfr(ZoneName, BindIP, DestinationIP) ->
     NewRecords = NewRecords0#dns_message.answers,
     %% AFXR requests always have the authority at the beginning and end of the answer section.
     [Authority | RestOfRecords] = NewRecords,
-    erldns_log:debug("Answer: ~p~n~n", [NewRecords]),
     {ok, Zone} = erldns_zone_cache:get_zone_with_records(ZoneName),
     NewZone = erldns_zone_cache:build_zone(ZoneName, Zone#zone.allow_notify, Zone#zone.allow_transfer,
         Zone#zone.allow_update, Zone#zone.also_notify, Zone#zone.notify_source, Zone#zone.version,
         [Authority], RestOfRecords),
-    erldns_log:debug("AFXR Results"),
-    erldns_log:debug("Old Zone: ~p~n~n", [Zone]),
     ok = erldns_zone_cache:delete_zone(normalize_name(ZoneName)),
     ok = erldns_zone_cache:put_zone(ZoneName, NewZone),
-    erldns_log:debug("New Zone: ~p~n~n", [erldns_zone_cache:get_zone_with_records(ZoneName)]),
     exit(normal).
 
 %%%===================================================================
@@ -215,7 +203,6 @@ send_tcp_message(BindIP, DestinationIP, EncodedMessage) ->
     send_recv(BindIP, DestinationIP, TcpEncodedMessage).
 
 send_recv(BindIP, DestinationIP, TcpEncodedMessage) ->
-    erldns_log:debug("Connecting to ~p using bind IP ~p", [DestinationIP, BindIP]),
     {ok, Socket} = gen_tcp:connect(DestinationIP, ?DNS_LISTEN_PORT, [binary, {active, false}, {ip, BindIP}]),
     ok = gen_tcp:send(Socket, TcpEncodedMessage),
     %% Extract the size header
@@ -291,5 +278,4 @@ query_server_for_answers(DestinationIP, BindIP, [Question | Tail], Acc) ->
                          send_tcp_message(BindIP, DestinationIP, EncodedMessage)
                  end,
     DecodedMessage = dns:decode_message(Recv),
-    erldns_log:debug("Got new record from master ~p", [DecodedMessage#dns_message.answers]),
     lists:flatten(query_server_for_answers(DestinationIP, BindIP, Tail, [DecodedMessage#dns_message.answers | Acc])).

@@ -242,7 +242,6 @@ retrieve_records(ServerIP, Qname) ->
     case ServerIP =:= get_zone_notify_source(Name) of
         true ->
             %% We are master, just return the records you have
-            erldns_log:debug("We are master, no need to get updated records."),
             get_records_by_name(Name);
         false ->
             %% We are slave, get the zone in the cache and the records from the dict with expirys.
@@ -268,10 +267,8 @@ retrieve_records(ZoneName, MasterIP, ServerIP, [{Expiry, Record} | Tail], Acc, Q
     %% Get the timestamp of the record
     case timestamp() < Expiry of
         true ->
-            erldns_log:debug("Record ~p with expire ~p at time ~p is NOT expired", [Record, Expiry, timestamp()]),
             retrieve_records(ZoneName, MasterIP, ServerIP, Tail, [Record | Acc], QueryAcc);
         false ->
-            erldns_log:debug("Record ~p with expire ~p at time ~p is expired", [Record, Expiry, timestamp()]),
             retrieve_records(ZoneName, MasterIP, ServerIP, Tail, Acc, [Record | QueryAcc])
     end.
 
@@ -549,8 +546,6 @@ normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(bina
 send_notify(ZoneName, Zone) ->
     Records = Zone#zone.records,
     NotifySet = get_notify_set(Records),
-    erldns_log:debug("NotifySet: ~p", [NotifySet]),
-    erldns_log:debug("Records: ~p", [Records]),
     %%Find the A record for this name server to get the ip(s)
     NotifySetIPs = get_ips_for_notify_set(Records, NotifySet),
     %% Now send the notify message out to the set of IPs
@@ -616,7 +611,6 @@ get_ips_for_notify_set(Records, [Head | Tail], IPs) ->
         false ->
             get_ips_for_notify_set(Records, Tail, IPs);
         ARecord0 ->
-            erldns_log:debug("Arecord ~p", [ARecord0]),
             ARecord = ARecord0#dns_rr.data,
             case ARecord of
                 #dns_rrdata_a{} ->
