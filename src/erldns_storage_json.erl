@@ -16,15 +16,15 @@
 
 %% API
 -export([create/1,
-    insert/2,
-    delete_table/1,
-    delete/2,
-    backup_table/1,
-    backup_tables/0,
-    select/2,
-    select/3,
-    foldl/3,
-    empty_table/1]).
+         insert/2,
+         delete_table/1,
+         delete/2,
+         backup_table/1,
+         backup_tables/0,
+         select/2,
+         select/3,
+         foldl/3,
+         empty_table/1]).
 
 %% Public API
 %% @doc Create ets table wrapper. Use match cases for adding different options to the table.
@@ -32,12 +32,12 @@
 create(zones) ->
     case ets:info(zones) of
         undefined ->
-               case ets:new(zones, [set, public, named_table]) of
-                   zones ->
-                       ok;
-                   Error ->
-                       {error, Error}
-               end;
+            case ets:new(zones, [set, public, named_table]) of
+                zones ->
+                    ok;
+                Error ->
+                    {error, Error}
+            end;
         _InfoList ->
             ok
     end;
@@ -82,10 +82,10 @@ create(handler_registry) ->
     case ets:info(handler_registry) of
         undefined ->
             case ets:new(handler_registry, [set, public, named_table]) of
-            handler_registry ->
-                ok;
-            Error ->
-                {error, Error}
+                handler_registry ->
+                    ok;
+                Error ->
+                    {error, Error}
             end;
         _InfoList ->
             ok
