@@ -39,7 +39,9 @@ end_per_suite(Config) ->
     Config.
 
 init_per_testcase(mnesia_API_test, Config) ->
-    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "test_db"}]),
+    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "test_db3"}]),
+    ok = erldns_storage:create(schema),
+    ok = erldns_storage:create(zones),
     Config;
 init_per_testcase(json_API_test, Config) ->
     application:set_env(erldns, storage, [{type, erldns_storage_json}]),
@@ -47,7 +49,9 @@ init_per_testcase(json_API_test, Config) ->
 init_per_testcase(server_children_test, Config) ->
     Config;
 init_per_testcase(test_zone_modify, Config) ->
-    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "test_db1"}]),
+    application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "test_db4"}]),
+    ok =  erldns_storage:create(schema),
+    ok = erldns_storage:create(zones),
     Config;
 init_per_testcase(query_tests, Config) ->
     Config.
@@ -60,8 +64,6 @@ mnesia_API_test(_Config) ->
     ZONE3 = #zone{name = <<"TEST NAME 3">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
     ZONE4 = #zone{name = <<"TEST NAME 4">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
     ZONE5 = #zone{name = <<"TEST NAME 5">>, version = <<"1">>,authority =  [], record_count = 0, records = [], records_by_name = DNSRR, records_by_type = DNSRR},
-    ok = erldns_storage:create(schema),
-    ok = erldns_storage:create(zones),
     mnesia:wait_for_tables([zones], 10000),
     ok = erldns_storage:insert(zones, ZONE1),
     ok = erldns_storage:insert(zones, ZONE2),
@@ -169,6 +171,7 @@ test_zone_modify(_Config) ->
 
 query_tests(_Config) ->
     io:format("ERLDNS Should already be started from previous test~n"),
+    ok  = application:ensure_started(erldns),
     timer:sleep(1000),
     io:format("You have to have the examples.zone.json file for this to work~n"),
     {ok, _} = erldns_storage:load_zones("/opt/erl-dns/priv/example.zone.json"),

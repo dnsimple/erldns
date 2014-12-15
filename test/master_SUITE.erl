@@ -45,7 +45,7 @@ init_per_testcase(test_zone_modify, Config) ->
             ]}]
     ]),
     application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "/opt/erl-dns/test/test_db1"}]),
-    application:set_env(mnesia, dir, "/opt/erl-dns/test/test_db1"),
+    ok = erldns_storage:create(schema),
     ok = erldns:start(),
     Config;
 init_per_testcase(query_tests, Config) ->

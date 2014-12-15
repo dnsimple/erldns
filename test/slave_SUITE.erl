@@ -30,7 +30,6 @@ all() ->
 
 init_per_suite(Config) ->
     ok = application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "/opt/erl-dns/test/test_db2"}]),
-    ok = application:set_env(mnesia, dir, "/opt/erl-dns/test/test_db2"),
     ok = application:set_env(erldns, servers, [
         [{port, 8053},
             {listen, [{127,0,0,1}]},
