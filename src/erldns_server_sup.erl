@@ -18,10 +18,10 @@
 -module(erldns_server_sup).
 -behavior(supervisor).
 
-% API
+%% API
 -export([start_link/0]).
 
-% Supervisor hooks
+%% Supervisor hooks
 -export([init/1]).
 
 -define(SUPERVISOR, ?MODULE).
@@ -31,7 +31,7 @@
 
 %% Public API
 start_link() ->
-  supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
+    supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
 init(_Args) ->
     {ok, {{one_for_one, 20, 10}, []}}.
