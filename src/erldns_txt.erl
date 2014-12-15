@@ -25,7 +25,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
-% Public API
+%% Public API
 
 %% @doc Parse a string into a collection of bit strings, each no longer than
 %% 255 characters.
@@ -48,11 +48,16 @@ parse(String, [C|Rest], Tokens, CurrentToken, Escaped) -> parse_char(String, C, 
 parse_char(String, $", Rest, Tokens, _) -> parse(String, Rest, Tokens, [], false);
 parse_char(String, _, Rest, Tokens, _) -> parse(String, Rest, Tokens, false).
 
-parse_char(String, $", Rest, Tokens, CurrentToken, false) -> parse(String, Rest, Tokens ++ [split(CurrentToken)], false);
-parse_char(String, $", Rest, Tokens, CurrentToken, true) -> parse(String, Rest, Tokens, CurrentToken ++ [$"], false);
-parse_char(String, $\\, Rest, Tokens, CurrentToken, false) -> parse(String, Rest, Tokens, CurrentToken, true);
-parse_char(String, $\\, Rest, Tokens, CurrentToken, true) -> parse(String, Rest, Tokens, CurrentToken ++ [$\\], false);
-parse_char(String, C, Rest, Tokens, CurrentToken, _) -> parse(String, Rest, Tokens, CurrentToken ++ [C], false).
+parse_char(String, $", Rest, Tokens, CurrentToken, false) ->
+    parse(String, Rest, Tokens ++ [split(CurrentToken)], false);
+parse_char(String, $", Rest, Tokens, CurrentToken, true) ->
+    parse(String, Rest, Tokens, CurrentToken ++ [$"], false);
+parse_char(String, $\\, Rest, Tokens, CurrentToken, false) ->
+    parse(String, Rest, Tokens, CurrentToken, true);
+parse_char(String, $\\, Rest, Tokens, CurrentToken, true) ->
+    parse(String, Rest, Tokens, CurrentToken ++ [$\\], false);
+parse_char(String, C, Rest, Tokens, CurrentToken, _) ->
+    parse(String, Rest, Tokens, CurrentToken ++ [C], false).
 
 %% @doc Split the given string into a list of bit strings, with each element
 %% limited to 255 characters or less.
@@ -62,30 +67,31 @@ split(Data) -> split(Data, []).
 %% Internal recursive split function.
 -spec split(string(), [binary()]) -> [binary()].
 split(Data, Parts) ->
-  case byte_size(list_to_binary(Data)) > ?MAX_TXT_SIZE of
-    true ->
-      First = list_to_binary(string:substr(Data, 1, ?MAX_TXT_SIZE)),
-      Rest = string:substr(Data, ?MAX_TXT_SIZE + 1),
-      case Rest of
-        [] -> Parts ++ [First];
-        _ -> split(Rest, Parts ++ [First])
-      end;
-    false ->
-      Parts ++ [list_to_binary(Data)]
-  end.
+    case byte_size(list_to_binary(Data)) > ?MAX_TXT_SIZE of
+        true ->
+            First = list_to_binary(string:substr(Data, 1, ?MAX_TXT_SIZE)),
+            Rest = string:substr(Data, ?MAX_TXT_SIZE + 1),
+            case Rest of
+                [] -> Parts ++ [First];
+                _ -> split(Rest, Parts ++ [First])
+            end;
+        false ->
+            Parts ++ [list_to_binary(Data)]
+    end.
 
 
 -ifdef(TEST).
 
 parse_test() ->
-  ?assertEqual(parse(""), []),
-  ?assertEqual(parse("test"), [[<<"test">>]]),
-  ?assertEqual(parse(lists:duplicate(270, "x")), [[list_to_binary(lists:duplicate(255, "x")), list_to_binary(lists:duplicate(15, "x"))]]),
-  ?assertEqual(parse(<<"test">>), [[<<"test">>]]),
-  ?assertEqual(parse("\"test\" \"test\""), [[<<"test">>], [<<"test">>]]),
-  ?assertEqual(parse("\\"), [[<<"\\">>]]),
-  ?assertEqual(parse("test\\;"), [[<<"test\\;">>]]),
-  ?assertEqual(parse("test\\"), [[<<"test\\">>]]).
-%?assertEqual(parse("\"test\"\""), [[<<"test\"">>]]).
+    ?assertEqual(parse(""), []),
+    ?assertEqual(parse("test"), [[<<"test">>]]),
+    ?assertEqual(parse(lists:duplicate(270, "x")), [[list_to_binary(lists:duplicate(255, "x")),
+                                                     list_to_binary(lists:duplicate(15, "x"))]]),
+    ?assertEqual(parse(<<"test">>), [[<<"test">>]]),
+    ?assertEqual(parse("\"test\" \"test\""), [[<<"test">>], [<<"test">>]]),
+    ?assertEqual(parse("\\"), [[<<"\\">>]]),
+    ?assertEqual(parse("test\\;"), [[<<"test\\;">>]]),
+    ?assertEqual(parse("test\\"), [[<<"test\\">>]]).
+%%     ?assertEqual(parse("\"test\"\""), [[<<"test\"">>]]).
 
 -endif.
