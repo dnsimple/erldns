@@ -243,9 +243,9 @@ build_questions([], Acc) ->
     %% Remove duplicate questions from the list.
     Set = sets:from_list(Acc),
     sets:to_list(Set);
-build_questions([Record | Tail], Acc) ->
-    build_questions(Tail, [#dns_query{name = Record#dns_rr.name, class = Record#dns_rr.class,
-                                      type = Record#dns_rr.type} | Acc]).
+build_questions([#dns_rr{name = Name, class = Class, type = Type}  | Tail], Acc) ->
+    build_questions(Tail, [#dns_query{name = Name, class = Class,
+                                      type = Type} | Acc]).
 
 %% @doc Since erl-dns does not handle recursive queries, we need to do a query for every question.
 %% annoying but this will have to do for now...
