@@ -20,14 +20,17 @@
     init_per_testcase/2]).
 
 -export([query_for_updated_records/1,
-         query_for_axfr/1]).
+         query_for_axfr/1,
+         zone_refresh_test/1]).
 
 -include("../include/erldns.hrl").
 -include("../deps/dns/include/dns.hrl").
 all() ->
-    [query_for_updated_records, query_for_axfr].
+    [query_for_updated_records, query_for_axfr, zone_refresh_test].
 
 init_per_suite(Config) ->
+    ok = application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "/opt/erl-dns/test/test_db2"}]),
+    ok = application:set_env(mnesia, dir, "/opt/erl-dns/test/test_db2"),
     ok = application:set_env(erldns, servers, [
         [{port, 8053},
             {listen, [{127,0,0,1}]},
@@ -37,6 +40,8 @@ init_per_suite(Config) ->
             ]}]
     ]),
     ok = erldns:start(),
+    ok = erldns_storage:create(schema),
+    ok = erldns_storage:create(zones),
     Config.
 
 end_per_suite(Config) ->
@@ -46,6 +51,8 @@ end_per_suite(Config) ->
 init_per_testcase(query_for_updated_records, Config) ->
     Config;
 init_per_testcase(query_for_axfr, Config) ->
+    Config;
+init_per_testcase(zone_refresh_test, Config) ->
     Config.
 
 query_for_updated_records(_Config) ->
@@ -55,8 +62,13 @@ query_for_updated_records(_Config) ->
     {ok, Zone} = erldns_zone_cache:get_zone(<<"example.com">>),
     NewRecords = erldns_zone_transfer_worker:query_for_records(Zone#zone.notify_source, hd(erldns_config:get_address(inet)), Records),
     io:format("New records from master: ~p~n", [NewRecords]),
-    %% If we got the same amount of records we wueried for, the test passed.
-    true = length(NewRecords) =:= length(Records).
+    %% If we got the same amount of records we queried for, the test passed.
+    case length(NewRecords) =:= length(Records) of
+        true ->
+            ok;
+        false ->
+            ct:fail(didnt_get_all_records)
+    end.
 
 query_for_axfr(_Config) ->
     OldZone = erldns_zone_cache:get_zone_with_records(<<"example.com">>),
@@ -68,5 +80,29 @@ query_for_axfr(_Config) ->
         exit:normal -> io:format("Successful zone transfer!")
     end,
     NewZone = erldns_zone_cache:get_zone_with_records(<<"example.com">>),
-    io:format("OldZone: ~p~n NewZone: ~p~n", [OldZone, NewZone]),
-    ok.
+    io:format("OldZone: ~p~n NewZone: ~p~n", [OldZone, NewZone]).
+
+zone_refresh_test(_Config) ->
+    ok  = application:ensure_started(erldns),
+    {ok, Zone0} = erldns_zone_cache:get_zone_with_records(<<"example.com">>),
+    %% We need to update our serial before getting an AXFR
+    %% Update serial number
+    Authority = hd(Zone0#zone.authority),
+    SOA0 = Authority#dns_rr.data,
+    OldSerial = 0,
+    SOA = SOA0#dns_rrdata_soa{serial = OldSerial},
+    Zone = erldns_zone_cache:build_zone(<<"example.com">>, Zone0#zone.allow_notify, Zone0#zone.allow_transfer,
+        Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source, Zone0#zone.version,
+        [Authority#dns_rr{data = SOA}],  Zone0#zone.records),
+    %% Put zone back into cache. And wait for it to expire
+    ok = erldns_zone_cache:delete_zone(<<"example.com">>),
+    ok = erldns_zone_cache:put_zone(<<"example.com">>, Zone),
+    timer:sleep(15000),
+    {ok, #zone{authority = [#dns_rr{data = Authority2}]}} = erldns_zone_cache:get_zone_with_records(<<"example.com">>),
+    NewSerial = Authority2#dns_rrdata_soa.serial,
+    case NewSerial =:= OldSerial of
+        false ->
+            ok;
+        true ->
+            ct:fail(zone_no_refresh)
+    end.
