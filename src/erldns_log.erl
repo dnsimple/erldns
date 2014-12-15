@@ -91,9 +91,9 @@ format(Format, Data) ->
         unknown ->
             format_oneline("~p [unknown location] " ++ Format,
                            [self() | Data]);
-    %% {M, F, A} ->
-    %%     format_oneline("~p ~p:~p/~p " ++ Format,
-    %%                    [self(), M, F, A | Data]);
+        %% {M, F, A} ->
+        %%     format_oneline("~p ~p:~p/~p " ++ Format,
+        %%                    [self(), M, F, A | Data]);
         {M, F, A, Info} ->
             case lists:keysearch(line, 1, Info) of
                 {value, {line, Line}} ->
