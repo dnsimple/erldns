@@ -71,22 +71,22 @@
 -spec get_server_configs() -> {Pools :: term(), Servers :: term()}.
 get_server_configs() ->
     ServerList = case application:get_env(erldns, servers) of
-                    undefined ->
-                        [];
-                    {ok, ServerList0} ->
-                        ServerList0
+                     undefined ->
+                         [];
+                     {ok, ServerList0} ->
+                         ServerList0
                  end,
     {Pools, Servers, _} =
         lists:foldl(fun(Server, {PoolAcc, ServerAcc, Inc}) ->
-            {port, Port} = lists:keyfind(port, 1, Server),
-            {listen, IPList0} = lists:keyfind(listen, 1, Server),
-            IPList = normalize_addresses(IPList0),
-            {protocol, Proto} = lists:keyfind(protocol, 1, Server),
-            {worker_pool, Pool} = lists:keyfind(worker_pool, 1, Server),
-            PoolName = list_to_atom("erldns_tcp_worker_pool_" ++ integer_to_list(Inc)),
-            NewPools = [lists:append([{name, PoolName}], Pool) | PoolAcc],
-            {NewPools, parse_server(IPList, Proto, Port, PoolName, ServerAcc), Inc + 1}
-        end, {[], [], 0}, ServerList),
+                            {port, Port} = lists:keyfind(port, 1, Server),
+                            {listen, IPList0} = lists:keyfind(listen, 1, Server),
+                            IPList = normalize_addresses(IPList0),
+                            {protocol, Proto} = lists:keyfind(protocol, 1, Server),
+                            {worker_pool, Pool} = lists:keyfind(worker_pool, 1, Server),
+                            PoolName = list_to_atom("erldns_tcp_worker_pool_" ++ integer_to_list(Inc)),
+                            NewPools = [lists:append([{name, PoolName}], Pool) | PoolAcc],
+                            {NewPools, parse_server(IPList, Proto, Port, PoolName, ServerAcc), Inc + 1}
+                    end, {[], [], 0}, ServerList),
     {Pools, Servers}.
 
 %% @doc This function folds over a list of ip addresses (inet/inet6), if a address with all 0's
@@ -116,7 +116,7 @@ normalize_addresses([IP | Tail], Globalv4, Globalv6, Localv4, Localv6) ->
 
 %% @doc This function takes several parameters and creates the config for the server.
 -spec parse_server([{inet:address_family(), inet:ip_address()}],[inet:socket_protocol()],
-    inet:port_number(), atom(), term()) -> term().
+                   inet:port_number(), atom(), term()) -> term().
 parse_server([], _ProtocolList, _Port, _PoolName, Acc) ->
     Acc;
 parse_server([{IPType, IPAddr} = _IP | Tail], ProtocolList, Port, PoolName, Acc0) ->
@@ -127,47 +127,47 @@ add_protocols([], _IPType, _IPAddr, _Port, _PoolName, Acc) ->
     Acc;
 add_protocols([Proto | Tail], IPType, IPAddr, Port, PoolName, Acc0) ->
     add_protocols(Tail, IPType, IPAddr, Port, PoolName,
-        [{IPType, IPAddr, Proto, Port, PoolName} | Acc0]).
+                  [{IPType, IPAddr, Proto, Port, PoolName} | Acc0]).
 
 get_address(inet) ->
-  case application:get_env(erldns, inet4) of
-    {ok, Address} -> parse(Address);
-    _ -> [?DEFAULT_IPV4_ADDRESS]
-  end;
+    case application:get_env(erldns, inet4) of
+        {ok, Address} -> parse(Address);
+        _ -> [?DEFAULT_IPV4_ADDRESS]
+    end;
 get_address(inet6) ->
-  case application:get_env(erldns, inet6) of
-    {ok, Address} -> parse(Address);
-    _ -> [?DEFAULT_IPV6_ADDRESS]
-  end.
+    case application:get_env(erldns, inet6) of
+        {ok, Address} -> parse(Address);
+        _ -> [?DEFAULT_IPV6_ADDRESS]
+    end.
 
 %% @doc The the port that the DNS server should listen on.
 %%
 %% Default: 53
 -spec get_port() -> inet:port_number().
 get_port() ->
-  case application:get_env(erldns, port) of
-    {ok, Port} -> Port;
-    _ -> ?DEFAULT_PORT
-  end.
+    case application:get_env(erldns, port) of
+        {ok, Port} -> Port;
+        _ -> ?DEFAULT_PORT
+    end.
 
 %% @doc Get the number of workers to run for handling DNS requests.
 %%
 %% Default: 10
 -spec get_num_workers() -> non_neg_integer().
 get_num_workers() ->
-  case application:get_env(erldns, num_workers) of
-    {ok, NumWorkers} -> NumWorkers;
-    _ -> ?DEFAULT_NUM_WORKERS
-  end.
+    case application:get_env(erldns, num_workers) of
+        {ok, NumWorkers} -> NumWorkers;
+        _ -> ?DEFAULT_NUM_WORKERS
+    end.
 
 -spec use_root_hints() -> boolean().
 use_root_hints() ->
-  case application:get_env(erldns, use_root_hints) of
-    {ok, Flag} -> Flag;
-    _ -> true
-  end.
+    case application:get_env(erldns, use_root_hints) of
+        {ok, Flag} -> Flag;
+        _ -> true
+    end.
 
-% Private functions
+%% Private functions
 parse(IPList) ->
     parse(IPList, []).
 
@@ -187,46 +187,46 @@ parse(IP, Acc) when is_list(IP) ->
 parse_address(Address) when is_binary(Address) ->
     parse_address(binary_to_list(Address));
 parse_address(Address) when is_list(Address) ->
-  {ok, Tuple} = inet_parse:address(Address),
-  parse_address(Tuple);
+    {ok, Tuple} = inet_parse:address(Address),
+    parse_address(Tuple);
 parse_address({_,_,_,_,_,_,_,_} = Address) ->
     {inet6, Address};
 parse_address({_,_,_,_} = Address) ->
     {inet, Address}.
 
 zone_server_env() ->
-  {ok, ZoneServerEnv} = application:get_env(erldns, zone_server),
-  ZoneServerEnv.
+    {ok, ZoneServerEnv} = application:get_env(erldns, zone_server),
+    ZoneServerEnv.
 
 zone_server_max_processes() ->
-  proplists:get_value(max_processes, zone_server_env(), 16).
+    proplists:get_value(max_processes, zone_server_env(), 16).
 
 zone_server_protocol() ->
-  proplists:get_value(protocol, zone_server_env(), "https").
+    proplists:get_value(protocol, zone_server_env(), "https").
 
 zone_server_host() ->
-  proplists:get_value(host, zone_server_env(), "localhost").
+    proplists:get_value(host, zone_server_env(), "localhost").
 
 zone_server_port() ->
-  proplists:get_value(port, zone_server_env(), ?DEFAULT_ZONE_SERVER_PORT).
+    proplists:get_value(port, zone_server_env(), ?DEFAULT_ZONE_SERVER_PORT).
 
 websocket_env() ->
-  proplists:get_value(websocket, zone_server_env(), []).
+    proplists:get_value(websocket, zone_server_env(), []).
 
 websocket_protocol() ->
-  proplists:get_value(protocol, websocket_env(), wss).
+    proplists:get_value(protocol, websocket_env(), wss).
 
 websocket_host() ->
-  proplists:get_value(host, websocket_env(), zone_server_host()).
+    proplists:get_value(host, websocket_env(), zone_server_host()).
 
 websocket_port() ->
-  proplists:get_value(port, websocket_env(), zone_server_port()).
+    proplists:get_value(port, websocket_env(), zone_server_port()).
 
 websocket_path() ->
-  proplists:get_value(path, websocket_env(), ?DEFAULT_WEBSOCKET_PATH).
+    proplists:get_value(path, websocket_env(), ?DEFAULT_WEBSOCKET_PATH).
 
 websocket_url() ->
-  atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
+    atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
 
 storage_type() ->
     storage_get(type).
