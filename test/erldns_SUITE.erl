@@ -15,9 +15,9 @@
 -module(erldns_SUITE).
 %% API
 -export([all/0,
-    init_per_suite/1,
-    end_per_suite/1,
-    init_per_testcase/2]).
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_testcase/2]).
 
 -export([mnesia_API_test/1,
          json_API_test/1,
@@ -75,9 +75,9 @@ mnesia_API_test(_Config) ->
     ok = erldns_storage:insert(zones, {<<"Test Name">>, ZONE5}),
     %%Iterate through table and see all the entrys.
     Iterator =  fun(Rec,_)->
-        io:format("~p~n",[Rec]),
-        []
-    end,
+                        io:format("~p~n",[Rec]),
+                        []
+                end,
     erldns_storage:foldl(Iterator, [], zones),
     erldns_storage:select(zones, <<"TEST NAME 1">>),
     ok = erldns_storage:delete(zones, <<"TEST NAME 1">>),
@@ -87,11 +87,11 @@ mnesia_API_test(_Config) ->
     ok = erldns_storage:create(authorities),
     mnesia:wait_for_tables([authorities], 10000),
     AUTH1 = #authorities{owner_name = <<"Test Name">>, ttl = 1, class = <<"test calss">>, name_server = <<"Test Name Server">>,
-        email_addr = <<"test email">>, serial_num = 1, refresh = 1, retry = 1, expiry = 1, nxdomain = <<"test domain">>},
+                         email_addr = <<"test email">>, serial_num = 1, refresh = 1, retry = 1, expiry = 1, nxdomain = <<"test domain">>},
     AUTH2 = #authorities{owner_name = <<"Test Name">>, ttl = 1, class = <<"test calss">>, name_server = <<"Test Name Server">>,
-        email_addr = <<"test email">>, serial_num = 1, refresh = 1, retry = 1, expiry = 1, nxdomain = <<"test domain">>},
+                         email_addr = <<"test email">>, serial_num = 1, refresh = 1, retry = 1, expiry = 1, nxdomain = <<"test domain">>},
     AUTH3 = #authorities{owner_name = <<"Test Name">>, ttl = 1, class = <<"test calss">>, name_server = <<"Test Name Server">>,
-        email_addr = <<"test email">>, serial_num = 1, refresh = 1, retry = 1, expiry = 1, nxdomain = <<"test domain">>},
+                         email_addr = <<"test email">>, serial_num = 1, refresh = 1, retry = 1, expiry = 1, nxdomain = <<"test domain">>},
     ok = erldns_storage:insert(authorities, AUTH1),
     ok = erldns_storage:insert(authorities, AUTH2),
     ok = erldns_storage:insert(authorities, AUTH3),
@@ -118,9 +118,9 @@ json_API_test(_Config) ->
     ok = erldns_storage:insert(zones, ZONE5),
     %%Iterate through table and see all the entrys.
     Iterator =  fun(Rec,_)->
-        io:format("~p~n",[Rec]),
-        []
-    end,
+                        io:format("~p~n",[Rec]),
+                        []
+                end,
     erldns_storage:foldl(Iterator, [], zones),
     erldns_storage:select(zones, <<"TEST NAME 1">>),
     ok = erldns_storage:delete(zones, <<"TEST NAME 1">>),
@@ -131,26 +131,26 @@ json_API_test(_Config) ->
 server_children_test(_Config) ->
     {ok, IFAddrs} = inet:getifaddrs(),
     Config = lists:foldl(fun(IFList, Acc) ->
-        {_, List} = IFList,
-        [List | Acc]
-             end, [], IFAddrs),
+                                 {_, List} = IFList,
+                                 [List | Acc]
+                         end, [], IFAddrs),
     AddressesWithPorts = lists:foldl(fun(Conf, Acc) ->
-        {addr, Addr} = lists:keyfind(addr, 1, Conf),
-        [{Addr, 8053} | Acc]
-        end, [], Config),
+                                             {addr, Addr} = lists:keyfind(addr, 1, Conf),
+                                             [{Addr, 8053} | Acc]
+                                     end, [], Config),
     Addresses = lists:foldr(fun({Addr, _Port} = _Element, Acc) ->
-        [Addr| Acc]
-    end, [], AddressesWithPorts),
+                                    [Addr| Acc]
+                            end, [], AddressesWithPorts),
     io:format("AddressPort: ~p~n", [AddressesWithPorts]),
     io:format("Address: ~p~n", [Addresses]),
     ok = application:set_env(erldns, servers, [
-        [{port, 8053},
-            {listen, Addresses},
-            {protocol, [tcp, udp]},
-            {worker_pool, [
-                {size, 10}, {max_overflow, 20}
-            ]}]
-    ]),
+                                               [{port, 8053},
+                                                {listen, Addresses},
+                                                {protocol, [tcp, udp]},
+                                                {worker_pool, [
+                                                               {size, 10}, {max_overflow, 20}
+                                                              ]}]
+                                              ]),
     ok = application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "db"}]),
     erldns_storage_mnesia = erldns_config:storage_type(),
     ok = erldns:start(),
@@ -165,10 +165,10 @@ test_zone_modify(_Config) ->
     ok = erldns_storage:create(zones),
     {ok, _} = erldns_storage:load_zones("/opt/erl-dns/priv/example.zone.json"),
     ok = erldns_zone_cache:add_record(<<"example.com">>,
-        {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{7,7,7,7}}}, false),
+                                      {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{7,7,7,7}}}, false),
     ok = erldns_zone_cache:update_record(<<"example.com">>,
-        {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{7,7,7,7}}},
-        {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}, false),
+                                         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{7,7,7,7}}},
+                                         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}, false),
     ok = erldns_zone_cache:delete_record(<<"example.com">>,
                                          {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}, false).
 
@@ -191,13 +191,13 @@ query_tests(_Config) ->
     {ok, _} = erldns_storage:load_zones("/opt/erl-dns/priv/example.zone.json"),
     {ok, IFAddrs} = inet:getifaddrs(),
     Config = lists:foldl(fun(IFList, Acc) ->
-        {_, List} = IFList,
-        [List | Acc]
-    end, [], IFAddrs),
+                                 {_, List} = IFList,
+                                 [List | Acc]
+                         end, [], IFAddrs),
     AddressesWithPorts = lists:foldl(fun(Conf, Acc) ->
-        {addr, Addr} = lists:keyfind(addr, 1, Conf),
-        [{Addr, 8053} | Acc]
-    end, [], Config),
+                                             {addr, Addr} = lists:keyfind(addr, 1, Conf),
+                                             [{Addr, 8053} | Acc]
+                                     end, [], Config),
     io:format("**************Starting Query Test**************"),
     {ok, A} = inet_res:nnslookup("example.com", any, a, AddressesWithPorts, 10000),
     {ok, B} = inet_res:nnslookup("example.com", any, aaaa, AddressesWithPorts, 10000),
@@ -211,15 +211,15 @@ query_tests(_Config) ->
     {ok, J} = inet_res:nnslookup("example.com", any, naptr, AddressesWithPorts, 10000),
     {ok, K} = inet_res:nnslookup("example.com", any, axfr, AddressesWithPorts, 10000),
     io:format("Results: ~n"
-               "A: ~p~n"
-               "AAAA: ~p~n"
-               "SRV: ~p~n"
-               "CNAME: ~p~n"
-               "NS: ~p~n"
-               "MX: ~p~n"
-               "SPF: ~p~n"
-               "TXT: ~p~n"
-               "SOA: ~p~n"
-               "NAPTR: ~p~n"
-               "AFXR: ~p~n",
-               [A, B, C, D, E, F, G, H, I, J, K]).
+              "A: ~p~n"
+              "AAAA: ~p~n"
+              "SRV: ~p~n"
+              "CNAME: ~p~n"
+              "NS: ~p~n"
+              "MX: ~p~n"
+              "SPF: ~p~n"
+              "TXT: ~p~n"
+              "SOA: ~p~n"
+              "NAPTR: ~p~n"
+              "AFXR: ~p~n",
+              [A, B, C, D, E, F, G, H, I, J, K]).
