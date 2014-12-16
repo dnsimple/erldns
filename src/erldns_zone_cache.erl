@@ -57,7 +57,8 @@
          delete_zone/1,
          add_record/3,
          delete_record/3,
-         update_record/4
+         update_record/4,
+         increment_soa/1
         ]).
 
 %% Gen server hooks
@@ -347,6 +348,16 @@ put_zone_async(Name, #zone{records = Records, authority = [#dns_rr{name = AuthNa
                           {NormalizedName, Zone#zone{name = NormalizedName,
                                                      authority = [Auth#dns_rr{name = normalize_name(AuthName)}],
                                                      records = normalize_records(Records)}}).
+
+increment_soa(ZoneName) ->
+    {ok, #zone{records = Records, authority =
+                   [#dns_rr{data = #dns_rrdata_soa{serial = Serial} = SOA}] = [Authority]} = Zone0}
+        = get_zone_with_records(normalize_name(ZoneName)),
+    NewAuth = Authority#dns_rr{data = SOA#dns_rrdata_soa{serial = Serial + 1}},
+    Zone = build_zone(Zone0#zone{records = remove_old_soa_add_new(Records, NewAuth),
+                                 authority = [NewAuth]}),
+    ok = put_zone(ZoneName, Zone),
+    send_notify(ZoneName, Zone).
 
 %% @doc Remove a zone from the cache.
 -spec delete_zone(binary()) -> ok | {error, term()}.
