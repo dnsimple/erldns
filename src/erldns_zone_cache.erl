@@ -315,29 +315,38 @@ zone_names_and_versions() ->
 -spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok | {error, Reason :: term()}.
 put_zone({Name, Sha, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
           NotifySourceIP}) ->
+    NormalizedName = normalize_name(Name),
     erldns_storage:insert(zones,
-                          {normalize_name(Name), build_zone(Name, AllowNotifyList, AllowTransferList,
-                                                            AllowUpdateList, AlsoNotifyList,
-                                                            NotifySourceIP, Sha, Records)}).
+                          {NormalizedName, build_zone(NormalizedName, AllowNotifyList, AllowTransferList,
+                                                      AllowUpdateList, AlsoNotifyList,
+                                                      NotifySourceIP, Sha, normalize_records(Records))}).
 
 %% @doc Put a zone into the cache and wait for a response.
 -spec put_zone(binary(), #zone{}) -> ok | {error, Reason :: term()}.
-put_zone(Name, #zone{} = Zone) ->
-    erldns_storage:insert(zones, {normalize_name(Name), Zone}).
+put_zone(Name, #zone{records = Records, authority = [#dns_rr{name = AuthName} = Auth]} = Zone) ->
+    NormalizedName = normalize_name(Name),
+    erldns_storage:insert(zones, {NormalizedName,
+                                  Zone#zone{name = NormalizedName,records = normalize_records(Records),
+                                            authority = [Auth#dns_rr{name = normalize_name(AuthName)}]}}).
 
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok | {error, Reason :: term()}.
 put_zone_async({Name, Sha, Records, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
                 NotifySourceIP}) ->
+    NormalizedName = normalize_name(Name),
     erldns_storage:insert(zones,
-                          {normalize_name(Name), build_zone(Name, AllowNotifyList,AllowTransferList,
-                                                            AllowUpdateList, AlsoNotifyList,
-                                                            NotifySourceIP, Sha, Records)}).
+                          {NormalizedName, build_zone(NormalizedName, AllowNotifyList,AllowTransferList,
+                                                      AllowUpdateList, AlsoNotifyList,
+                                                      NotifySourceIP, Sha, normalize_records(Records))}).
 
 %% @doc Put a zone into the cache without waiting for a response.
 -spec put_zone_async(binary(), #zone{}) -> ok | {error, Reason :: term()}.
-put_zone_async(Name, Zone) ->
-    erldns_storage:insert(zones, {normalize_name(Name), Zone}).
+put_zone_async(Name, #zone{records = Records, authority = [#dns_rr{name = AuthName} = Auth]} = Zone) ->
+    NormalizedName = normalize_name(Name),
+    erldns_storage:insert(zones,
+                          {NormalizedName, Zone#zone{name = NormalizedName,
+                                                     authority = [Auth#dns_rr{name = normalize_name(AuthName)}],
+                                                     records = normalize_records(Records)}}).
 
 %% @doc Remove a zone from the cache.
 -spec delete_zone(binary()) -> ok | {error, term()}.
@@ -511,21 +520,23 @@ find_zone_in_cache(Qname) ->
 
 build_zone(#zone{records = Records} = Zone) ->
     Zone#zone{authority = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
-        records_by_name = build_named_index(Records)}.
+              records_by_name = build_named_index(Records)}.
 
 build_zone(Qname, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
            NotifySourceIP, Version, Records) ->
     Authority = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
     #zone{name = Qname, allow_notify = AllowNotifyList, allow_transfer = AllowTransferList,
-          allow_update = AllowUpdateList, also_notify = AlsoNotifyList, notify_source = NotifySourceIP,
-          version = Version, record_count = length(Records), authority = Authority, records = Records,
+          allow_update = AllowUpdateList, also_notify = AlsoNotifyList,
+          notify_source = NotifySourceIP, version = Version, record_count = length(Records),
+          authority = Authority, records = Records,
           records_by_name = build_named_index(Records)}.
 
 build_zone(Qname, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
-           NotifySourceIP, Version, Authority, Records) ->
+           NotifySourceIP, Version, [#dns_rr{name = AuthName}] = Authority, Records) ->
     #zone{name = Qname, allow_notify = AllowNotifyList, allow_transfer = AllowTransferList,
           allow_update = AllowUpdateList, also_notify = AlsoNotifyList, notify_source = NotifySourceIP,
-          version = Version, record_count = length(Records), authority = Authority, records = Records,
+          version = Version, record_count = length(Records),
+          authority = Authority#dns_rr{name = normalize_name(AuthName)}, records = Records,
           records_by_name = build_named_index(Records)}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
@@ -541,6 +552,19 @@ build_named_index([#dns_rr{name = Name, ttl = TTL} = R |Rest], Idx) ->
 
 normalize_name(Name) when is_list(Name) -> bin_to_lower(list_to_binary(Name));
 normalize_name(Name) when is_binary(Name) -> bin_to_lower(Name).
+
+%% @doc This function takes a list of records and normalizes the name. This ensures that the record
+%% being looked up is found.
+%% @end
+-spec normalize_records([dns:rr()]) -> [dns:rr()].
+normalize_records(Records) ->
+    normalize_records(Records, []).
+
+normalize_records([], Acc) ->
+    erldns_log:info("Returning ~p", [Acc]),
+    Acc;
+normalize_records([#dns_rr{name = Name} = H | Tail], Acc) ->
+    normalize_records(Tail, [H#dns_rr{name = normalize_name(Name)} | Acc]).
 
 %% @doc Takes a binary messages, and transforms it to lower case. Self said!
 -spec bin_to_lower(Bin :: binary()) -> binary().
