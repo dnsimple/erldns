@@ -543,11 +543,11 @@ build_zone(Qname, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotif
           records_by_name = build_named_index(Records)}.
 
 build_zone(Qname, AllowNotifyList, AllowTransferList, AllowUpdateList, AlsoNotifyList,
-           NotifySourceIP, Version, [#dns_rr{name = AuthName}] = Authority, Records) ->
+           NotifySourceIP, Version, [#dns_rr{name = AuthName} = Authority], Records) ->
     #zone{name = Qname, allow_notify = AllowNotifyList, allow_transfer = AllowTransferList,
           allow_update = AllowUpdateList, also_notify = AlsoNotifyList, notify_source = NotifySourceIP,
           version = Version, record_count = length(Records),
-          authority = Authority#dns_rr{name = normalize_name(AuthName)}, records = Records,
+          authority = [Authority#dns_rr{name = normalize_name(AuthName)}], records = Records,
           records_by_name = build_named_index(Records)}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
@@ -572,7 +572,6 @@ normalize_records(Records) ->
     normalize_records(Records, []).
 
 normalize_records([], Acc) ->
-    erldns_log:info("Returning ~p", [Acc]),
     Acc;
 normalize_records([#dns_rr{name = Name} = H | Tail], Acc) ->
     normalize_records(Tail, [H#dns_rr{name = normalize_name(Name)} | Acc]).
