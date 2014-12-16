@@ -23,12 +23,13 @@
          json_API_test/1,
          server_children_test/1,
          test_zone_modify/1,
+         increment_soa/1,
          query_tests/1]).
 
 -include("../include/erldns.hrl").
 -include("../deps/dns/include/dns.hrl").
 all() ->
-    [mnesia_API_test, json_API_test, server_children_test, test_zone_modify, query_tests].
+    [mnesia_API_test, json_API_test, server_children_test, test_zone_modify, increment_soa, query_tests].
 
 init_per_suite(Config) ->
     application:start(erldns_app),
@@ -52,6 +53,8 @@ init_per_testcase(test_zone_modify, Config) ->
     application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "test_db4"}]),
     ok =  erldns_storage:create(schema),
     ok = erldns_storage:create(zones),
+    Config;
+init_per_testcase(increment_soa, Config) ->
     Config;
 init_per_testcase(query_tests, Config) ->
     Config.
@@ -167,7 +170,18 @@ test_zone_modify(_Config) ->
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{7,7,7,7}}},
         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}, false),
     ok = erldns_zone_cache:delete_record(<<"example.com">>,
-        {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}, false).
+                                         {dns_rr,<<"example.com">>,1,1,3600,{dns_rrdata_a,{77,77,77,77}}}, false).
+
+increment_soa(_Config) ->
+    {ok, #zone{authority = [#dns_rr{data = #dns_rrdata_soa{serial = OldSerial}}]} = OldZone}
+        = erldns_zone_cache:get_zone_with_records(<<"example.com">>),
+    erldns_zone_cache:increment_soa(<<"example.com">>),
+    {ok, #zone{authority = [#dns_rr{data = #dns_rrdata_soa{serial = NewSerial}}]} = NewZone}
+        = erldns_zone_cache:get_zone_with_records(<<"example.com">>),
+    case NewSerial =:= (OldSerial + 1) of
+        true -> ok;
+        false -> ct:fail(soa_didnt_increment)
+    end.
 
 query_tests(_Config) ->
     io:format("ERLDNS Should already be started from previous test~n"),
