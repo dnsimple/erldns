@@ -40,7 +40,7 @@ handle_event(start_servers, State) ->
         {Pools, Configs} = erldns_config:get_server_configs(),
         erldns_log:info("Pools: ~p, Configs; ~p", [Pools, Configs]),
         add_pools(Pools),
-        add_servers(Configs),
+        add_servers(lists:flatten([erldns_config:get_admin() | Configs])),
       erldns_events:notify(servers_started),
       {ok, State#state{servers_running = true}};
     _ ->
@@ -98,7 +98,13 @@ add_servers([{inet6, {_, _, _, _, _, _, _, _} = IPAddr, udp, Port, _}| Tail]) ->
     permanent, 5000, worker, [erldns_udp_server]},
     erldns_log:info("Starting server child with spec: ~p", [Spec]),
     ok = start_child(Spec),
+    add_servers(Tail);
+add_servers([{Addr, Port} | Tail]) ->
+    Spec =  {admin, {erldns_admin_server, start_link, [admin, Addr, Port]},
+        permanent, 5000, worker, [erldns_admin_server]},
+    ok = start_child(Spec),
     add_servers(Tail).
+
 
 add_pools([]) ->
     ok;
@@ -127,3 +133,4 @@ start_child(Spec) ->
         {error, already_present} ->
             ok
     end.
+

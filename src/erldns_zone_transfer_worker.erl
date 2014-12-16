@@ -56,6 +56,9 @@ init([Operation, Args]) ->
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
+handle_cast({send_zone_name_request, {Bin, {MasterIP, Port}, BindIP}}, State) ->
+    send_zone_name_request(Bin, MasterIP, Port, BindIP),
+    {noreply, State};
 handle_cast({send_notify, {BindIP, DestinationIP, ZoneName, ZoneClass} = _Args}, State) ->
     send_notify(BindIP, DestinationIP, ZoneName, ZoneClass),
     {noreply, State};
@@ -80,6 +83,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+send_zone_name_request(Bin, MasterIP, Port, BindIP) ->
+    erldns_log:info("Sending zone name request, {~p, ~p, ~p, ~p}", [Bin, MasterIP, Port, BindIP]),
+    {ok, Socket} = gen_tcp:connect(MasterIP, Port, [binary, {active, false}, {ip, BindIP}]),
+    ok = gen_tcp:send(Socket, Bin),
+    %% Extract the size header
+    {ok, Zones} = gen_tcp:recv(Socket, 0),
+    erldns_log:info("I got zones: ~p", [binary_to_term(Zones)]),
+    ok = gen_tcp:close(Socket),
+    [send_startup_zone_request(Zone, BindIP, MasterIP) || Zone <- binary_to_term(Zones)].
+
 %% @doc Sends the notify message to the given nameservers. Restrict to TCP to allow proper query throttling.
 -spec send_notify(inet:ip_address(), inet:ip_address(), binary(), dns:class()) -> ok.
 send_notify(BindIP, DestinationIP, ZoneName, ZoneClass) ->
@@ -190,6 +203,36 @@ send_axfr(ZoneName, BindIP, DestinationIP) ->
     ok = erldns_zone_cache:delete_zone(ZoneName),
     ok = erldns_zone_cache:put_zone(ZoneName, NewZone),
     exit(normal).
+
+send_startup_zone_request(#zone{name = ZoneName} = Zone, BindIP, MasterIP) ->
+    Packet =  #dns_message{id = dns:random_id(),
+                           oc = ?DNS_OPCODE_QUERY,
+                           rd = true,
+                           ad = true,
+                           rc = ?DNS_RCODE_NOERROR,
+                           aa = true,
+                           qc = 1,
+                           adc = 1,
+                           questions = [#dns_query{name = ZoneName, class = ?DNS_CLASS_IN,
+                                                   type = ?DNS_TYPE_AXFR}]},
+    {ok, Recv} = case erldns_encoder:encode_message(Packet) of
+                     {false, EncodedMessage} ->
+                         send_tcp_message(BindIP, MasterIP, EncodedMessage);
+                     {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
+                         send_tcp_message(BindIP, MasterIP, EncodedMessage);
+                     {false, EncodedMessage, _TsigMac} ->
+                         send_tcp_message(BindIP, MasterIP, EncodedMessage);
+                     {true, EncodedMessage, _TsigMac, _Message} ->
+                         send_tcp_message(BindIP, MasterIP, EncodedMessage)
+                 end,
+    %% Get new records from answer, delete old zone and replace it with the new zone
+    erldns_log:info("GOT ANSWER! ~p", [dns:decode_message(Recv)]),
+    NewRecords0 = dns:decode_message(Recv),
+    NewRecords = NewRecords0#dns_message.answers,
+    %% AFXR requests always have the authority at the beginning and end of the answer section.
+    [_Authority | RestOfRecords] = NewRecords,
+    NewZone = erldns_zone_cache:build_zone(Zone#zone{records = RestOfRecords}),
+    erldns_zone_cache:put_zone(ZoneName, NewZone).
 
 %%%===================================================================
 %%% Utility functions

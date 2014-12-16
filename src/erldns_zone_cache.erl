@@ -31,11 +31,13 @@
          find_zone/1,
          find_zone/2,
          get_zone/1,
+         get_zone_names_for_slave/1,
          get_zone_with_records/1,
          get_authority/1,
          get_delegations/1,
          get_records_by_name/1,
          in_zone/1,
+         zone_names/0,
          zone_names_and_versions/0,
          retrieve_records/2,
          get_zone_allow_notify/1,
@@ -126,6 +128,25 @@ get_zone(Name) ->
         _Res ->
             {error, {zone_not_found, NormalizedName}}
     end.
+
+%% @doc This function takes an IP address. Finds the zones that the IP should be holding and returns
+%% the zone names.
+%% @end
+-spec get_zone_names_for_slave(inet:ip_address()) -> [binary()].
+get_zone_names_for_slave(Addr) ->
+    erldns_log:info("YO! Im chekcing zones for IP ~p", [Addr]),
+    Res = lists:foldl(fun(ZoneName, Acc) ->
+        {ok, #zone{records = Records} = Zone} = get_zone_with_records(ZoneName),
+        case lists:member(Addr, get_ips_for_notify_set(Records)) of
+            true ->
+                [Zone#zone{records = [], authority = [], records_by_name = [], records_by_type = []} | Acc];
+            false ->
+                Acc
+        end
+        end, [], zone_names()),
+    erldns_log:info("Heres what I got ~p", [Res]),
+    Res.
+
 
 %% @doc Get a zone for the specific name, including the records for the zone.
 -spec get_zone_with_records(dns:dname()) -> {ok, #zone{}} | {error, {zone_not_found, binary()}}.
@@ -305,6 +326,13 @@ zone_names_and_versions() ->
     erldns_storage:foldl(fun(#zone{name = Name, version = Version}, NamesAndShas) ->
                                  [{Name, Version} | NamesAndShas]
                          end, [], zones).
+
+%% @doc Return a list of zone names that are currently stored.
+-spec zone_names() -> [{dns:dname()}].
+zone_names() ->
+    erldns_storage:foldl(fun(#zone{name = Name}, Names) ->
+        [Name | Names]
+    end, [], zones).
 
 %% -----------------------------------------------------------------------------------------------
 %% Write API
