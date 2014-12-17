@@ -31,7 +31,7 @@
          find_zone/1,
          find_zone/2,
          get_zone/1,
-         get_zone_names_for_slave/1,
+         get_zones_for_slave/1,
          get_zone_with_records/1,
          get_authority/1,
          get_delegations/1,
@@ -132,8 +132,8 @@ get_zone(Name) ->
 %% @doc This function takes an IP address. Finds the zones that the IP should be holding and returns
 %% the zone names.
 %% @end
--spec get_zone_names_for_slave(inet:ip_address()) -> [binary()].
-get_zone_names_for_slave(Addr) ->
+-spec get_zones_for_slave(inet:ip_address()) -> [binary()].
+get_zones_for_slave(Addr) ->
     Res = lists:foldl(fun(ZoneName, Acc) ->
         {ok, #zone{records = Records} = Zone} = get_zone_with_records(ZoneName),
         case lists:member(Addr, get_ips_for_notify_set(Records)) of
