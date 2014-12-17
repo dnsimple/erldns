@@ -55,7 +55,6 @@ handle_cast(_Message, State) ->
     {noreply, State}.
 
 handle_info({tcp, Socket, <<"slave_startup_",  IP/binary>>}, State) ->
-    erldns_log:info("Got some info up in here! IP ~p", [binary_to_term(IP)]),
     gen_tcp:send(Socket,
                  term_to_binary(erldns_zone_cache:get_zone_names_for_slave(binary_to_term(IP)))),
     {noreply, State};
