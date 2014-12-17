@@ -65,9 +65,14 @@ resolve(Message, _AuthorityRecords, Qname, ?DNS_TYPE_AXFR = _Qtype, {ClientIP, S
     end;
 
 resolve(Message, AuthorityRecords, Qname, Qtype, {ClientIP, ServerIP}) ->
-    Zone = erldns_zone_cache:find_zone(Qname, AuthorityRecords), % Zone lookup
-    Records = resolve(Message, Qname, Qtype, Zone, {ClientIP, ServerIP}, _CnameChain = []),
-    additional_processing(rewrite_soa_ttl(Records), ClientIP, Zone).
+    case erldns_config:get_mode() of
+        public ->
+            Zone = erldns_zone_cache:find_zone(Qname, AuthorityRecords), % Zone lookup
+            Records = resolve(Message, Qname, Qtype, Zone, {ClientIP, ServerIP}, _CnameChain = []),
+            additional_processing(rewrite_soa_ttl(Records), ClientIP, Zone);
+        hidden ->
+            Message
+    end.
 
 %% No SOA was found for the Qname so we return the root hints
 %% Note: it seems odd that we are indicating we are authoritative here.

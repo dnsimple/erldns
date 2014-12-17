@@ -49,7 +49,8 @@
          storage_dir/0
         ]).
 -export([get_master/0,
-         get_admin/0]).
+         get_admin/0,
+         get_mode/0]).
 
 -define(DEFAULT_IPV4_ADDRESS, {127,0,0,1}).
 -define(DEFAULT_IPV6_ADDRESS, {0,0,0,0,0,0,0,1}).
@@ -284,6 +285,16 @@ get_admin() ->
             [];
         {ok, Admin} ->
             {keyget(listen, Admin), keyget(port, Admin)}
+    end.
+
+get_mode() ->
+    case application:get_env(erldns, mode) of
+        undefined ->
+            public;
+        {ok, public} ->
+            public;
+        {ok, hidden} ->
+            hidden
     end.
 
 keyget(Key, Data) ->
