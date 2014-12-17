@@ -85,8 +85,19 @@ handle_info(timeout, #state{zone_expirations = Orddict, orddict_size = Size} = S
     Timestamp = timestamp(),
     NewOrddict = case hd(orddict:to_list(Orddict)) of
                      {Expiration, ListOfExpiredZones} when Expiration < Timestamp ->
-                         [gen_server:cast(erldns_manager, {send_axfr, Args})
-                          || Args <- ListOfExpiredZones],
+                         [begin
+                              {ok, Zone} = erldns_zone_cache:get_zone(ZoneName),
+                              try erldns_zone_transfer_worker:send_axfr(ZoneName, BindIP, Zone#zone.notify_source) of
+                                  _Error -> erldns_log:warning("Recieved weird error: ~p", [_Error])
+                              catch
+                                  exit:normal -> ok;
+                                  error:Reason ->
+                                      erldns_log:warning("Could not refresh zone ~p, requested from ~p"
+                                      " for reason ~p",
+                                          [ZoneName, Zone#zone.notify_source, Reason])
+                              end
+                          end
+                          || {ZoneName, BindIP} <- ListOfExpiredZones],
                          create_new_zone_expiration_orddict(Expiration, Orddict, ListOfExpiredZones);
                      {Expiration, _ListOfExpiredZone} when Expiration >= Timestamp ->
                          Orddict
