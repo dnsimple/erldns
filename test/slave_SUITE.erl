@@ -15,32 +15,34 @@
 -module(slave_SUITE).
 %% API
 -export([all/0,
-    init_per_suite/1,
-    end_per_suite/1,
-    init_per_testcase/2]).
+         init_per_suite/1,
+         end_per_suite/1,
+         init_per_testcase/2]).
 
 -export([query_for_updated_records/1,
          query_for_axfr/1,
-         zone_refresh_test/1]).
+         zone_refresh_test/1,
+         test_master_hidden/1]).
 
 -include("../include/erldns.hrl").
 -include("../deps/dns/include/dns.hrl").
 all() ->
-    [query_for_updated_records, query_for_axfr, zone_refresh_test].
+    [query_for_updated_records, query_for_axfr, zone_refresh_test, test_master_hidden].
 
 init_per_suite(Config) ->
     ok = application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "/opt/erl-dns/test/test_db2"}]),
     ok = application:set_env(erldns, servers, [
-        [{port, 8053},
-            {listen, [{127,0,0,1}]},
-            {protocol, [tcp, udp]},
-            {worker_pool, [
-                {size, 10}, {max_overflow, 20}
-            ]}]
-    ]),
+                                               [{port, 8053},
+                                                {listen, [{127,0,0,1}]},
+                                                {protocol, [tcp, udp]},
+                                                {worker_pool, [
+                                                               {size, 10}, {max_overflow, 20}
+                                                              ]}]
+                                              ]),
     ok = erldns:start(),
     ok = erldns_storage:create(schema),
     ok = erldns_storage:create(zones),
+    {ok, _} = erldns_storage:load_zones("/opt/erl-dns/priv/example.zone.json"),
     Config.
 
 end_per_suite(Config) ->
@@ -52,10 +54,12 @@ init_per_testcase(query_for_updated_records, Config) ->
 init_per_testcase(query_for_axfr, Config) ->
     Config;
 init_per_testcase(zone_refresh_test, Config) ->
+    Config;
+init_per_testcase(test_master_hidden, Config) ->
     Config.
 
 query_for_updated_records(_Config) ->
-    {ok, _} = erldns_storage:load_zones("/opt/erl-dns/priv/example.zone.json"),
+    io:format("NOTE: WILL FAIL IF MASTER IS 'HIDDEN'"),
     Records = erldns_zone_cache:get_records_by_name(<<"example.com">>),
     io:format("Old records: ~p~n", [Records]),
     {ok, Zone} = erldns_zone_cache:get_zone(<<"example.com">>),
@@ -91,8 +95,8 @@ zone_refresh_test(_Config) ->
     OldSerial = 0,
     SOA = SOA0#dns_rrdata_soa{serial = OldSerial},
     Zone = erldns_zone_cache:build_zone(<<"example.com">>, Zone0#zone.allow_notify, Zone0#zone.allow_transfer,
-        Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source, Zone0#zone.version,
-        [Authority#dns_rr{data = SOA}],  Zone0#zone.records),
+                                        Zone0#zone.allow_update, Zone0#zone.also_notify, Zone0#zone.notify_source, Zone0#zone.version,
+                                        [Authority#dns_rr{data = SOA}],  Zone0#zone.records),
     %% Put zone back into cache. And wait for it to expire
     ok = erldns_zone_cache:delete_zone(<<"example.com">>),
     ok = erldns_zone_cache:put_zone(<<"example.com">>, Zone),
@@ -104,4 +108,74 @@ zone_refresh_test(_Config) ->
             ok;
         true ->
             ct:fail(zone_no_refresh)
+    end.
+
+test_master_hidden(_Config) ->
+    io:format("Master must be configured as 'hidden'"),
+    {ok, {dns_rec,
+          {dns_header,_,_,_,_,_,_,_,_,_},
+          _,
+          [],   %%Answer (Should be empty)
+          [],   %%NS List (Should be empty)
+          []}} = inet_res:nnslookup("example.com", any, a, [{{10,1,10,51}, 8053}], 10000),
+    {ok, {dns_rec,
+          {dns_header,_,_,_,_,_,_,_,_,_},
+          _,
+          [],   %%Answer (Should be empty)
+          [],   %%NS List (Should be empty)
+          []}} = inet_res:nnslookup("example.com", any, aaaa, [{{10,1,10,51}, 8053}], 10000),
+    {ok, {dns_rec,
+          {dns_header,_,_,_,_,_,_,_,_,_},
+          _,
+          [],   %%Answer (Should be empty)
+          [],   %%NS List (Should be empty)
+          []}} = inet_res:nnslookup("example.com", any, srv, [{{10,1,10,51}, 8053}], 10000),
+    {ok, {dns_rec,
+          {dns_header,_,_,_,_,_,_,_,_,_},
+          _,
+          [],   %%Answer (Should be empty)
+          [],   %%NS List (Should be empty)
+          []}} = inet_res:nnslookup("example.com", any, cname, [{{10,1,10,51}, 8053}], 10000),
+    {ok, {dns_rec,
+          {dns_header,_,_,_,_,_,_,_,_,_},
+          _,
+          [],   %%Answer (Should be empty)
+          [],   %%NS List (Should be empty)
+          []}} = inet_res:nnslookup("example.com", any, ns, [{{10,1,10,51}, 8053}], 10000),
+    {ok, {dns_rec,
+          {dns_header,_,_,_,_,_,_,_,_,_},
+          _,
+          [],   %%Answer (Should be empty)
+          [],   %%NS List (Should be empty)
+          []}} = inet_res:nnslookup("example.com", any, mx, [{{10,1,10,51}, 8053}], 10000),
+    {ok, {dns_rec,
+          {dns_header,_,_,_,_,_,_,_,_,_},
+          _,
+          [],   %%Answer (Should be empty)
+          [],   %%NS List (Should be empty)
+          []}} = inet_res:nnslookup("example.com", any, spf, [{{10,1,10,51}, 8053}], 10000),
+    {ok, {dns_rec,
+          {dns_header,_,_,_,_,_,_,_,_,_},
+          _,
+          [],   %%Answer (Should be empty)
+          [],   %%NS List (Should be empty)
+          []}} = inet_res:nnslookup("example.com", any, txt, [{{10,1,10,51}, 8053}], 10000),
+    {ok, {dns_rec,
+          {dns_header,_,_,_,_,_,_,_,_,_},
+          _,
+          [],   %%Answer (Should be empty)
+          [],   %%NS List (Should be empty)
+          []}} = inet_res:nnslookup("example.com", any, soa, [{{10,1,10,51}, 8053}], 10000),
+    {ok, {dns_rec,
+          {dns_header,_,_,_,_,_,_,_,_,_},
+          _,
+          [],   %%Answer (Should be empty)
+          [],   %%NS List (Should be empty)
+          []}} = inet_res:nnslookup("example.com", any, naptr, [{{10,1,10,51}, 8053}], 10000),
+    try erldns_zone_transfer_worker:send_axfr(<<"example.com">>, {127,0,0,1}, {10,1,10,51}) of
+        _ ->
+            io:format("Hmm....should have caught an exit normal for send_afxr!"),
+            ct:fail(didnt_catch_normal_exit)
+    catch
+        exit:normal -> io:format("Successful zone transfer!")
     end.
