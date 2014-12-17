@@ -134,7 +134,6 @@ get_zone(Name) ->
 %% @end
 -spec get_zone_names_for_slave(inet:ip_address()) -> [binary()].
 get_zone_names_for_slave(Addr) ->
-    erldns_log:info("YO! Im chekcing zones for IP ~p", [Addr]),
     Res = lists:foldl(fun(ZoneName, Acc) ->
         {ok, #zone{records = Records} = Zone} = get_zone_with_records(ZoneName),
         case lists:member(Addr, get_ips_for_notify_set(Records)) of
@@ -144,7 +143,6 @@ get_zone_names_for_slave(Addr) ->
                 Acc
         end
         end, [], zone_names()),
-    erldns_log:info("Heres what I got ~p", [Res]),
     Res.
 
 

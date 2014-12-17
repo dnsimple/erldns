@@ -287,6 +287,5 @@ get_admin() ->
     end.
 
 keyget(Key, Data) ->
-    erldns_log:info("keyget ~p, ~p", [Key, Data]),
     {Key, Value} = lists:keyfind(Key, 1, Data),
     Value.

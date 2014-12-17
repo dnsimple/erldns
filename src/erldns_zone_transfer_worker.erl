@@ -84,12 +84,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 send_zone_name_request(Bin, MasterIP, Port, BindIP) ->
-    erldns_log:info("Sending zone name request, {~p, ~p, ~p, ~p}", [Bin, MasterIP, Port, BindIP]),
     {ok, Socket} = gen_tcp:connect(MasterIP, Port, [binary, {active, false}, {ip, BindIP}]),
     ok = gen_tcp:send(Socket, Bin),
     %% Extract the size header
     {ok, Zones} = gen_tcp:recv(Socket, 0),
-    erldns_log:info("I got zones: ~p", [binary_to_term(Zones)]),
     ok = gen_tcp:close(Socket),
     [send_startup_zone_request(Zone, BindIP, MasterIP) || Zone <- binary_to_term(Zones)].
 
@@ -226,7 +224,6 @@ send_startup_zone_request(#zone{name = ZoneName} = Zone, BindIP, MasterIP) ->
                          send_tcp_message(BindIP, MasterIP, EncodedMessage)
                  end,
     %% Get new records from answer, delete old zone and replace it with the new zone
-    erldns_log:info("GOT ANSWER! ~p", [dns:decode_message(Recv)]),
     NewRecords0 = dns:decode_message(Recv),
     NewRecords = NewRecords0#dns_message.answers,
     %% AFXR requests always have the authority at the beginning and end of the answer section.

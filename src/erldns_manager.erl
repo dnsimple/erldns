@@ -69,7 +69,6 @@ handle_cast({send_axfr, {_ZoneName, _ServerIP} = Args}, State) ->
     supervisor:start_child(erldns_zone_transfer_sup, Spec),
     {noreply, State, ?REFRESH_INTERVAL};
 handle_cast({send_zone_name_request, {_Bin, {_MasterIP, _Port}, _BindIP} = Args}, State) ->
-    erldns_log:info("send zone name request args: ~p", [Args]),
     Spec = ?TRANSFER_WORKER(send_zone_name_request, Args),
     supervisor:start_child(erldns_zone_transfer_sup, Spec),
     {noreply, State, ?REFRESH_INTERVAL};
