@@ -82,7 +82,7 @@ create(authorities) ->
                              [{attributes, record_info(fields, authorities)},
                               {disc_copies, [node()]}]) of
         {aborted, {already_exists, authorities}} ->
-            erldns_log:warning("The zone table already exists on node ~p.~n",
+            erldns_log:warning("The authority table already exists on node ~p.~n",
                                [node()]),
             ok;
         {atomic, ok} ->
