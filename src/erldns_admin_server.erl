@@ -57,7 +57,9 @@ handle_cast({add_zone, Zone, SlaveIPs}, #state{listen_ip = BindIP} = State) ->
     [begin
          {ok, Socket} = gen_tcp:connect(IP, ?ADMIN_PORT, [binary, {active, false}, {ip, BindIP}]),
          ZoneBin = term_to_binary(Zone),
-         ok = gen_tcp:send(Socket, <<"add_zone_", ZoneBin/binary>>),
+         {Key, Vector} = erldns_config:get_crypto(),
+         Message = erldns_crypto:encrypt(Key, Vector, ZoneBin),
+         ok = gen_tcp:send(Socket, <<"add_zone_", Message/binary>>),
          gen_tcp:close(Socket)
      end || IP <- SlaveIPs],
     {noreply, State};
@@ -93,20 +95,23 @@ handle_info({tcp, Socket, <<"delete_zone_", ZoneName/binary>>}, State) ->
             erldns_log:warning("Possible intruder requested zone delete: ~p", [{SocketIP, _SocketPort}])
     end,
     {noreply, State};
-handle_info({tcp, Socket, <<"add_zone_", Zone0/binary>>}, State) ->
+handle_info({tcp, Socket, <<"add_zone_", EncryptedZone/binary>>}, State) ->
     {ok, {SocketIP, _SocketPort}} = inet:peername(Socket),
     case SocketIP =:= erldns_config:get_master_ip() of
         true ->
-            Zone = binary_to_term(Zone0),
-            erldns_zone_cache:put_zone(Zone#zone.name, Zone),
+            {Key, Vector} = erldns_config:get_crypto(),
+            Zone0 = erldns_crypto:decrypt(Key, Vector, EncryptedZone),
+            Zone#zone{name = ZoneName} = binary_to_term(Zone0),
+            erldns_zone_cache:put_zone(ZoneName, Zone),
             {ok, {BindIP, _Port}} = inet:sockname(Socket),
-            gen_server:cast(erldns_manager, {send_axfr, {Zone#zone.name, BindIP}}),
+            gen_server:cast(erldns_manager, {send_axfr, {ZoneName, BindIP}}),
             gen_server:cast(erldns_manager, {add_zone_to_orddict, {Zone, BindIP}});
         false ->
             erldns_log:warning("Possible intruder requested zone add: ~p", [{SocketIP, _SocketPort}])
     end,
     {noreply, State};
 handle_info(_Message, State) ->
+    erldns_log:info("some other message ~p", [_Message]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->

@@ -52,7 +52,8 @@
          get_master_ip/0,
          get_master_port/0,
          get_admin/0,
-         get_mode/0]).
+         get_mode/0,
+         get_crypto/0]).
 
 -define(DEFAULT_IPV4_ADDRESS, {127,0,0,1}).
 -define(DEFAULT_IPV6_ADDRESS, {0,0,0,0,0,0,0,1}).
@@ -303,6 +304,14 @@ get_admin() ->
             [];
         {ok, Admin} ->
             {keyget(listen, Admin), keyget(port, Admin)}
+    end.
+
+get_crypto() ->
+    case application:get_env(erldns, crypto) of
+        undefined ->
+            undefined;
+        {ok, Crypto} ->
+            {keyget(key, Crypto), keyget(vector, Crypto)}
     end.
 
 get_mode() ->
