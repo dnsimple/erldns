@@ -56,6 +56,16 @@ init([]) ->
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
+handle_cast({delete_zone_from_orddict, ZoneName}, #state{zone_expirations = Orddict} = State) ->
+    NewOrddict = delete_zone_from_orddict(ZoneName, Orddict),
+    {noreply, State#state{orddict_size = length(NewOrddict), zone_expirations = NewOrddict}, ?REFRESH_INTERVAL};
+handle_cast({add_zone_to_orddict, {#zone{name = ZoneName, authority = [#dns_rr{data = ZoneAuth}]}, BindIP}},
+            #state{zone_expirations = Orddict} = State) ->
+    Expiration = ZoneAuth#dns_rrdata_soa.expire + timestamp(),
+    ArgsToSendAXFR = {ZoneName, BindIP},
+    NewOrddict = orddict:append(Expiration, ArgsToSendAXFR, Orddict),
+        {noreply, State#state{orddict_size = length(NewOrddict), zone_expirations = NewOrddict},
+         ?REFRESH_INTERVAL};
 handle_cast({send_notify, {_BindIP, _DestinationIP, _ZoneName, _ZoneClass} = Args}, State) ->
     Spec = ?TRANSFER_WORKER(send_notify, Args),
     supervisor:start_child(erldns_zone_transfer_sup, Spec),
@@ -93,8 +103,8 @@ handle_info(timeout, #state{zone_expirations = Orddict, orddict_size = Size} = S
                                   exit:normal -> ok;
                                   error:Reason ->
                                       erldns_log:warning("Could not refresh zone ~p, requested from ~p"
-                                      " for reason ~p",
-                                          [ZoneName, Zone#zone.notify_source, Reason])
+                                                         " for reason ~p",
+                                                         [ZoneName, Zone#zone.notify_source, Reason])
                               end
                           end
                           || {ZoneName, BindIP} <- ListOfExpiredZones],
@@ -106,7 +116,6 @@ handle_info(timeout, #state{zone_expirations = Orddict, orddict_size = Size} = S
     {noreply, State#state{zone_expirations = NewOrddict, orddict_size = orddict:size(NewOrddict)},
      ?REFRESH_INTERVAL + TimeSpentMs};
 handle_info(timeout, State)  ->
-    %%TODO Should we attempt a refresh? And check if there are now zones in our authroity we should watch?
     {noreply, State, ?REFRESH_INTERVAL};
 handle_info(_Info, State) ->
     {noreply, State, ?REFRESH_INTERVAL}.
@@ -176,3 +185,26 @@ get_expiration(ZoneName) ->
 timestamp() ->
     {TM, TS, _} = os:timestamp(),
     (TM * 1000000) + TS.
+
+delete_zone_from_orddict(ZoneName, Orddict) ->
+    delete_zone_from_orddict(ZoneName, orddict:to_list(Orddict), []).
+
+delete_zone_from_orddict(_ZoneName, [], Acc) ->
+    orddict:from_list(Acc);
+delete_zone_from_orddict(ZoneName, [{Expiration, ZoneArgs} | Tail], Acc) ->
+    case process_args(ZoneName, ZoneArgs) of
+        [] ->
+            delete_zone_from_orddict(ZoneName, Tail, Acc);
+        NewArgs ->
+            delete_zone_from_orddict(ZoneName, Tail, [{Expiration, NewArgs} | Acc])
+    end.
+
+process_args(ZoneName, ZoneArgs) ->
+    process_args(ZoneName, ZoneArgs, []).
+
+process_args(_ZoneName, [], Acc) ->
+    Acc;
+process_args(ZoneName, [{Name, _ServerIP} | Tail], Acc) when ZoneName =:= Name ->
+    process_args(ZoneName, Tail, Acc);
+process_args(ZoneName, [Args | Tail], Acc) ->
+    process_args(ZoneName, Tail, [Args | Acc]).

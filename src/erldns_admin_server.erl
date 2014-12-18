@@ -87,6 +87,7 @@ handle_info({tcp, Socket, <<"delete_zone_", ZoneName/binary>>}, State) ->
     {ok, {SocketIP, _SocketPort}} = inet:peername(Socket),
     case SocketIP =:= erldns_config:get_master_ip() of
         true ->
+            gen_server:cast(erldns_manager, {delete_zone_from_orddict, ZoneName}),
             erldns_zone_cache:delete_zone(ZoneName);
         false ->
             erldns_log:warning("Possible intruder requested zone delete: ~p", [{SocketIP, _SocketPort}])
@@ -99,7 +100,8 @@ handle_info({tcp, Socket, <<"add_zone_", Zone0/binary>>}, State) ->
             Zone = binary_to_term(Zone0),
             erldns_zone_cache:put_zone(Zone#zone.name, Zone),
             {ok, {BindIP, _Port}} = inet:sockname(Socket),
-            gen_server:cast(erldns_manager, {send_axfr, {Zone#zone.name, BindIP}});
+            gen_server:cast(erldns_manager, {send_axfr, {Zone#zone.name, BindIP}}),
+            gen_server:cast(erldns_manager, {add_zone_to_orddict, {Zone, BindIP}});
         false ->
             erldns_log:warning("Possible intruder requested zone add: ~p", [{SocketIP, _SocketPort}])
     end,
