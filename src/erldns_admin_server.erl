@@ -101,10 +101,10 @@ handle_info({tcp, Socket, <<"add_zone_", EncryptedZone/binary>>}, State) ->
         true ->
             {Key, Vector} = erldns_config:get_crypto(),
             Zone0 = erldns_crypto:decrypt(Key, Vector, EncryptedZone),
-            Zone#zone{name = ZoneName} = binary_to_term(Zone0),
-            erldns_zone_cache:put_zone(ZoneName, Zone),
+            Zone = binary_to_term(Zone0),
+            erldns_zone_cache:put_zone(Zone#zone.name, Zone),
             {ok, {BindIP, _Port}} = inet:sockname(Socket),
-            gen_server:cast(erldns_manager, {send_axfr, {ZoneName, BindIP}}),
+            gen_server:cast(erldns_manager, {send_axfr, {Zone#zone.name, BindIP}}),
             gen_server:cast(erldns_manager, {add_zone_to_orddict, {Zone, BindIP}});
         false ->
             erldns_log:warning("Possible intruder requested zone add: ~p", [{SocketIP, _SocketPort}])
