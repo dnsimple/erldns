@@ -185,7 +185,7 @@ get_expiration(ZoneName) ->
 %% @doc This function takes a zone name and the orrdict to delete entries in the zone expiration
 %% orddict.
 %% @end
--spec delete_zone_from_orddict(binary(), orddict()) -> orddict().
+-spec delete_zone_from_orddict(binary(), orddict:orddict()) -> orddict:orddict().
 delete_zone_from_orddict(ZoneName, Orddict) ->
     delete_zone_from_orddict(ZoneName, orddict:to_list(Orddict), []).
 
