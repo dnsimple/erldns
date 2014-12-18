@@ -182,10 +182,10 @@ get_expiration(ZoneName) ->
     [#dns_rr{data = #dns_rrdata_soa{expire = Expire}}] = Zone#zone.authority,
     Expire + timestamp().
 
-timestamp() ->
-    {TM, TS, _} = os:timestamp(),
-    (TM * 1000000) + TS.
-
+%% @doc This function takes a zone name and the orrdict to delete entries in the zone expiration
+%% orddict.
+%% @end
+-spec delete_zone_from_orddict(binary(), orddict()) -> orddict().
 delete_zone_from_orddict(ZoneName, Orddict) ->
     delete_zone_from_orddict(ZoneName, orddict:to_list(Orddict), []).
 
@@ -208,3 +208,7 @@ process_args(ZoneName, [{Name, _ServerIP} | Tail], Acc) when ZoneName =:= Name -
     process_args(ZoneName, Tail, Acc);
 process_args(ZoneName, [Args | Tail], Acc) ->
     process_args(ZoneName, Tail, [Args | Acc]).
+
+timestamp() ->
+    {TM, TS, _} = os:timestamp(),
+    (TM * 1000000) + TS.
