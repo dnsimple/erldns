@@ -52,16 +52,20 @@
          build_zone/1,
          build_zone/8,
          build_zone/9,
+         add_new_zone/2,
          put_zone/1,
          put_zone/2,
          put_zone_async/1,
          put_zone_async/2,
          delete_zone/1,
+         delete_zone_permanently/1,
          add_record/3,
          delete_record/3,
          update_record/4,
          increment_soa/1
         ]).
+
+-export([get_ips_for_notify_set/1]).
 
 %% Gen server hooks
 -export([init/1,
@@ -135,14 +139,14 @@ get_zone(Name) ->
 -spec get_zones_for_slave(inet:ip_address()) -> [binary()].
 get_zones_for_slave(Addr) ->
     Res = lists:foldl(fun(ZoneName, Acc) ->
-        {ok, #zone{records = Records} = Zone} = get_zone_with_records(ZoneName),
-        case lists:member(Addr, get_ips_for_notify_set(Records)) of
-            true ->
-                [Zone#zone{records = [], authority = [], records_by_name = [], records_by_type = []} | Acc];
-            false ->
-                Acc
-        end
-        end, [], zone_names()),
+                              {ok, #zone{records = Records} = Zone} = get_zone_with_records(ZoneName),
+                              case lists:member(Addr, get_ips_for_notify_set(Records)) of
+                                  true ->
+                                      [Zone#zone{records = [], authority = [], records_by_name = [], records_by_type = []} | Acc];
+                                  false ->
+                                      Acc
+                              end
+                      end, [], zone_names()),
     Res.
 
 
@@ -329,11 +333,20 @@ zone_names_and_versions() ->
 -spec zone_names() -> [{dns:dname()}].
 zone_names() ->
     erldns_storage:foldl(fun(#zone{name = Name}, Names) ->
-        [Name | Names]
-    end, [], zones).
+                                 [Name | Names]
+                         end, [], zones).
 
 %% -----------------------------------------------------------------------------------------------
 %% Write API
+
+%% @doc Add a new zone and send it to the slaves. Assumes that the zone was built using build_zone/1
+-spec add_new_zone(binary(), #zone{}) -> ok | [ok].
+add_new_zone(ZoneName, #zone{} = Zone) ->
+    ok  = put_zone(ZoneName, Zone),
+    gen_server:cast(erldns_admin_server, {add_zone, Zone#zone{records = [],
+                                                              records_by_name = [], records_by_type = []},
+                                          get_ips_for_notify_set(ZoneName)}).
+
 
 %% @doc Put a name and its records into the cache, along with a SHA which can be
 %% used to determine if the zone requires updating.
@@ -389,6 +402,15 @@ increment_soa(ZoneName) ->
 -spec delete_zone(binary()) -> ok | {error, term()}.
 delete_zone(Name) ->
     erldns_storage:delete(zones, normalize_name(Name)).
+
+%% @doc Remove a zone from the cache permanently and notify slaves to remove the zone from their
+%% storage as well.
+%% @end
+-spec delete_zone_permanently(binary()) -> ok | {error, term()}.
+delete_zone_permanently(Name0) ->
+    Name = normalize_name(Name0),
+    gen_server:cast(erldns_admin_server, {delete_zone, Name, get_ips_for_notify_set(Name)}),
+    erldns_storage:delete(zones, Name).
 
 %% @doc Add a record to a particular zone.
 -spec add_record(binary(), #dns_rr{}, boolean()) -> ok | {error, term()}.
@@ -630,8 +652,8 @@ send_notify(ZoneName, #zone{notify_source = NotifySource, records = Records}) ->
                                                                         ZoneName, ?DNS_CLASS_IN}}) | Acc]
                 end, [], get_ips_for_notify_set(Records)).
 
-%% @doc This function returns a list of nameservers to notify for a zone. Returned list
-%% excludes the mname that is specified in the authority.
+%% @doc This function takes the zones's list of records and returns a list of nameservers to
+%% notify for a zone. Returned list excludes the mname that is specified in the authority.
 %% @end
 -spec get_notify_set([dns:rr()]) -> [dns:rr()].
 get_notify_set(Records) ->
@@ -665,25 +687,32 @@ exclude_mname_duplicates(#dns_rrdata_soa{mname = MName}, NameServers) ->
                         end
                 end, [], NameServers).
 
-%% @doc This function takes a list of nameservers, finds it's A/AAAA record in the given record set
+%% @doc This function takes a list of records, finds it's A/AAAA record in the given record set
 %% and returns the nameserver's IP address.
 %% @end
--spec get_ips_for_notify_set([dns:rr()]) -> [inet:ip_address()].
-get_ips_for_notify_set(Records) ->
-    get_ips_for_notify_set(Records, get_notify_set(Records), []).
+-spec get_ips_for_notify_set([dns:rr()] | binary()) -> [inet:ip_address()] | [].
+get_ips_for_notify_set(ZoneName) when is_binary(ZoneName) ->
+    case get_zone_with_records(ZoneName) of
+        {ok, #zone{records = Records}} ->
+            get_ips_for_notify_set(Records);
+        _ ->
+            []
+    end;
+get_ips_for_notify_set(NameServers) ->
+    get_ips_for_notify_set(NameServers, get_notify_set(NameServers), []).
 
-get_ips_for_notify_set(_Records, [], IPs) ->
+get_ips_for_notify_set(_NameServers, [], IPs) ->
     IPs;
-get_ips_for_notify_set(Records, [#dns_rrdata_ns{dname = DName} | Tail], IPs) ->
-    case lists:keyfind(DName, 2, Records) of
+get_ips_for_notify_set(NameServers, [#dns_rrdata_ns{dname = DName} | Tail], IPs) ->
+    case lists:keyfind(DName, 2, NameServers) of
         false ->
-            get_ips_for_notify_set(Records, Tail, IPs);
+            get_ips_for_notify_set(NameServers, Tail, IPs);
         #dns_rr{data = ARecord}  ->
             case ARecord of
                 #dns_rrdata_a{ip = IP} ->
-                    get_ips_for_notify_set(Records, Tail, [IP | IPs]);
+                    get_ips_for_notify_set(NameServers, Tail, [IP | IPs]);
                 #dns_rrdata_aaaa{ip = IP} ->
-                    get_ips_for_notify_set(Records, Tail, [IP | IPs])
+                    get_ips_for_notify_set(NameServers, Tail, [IP | IPs])
             end
     end.
 

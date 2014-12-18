@@ -161,7 +161,7 @@ load_zones(Filename) when is_list(Filename) ->
             lists:foreach(
               fun(JsonZone) ->
                       Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-                      erldns_zone_cache:put_zone(Zone)
+                      ok = erldns_zone_cache:put_zone(Zone)
               end, JsonZones),
             erldns_log:info("Loaded ~p zones", [length(JsonZones)]),
             {ok, length(JsonZones)};

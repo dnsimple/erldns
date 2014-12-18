@@ -19,6 +19,8 @@
 -module(erldns_admin_server).
 -behavior(gen_nb_server).
 
+-include("erldns.hrl").
+
 %% API
 -export([start_link/3]).
 
@@ -42,7 +44,7 @@
 %% Public API
 start_link(_Name, ListenIP, Port) ->
     erldns_log:info("Starting ADMIN server on port ~p, IP ~p", [Port, ListenIP]),
-    gen_nb_server:start_link(?MODULE, ListenIP, Port, [Port, ListenIP]).
+    gen_nb_server:start_link({local, ?MODULE}, ListenIP, Port, [Port, ListenIP]).
 
 %% gen_server hooks
 init([Port, ListenIP]) ->
@@ -51,12 +53,56 @@ init([Port, ListenIP]) ->
 handle_call(_Request, _From, State) ->
     {ok, State}.
 
+handle_cast({add_zone, Zone, SlaveIPs}, #state{listen_ip = BindIP} = State) ->
+    [begin
+         {ok, Socket} = gen_tcp:connect(IP, ?ADMIN_PORT, [binary, {active, false}, {ip, BindIP}]),
+         ZoneBin = term_to_binary(Zone),
+         ok = gen_tcp:send(Socket, <<"add_zone_", ZoneBin/binary>>),
+         gen_tcp:close(Socket)
+     end || IP <- SlaveIPs],
+    {noreply, State};
+handle_cast({delete_zone, ZoneName, SlaveIPs}, #state{listen_ip = BindIP} = State) ->
+    [begin
+         {ok, Socket} = gen_tcp:connect(IP, ?ADMIN_PORT, [binary, {active, false}, {ip, BindIP}]),
+         ok = gen_tcp:send(Socket, <<"delete_zone_", ZoneName/binary>>),
+         gen_tcp:close(Socket)
+     end || IP <- SlaveIPs],
+    {noreply, State};
 handle_cast(_Message, State) ->
+    erldns_log:info("Some other message: ~p", [_Message]),
     {noreply, State}.
 
-handle_info({tcp, Socket, <<"slave_startup_",  IP/binary>>}, State) ->
-    gen_tcp:send(Socket,
-                 term_to_binary(erldns_zone_cache:get_zone_names_for_slave(binary_to_term(IP)))),
+handle_info({tcp, Socket, <<"slave_startup_",  IP0/binary>>}, State) ->
+    IP = binary_to_term(IP0),
+    {ok, {SocketIP, _SocketPort}} = inet:peername(Socket),
+    case  SocketIP =:= IP of
+        true ->
+            gen_tcp:send(Socket, term_to_binary(erldns_zone_cache:get_zones_for_slave(IP)));
+        false ->
+            erldns_log:warning("Possible intruder requested zone: ~p", [{SocketIP, _SocketPort}]),
+            gen_tcp:close(Socket)
+    end,
+    {noreply, State};
+handle_info({tcp, Socket, <<"delete_zone_", ZoneName/binary>>}, State) ->
+    {ok, {SocketIP, _SocketPort}} = inet:peername(Socket),
+    case SocketIP =:= erldns_config:get_master_ip() of
+        true ->
+            erldns_zone_cache:delete_zone(ZoneName);
+        false ->
+            erldns_log:warning("Possible intruder requested zone delete: ~p", [{SocketIP, _SocketPort}])
+    end,
+    {noreply, State};
+handle_info({tcp, Socket, <<"add_zone_", Zone0/binary>>}, State) ->
+    {ok, {SocketIP, _SocketPort}} = inet:peername(Socket),
+    case SocketIP =:= erldns_config:get_master_ip() of
+        true ->
+            Zone = binary_to_term(Zone0),
+            erldns_zone_cache:put_zone(Zone#zone.name, Zone),
+            {ok, {BindIP, _Port}} = inet:sockname(Socket),
+            gen_server:cast(erldns_manager, {send_axfr, {Zone#zone.name, BindIP}});
+        false ->
+            erldns_log:warning("Possible intruder requested zone add: ~p", [{SocketIP, _SocketPort}])
+    end,
     {noreply, State};
 handle_info(_Message, State) ->
     {noreply, State}.

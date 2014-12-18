@@ -100,11 +100,10 @@ add_servers([{inet6, {_, _, _, _, _, _, _, _} = IPAddr, udp, Port, _}| Tail]) ->
     ok = start_child(Spec),
     add_servers(Tail);
 add_servers([{Addr, Port} | Tail]) ->
-    Spec =  {admin, {erldns_admin_server, start_link, [admin, Addr, Port]},
+    Spec =  {erldns_admin_server, {erldns_admin_server, start_link, [erldns_admin_server, Addr, Port]},
         permanent, 5000, worker, [erldns_admin_server]},
     ok = start_child(Spec),
     add_servers(Tail).
-
 
 add_pools([]) ->
     ok;

@@ -60,6 +60,8 @@ behaviour_info(_) ->
 %% InitParams = [any()]
 %% Result = {ok, pid()} | {error, any()}
 %% @doc Start server listening on IpAddr:Port
+start_link({local, CallbackModule}, IpAddr, Port, InitParams) ->
+    gen_server:start_link({local, CallbackModule}, ?MODULE, [CallbackModule, IpAddr, Port, InitParams], []);
 start_link(CallbackModule, IpAddr, Port, InitParams) ->
     gen_server:start_link(?MODULE, [CallbackModule, IpAddr, Port, InitParams], []).
 

@@ -49,6 +49,8 @@
          storage_dir/0
         ]).
 -export([get_master/0,
+         get_master_ip/0,
+         get_master_port/0,
          get_admin/0,
          get_mode/0]).
 
@@ -277,6 +279,22 @@ get_master() ->
             undefined;
         {ok, {Addr, Port}} ->
             {Addr, Port}
+    end.
+
+get_master_ip() ->
+    case application:get_env(erldns, master_admin_server) of
+        undefined ->
+            undefined;
+        {ok, {Addr, _Port}} ->
+            Addr
+    end.
+
+get_master_port() ->
+    case application:get_env(erldns, master_admin_server) of
+        undefined ->
+            undefined;
+        {ok, {_Addr, Port}} ->
+            Port
     end.
 
 get_admin() ->
