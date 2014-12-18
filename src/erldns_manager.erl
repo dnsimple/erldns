@@ -127,11 +127,6 @@ code_change(_OldVsn, State, _Extra) ->
 -spec setup_zone_expiration_orddict() -> orddict:orddict().
 setup_zone_expiration_orddict() ->
     %% Get the bind IP we will use to send the AXFR
-    {ok, IFAddrs} = inet:getifaddrs(),
-    MountedIPAddresses = [begin
-                              {addr, Addr} = lists:keyfind(addr, 1, List),
-                              Addr
-                          end || {_, List} <- IFAddrs],
     NewOrrdict = lists:foldl(
                    fun({ZoneName, _ZoneVersion}, Orrdict) ->
                            {ok, #zone{allow_transfer = AllowTransfer, notify_source = NotifySource,
@@ -141,8 +136,7 @@ setup_zone_expiration_orddict() ->
                                [] ->
                                    Orrdict;
                                _ ->
-                                   MountedIP = hd(lists:sort([IP || IP <- MountedIPAddresses,
-                                                                    lists:member(IP, AllowTransfer)])),
+                                   {MountedIP, _Port} = erldns_config:get_admin(),
                                    case NotifySource =:= MountedIP of
                                        true ->
                                            %% We are the zone Authority, we don't need to keep
