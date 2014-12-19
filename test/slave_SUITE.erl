@@ -22,14 +22,17 @@
 -export([query_for_updated_records/1,
          query_for_axfr/1,
          zone_refresh_test/1,
-         test_master_hidden/1]).
+         test_master_hidden/1,
+         test_zone_add_delete_sync/1]).
 
 -include("../include/erldns.hrl").
 -include("../deps/dns/include/dns.hrl").
 all() ->
-    [query_for_updated_records, query_for_axfr, zone_refresh_test, test_master_hidden].
+    [query_for_updated_records, query_for_axfr, zone_refresh_test, test_master_hidden, test_zone_add_delete_sync].
 
 init_per_suite(Config) ->
+    ok = application:set_env(erldns, admin, [{listen, {127, 0, 0, 1}}, {port, 9000}]),
+    ok = application:set_env(erldns, master_admin_server, {{10, 1, 10, 51}, 9000}),
     ok = application:set_env(erldns, storage, [{type, erldns_storage_mnesia}, {dir, "/opt/erl-dns/test/test_db2"}]),
     ok = application:set_env(erldns, servers, [
                                                [{port, 8053},
@@ -39,6 +42,7 @@ init_per_suite(Config) ->
                                                                {size, 10}, {max_overflow, 20}
                                                               ]}]
                                               ]),
+    ok = application:set_env(erldns, crypto, [{key, "29bba620-39dc-4426-bb59-43c284752ee1"}, {vector, "fd4c96ec-9c51-4e67-8ee8-e643b0f960d0"}]),
     ok = erldns:start(),
     ok = erldns_storage:create(schema),
     ok = erldns_storage:create(zones),
@@ -56,6 +60,8 @@ init_per_testcase(query_for_axfr, Config) ->
 init_per_testcase(zone_refresh_test, Config) ->
     Config;
 init_per_testcase(test_master_hidden, Config) ->
+    Config;
+init_per_testcase(test_zone_add_delete_sync, Config) ->
     Config.
 
 query_for_updated_records(_Config) ->
@@ -178,4 +184,37 @@ test_master_hidden(_Config) ->
             ct:fail(didnt_catch_normal_exit)
     catch
         exit:normal -> io:format("Successful zone transfer!")
+    end.
+
+test_zone_add_delete_sync(_Config) ->
+    {MasterIP, Port} = erldns_config:get_master(),
+    DNS = [
+           #dns_rr{name = <<"test.com">>,class = 1,
+                   type = 6,ttl = 3600,
+                   data = #dns_rrdata_soa{mname = <<"ns1.test.com">>,
+                                          rname = <<"admin.test.com">>,serial = 2013022001,
+                                          refresh = 86400,retry = 7200,expire = 5,minimum = 300}},
+        {dns_rr,<<"test.com">>,1,2,3600,
+            {dns_rrdata_ns,<<"ns2.test.com">>}},
+        {dns_rr,<<"ns2.test.com">>,1,1,3600,{dns_rrdata_a,{127,0,0,1}}}],
+    Zone = erldns_zone_cache:build_zone(<<"test.com">>, [{127,0,0,1}, {10,1,10,51}], [{127,0,0,1}, {10,1,10,51}],
+                                        [{10,1,10,51},{127,0,0,1}], [{10,1,10,51},{127,0,0,1}], {10,1,10,51}, 0, DNS),
+    {ok, Socket1} = gen_tcp:connect(MasterIP, ?ADMIN_PORT, [binary, {active, false}, {ip, {127, 0, 0, 1}}]),
+    Message1 = term_to_binary(Zone),
+    ok = gen_tcp:send(Socket1, <<"test_add_zone_", Message1/binary>>),
+    timer:sleep(2000),
+    case erldns_zone_cache:get_zone_with_records(<<"test.com">>) of
+        {ok, _TestZone1} ->
+            ok;
+        _ ->
+            ct:fail(slave_did_not_sync)
+    end,
+    {ok, Socket2} = gen_tcp:connect(MasterIP, ?ADMIN_PORT, [binary, {active, false}, {ip, {127, 0, 0, 1}}]),
+    ok = gen_tcp:send(Socket2, <<"test_delete_zone_", <<"test.com">>/binary>>),
+    timer:sleep(2000),
+    case erldns_zone_cache:get_zone_with_records(<<"test.com">>) of
+        {ok, _TestZone2} ->
+            ct:fail(slave_did_not_sync);
+        _ ->
+            ok
     end.

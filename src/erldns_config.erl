@@ -53,7 +53,8 @@
          get_master_port/0,
          get_admin/0,
          get_mode/0,
-         get_crypto/0]).
+         get_crypto/0,
+         is_test/0]).
 
 -define(DEFAULT_IPV4_ADDRESS, {127,0,0,1}).
 -define(DEFAULT_IPV6_ADDRESS, {0,0,0,0,0,0,0,1}).
@@ -322,6 +323,16 @@ get_mode() ->
             public;
         {ok, hidden} ->
             hidden
+    end.
+
+is_test() ->
+    case application:get_env(erldns, test) of
+        {ok, true} ->
+            true;
+        {ok, false} ->
+            false;
+        undefined ->
+            false
     end.
 
 keyget(Key, Data) ->

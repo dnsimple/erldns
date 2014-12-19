@@ -110,6 +110,26 @@ handle_info({tcp, Socket, <<"add_zone_", EncryptedZone/binary>>}, State) ->
             erldns_log:warning("Possible intruder requested zone add: ~p", [{SocketIP, _SocketPort}])
     end,
     {noreply, State};
+%% TEST FUNCTIONS---------------------------
+handle_info({tcp, _Socket, <<"test_delete_zone_", ZoneName/binary>>}, State) ->
+    case erldns_config:is_test() of
+        true ->
+            erldns_zone_cache:delete_zone_permanently(ZoneName);
+        false ->
+            ok
+    end,
+    {noreply, State};
+handle_info({tcp, _Socket, <<"test_add_zone_", Zone0/binary>>}, State) ->
+    case erldns_config:is_test() of
+        true ->
+            Zone = binary_to_term(Zone0),
+            erldns_log:info("Zone being added: ~p", [Zone]),
+            erldns_zone_cache:add_new_zone(Zone#zone.name, Zone);
+        false ->
+            ok
+    end,
+    {noreply, State};
+%% TEST FUNCTIONS---------------------------
 handle_info(_Message, State) ->
     erldns_log:info("some other message ~p", [_Message]),
     {noreply, State}.
