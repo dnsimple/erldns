@@ -323,4 +323,8 @@ query_server_for_answers(DestinationIP, BindIP, [Question | Tail], Acc) ->
                          send_tcp_message(BindIP, DestinationIP, EncodedMessage)
                  end,
     DecodedMessage = dns:decode_message(Recv),
+    if
+        DecodedMessage#dns_message.answers =:= [] ->
+            erldns_log:warning("Didn't receive answers for question: ~p", [Question])
+    end,
     lists:flatten(query_server_for_answers(DestinationIP, BindIP, Tail, [DecodedMessage#dns_message.answers | Acc])).

@@ -123,7 +123,6 @@ handle_info({tcp, _Socket, <<"test_add_zone_", Zone0/binary>>}, State) ->
     case erldns_config:is_test() of
         true ->
             Zone = binary_to_term(Zone0),
-            erldns_log:info("Zone being added: ~p", [Zone]),
             erldns_zone_cache:add_new_zone(Zone#zone.name, Zone);
         false ->
             ok
