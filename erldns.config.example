@@ -1,8 +1,11 @@
 [
   {erldns,[
-      {port, 8053},
-      {inet4, "127.0.0.1"},
-      {inet6, "::1"},
+      {servers, [
+        [{name, inet_localhost_1}, {address, "127.0.0.1"}, {port, 8053}, {family, inet}, {processes, 2}],
+        [{name, inet6_localhost_1}, {address, "::1"}, {port, 8053}, {family, inet6}]
+        [{name, inet_localhost_2}, {address, "127.0.0.2"}, {port, 8053}, {family, inet}]
+      ]},
+
       {use_root_hints, false},
       {catch_exceptions, false},
       {zones, "priv/example.zone.json"},
