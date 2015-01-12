@@ -54,11 +54,16 @@
 get_servers() ->
   case application:get_env(erldns, servers) of
     {ok, Servers} ->
-      %% Note: This is currently brittle, since it expects the order of the tuples in the list
-      %% to match exactly. Eventually switch it to a proplist.
-      lists:map(fun([{name, Name}, {address, Address}, {port, Port}, {family, Family}]) ->
-                    [{name, Name}, {address, parse_address(Address)}, {port, Port}, {family, Family}]
-                end, Servers);
+      lists:map(
+        fun(Server) ->
+            [
+             {name, proplists:get_value(name, Server)},
+             {address, parse_address(proplists:get_value(address, Server))},
+             {port, proplists:get_value(port, Server)},
+             {family, proplists:get_value(family, Server)},
+             {processes, proplists:get_value(processes, Server, 1)}
+            ]
+        end, Servers);
     _ -> []
   end.
 
@@ -74,7 +79,7 @@ get_servers_empty_list_test() ->
 get_servers_single_server_test() ->
   application:set_env(erldns, servers, [[{name, example}, {address, "127.0.0.1"}, {port, 8053}, {family, inet}]]),
   ?assertEqual([
-                [{name, example}, {address, {127,0,0,1}}, {port, 8053}, {family, inet}]
+                [{name, example}, {address, {127,0,0,1}}, {port, 8053}, {family, inet}, {processes, 1}]
                ], get_servers()).
 
 get_servers_multiple_servers_test() ->
@@ -83,8 +88,8 @@ get_servers_multiple_servers_test() ->
                                         [{name, example_inet6}, {address, "::1"}, {port, 8053}, {family, inet6}]
                                        ]),
   ?assertEqual([
-                [{name, example_inet}, {address, {127,0,0,1}}, {port, 8053}, {family, inet}],
-                [{name, example_inet6}, {address, {0,0,0,0,0,0,0,1}}, {port, 8053}, {family, inet6}]
+                [{name, example_inet}, {address, {127,0,0,1}}, {port, 8053}, {family, inet}, {processes, 1}],
+                [{name, example_inet6}, {address, {0,0,0,0,0,0,0,1}}, {port, 8053}, {family, inet6}, {processes, 1}]
                ], get_servers()).
 
 -endif.
