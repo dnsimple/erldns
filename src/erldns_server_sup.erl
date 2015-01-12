@@ -63,6 +63,13 @@ define_server(Name, Address, Port, Family, N) ->
 
 define_server(_, _, _, _, 0, Definitions) ->
   Definitions;
+define_server(Name, Address, Port, Family, 1, []) ->
+  UDPName = list_to_atom(lists:concat([udp, '_', Name])),
+  TCPName = list_to_atom(lists:concat([tcp, '_', Name])),
+  [
+   {UDPName, {erldns_udp_server, start_link, [UDPName, Family, Address, Port]}, permanent, 5000, worker, [UDPName]},
+   {TCPName, {erldns_tcp_server, start_link, [TCPName, Family, Address, Port]}, permanent, 5000, worker, [TCPName]}
+  ];
 define_server(Name, Address, Port, Family, N = 1, Definitions) ->
   UDPName = list_to_atom(lists:concat([udp, '_', Name, '_', N])),
   TCPName = list_to_atom(lists:concat([tcp, '_', Name])),
