@@ -44,14 +44,22 @@ init(_Args) ->
                     ];
 
                   Servers ->
-                    lists:flatten(lists:map(fun(_Server = [{name, Name}, {address, Address}, {port, Port}, {family, Family}]) ->
-                                  UDPName = list_to_atom(lists:concat([udp_, Name])),
-                                  TCPName = list_to_atom(lists:concat([tcp_, Name])),
-                                  [
-                                   {UDPName, {erldns_udp_server, start_link, [UDPName, Family, Address, Port]}, permanent, 5000, worker, [UDPName]},
-                                   {TCPName, {erldns_tcp_server, start_link, [TCPName, Family, Address, Port]}, permanent, 5000, worker, [TCPName]}
-                                  ]
-                              end, Servers))
+                    lists:flatten(
+                      lists:map(
+                        fun(Server) ->
+                            Name = proplists:get_value(name, Server),
+                            Address = proplists:get_value(address, Server),
+                            Port = proplists:get_value(port, Server),
+                            Family = proplists:get_value(family, Server),
+
+                            UDPName = list_to_atom(lists:concat([udp_, Name])),
+                            TCPName = list_to_atom(lists:concat([tcp_, Name])),
+                            [
+                             {UDPName, {erldns_udp_server, start_link, [UDPName, Family, Address, Port]}, permanent, 5000, worker, [UDPName]},
+                             {TCPName, {erldns_tcp_server, start_link, [TCPName, Family, Address, Port]}, permanent, 5000, worker, [TCPName]}
+                            ]
+                        end, Servers)
+                     )
                 end,
 
   {ok, {{one_for_one, 20, 10}, ServerProcs}}.
