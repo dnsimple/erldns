@@ -1,5 +1,15 @@
 [
   {erldns,[
+    %% DB Config
+    {storage,
+      [{type, erldns_storage_mnesia},    %% erldns_storage_json | erldns_storage_mnesia
+       {dir, "db"},
+       {dbname, undefined},  %% name of the db
+       {user, undefined},    %% for future db types
+       {pass, undefined},    %% for future db types
+       {host, undefined},    %% for future db types
+       {port, undefined}     %% for future db types
+      ]},
       {servers, [
         [{name, inet_localhost_1}, {address, "127.0.0.1"}, {port, 8053}, {family, inet}, {processes, 2}],
         [{name, inet6_localhost_1}, {address, "::1"}, {port, 8053}, {family, inet6}]
