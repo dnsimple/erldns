@@ -41,6 +41,16 @@
         ]).
 
 -export([
+    storage_env/0,
+    storage_type/0,
+    storage_user/0,
+    storage_pass/0,
+    storage_host/0,
+    storage_port/0,
+    storage_dir/0
+]).
+
+-export([
          keyget/2,
          keyget/3
         ]).
@@ -194,3 +204,45 @@ websocket_path() ->
 
 websocket_url() ->
   atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
+
+storage_type() ->
+    storage_get(type).
+
+storage_dir() ->
+    storage_get(dir).
+
+storage_user() ->
+    storage_get(user).
+
+storage_pass() ->
+    storage_get(pass).
+
+storage_host() ->
+    storage_get(host).
+
+storage_port() ->
+    storage_get(port).
+
+storage_env() ->
+    get_env(storage).
+
+get_env(storage) ->
+    case application:get_env(erldns, storage) of
+        undefined ->
+            [{type, erldns_storage_json},
+                {dir, undefined},
+                {user, undefined},
+                {pass, undefined},
+                {host, undefined},
+                {port, undefined}];
+        {ok, Env} ->
+            Env
+    end.
+
+storage_get(Key) ->
+    case lists:keyfind(Key, 1, get_env(storage)) of
+        false ->
+            undefined;
+        {Key, Value} ->
+            Value
+    end.
