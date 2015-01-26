@@ -160,8 +160,8 @@ apply_context_options([_, _, _, _, Context]) ->
     {ok, ContextOptions} ->
       ContextSet = sets:from_list(Context),
       Result = lists:append([
-                             apply_context_match_empty_check(proplists:get_value(match_empty, ContextOptions), Context),
-                             apply_context_list_check(sets:from_list(proplists:get_value(allow, ContextOptions)), ContextSet)
+                             apply_context_match_empty_check(erldns_config:keyget(match_empty, ContextOptions), Context),
+                             apply_context_list_check(sets:from_list(erldns_config:keyget(allow, ContextOptions)), ContextSet)
                             ]),
       case lists:any(fun(I) -> I =:= pass end, Result) of
         true -> pass;
@@ -173,11 +173,11 @@ apply_context_options([_, _, _, _, Context]) ->
 
 json_record_to_list(JsonRecord) ->
   [
-   proplists:get_value(<<"name">>, JsonRecord),
-   proplists:get_value(<<"type">>, JsonRecord),
-   proplists:get_value(<<"ttl">>, JsonRecord),
-   proplists:get_value(<<"data">>, JsonRecord),
-   proplists:get_value(<<"context">>, JsonRecord)
+   erldns_config:keyget(<<"name">>, JsonRecord),
+   erldns_config:keyget(<<"type">>, JsonRecord),
+   erldns_config:keyget(<<"ttl">>, JsonRecord),
+   erldns_config:keyget(<<"data">>, JsonRecord),
+   erldns_config:keyget(<<"context">>, JsonRecord)
   ].
 
 try_custom_parsers([_Name, _Type, _Ttl, _Rdata, _Context], []) ->
@@ -198,13 +198,13 @@ json_record_to_erlang([Name, <<"SOA">>, Ttl, Data, _Context]) ->
      name = Name,
      type = ?DNS_TYPE_SOA,
      data = #dns_rrdata_soa{
-               mname = proplists:get_value(<<"mname">>, Data),
-               rname = proplists:get_value(<<"rname">>, Data),
-               serial = proplists:get_value(<<"serial">>, Data),
-               refresh = proplists:get_value(<<"refresh">>, Data),
-               retry = proplists:get_value(<<"retry">>, Data),
-               expire = proplists:get_value(<<"expire">>, Data),
-               minimum = proplists:get_value(<<"minimum">>, Data)
+               mname = erldns_config:keyget(<<"mname">>, Data),
+               rname = erldns_config:keyget(<<"rname">>, Data),
+               serial = erldns_config:keyget(<<"serial">>, Data),
+               refresh = erldns_config:keyget(<<"refresh">>, Data),
+               retry = erldns_config:keyget(<<"retry">>, Data),
+               expire = erldns_config:keyget(<<"expire">>, Data),
+               minimum = erldns_config:keyget(<<"minimum">>, Data)
               },
      ttl = Ttl};
 
@@ -213,12 +213,12 @@ json_record_to_erlang([Name, <<"NS">>, Ttl, Data, _Context]) ->
      name = Name,
      type = ?DNS_TYPE_NS,
      data = #dns_rrdata_ns{
-               dname = proplists:get_value(<<"dname">>, Data)
+               dname = erldns_config:keyget(<<"dname">>, Data)
               },
      ttl = Ttl};
 
 json_record_to_erlang([Name, <<"A">>, Ttl, Data, _Context]) ->
-  Ip = proplists:get_value(<<"ip">>, Data),
+  Ip = erldns_config:keyget(<<"ip">>, Data),
   case inet_parse:address(binary_to_list(Ip)) of
     {ok, Address} ->
       #dns_rr{name = Name, type = ?DNS_TYPE_A, data = #dns_rrdata_a{ip = Address}, ttl = Ttl};
@@ -228,7 +228,7 @@ json_record_to_erlang([Name, <<"A">>, Ttl, Data, _Context]) ->
   end;
 
 json_record_to_erlang([Name, <<"AAAA">>, Ttl, Data, _Context]) ->
-  Ip = proplists:get_value(<<"ip">>, Data),
+  Ip = erldns_config:keyget(<<"ip">>, Data),
   case inet_parse:address(binary_to_list(Ip)) of
     {ok, Address} ->
       #dns_rr{name = Name, type = ?DNS_TYPE_AAAA, data = #dns_rrdata_aaaa{ip = Address}, ttl = Ttl};
@@ -241,7 +241,7 @@ json_record_to_erlang([Name, <<"CNAME">>, Ttl, Data, _Context]) ->
   #dns_rr{
      name = Name,
      type = ?DNS_TYPE_CNAME,
-     data = #dns_rrdata_cname{dname = proplists:get_value(<<"dname">>, Data)},
+     data = #dns_rrdata_cname{dname = erldns_config:keyget(<<"dname">>, Data)},
      ttl = Ttl};
 
 json_record_to_erlang([Name, <<"MX">>, Ttl, Data, _Context]) ->
@@ -249,8 +249,8 @@ json_record_to_erlang([Name, <<"MX">>, Ttl, Data, _Context]) ->
      name = Name,
      type = ?DNS_TYPE_MX,
      data = #dns_rrdata_mx{
-               exchange = proplists:get_value(<<"exchange">>, Data),
-               preference = proplists:get_value(<<"preference">>, Data)
+               exchange = erldns_config:keyget(<<"exchange">>, Data),
+               preference = erldns_config:keyget(<<"preference">>, Data)
               },
      ttl = Ttl};
 
@@ -259,8 +259,8 @@ json_record_to_erlang([Name, <<"HINFO">>, Ttl, Data, _Context]) ->
      name = Name,
      type = ?DNS_TYPE_HINFO,
      data = #dns_rrdata_hinfo{
-               cpu = proplists:get_value(<<"cpu">>, Data),
-               os = proplists:get_value(<<"os">>, Data)
+               cpu = erldns_config:keyget(<<"cpu">>, Data),
+               os = erldns_config:keyget(<<"os">>, Data)
               },
      ttl = Ttl};
 
@@ -269,14 +269,14 @@ json_record_to_erlang([Name, <<"RP">>, Ttl, Data, _Context]) ->
      name = Name,
      type = ?DNS_TYPE_RP,
      data = #dns_rrdata_rp{
-               mbox = proplists:get_value(<<"mbox">>, Data),
-               txt = proplists:get_value(<<"txt">>, Data)
+               mbox = erldns_config:keyget(<<"mbox">>, Data),
+               txt = erldns_config:keyget(<<"txt">>, Data)
               },
      ttl = Ttl};
 
 json_record_to_erlang([Name, <<"TXT">>, Ttl, Data, _Context]) ->
   %% This function call may crash. Handle it as a bad record.
-  try erldns_txt:parse(proplists:get_value(<<"txt">>, Data)) of
+  try erldns_txt:parse(erldns_config:keyget(<<"txt">>, Data)) of
     ParsedText ->
       #dns_rr{
          name = Name,
@@ -293,26 +293,26 @@ json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) ->
   #dns_rr{
      name = Name,
      type = ?DNS_TYPE_SPF,
-     data = #dns_rrdata_spf{spf = [proplists:get_value(<<"spf">>, Data)]},
+     data = #dns_rrdata_spf{spf = [erldns_config:keyget(<<"spf">>, Data)]},
      ttl = Ttl};
 
 json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) ->
   #dns_rr{
      name = Name,
      type = ?DNS_TYPE_PTR,
-     data = #dns_rrdata_ptr{dname = proplists:get_value(<<"dname">>, Data)},
+     data = #dns_rrdata_ptr{dname = erldns_config:keyget(<<"dname">>, Data)},
      ttl = Ttl};
 
 json_record_to_erlang([Name, <<"SSHFP">>, Ttl, Data, _Context]) ->
   %% This function call may crash. Handle it as a bad record.
-  try hex_to_bin(proplists:get_value(<<"fp">>, Data)) of
+  try hex_to_bin(erldns_config:keyget(<<"fp">>, Data)) of
     Fp ->
       #dns_rr{
          name = Name,
          type = ?DNS_TYPE_SSHFP,
          data = #dns_rrdata_sshfp{
-                   alg = proplists:get_value(<<"alg">>, Data),
-                   fp_type = proplists:get_value(<<"fptype">>, Data),
+                   alg = erldns_config:keyget(<<"alg">>, Data),
+                   fp_type = erldns_config:keyget(<<"fptype">>, Data),
                    fp = Fp
                   },
          ttl = Ttl}
@@ -327,10 +327,10 @@ json_record_to_erlang([Name, <<"SRV">>, Ttl, Data, _Context]) ->
      name = Name,
      type = ?DNS_TYPE_SRV,
      data = #dns_rrdata_srv{
-               priority = proplists:get_value(<<"priority">>, Data),
-               weight = proplists:get_value(<<"weight">>, Data),
-               port = proplists:get_value(<<"port">>, Data),
-               target = proplists:get_value(<<"target">>, Data)
+               priority = erldns_config:keyget(<<"priority">>, Data),
+               weight = erldns_config:keyget(<<"weight">>, Data),
+               port = erldns_config:keyget(<<"port">>, Data),
+               target = erldns_config:keyget(<<"target">>, Data)
               },
      ttl = Ttl};
 
@@ -339,12 +339,12 @@ json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data, _Context]) ->
      name = Name,
      type = ?DNS_TYPE_NAPTR,
      data = #dns_rrdata_naptr{
-               order = proplists:get_value(<<"order">>, Data),
-               preference = proplists:get_value(<<"preference">>, Data),
-               flags = proplists:get_value(<<"flags">>, Data),
-               services = proplists:get_value(<<"services">>, Data),
-               regexp = proplists:get_value(<<"regexp">>, Data),
-               replacement = proplists:get_value(<<"replacement">>, Data)
+               order = erldns_config:keyget(<<"order">>, Data),
+               preference = erldns_config:keyget(<<"preference">>, Data),
+               flags = erldns_config:keyget(<<"flags">>, Data),
+               services = erldns_config:keyget(<<"services">>, Data),
+               regexp = erldns_config:keyget(<<"regexp">>, Data),
+               replacement = erldns_config:keyget(<<"replacement">>, Data)
               },
      ttl = Ttl};
 

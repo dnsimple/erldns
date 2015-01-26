@@ -48,12 +48,12 @@ define_servers(Servers) ->
   lists:flatten(
     lists:map(
       fun(Server) ->
-          Name = proplists:get_value(name, Server),
-          Address = proplists:get_value(address, Server),
-          Port = proplists:get_value(port, Server),
-          Family = proplists:get_value(family, Server),
+          Name = erldns_config:keyget(name, Server),
+          Address = erldns_config:keyget(address, Server),
+          Port = erldns_config:keyget(port, Server),
+          Family = erldns_config:keyget(family, Server),
 
-          Processes = proplists:get_value(processes, Server, 1),
+          Processes = erldns_config:keyget(processes, Server, 1),
           define_server(Name, Address, Port, Family, Processes)
       end, Servers)
    ).
