@@ -73,7 +73,7 @@ handle_cast(_, State) ->
 handle_info(_, State) ->
   {noreply, State}.
 terminate(_, _) ->
-  ets:delete(handler_registry),
+  erldns_storage:delete_table(handler_registry),
   ok.
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.

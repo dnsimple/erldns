@@ -57,7 +57,7 @@ get(Question) ->
 %% by the given host.
 -spec get(dns:question(), dns:ip()) -> {ok, dns:message()} | {error, cache_expired} | {error, cache_miss}.
 get(Question, _Host) ->
-  case ets:lookup(packet_cache, Question) of
+  case erldns_storage:select(packet_cache, Question) of
     [{Question, {Response, ExpiresAt}}] ->
       case timestamp() > ExpiresAt of
         true ->
@@ -104,31 +104,31 @@ stop() ->
 init([]) ->
   init([20]);
 init([TTL]) ->
-  ets:new(packet_cache, [set, named_table]),
+  erldns_storage:create(packet_cache),
   {ok, Tref} = timer:apply_interval(?SWEEP_INTERVAL, ?MODULE, sweep, []),
   {ok, #state{ttl = TTL, tref = Tref}}.
 
 handle_call({set_packet, [Question, Response]}, _From, State) ->
-  ets:insert(packet_cache, {Question, {Response, timestamp() + State#state.ttl}}),
+  erldns_storage:insert(packet_cache, {Question, {Response, timestamp() + State#state.ttl}}),
   {reply, ok, State};
 
 handle_call(stop, _From, State) ->
   {stop, normal, ok, State}.
 
 handle_cast(sweep, State) ->
-  Keys = ets:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}]),
-  lists:foreach(fun(K) -> ets:delete(packet_cache, K) end, Keys),
+  Keys = erldns_storage:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}]),
+  lists:foreach(fun(K) -> erldns_storage:delete(packet_cache, K) end, Keys),
   {noreply, State};
 
 handle_cast(clear, State) ->
-  ets:delete_all_objects(packet_cache),
+  erldns_storage:empty_table(packet_cache),
   {noreply, State}.
 
 handle_info(_Message, State) ->
   {noreply, State}.
 
 terminate(_Reason, _State) ->
-  ets:delete(packet_cache),
+  erldns_storage:delete_table(packet_cache),
   ok.
 
 code_change(_PreviousVersion, State, _Extra) ->

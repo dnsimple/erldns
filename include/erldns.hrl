@@ -7,3 +7,16 @@
     records_by_name :: [dns:rr()],
     records_by_type :: [dns:rr()]
   }).
+
+-record(authorities, {
+    owner_name,
+    ttl,
+    class,
+    name_server,
+    email_addr,
+    serial_num,
+    refresh,
+    retry,
+    expiry,
+    nxdomain
+}).
