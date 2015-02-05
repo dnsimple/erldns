@@ -32,79 +32,19 @@
 -spec create(atom()) -> ok | not_implemented | {error, Reason :: term()}.
 create(schema) ->
     not_implemented;
-create(zones) ->
-    case ets:info(zones) of
-        undefined ->
-            case ets:new(zones, [set, public, named_table]) of
-                zones ->
-                    ok;
-                Error ->
-                    {error, Error}
-            end;
-        _InfoList ->
-            ok
-    end;
-create(authorities) ->
-    case ets:info(authorities) of
-        undefined ->
-            case ets:new(authorities, [set, public, named_table]) of
-                authorities ->
-                    ok;
-                Error ->
-                    {error, Error}
-            end;
-        _InfoList ->
-            ok
-    end;
+create(Name = zones) ->
+    create_ets_table(Name, set);
+create(Name = authorities) ->
+    create_ets_table(Name, set);
 %% These tables should always use ets. Due to their functionality
-create(packet_cache) ->
-    case ets:info(packet_cache) of
-        undefined ->
-            case ets:new(packet_cache, [set, public, named_table]) of
-                packet_cache ->
-                    ok;
-                Error ->
-                    {error, Error}
-            end;
-        _InfoList ->
-            ok
-    end;
-create(host_throttle) ->
-    case ets:info(host_throttle) of
-        undefined ->
-            case ets:new(host_throttle, [set, public, named_table]) of
-                host_throttle ->
-                    ok;
-                Error ->
-                    {error, Error}
-            end;
-        _InfoList ->
-            ok
-    end;
-create(lookup_table) ->
-    case ets:info(lookup_table) of
-        undefined ->
-            case ets:new(lookup_table, [bag, public, named_table]) of
-                lookup_table ->
-                    ok;
-                Error ->
-                    {error, Error}
-            end;
-        _InfoList ->
-            ok
-    end;
-create(handler_registry) ->
-    case ets:info(handler_registry) of
-        undefined ->
-            case ets:new(handler_registry, [set, public, named_table]) of
-                handler_registry ->
-                    ok;
-                Error ->
-                    {error, Error}
-            end;
-        _InfoList ->
-            ok
-    end.
+create(Name = packet_cache) ->
+    create_ets_table(Name, set);
+create(Name = host_throttle) ->
+    create_ets_table(Name, set);
+create(Name = lookup_table) ->
+    create_ets_table(Name, bag);
+create(Name = handler_registry) ->
+    create_ets_table(Name, set).
 
 %% @doc Insert value in ets table.
 -spec insert(atom(), tuple()) -> ok | {error, Reason :: term()}.
@@ -173,3 +113,18 @@ list_table(TableName) ->
         error:R ->
             {error, R}
     end.
+
+%% Internal methods
+-spec create_ets_table(ets:tab(), ets:type()) -> ok | {error, Reason :: term()}.
+create_ets_table(Name, Type) ->
+  case ets:info(Name) of
+    undefined ->
+      case ets:new(Name, [Type, public, named_table]) of
+        Name ->
+          ok;
+        Error ->
+          {error, Error}
+      end;
+    _InfoList ->
+      ok
+  end.
