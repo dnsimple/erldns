@@ -136,7 +136,7 @@ record_filter() ->
       end
   end.
 
--spec apply_context_list_check(set(), set()) -> [fail] | [pass].
+-spec apply_context_list_check(sets:set(), sets:set()) -> [fail] | [pass].
 apply_context_list_check(ContextAllowSet, ContextSet) ->
   case sets:size(sets:intersection(ContextAllowSet, ContextSet)) of
     0 -> [fail];
