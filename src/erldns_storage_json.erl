@@ -29,7 +29,9 @@
 
 %% Public API
 %% @doc Create ets table wrapper. Use match cases for adding different options to the table.
--spec create(atom()) -> ok | {error, Reason :: term()}.
+-spec create(atom()) -> ok | not_implemented | {error, Reason :: term()}.
+create(schema) ->
+    not_implemented;
 create(zones) ->
     case ets:info(zones) of
         undefined ->
