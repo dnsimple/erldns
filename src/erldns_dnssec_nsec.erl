@@ -160,8 +160,8 @@ nsec_test(wildcard_no_data) ->
 -spec nsec_action(no_data|name_error|wildcard_answer|wildcard_no_data) -> fun((dns:message(), [[dns:rr()]], dns:dname(), dns:type(), erldns:zone()) -> dns:message()).
 nsec_action(Action = no_data) ->
   % exact match by name, but not type
-  fun(Message, RRSet, Qname, _Qtype, Zone) ->
-      lager:debug("NSEC No Data"),
+  fun(Message, RRSet, Qname, Qtype, Zone) ->
+      lager:debug("NSEC No Data (~p, ~p)", [Qname, dns:type_name(Qtype)]),
       case RRSet of
         [] ->
           Message;
@@ -173,8 +173,8 @@ nsec_action(Action = no_data) ->
   end;
 nsec_action(Action = name_error) ->
   % no match by name, including wildcard expansion
-  fun(Message, RRSet, Qname, _Qtype, Zone) ->
-      lager:debug("NSEC Name Error"),
+  fun(Message, RRSet, Qname, Qtype, Zone) ->
+      lager:debug("NSEC Name Error (~p, ~p)", [Qname, dns:type_name(Qtype)]),
       case RRSet of
         [] ->
           Message;
@@ -198,8 +198,8 @@ nsec_action(Action = name_error) ->
   end;
 nsec_action(Action = wildcard_answer) ->
   % no exact match by name, but match name and type with wildcard expansion
-  fun(Message, RRSet, Qname, _Qtype, Zone) ->
-      lager:debug("NSEC Wildcard Answer"),
+  fun(Message, RRSet, Qname, Qtype, Zone) ->
+      lager:debug("NSEC Wildcard Answer (~p, ~p)", [Qname, dns:type_name(Qtype)]),
       case RRSet of
         [] ->
           Message;
@@ -209,8 +209,8 @@ nsec_action(Action = wildcard_answer) ->
       end
   end;
 nsec_action(Action = wildcard_no_data) ->
-  fun(Message, RRSet, Qname, _Qtype, Zone) ->
-      lager:debug("NSEC Wildcard No Data"),
+  fun(Message, RRSet, Qname, Qtype, Zone) ->
+      lager:debug("NSEC Wildcard No Data (~p, ~p)", [Qname, dns:type_name(Qtype)]),
       case RRSet of
         [] ->
           Message;
