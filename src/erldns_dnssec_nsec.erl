@@ -599,11 +599,11 @@ nsec_action_name_error_test_() ->
    fun() ->
        Records = [#dns_rr{name = <<"alpha.example.com">>, type = ?DNS_TYPE_A}, #dns_rr{name = <<"outpost.example.com">>, type = ?DNS_TYPE_A}],
        Zone1 = Zone#zone{records = Zone#zone.records ++ Records},
-       Actual = F(Message, RR, Qname, Qtype, Zone1)
+       Actual = F(Message, RR, Qname, Qtype, Zone1),
        %?debugVal(Actual#dns_message.authority),
-       %?assertMatch(#dns_message{authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_NSEC}, #dns_rr{name = <<"alpha.example.com">>, type = ?DNS_TYPE_NSEC}]}, Actual),
-       %?assertMatch(#dns_message{authority = [#dns_rr{data = #dns_rrdata_nsec{next_dname = <<"alpha.example.com">>}}, #dns_rr{data = #dns_rrdata_nsec{next_dname = <<"outpost.example.com">>}}]}, Actual),
-       %?assertMatch(#dns_message{authority = [#dns_rr{data = #dns_rrdata_nsec{types = [?DNS_TYPE_DNSKEY, ?DNS_TYPE_SOA, ?DNS_TYPE_NSEC, ?DNS_TYPE_RRSIG]}}, #dns_rr{data = #dns_rrdata_nsec{types = [?DNS_TYPE_A, ?DNS_TYPE_NSEC, ?DNS_TYPE_RRSIG]}}]}, Actual)
+       ?assertMatch(#dns_message{authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_NSEC}, #dns_rr{name = <<"alpha.example.com">>, type = ?DNS_TYPE_NSEC}]}, Actual),
+       ?assertMatch(#dns_message{authority = [#dns_rr{data = #dns_rrdata_nsec{next_dname = <<"alpha.example.com">>}}, #dns_rr{data = #dns_rrdata_nsec{next_dname = <<"outpost.example.com">>}}]}, Actual),
+       ?assertMatch(#dns_message{authority = [#dns_rr{data = #dns_rrdata_nsec{types = [?DNS_TYPE_DNSKEY, ?DNS_TYPE_SOA, ?DNS_TYPE_NSEC, ?DNS_TYPE_RRSIG]}}, #dns_rr{data = #dns_rrdata_nsec{types = [?DNS_TYPE_A, ?DNS_TYPE_NSEC, ?DNS_TYPE_RRSIG]}}]}, Actual)
    end
   ].
 
