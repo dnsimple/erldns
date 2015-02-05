@@ -49,8 +49,8 @@ resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
 
 %% No SOA was found for the Qname so we return the root hints
 %% Note: it seems odd that we are indicating we are authoritative here.
-resolve(Message, Qname, _Qtype, {error, not_authoritative}, _Host, CnameChain) ->
-  lager:debug("CNAME chain (no SOA): ~p", [CnameChain]),
+resolve(Message, Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain) ->
+  %lager:debug("CNAME chain (no SOA): ~p", [CnameChain]),
   case erldns_config:use_root_hints() of
     true ->
       lager:debug("No SOA found for ~p, adding root hints", [Qname]),
@@ -62,7 +62,7 @@ resolve(Message, Qname, _Qtype, {error, not_authoritative}, _Host, CnameChain) -
 
 %% An SOA was found, thus we are authoritative, however the qtype is RRSIG.
 resolve(Message, _Qname, ?DNS_TYPE_RRSIG, _Zone, _Host, _CnameChain) ->
-  lager:debug("Authoritative but type is RRSIG"),
+  %lager:debug("Authoritative but type is RRSIG"),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOTIMP};
 
 %% An SOA was found, thus we are authoritative and have the zone.
@@ -133,13 +133,13 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
 %% There were no matches for exact name and type, so now we are looking for NS records
 %% in the exact name matches.
 resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _ExactTypeMatches = [], AuthorityRecords) ->
-  lager:debug("No exact matches for name and type"),
+  %lager:debug("No exact matches for name and type"),
   ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), MatchedRecords), % Query matched records for NS type
   resolve_no_exact_type_match(Message, Qname, Qtype, Host, CnameChain, [], Zone, MatchedRecords, ReferralRecords, AuthorityRecords);
 
 %% There were exact matches of name and type.
 resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, _MatchedRecords, Zone, ExactTypeMatches, AuthorityRecords) ->
-  lager:debug("Found exact matches of name and type"),
+  %lager:debug("Found exact matches of name and type"),
   resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, ExactTypeMatches, Zone, AuthorityRecords).
 
 
@@ -158,7 +158,7 @@ resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, Matc
 
 %% There was an exact type match for something other than an NS record and we are authoritative because there is an SOA record.
 resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
-  lager:debug("Exact type match for something other than an NS and we are authoritative"),
+  %lager:debug("Exact type match for something other than an NS and we are authoritative"),
   % NOTE: this is a potential bug because it assumes the last record is the one to examine.
   Answer = lists:last(MatchedRecords),
   case NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
@@ -181,7 +181,7 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
 
 %% We are authoritative and there were no NS records here.
 resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRecords, Zone, _AuthorityRecords, _NSRecords = []) ->
-  lager:debug("Authoritative and no NS records present"),
+  %lager:debug("Authoritative and no NS records present"),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = erldns_dnssec:sign_records(Message, Zone, MatchedRecords)};
 
 %% We are authoritative and there are NS records here.
@@ -215,16 +215,16 @@ check_if_parent(PossibleParentName, Name) ->
 %% There were no exact type matches, but there were other name matches and there are NS records.
 %% Since the Qtype is ANY we indicate we are authoritative and include the NS records.
 resolve_no_exact_type_match(Message, _Qname, ?DNS_TYPE_ANY, _Host, _CnameChain, _ExactTypeMatches, _Zone, _MatchedRecords = [], _ReferralRecords = [], AuthorityRecords) ->
-  lager:debug("No exact name and type match, but ANY query"),
+  %lager:debug("No exact name and type match, but ANY query"),
   Message#dns_message{aa = true, authority = AuthorityRecords};
 resolve_no_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, _ExactTypeMatches = [], Zone, _MatchedRecords, _ReferralRecords = [], _AuthorityRecords) ->
-  lager:debug("No exact name and type match, but other name matches and NS records present"),
+  %lager:debug("No exact name and type match, but other name matches and NS records present"),
   Message#dns_message{aa = true, authority = Message#dns_message.authority ++ Zone#zone.authority};
 resolve_no_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, ExactTypeMatches, _Zone, _MatchedRecords, _ReferralRecords = [], _AuthorityRecords) ->
-  lager:debug("No exact name and type match, but other name matches and NS records present"),
+  %lager:debug("No exact name and type match, but other name matches and NS records present"),
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ ExactTypeMatches};
 resolve_no_exact_type_match(Message, Qname, Qtype, _Host, _CnameChain, _ExactTypeMatches, Zone, MatchedRecords, ReferralRecords, AuthorityRecords) ->
-  lager:debug("Not exact name and type match, but referral present"),
+  %lager:debug("Not exact name and type match, but referral present"),
   ResolvedMessage = resolve_exact_match_referral(Message, Qtype, MatchedRecords, ReferralRecords, AuthorityRecords),
   case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
     true -> erldns_dnssec:sign_message(ResolvedMessage, Qname, Qtype, Zone, [], AuthorityRecords);
@@ -236,7 +236,7 @@ resolve_no_exact_type_match(Message, Qname, Qtype, _Host, _CnameChain, _ExactTyp
 % Given an exact name match where the Qtype is not found in the record set and we are not authoritative,
 % add the NS records to the authority section of the message.
 resolve_exact_match_referral(Message, _Qtype, _MatchedRecords, ReferralRecords, _AuthorityRecords = []) ->
-  lager:debug("Exact match referral, no authority present"),
+  %lager:debug("Exact match referral, no authority present"),
   Message#dns_message{authority = Message#dns_message.authority ++ ReferralRecords};
 
 % Given an exact name match and the type of ANY, return all of the matched records.
@@ -255,7 +255,7 @@ resolve_exact_match_referral(Message, ?DNS_TYPE_SOA, _MatchedRecords, _ReferralR
 % return the SOA records for the zone in the authority section of the message and set the RC to
 % NOERROR.
 resolve_exact_match_referral(Message, _, _MatchedRecords, _ReferralRecords, AuthorityRecords) ->
-  lager:debug("Exact match name, no type match, and qtype is not ANY, SOA or NS"),
+  %lager:debug("Exact match name, no type match, and qtype is not ANY, SOA or NS"),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Message#dns_message.authority ++ AuthorityRecords}.
 
 
@@ -277,7 +277,7 @@ resolve_exact_match_with_cname(Message, _Qtype, _Host, _CnameChain, _MatchedReco
 resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, _MatchedRecords, Zone, CnameRecords, false) ->
   CnameRecord = lists:last(CnameRecords),
   Name = CnameRecord#dns_rr.data#dns_rrdata_cname.dname,
-  lager:debug("Restarting query with CNAME name ~p (exact match)", [Name]),
+  %lager:debug("Restarting query with CNAME name ~p (exact match)", [Name]),
 
   ResolvedMessage = Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords},
   SignedMessage = case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
@@ -348,7 +348,7 @@ resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords
       % Why is it here?
       case erldns_config:use_root_hints() of
         true ->
-          lager:debug("resolve_best_match() using root hints"),
+          %lager:debug("resolve_best_match() using root hints"),
           {Authority, Additional} = erldns_records:root_hints(),
           Message#dns_message{authority = Message#dns_message.authority ++ Authority, additional = Message#dns_message.additional ++ Additional};
         _ ->
@@ -359,7 +359,7 @@ resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords
 
 % It's a wildcard CNAME
 resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, []) ->
-  lager:debug("Resolving best match with wildcard"),
+  %lager:debug("Resolving best match with wildcard"),
   TypeMatchedRecords = case Qtype of
                          ?DNS_TYPE_ANY ->
                            FilteredMatchedRecords = filter_records(MatchedRecords, erldns_handler:get_handlers()),
@@ -385,19 +385,19 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMa
 
 % It is not a CNAME and there were no exact type matches
 resolve_best_match_with_wildcard(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, _CnameRecords = [], _TypeMatches = []) ->
-  lager:debug("Not a CNAME and no exact type matches"),
+  %lager:debug("Not a CNAME and no exact type matches"),
   Message#dns_message{aa = true, authority = Message#dns_message.authority ++ Zone#zone.authority};
 
 % It is not a CNAME and there were exact type matches
 resolve_best_match_with_wildcard(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, _CnameRecords = [], TypeMatches) ->
-  lager:debug("Not a CNAME but there were exact type matches: ~p", [TypeMatches]),
+  %lager:debug("Not a CNAME but there were exact type matches: ~p", [TypeMatches]),
   Records = TypeMatches,
   NewMessage = Message#dns_message{aa = true, answers = Message#dns_message.answers ++ Records},
   SignedMessage = case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
     true -> erldns_dnssec:sign_wildcard_message(NewMessage, Qname, Zone, TypeMatches);
     false -> NewMessage
   end,
-  lager:debug("Answers after signing: ~p", [SignedMessage#dns_message.answers]),
+  %lager:debug("Answers after signing: ~p", [SignedMessage#dns_message.answers]),
   SignedMessage.
 
 
@@ -419,9 +419,9 @@ resolve_best_match_with_wildcard_cname(Message, _Qname, _Qtype, _Host, _CnameCha
 
 % We should follow the CNAME
 resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, _BestMatchRecords, Zone, CnameRecords, false) ->
-  lager:debug("Follow CNAME (best match)"),
+  %lager:debug("Follow CNAME (best match)"),
   FollowedCnameRecord = lists:last(CnameRecords),
-  lager:debug("Followed CNAME record: ~p", [FollowedCnameRecord]),
+  %lager:debug("Followed CNAME record: ~p", [FollowedCnameRecord]),
   FollowedCname = FollowedCnameRecord#dns_rr.name,
   CnameAnswers = CnameRecords,
   CnameRecord = lists:last(CnameAnswers),
@@ -445,13 +445,13 @@ resolve_best_match_referral(Message, Qname, Qtype, Host, CnameChain, BestMatchRe
 % SOA records in the best-match results. The name has thus been delegated
 % to another authority.
 resolve_best_match_referral(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _Zone, ReferralRecords, []) ->
-  lager:debug("Best match referral but no SOA so not authority"),
+  %lager:debug("Best match referral but no SOA so not authority"),
   Message#dns_message{aa = false, authority = Message#dns_message.authority ++ ReferralRecords};
 
 % We are authoritative for the name since there was an SOA record in
 % the best match results.
 resolve_best_match_referral(Message, Qname, Qtype, _Host, _CnameChain = [], _BestMatchRecords, Zone, _ReferralRecords, AuthorityRecords) ->
-  lager:debug("Best match referral, NXDOMAIN"),
+  %lager:debug("Best match referral, NXDOMAIN"),
 
   {ok, ZoneWithRecords} = erldns_zone_cache:get_zone_with_records(Zone#zone.name),
   ResponseCode = case lists:any(erldns_records:match_any_subdomain(Qname), ZoneWithRecords#zone.records) of
@@ -474,10 +474,10 @@ resolve_best_match_referral(Message, Qname, Qtype, _Host, _CnameChain = [], _Bes
 % We are authoritative and the Qtype is ANY so we just return the 
 % original message.
 resolve_best_match_referral(Message, _Qname, ?DNS_TYPE_ANY, _Host, _CnameChain, _BestMatchRecords, _Zone, _ReferralRecords, _Authority) ->
-  lager:debug("Best match referral, QType is ANY"),
+  %lager:debug("Best match referral, QType is ANY"),
   Message;
 resolve_best_match_referral(Message, Qname, Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, _ReferralRecords, AuthorityRecords) ->
-  lager:debug("Best match referral of type ~p", [Qtype]),
+  %lager:debug("Best match referral of type ~p", [Qtype]),
   NewMessage = Message#dns_message{authority = Message#dns_message.authority ++ AuthorityRecords},
   case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
     true -> erldns_dnssec:sign_message(NewMessage, Qname, Qtype, Zone, [], AuthorityRecords);
