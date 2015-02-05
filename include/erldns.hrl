@@ -10,5 +10,18 @@
     zone_signing_key :: crypto:rsa_private()
   }).
 
+-record(authorities, {
+    owner_name,
+    ttl,
+    class,
+    name_server,
+    email_addr,
+    serial_num,
+    refresh,
+    retry,
+    expiry,
+    nxdomain
+}).
+
 -define(DNSKEY_ZSK_TYPE, 256).
 -define(DNSKEY_KSK_TYPE, 257).

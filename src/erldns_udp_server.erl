@@ -17,7 +17,7 @@
 -behavior(gen_server).
 
 % API
--export([start_link/2, is_running/0]).
+-export([start_link/2, start_link/4, start_link/5, is_running/0]).
 
 % Gen server hooks
 -export([init/1,
@@ -33,7 +33,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {port, socket, workers}).
+-record(state, {address, port, socket, workers}).
 
 % Public API
 
@@ -41,6 +41,13 @@
 -spec start_link(atom(), inet | inet6) -> {ok, pid()} | ignore | {error, term()}.
 start_link(Name, InetFamily) ->
   gen_server:start_link({local, Name}, ?MODULE, [InetFamily], []).
+
+-spec start_link(atom(), inet | inet6, inet:ip_address(), inet:port_number()) -> {ok, pid()} | ignore | {error, term()}.
+start_link(Name, InetFamily, Address, Port) ->
+  gen_server:start_link({local, Name}, ?MODULE, [InetFamily, Address, Port], []).
+
+start_link(Name, InetFamily, Address, Port, SocketOpts) ->
+  gen_server:start_link({local, Name}, ?MODULE, [InetFamily, Address, Port, SocketOpts], []).
 
 %% @doc Return true if the UDP server process is running
 -spec is_running() -> boolean().
@@ -56,7 +63,14 @@ is_running() ->
 init([InetFamily]) ->
   Port = erldns_config:get_port(),
   {ok, Socket} = start(Port, InetFamily),
-  {ok, #state{port = Port, socket = Socket, workers = make_workers(queue:new())}}.
+  {ok, #state{port = Port, socket = Socket, workers = make_workers(queue:new())}};
+init([InetFamily, Address, Port]) ->
+  {ok, Socket} = start(Address, Port, InetFamily),
+  {ok, #state{address = Address, port = Port, socket = Socket, workers = make_workers(queue:new())}};
+init([InetFamily, Address, Port, SocketOpts]) ->
+  {ok, Socket} = start(Address, Port, InetFamily, SocketOpts),
+  {ok, #state{address = Address, port = Port, socket = Socket, workers = make_workers(queue:new())}}.
+
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 handle_cast(_Message, State) ->
@@ -78,10 +92,24 @@ code_change(_PreviousVersion, State, _Extra) ->
 %% Internal functions
 %% Start a UDP server.
 start(Port, InetFamily) ->
-  lager:info("Starting UDP server for ~p on port ~p", [InetFamily, Port]),
-  case gen_udp:open(Port, [binary, {active, once}, {read_packets, 1000}, {ip, erldns_config:get_address(InetFamily)}, InetFamily]) of
+  start(erldns_config:get_address(InetFamily), Port, InetFamily).
+
+start(Address, Port, InetFamily) ->
+  lager:info("Starting UDP server for ~p on address ~p and port ~p", [InetFamily, Address, Port]),
+  case gen_udp:open(Port, [binary, {active, once}, {read_packets, 1000}, {ip, Address}, InetFamily]) of
     {ok, Socket} -> 
-      lager:info("UDP server (~p) opened socket: ~p", [InetFamily, Socket]),
+      lager:info("UDP server (~p, address: ~p) opened socket: ~p", [InetFamily, Address, Socket]),
+      {ok, Socket};
+    {error, eacces} ->
+      lager:error("Failed to open UDP socket. Need to run as sudo?"),
+      {error, eacces}
+  end.
+
+start(Address, Port, InetFamily, SocketOpts) ->
+  lager:info("Starting UDP server for ~p on address ~p and port ~p (sockopts: ~p)", [InetFamily, Address, Port, SocketOpts]),
+  case gen_udp:open(Port, [binary, {active, once}, {read_packets, 1000}, {ip, Address}, InetFamily|SocketOpts]) of
+    {ok, Socket} -> 
+      lager:info("UDP server (~p, address: ~p) opened socket: ~p", [InetFamily, Address, Socket]),
       {ok, Socket};
     {error, eacces} ->
       lager:error("Failed to open UDP socket. Need to run as sudo?"),

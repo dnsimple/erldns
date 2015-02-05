@@ -34,11 +34,60 @@ start_link() ->
   supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
 
 init(_Args) ->
-  ServerProcs = [
-                 {udp_inet, {erldns_udp_server, start_link, [udp_inet, inet]}, permanent, 5000, worker, [erldns_udp_server]},
-                 {udp_inet6, {erldns_udp_server, start_link, [udp_inet6, inet6]}, permanent, 5000, worker, [erldns_udp_server]},
-                 {tcp_inet, {erldns_tcp_server, start_link, [tcp_inet, inet]}, permanent, 5000, worker, [erldns_tcp_server]},
-                 {tcp_inet6, {erldns_tcp_server, start_link, [tcp_inet6, inet6]}, permanent, 5000, worker, [erldns_tcp_server]}
-                ],
+  {ok, {{one_for_one, 20, 10}, define_servers(erldns_config:get_servers())}}.
 
-  {ok, {{one_for_one, 20, 10}, ServerProcs}}.
+define_servers([]) ->
+  [
+   {udp_inet, {erldns_udp_server, start_link, [udp_inet, inet]}, permanent, 5000, worker, [erldns_udp_server]},
+   {udp_inet6, {erldns_udp_server, start_link, [udp_inet6, inet6]}, permanent, 5000, worker, [erldns_udp_server]},
+   {tcp_inet, {erldns_tcp_server, start_link, [tcp_inet, inet]}, permanent, 5000, worker, [erldns_tcp_server]},
+   {tcp_inet6, {erldns_tcp_server, start_link, [tcp_inet6, inet6]}, permanent, 5000, worker, [erldns_tcp_server]}
+  ];
+
+define_servers(Servers) ->
+  lists:flatten(
+    lists:map(
+      fun(Server) ->
+          Name = erldns_config:keyget(name, Server),
+          Address = erldns_config:keyget(address, Server),
+          Port = erldns_config:keyget(port, Server),
+          Family = erldns_config:keyget(family, Server),
+
+          Processes = erldns_config:keyget(processes, Server, 1),
+          define_server(Name, Address, Port, Family, Processes)
+      end, Servers)
+   ).
+
+define_server(Name, Address, Port, Family, N) ->
+  define_server(Name, Address, Port, Family, N, []).
+
+define_server(_, _, _, _, 0, Definitions) ->
+  Definitions;
+define_server(Name, Address, Port, Family, 1, []) ->
+  UDPName = list_to_atom(lists:concat([udp, '_', Name])),
+  TCPName = list_to_atom(lists:concat([tcp, '_', Name])),
+  [
+   {UDPName, {erldns_udp_server, start_link, [UDPName, Family, Address, Port]}, permanent, 5000, worker, [UDPName]},
+   {TCPName, {erldns_tcp_server, start_link, [TCPName, Family, Address, Port]}, permanent, 5000, worker, [TCPName]}
+  ];
+define_server(Name, Address, Port, Family, N = 1, Definitions) ->
+  UDPName = list_to_atom(lists:concat([udp, '_', Name, '_', N])),
+  TCPName = list_to_atom(lists:concat([tcp, '_', Name])),
+  Definition = [
+   {UDPName, {erldns_udp_server, start_link, [UDPName, Family, Address, Port, socket_opts()]}, permanent, 5000, worker, [UDPName]},
+   {TCPName, {erldns_tcp_server, start_link, [TCPName, Family, Address, Port]}, permanent, 5000, worker, [TCPName]}
+  ],
+  define_server(Name, Address, Port, Family, N - 1, Definitions ++ Definition);
+define_server(Name, Address, Port, Family, N, Definitions) ->
+  UDPName = list_to_atom(lists:concat([udp, '_', Name, '_', N])),
+  Definition = [
+   {UDPName, {erldns_udp_server, start_link, [UDPName, Family, Address, Port, socket_opts()]}, permanent, 5000, worker, [UDPName]}
+  ],
+  define_server(Name, Address, Port, Family, N - 1, Definitions ++ Definition).
+
+socket_opts() ->
+  case os:type() of
+    {unix, linux} -> [{raw, 1, 15, <<1:32/native>>}];
+    {unix, darwin} -> [{raw, 16#ffff, 16#0200, <<1:32/native>>}];
+    _ -> []
+  end.

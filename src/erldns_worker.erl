@@ -66,7 +66,7 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>) ->
   case Bin of
     <<>> -> ok;
     _ ->
-      case dns:decode_message(Bin) of
+      case erldns_decoder:decode_message(Bin) of
         {truncated, _, _} ->
           lager:info("received truncated request from ~p", [Address]),
           ok;
@@ -110,7 +110,7 @@ send_tcp_message(Socket, EncodedMessage) ->
 handle_udp_dns_query(Socket, Host, Port, Bin) ->
   %lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
   erldns_events:notify({start_udp, [{host, Host}]}),
-  case dns:decode_message(Bin) of
+  case erldns_decoder:decode_message(Bin) of
     {trailing_garbage, DecodedMessage, _} ->
       handle_decoded_udp_message(DecodedMessage, Socket, Host, Port);
     {_Error, _, _} ->
