@@ -8,7 +8,7 @@ A JSON zone file contains an array of 1 or more zones. Each zone has a name and 
 
 The follow is an example of a collection of zones with a single zone in the collection.
 
-'''json
+```json
     [{
       "name": "example.com",
       "records": [
@@ -25,6 +25,7 @@ The follow is an example of a collection of zones with a single zone in the coll
             "expire": 1,
             "minimum": 1
           }
+        },
         {
           "name": "example.com",
           "type": "A",
@@ -44,4 +45,4 @@ The follow is an example of a collection of zones with a single zone in the coll
         }
       ]
     }]
-'''
+```
