@@ -37,6 +37,7 @@ resolve(Message, AuthorityRecords, Host, [Question|_]) -> resolve(Message, Autho
 %% Start the resolution process on the given question.
 %% Step 1: Set the RA bit to false as we do not handle recursive queries.
 resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
+  check_dnssec(Message, Host, Question),
   ResolvedMessage = resolve(Message#dns_message{ra = false}, AuthorityRecords, Qname = Question#dns_query.name, Question#dns_query.type, Host),
   substitute_wildcards(ResolvedMessage, Qname).
 
@@ -609,3 +610,15 @@ requires_additional_processing([Answer|Rest], RequiresAdditional) ->
 
 is_dnssec(Message) ->
   proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) and erldns_config:use_dnssec().
+
+check_dnssec(Message, Host, Question) ->
+  case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
+    true ->
+      case erldns_config:use_dnssec() of
+        true -> true;
+        false ->
+          lager:info("DNSSEC requested but not enabled (Host: ~p, Qname: ~p)", [Host, Question#dns_query.name]),
+          false
+      end;
+    false -> false
+  end.
