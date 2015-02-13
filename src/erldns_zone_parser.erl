@@ -348,6 +348,25 @@ json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data, _Context]) ->
               },
      ttl = Ttl};
 
+json_record_to_erlang([Name, <<"DS">>, Ttl, Data, _Context]) ->
+  try hex_to_bin(erldns_config:keyget(<<"digest">>, Data)) of
+    Digest ->
+      #dns_rr{
+         name = Name,
+         type = ?DNS_TYPE_DS,
+         data = #dns_rrdata_ds{
+                   keytag = erldns_config:keyget(<<"keytag">>, Data),
+                   alg = erldns_config:keyget(<<"alg">>, Data),
+                   digest_type = erldns_config:keyget(<<"digest_type">>, Data),
+                   digest = Digest
+                  },
+         ttl = Ttl}
+  catch
+    Exception:Reason ->
+      lager:error("Error parsing DS ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason]),
+      {}
+  end;
+
 json_record_to_erlang(_Data) ->
   %lager:debug("Cannot convert ~p", [Data]),
   {}.
