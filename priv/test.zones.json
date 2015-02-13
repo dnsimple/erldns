@@ -135,7 +135,7 @@
                 "type": "DS",
                 "ttl": 120,
                 "data": {
-                    "keytype": 28129,
+                    "keytag": 28129,
                     "alg": 8,
                     "digest_type": 1,
                     "digest": "caf1eaaecdabe7616670788f9022454bf5fd9fda"
