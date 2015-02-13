@@ -72,7 +72,7 @@ start_link() ->
 % Read API
 
 %% @doc Find a zone for a given qname.
--spec find_zone(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found} | {error, not_authoritative}.
+-spec find_zone(dns:dname()) -> #zone{} | {error, zone_not_found} | {error, not_authoritative}.
 find_zone(Qname) ->
   find_zone(normalize_name(Qname), get_authority(Qname)).
 
