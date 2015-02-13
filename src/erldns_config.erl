@@ -39,16 +39,20 @@
          websocket_path/0,
          websocket_url/0
         ]).
+-export([
+         dnssec_env/0,
+         use_dnssec/0
+        ]).
 
 -export([
-    storage_env/0,
-    storage_type/0,
-    storage_user/0,
-    storage_pass/0,
-    storage_host/0,
-    storage_port/0,
-    storage_dir/0
-]).
+         storage_env/0,
+         storage_type/0,
+         storage_user/0,
+         storage_pass/0,
+         storage_host/0,
+         storage_port/0,
+         storage_dir/0
+        ]).
 
 -export([
          keyget/2,
@@ -154,22 +158,36 @@ use_root_hints() ->
   end.
 
 keyget(Key, Data) ->
-    keyget(Key, Data, undefined).
+  keyget(Key, Data, undefined).
 
 keyget(Key, Data, Default) ->
-    case lists:keyfind(Key, 1, Data) of
-        false ->
-            Default;
-        {Key, Value} ->
-            Value
-    end.
+  case lists:keyfind(Key, 1, Data) of
+    false ->
+      Default;
+    {Key, Value} ->
+      Value
+  end.
 
-% Private functions
 
-parse_address(Address) when is_list(Address) ->
-  {ok, Tuple} = inet_parse:address(Address),
-  Tuple;
-parse_address(Address) -> Address.
+%% @doc Returns true if DNSSEC is enabled.
+%%
+%% Default: false
+-spec use_dnssec() -> boolean().
+use_dnssec() ->
+  keyget(enabled, get_env(dnssec), false).
+
+dnssec_env() ->
+  get_env(dnssec).
+
+-ifdef(TEST).
+use_dnssec_undefined_test() ->
+  ?assertEqual(false, use_dnssec()).
+
+-endif.
+
+
+%% Zone server configuration
+%% TODO: remove as zone server client logic has been removed
 
 zone_server_env() ->
   {ok, ZoneServerEnv} = application:get_env(erldns, zone_server),
@@ -179,70 +197,89 @@ zone_server_max_processes() ->
   keyget(max_processes, zone_server_env(), 16).
 
 zone_server_protocol() ->
-    keyget(protocol, zone_server_env(), "https").
+  keyget(protocol, zone_server_env(), "https").
 
 zone_server_host() ->
-    keyget(host, zone_server_env(), "localhost").
+  keyget(host, zone_server_env(), "localhost").
 
 zone_server_port() ->
-    keyget(port, zone_server_env(), ?DEFAULT_ZONE_SERVER_PORT).
+  keyget(port, zone_server_env(), ?DEFAULT_ZONE_SERVER_PORT).
 
 websocket_env() ->
-    keyget(websocket, zone_server_env(), []).
+  keyget(websocket, zone_server_env(), []).
 
 websocket_protocol() ->
-    keyget(protocol, websocket_env(), wss).
+  keyget(protocol, websocket_env(), wss).
 
 websocket_host() ->
-    keyget(host, websocket_env(), zone_server_host()).
+  keyget(host, websocket_env(), zone_server_host()).
 
 websocket_port() ->
-    keyget(port, websocket_env(), zone_server_port()).
+  keyget(port, websocket_env(), zone_server_port()).
 
 websocket_path() ->
-    keyget(path, websocket_env(), ?DEFAULT_WEBSOCKET_PATH).
+  keyget(path, websocket_env(), ?DEFAULT_WEBSOCKET_PATH).
 
 websocket_url() ->
   atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
 
+
+%% Storage configuration
+
 storage_type() ->
-    storage_get(type).
+  storage_get(type).
 
 storage_dir() ->
-    storage_get(dir).
+  storage_get(dir).
 
 storage_user() ->
-    storage_get(user).
+  storage_get(user).
 
 storage_pass() ->
-    storage_get(pass).
+  storage_get(pass).
 
 storage_host() ->
-    storage_get(host).
+  storage_get(host).
 
 storage_port() ->
-    storage_get(port).
+  storage_get(port).
 
 storage_env() ->
-    get_env(storage).
-
-get_env(storage) ->
-    case application:get_env(erldns, storage) of
-        undefined ->
-            [{type, erldns_storage_json},
-                {dir, undefined},
-                {user, undefined},
-                {pass, undefined},
-                {host, undefined},
-                {port, undefined}];
-        {ok, Env} ->
-            Env
-    end.
+  get_env(storage).
 
 storage_get(Key) ->
-    case lists:keyfind(Key, 1, get_env(storage)) of
-        false ->
-            undefined;
-        {Key, Value} ->
-            Value
-    end.
+  get_env_value(Key, storage).
+
+% Private functions
+
+parse_address(Address) when is_list(Address) ->
+  {ok, Tuple} = inet_parse:address(Address),
+  Tuple;
+parse_address(Address) -> Address.
+
+get_env_value(Key, Name) ->
+  case lists:keyfind(Key, 1, get_env(Name)) of
+    false ->
+      undefined;
+    {Key, Value} ->
+      Value
+  end.
+
+get_env(storage) ->
+  case application:get_env(erldns, storage) of
+    undefined ->
+      [{type, erldns_storage_json},
+       {dir, undefined},
+       {user, undefined},
+       {pass, undefined},
+       {host, undefined},
+       {port, undefined}];
+    {ok, Env} ->
+      Env
+  end;
+get_env(dnssec) ->
+  case application:get_env(erldns, dnssec) of
+    undefined ->
+      [];
+    {ok, Env} -> Env
+  end.
