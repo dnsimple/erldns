@@ -72,10 +72,42 @@ resolve(Message, _Qname, ?DNS_TYPE_RRSIG, _Zone, _Host, _CnameChain) ->
   %lager:debug("Authoritative but type is RRSIG"),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOTIMP};
 
+%% An SOA was found, thus we are authoritative, special handling for DS record.
+resolve(Message, Qname, Qtype = ?DNS_TYPE_DS, Zone, Host, CnameChain) ->
+  case is_dnssec(Message) of
+    true ->
+      lager:debug("Authoritative, type is DS (qname: ~p)", [Qname]),
+      % If we are at the apex, do not return a DS, get it from the parent if the parent is present
+      case Qname =:= Zone#zone.name of
+        true ->
+          lager:debug("At the apex, find DS in parent if possible"),
+
+          Labels = dns:dname_to_labels(Qname),
+          [_|ParentLabels] = Labels,
+          ParentName = dns:labels_to_dname(ParentLabels),
+          case erldns_zone_cache:get_zone_with_records(ParentName) of
+            {ok, ParentZone} ->
+              lager:debug("Parent zone records: ~p", [ParentZone#zone.records]),
+              MatchedRecords = lists:filter(erldns_records:match_name_and_type(Qname, ?DNS_TYPE_DS), ParentZone#zone.records),
+              lager:debug("Matched records: ~p", [MatchedRecords]),
+              resolve(Message, Qname, Qtype, MatchedRecords, Host, CnameChain, ParentZone);
+            {error, _Reason} ->
+              start_resolve(Message, Qname, Qtype, Zone, Host, CnameChain)
+          end;
+        false ->
+          lager:debug("Not at the apex"),
+          Message#dns_message{aa = true, rc = ?DNS_RCODE_NOTIMP}
+      end;
+    false ->
+      start_resolve(Message, Qname, Qtype, Zone, Host, CnameChain)
+  end;
+
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
-  %lager:debug("CNAME chain: ~p", [CnameChain]),
+  start_resolve(Message, Qname, Qtype, Zone, Host, CnameChain).
+
+start_resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
   ResolvedMessage = resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone),
 
   case is_dnssec(Message) of
@@ -129,11 +161,11 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
-      %lager:debug("Exact match for name, but no type matches in zone, try custom handlers"),
+      lager:debug("Exact match for name, but no type matches in zone, try custom handlers"),
       NewRecords = lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers())),
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, NewRecords, AuthorityRecords);
     _ ->
-      %lager:debug("Found exact match for name and type matches"),
+      lager:debug("Found exact match for name and type matches"),
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, TypeMatches, AuthorityRecords)
   end.
 
