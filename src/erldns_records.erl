@@ -24,7 +24,7 @@
 -export([wildcard_qname/1, wildcard_substitution/2, dname_match/2]).
 -export([default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
 -export([minimum_soa_ttl/2]).
--export([match_name/1, match_type/1, match_types/1, match_wildcard/0, match_delegation/1, match_glue/1, match_dnskey_type/1, match_optrr/0, match_any_subdomain/1]).
+-export([match_name/1, match_type/1, match_name_and_type/2, match_types/1, match_wildcard/0, match_delegation/1, match_glue/1, match_dnskey_type/1, match_optrr/0, match_any_subdomain/1]).
 -export([not_match/1]).
 -export([empty_name_predicate/0]).
 -export([replace_name/1, rr_to_name/0]).
@@ -105,6 +105,11 @@ match_name(Name) ->
 match_type(Type) ->
   fun(R) when is_record(R, dns_rr) ->
       R#dns_rr.type =:= Type
+  end.
+
+match_name_and_type(Name, Type) ->
+  fun(R) when is_record(R, dns_rr) ->
+      (R#dns_rr.name =:= Name) and (R#dns_rr.type =:= Type)
   end.
 
 match_types(Types) ->
