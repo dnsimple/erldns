@@ -81,7 +81,6 @@ resolve(Message, Qname, Qtype = ?DNS_TYPE_DS, Zone, Host, CnameChain) ->
       case Qname =:= Zone#zone.name of
         true ->
           lager:debug("At the apex, find DS in parent if possible"),
-
           Labels = dns:dname_to_labels(Qname),
           [_|ParentLabels] = Labels,
           ParentName = dns:labels_to_dname(ParentLabels),
@@ -96,7 +95,7 @@ resolve(Message, Qname, Qtype = ?DNS_TYPE_DS, Zone, Host, CnameChain) ->
           end;
         false ->
           lager:debug("Not at the apex"),
-          Message#dns_message{aa = true, rc = ?DNS_RCODE_NOTIMP}
+          start_resolve(Message, Qname, Qtype, Zone, Host, CnameChain)
       end;
     false ->
       start_resolve(Message, Qname, Qtype, Zone, Host, CnameChain)
@@ -223,6 +222,7 @@ resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRec
   lager:debug("Authoritative and no NS records present"),
   case is_dnssec(Message) of
     true ->
+      lager:debug("DNSSEC sign records: ~p", [MatchedRecords]),
       Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = erldns_dnssec:sign_records(Message, Zone, MatchedRecords)};
     false ->
       Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords}
