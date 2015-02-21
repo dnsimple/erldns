@@ -1460,7 +1460,7 @@
           }
         },
         {
-          "name": "ns2..dnssec-parent.com",
+          "name": "ns2.dnssec-parent.com",
           "type": "A",
           "ttl": 3600,
           "data": {
