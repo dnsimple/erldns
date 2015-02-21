@@ -1202,7 +1202,7 @@
                 "type": "MX",
                 "ttl": 3600,
                 "data": {
-                    "exchange": "smtp-servers.example.com",
+                    "exchange": "",
                     "preference": 10
                 }
             },
@@ -1232,11 +1232,19 @@
                 }
             },
             {
+                "name": "toroot.test.com",
+                "type": "CNAME",
+                "ttl": 3600,
+                "data": {
+                    "dname": ""
+                }
+            },
+            {
                 "name": "www.test.com",
                 "type": "CNAME",
                 "ttl": 3600,
                 "data": {
-                    "ip": "server1.test.com"
+                    "dname": "server1.test.com"
                 }
             },
             {
@@ -1340,6 +1348,17 @@
                     "weight": 100,
                     "port": 389,
                     "target": "server1.test.com"
+                }
+            },
+            {
+                "name": "_root._tcp.dc.test.com",
+                "type": "SRV",
+                "ttl": 3600,
+                "data": {
+                    "priority": 0,
+                    "weight": 0,
+                    "port": 0,
+                    "target": ""
                 }
             },
             {
@@ -1729,7 +1748,7 @@
                 "type": "NS",
                 "ttl": 3600,
                 "data": {
-                    "dname": "ns1.wtest.com"
+                    "dname": ""
                 }
             },
             {
@@ -1737,7 +1756,7 @@
                 "type": "NS",
                 "ttl": 3600,
                 "data": {
-                    "dname": "ns2.wtest.com"
+                    "dname": "ns1.wtest.com"
                 }
             },
             {
