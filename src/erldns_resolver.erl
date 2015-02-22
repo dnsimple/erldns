@@ -78,7 +78,7 @@ resolve(Message, Qname, Qtype = ?DNS_TYPE_DS, Zone, Host, CnameChain) ->
     true ->
       lager:debug("Authoritative, type is DS (qname: ~p)", [Qname]),
       % If we are at the apex, do not return a DS, get it from the parent if the parent is present
-      case Qname =:= Zone#zone.name of
+      case is_apex(Qname, Zone) of
         true ->
           lager:debug("At the apex, find DS in parent if possible"),
           Labels = dns:dname_to_labels(Qname),
@@ -107,14 +107,19 @@ resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
   start_resolve(Message, Qname, Qtype, Zone, Host, CnameChain).
 
 start_resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
-  ResolvedMessage = resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone),
-
   case is_dnssec(Message, Zone) of
     true ->
+      RecordsByName = case {Qtype, is_apex(Qname, Zone)} of
+                        {?DNS_TYPE_ANY, true} ->
+                          erldns_zone_cache:get_records_by_name(Qname) ++ erldns_dnssec:dnskey_rrset(Message, Zone);
+                        _ ->
+                          erldns_zone_cache:get_records_by_name(Qname)
+                      end,
+      ResolvedMessage = resolve(Message, Qname, Qtype, RecordsByName, Host, CnameChain, Zone),
       {ok, ZoneWithRecords} = erldns_zone_cache:get_zone_with_records(Zone#zone.name),
       erldns_dnssec_nsec_simple:include_nsec(ResolvedMessage, Qname, Qtype, ZoneWithRecords, CnameChain);
     false ->
-      ResolvedMessage
+      resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone)
   end.
 
 %% There were no exact matches on name, so move to the best-match resolution.
@@ -187,13 +192,19 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, _MatchedRecords, Zo
 resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords, Zone, []) ->
   Answer = lists:last(MatchedRecords),
   Name = Answer#dns_rr.name,
-  %lager:debug("Exact match type was NS, restarting query with delegated name ~p", [Name]),
+  lager:debug("Exact match type was NS, restarting query with delegated name ~p", [Name]),
   % It isn't clear what the QTYPE should be on a delegated restart. I assume an A record.
   restart_delegated_query(Message, Name, ?DNS_TYPE_A, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name));
 
 %% There was an exact type match for an NS query and an SOA record.
-resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords) ->
-  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = MatchedRecords};
+resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
+  lager:debug("Exact match for NS type"),
+  case is_dnssec(Message, Zone) of
+    true ->
+      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = erldns_dnssec:sign_records(Message, Zone, MatchedRecords)};
+    false ->
+      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = MatchedRecords}
+  end;
 
 %% There was an exact type match for something other than an NS record and we are authoritative because there is an SOA record.
 resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
@@ -663,3 +674,6 @@ check_dnssec(Message, Host, Question) ->
       end;
     false -> false
   end.
+
+is_apex(Qname, Zone) ->
+  Qname =:= Zone#zone.name.
