@@ -43,7 +43,7 @@ include_nsec(Message, Qname, Qtype, ZoneWithRecords, _CnameChain) ->
               lager:debug("Name is present, type is ANY"),
               Message#dns_message{answers = Message#dns_message.answers ++ NSECRecords};
             ?DNS_TYPE_DNSKEY ->
-              lager:debug("Name is present, type is DNSSEC"),
+              lager:debug("Name is present, type is DNSKEY"),
               Message;
             _ ->
               lager:debug("Name is present, type is not"),
