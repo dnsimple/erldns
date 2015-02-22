@@ -28,6 +28,7 @@
 -export([not_match/1]).
 -export([empty_name_predicate/0]).
 -export([replace_name/1, rr_to_name/0]).
+-export([records_to_rrsets/1]).
 
 %% Get a wildcard variation of a Qname. Replaces the leading
 %% label with an asterisk for wildcard lookup.
@@ -94,6 +95,36 @@ default_priority(Priority) ->
 -spec minimum_soa_ttl(dns:dns_rr(), dns:dns_rrdata_soa()) -> dns:dns_rr().
 minimum_soa_ttl(Record, Data) when is_record(Data, dns_rrdata_soa) -> Record#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, Record#dns_rr.ttl)};
 minimum_soa_ttl(Record, _) -> Record.
+
+%% @doc Takes a list of records of potentially different types
+%% and returns a new list of lists, where each list contains
+%% only a specific type.
+-spec records_to_rrsets([dns:dns_rr()]) -> [[dns:dns_rr()],...].
+records_to_rrsets(Records) ->
+  RRSets = records_to_rrsets(Records, []),
+  lists:map(fun({_Type, RRSet}) -> RRSet end, RRSets).
+
+records_to_rrsets([], RRSets) -> RRSets;
+records_to_rrsets([RR|Rest], RRSets) ->
+  Type = RR#dns_rr.type,
+  NewRRSets = case lists:keyfind(Type, 1, RRSets) of
+                {Type, RRs} ->
+                  lists:keyreplace(Type, 1, RRSets, {Type, RRs ++ [RR]});
+                false ->
+                  lists:keystore(Type, 1, RRSets, {Type, [RR]})
+              end,
+  records_to_rrsets(Rest, NewRRSets).
+
+-ifdef(TEST).
+records_to_rrsets_test_() ->
+  [
+    ?_assertEqual(records_to_rrsets([]), []),
+    ?_assertEqual(records_to_rrsets([#dns_rr{type = ?DNS_TYPE_A}]), [[#dns_rr{type = ?DNS_TYPE_A}]]),
+    ?_assertEqual(records_to_rrsets([#dns_rr{type = ?DNS_TYPE_A}, #dns_rr{type = ?DNS_TYPE_NS}]), [[#dns_rr{type = ?DNS_TYPE_A}], [#dns_rr{type = ?DNS_TYPE_NS}]]),
+    ?_assertEqual(records_to_rrsets([#dns_rr{type = ?DNS_TYPE_A}, #dns_rr{type = ?DNS_TYPE_NS}, #dns_rr{type = ?DNS_TYPE_A}]), [[#dns_rr{type = ?DNS_TYPE_A}, #dns_rr{type = ?DNS_TYPE_A}], [#dns_rr{type = ?DNS_TYPE_NS}]]),
+    ?_assertNotEqual(records_to_rrsets([#dns_rr{type = ?DNS_TYPE_A}]), [])
+  ].
+-endif.
 
 
 %% Various matching functions.

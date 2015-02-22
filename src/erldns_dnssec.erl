@@ -15,7 +15,7 @@
 %% @doc DNSSEC support methods.
 -module(erldns_dnssec).
 
--export([sign_message/5, sign_message/6, sign_wildcard_message/4, sign_wildcard_message/5, sign_rrset/3, sign_records/3, dnskey_rrset/1, dnskey_rrset/2]).
+-export([sign_message/5, sign_message/6, sign_wildcard_message/4, sign_wildcard_message/5, sign_rrsets/3, sign_rrset/3, sign_records/3, dnskey_rrset/1, dnskey_rrset/2]).
 
 -include("erldns.hrl").
 -include_lib("dns/include/dns.hrl").
@@ -40,18 +40,25 @@ sign_wildcard_message(Message, Qname, Zone, AnswerRecords, FollowedCname) ->
   AnswersRRSig = lists:map(erldns_records:replace_name(Qname), erldns_dnssec:sign_rrset(Message, Zone, AnswerRecords)),
   Message#dns_message{answers = Message#dns_message.answers ++ AnswersRRSig, authority = Message#dns_message.authority}.
 
-
+%% @doc Create an RRSIG record for each record set.
+-spec sign_records(dns:message(), erldns:zone(), [dns:rr()]) -> [dns:rr()].
 sign_records(Message, Zone, Records) ->
   Answers = Message#dns_message.answers ++ Records,
-  case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
-    true -> Answers ++ erldns_dnssec:sign_rrset(Message, Zone, Records);
-    false -> Answers
-  end.
+  Answers ++ erldns_dnssec:sign_rrsets(Message, Zone, erldns_records:records_to_rrsets(Records)).
+
+%% @doc Create an RRSIG record for each record set in RRSets.
+-spec sign_rrsets(dns:message(), erldns:zone(), [[dns:rr()],...]) -> [dns:rr()].
+sign_rrsets(Message, Zone, RRSets) -> sign_rrsets(Message, Zone, RRSets, []).
+
+sign_rrsets(_Message, _Zone, [], RRSigs) -> RRSigs;
+sign_rrsets(Message, Zone, [RRSet|Rest], RRSigs) ->
+  sign_rrsets(Message, Zone, Rest, RRSigs ++ sign_rrset(Message, Zone, RRSet)).
 
 %% @doc Signs an RR set and returns a list with one RRSIG record.
 -spec sign_rrset(dns:message(), erldns:zone(), [dns:rr()]) -> [dns:rr()].
 sign_rrset(_Message, _Zone, []) -> [];
 sign_rrset(Message, Zone, RRSet) ->
+  lager:debug("Signing RR set: ~p", [RRSet]),
   SignedZone = signed_zone(Zone),
   [SigningKey, KeyTag] = key_and_tag(Message, SignedZone),
   [dnssec:sign_rrset(lists:flatten([RRSet]), Zone#zone.name, KeyTag, ?DNS_ALG_RSASHA256, SigningKey, [])].
