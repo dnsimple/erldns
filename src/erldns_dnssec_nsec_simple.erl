@@ -41,7 +41,7 @@ include_nsec(Message, Qname, Qtype, ZoneWithRecords, _CnameChain) ->
           case lists:any(erldns_records:match_type(Qtype), ZoneWithRecords#zone.records) of
             true ->
               lager:debug("Name and type do not match, but name is present with another type"),
-              case lists:any(erldns_records:match_type(?DNS_TYPE_CNAME), ZoneWithRecords#zone.records) of
+              case lists:any(erldns_records:match_name_and_type(Qname, ?DNS_TYPE_CNAME), ZoneWithRecords#zone.records) of
                 true ->
                   lager:debug("Other type is CNAME"),
                   Message;
