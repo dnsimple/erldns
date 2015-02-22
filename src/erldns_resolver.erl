@@ -321,9 +321,15 @@ resolve_exact_match_referral(Message, _, _MatchedRecords, _ReferralRecords, Auth
 
 % There is a CNAME record and the request was for a CNAME record so append the CNAME records to
 % the answers section..
-resolve_exact_match_with_cname(Message, ?DNS_TYPE_CNAME, _Host, _CnameChain, _MatchedRecords, _Zone, CnameRecords) ->
-  %lager:debug("Exact match CNAME"),
-  Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
+resolve_exact_match_with_cname(Message, ?DNS_TYPE_CNAME, _Host, _CnameChain, _MatchedRecords, Zone, CnameRecords) ->
+  lager:debug("Exact match CNAME"),
+  case is_dnssec(Message, Zone) of
+    true ->
+      Message#dns_message{aa = true, answers = Message#dns_message.answers ++ erldns_dnssec:sign_records(Message, Zone, CnameRecords)};
+    false ->
+      Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords}
+  end;
+
 % There is a CNAME record, however the Qtype is not CNAME, check for a CNAME loop before continuing.
 resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords) ->
   resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, MatchedRecords, Zone, CnameRecords, lists:member(lists:last(CnameRecords), CnameChain)).
