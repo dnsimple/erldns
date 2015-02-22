@@ -154,10 +154,10 @@ exact_match_resolution(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords,
 %% records and find any type matches on QTYPE and continue on.
 resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
   AuthorityRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), MatchedRecords), % Query matched records for SOA type
-  TypeMatches = case Qtype of
-                  ?DNS_TYPE_ANY ->
+  TypeMatches = case {Qtype, is_apex(Qname, Zone)} of
+                  {?DNS_TYPE_ANY, _} ->
                     filter_records(MatchedRecords, erldns_handler:get_handlers());
-                  ?DNS_TYPE_DNSKEY ->
+                  {?DNS_TYPE_DNSKEY, true} ->
                     erldns_dnssec:dnskey_rrset(Message, Zone);
                   _ ->
                     lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
