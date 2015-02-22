@@ -33,8 +33,6 @@ include_nsec(Message, Qname, Qtype, ZoneWithRecords, _CnameChain) ->
           lager:debug("Name and type are present"),
           Message;
         false ->
-          lager:debug("Name is present, type is not"),
-
           Records = lists:filter(erldns_records:match_name(Qname), ZoneWithRecords#zone.records),
           AdditionalTypes = lists:usort(lists:map(fun(RR) -> RR#dns_rr.type end, Records)),
           Types = AdditionalTypes ++ [?DNS_TYPE_NSEC, ?DNS_TYPE_RRSIG],
@@ -42,8 +40,13 @@ include_nsec(Message, Qname, Qtype, ZoneWithRecords, _CnameChain) ->
 
           case Qtype of
             ?DNS_TYPE_ANY ->
+              lager:debug("Name is present, type is ANY"),
               Message#dns_message{answers = Message#dns_message.answers ++ NSECRecords};
+            ?DNS_TYPE_DNSKEY ->
+              lager:debug("Name is present, type is DNSSEC"),
+              Message;
             _ ->
+              lager:debug("Name is present, type is not"),
               Message#dns_message{authority = Message#dns_message.authority ++ NSECRecords}
           end
       end;
