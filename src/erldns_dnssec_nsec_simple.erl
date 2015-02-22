@@ -28,7 +28,7 @@ include_nsec(Message, Qname, Qtype, ZoneWithRecords, _CnameChain) ->
       end;
     ?DNS_RCODE_NOERROR ->
       lager:debug("Zone present, response code is NOERROR"),
-      case lists:any(erldns_records:match_type(Qtype), ZoneWithRecords#zone.records) of
+      case lists:any(erldns_records:match_name_and_type(Qname, Qtype), ZoneWithRecords#zone.records) of
         true ->
           lager:debug("Name and type are present"),
           Message;
@@ -38,16 +38,28 @@ include_nsec(Message, Qname, Qtype, ZoneWithRecords, _CnameChain) ->
           Types = AdditionalTypes ++ [?DNS_TYPE_NSEC, ?DNS_TYPE_RRSIG],
           NSECRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NSEC, ttl = SoaMinimumTtl, data = #dns_rrdata_nsec{next_dname = NextDname, types = Types}}],
 
-          case Qtype of
-            ?DNS_TYPE_ANY ->
-              lager:debug("Name is present, type is ANY"),
-              Message#dns_message{answers = Message#dns_message.answers ++ NSECRecords};
-            ?DNS_TYPE_DNSKEY ->
-              lager:debug("Name is present, type is DNSKEY"),
-              Message;
-            _ ->
-              lager:debug("Name is present, type is not"),
-              Message#dns_message{authority = Message#dns_message.authority ++ NSECRecords}
+          case lists:any(erldns_records:match_type(Qtype), ZoneWithRecords#zone.records) of
+            true ->
+              lager:debug("Name and type do not match, but name is present with another type"),
+              case lists:any(erldns_records:match_type(?DNS_TYPE_CNAME), ZoneWithRecords#zone.records) of
+                true ->
+                  lager:debug("Other type is CNAME"),
+                  Message;
+                false ->
+                  Message#dns_message{authority = Message#dns_message.authority ++ NSECRecords}
+              end;
+            false ->
+              case Qtype of
+                ?DNS_TYPE_ANY ->
+                  lager:debug("Name is present, type is ANY"),
+                  Message#dns_message{answers = Message#dns_message.answers ++ NSECRecords};
+                ?DNS_TYPE_DNSKEY ->
+                  lager:debug("Name is present, type is DNSKEY"),
+                  Message;
+                _ ->
+                  lager:debug("Name is present, type is not"),
+                  Message#dns_message{authority = Message#dns_message.authority ++ NSECRecords}
+              end
           end
       end;
     Rcode ->
