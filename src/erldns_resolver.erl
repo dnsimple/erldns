@@ -124,7 +124,7 @@ start_resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
 
 %% There were no exact matches on name, so move to the best-match resolution.
 resolve(Message, Qname, Qtype, _MatchedRecords = [], Host, CnameChain, Zone) ->
-  %lager:debug("No exact matches, using best-match resolution"),
+  lager:debug("No exact matches, using best-match resolution"),
   best_match_resolution(Message, Qname, Qtype, Host, CnameChain, best_match(Qname, Zone), Zone);
 
 %% There was at least one exact match on name.
@@ -273,22 +273,20 @@ check_if_parent(PossibleParentName, Name) ->
 %% There were no exact type matches, but there were other name matches and there are NS records.
 %% Since the Qtype is ANY we indicate we are authoritative and include the NS records.
 resolve_no_exact_type_match(Message, _Qname, ?DNS_TYPE_ANY, _Host, _CnameChain, _ExactTypeMatches, _Zone, _MatchedRecords = [], _ReferralRecords = [], AuthorityRecords) ->
-  %lager:debug("No exact name and type match, but ANY query"),
+  lager:debug("No exact name and type match, but ANY query"),
   Message#dns_message{aa = true, authority = AuthorityRecords};
-resolve_no_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, _ExactTypeMatches = [], Zone, _MatchedRecords, _ReferralRecords = [], _AuthorityRecords) ->
-  %lager:debug("No exact name and type match, but other name matches and NS records present"),
-  Message#dns_message{aa = true, authority = Message#dns_message.authority ++ Zone#zone.authority};
-resolve_no_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, ExactTypeMatches, _Zone, _MatchedRecords, _ReferralRecords = [], _AuthorityRecords) ->
-  %lager:debug("No exact name and type match, but other name matches and NS records present"),
-  Message#dns_message{aa = true, answers = Message#dns_message.answers ++ ExactTypeMatches};
+resolve_no_exact_type_match(Message, Qname, Qtype, _Host, _CnameChain, _ExactTypeMatches = [], Zone, _MatchedRecords, _ReferralRecords = [], _AuthorityRecords) ->
+  lager:debug("No exact name and type match, but other records match name and NS records present"),
+  ResolvedMessage = Message#dns_message{aa = true, authority = Message#dns_message.authority ++ Zone#zone.authority},
+  sign_records(ResolvedMessage, Qname, Qtype, Zone, [], Zone#zone.authority);
+resolve_no_exact_type_match(Message, Qname, Qtype, _Host, _CnameChain, ExactTypeMatches, Zone, _MatchedRecords, _ReferralRecords = [], AuthorityRecords) ->
+  lager:debug("No exact name and type match, but other records match type and NS records present"),
+  ResolvedMessage = Message#dns_message{aa = true, answers = Message#dns_message.answers ++ ExactTypeMatches},
+  sign_records(ResolvedMessage, Qname, Qtype, Zone, ExactTypeMatches, AuthorityRecords);
 resolve_no_exact_type_match(Message, Qname, Qtype, _Host, _CnameChain, _ExactTypeMatches, Zone, MatchedRecords, ReferralRecords, AuthorityRecords) ->
-  %lager:debug("Not exact name and type match, but referral present"),
+  lager:debug("Not exact name and type match, but referral present"),
   ResolvedMessage = resolve_exact_match_referral(Message, Qtype, MatchedRecords, ReferralRecords, AuthorityRecords),
-
-  case is_dnssec(Message, Zone) of
-    true -> erldns_dnssec:sign_message(ResolvedMessage, Qname, Qtype, Zone, [], AuthorityRecords);
-    false -> ResolvedMessage
-  end.
+  sign_records(ResolvedMessage, Qname, Qtype, Zone, [], AuthorityRecords).
 
 
 
@@ -505,9 +503,6 @@ resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, 
     false -> 
       restart_query(NewMessage, Name, Qtype, Host, CnameChain ++ CnameRecords, Zone, erldns_zone_cache:in_zone(Name))
   end.
-  
-  
-
 
 
 
@@ -518,6 +513,9 @@ resolve_best_match_referral(Message, Qname, Qtype, Host, CnameChain, BestMatchRe
 % Indicate that we are not authoritative for the name as there were no
 % SOA records in the best-match results. The name has thus been delegated
 % to another authority.
+%
+% Note that in this case the referral records should not be signed since we
+% are not authoritative.
 resolve_best_match_referral(Message, _Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, _Zone, ReferralRecords, []) ->
   %lager:debug("Best match referral but no SOA so not authority"),
   Message#dns_message{aa = false, authority = Message#dns_message.authority ++ ReferralRecords};
@@ -537,12 +535,8 @@ resolve_best_match_referral(Message, Qname, Qtype, _Host, _CnameChain = [], _Bes
                      ?DNS_RCODE_NXDOMAIN
                  end,
 
-  NewMessage = Message#dns_message{aa = true, rc = ResponseCode, authority = Message#dns_message.authority ++ AuthorityRecords},
-  case is_dnssec(Message, Zone) of
-    true -> erldns_dnssec:sign_message(NewMessage, Qname, Qtype, Zone, [], AuthorityRecords);
-    false -> NewMessage
-  end;
-
+  ResolvedMessage = Message#dns_message{aa = true, rc = ResponseCode, authority = Message#dns_message.authority ++ AuthorityRecords},
+  sign_records(ResolvedMessage, Qname, Qtype, Zone, [], AuthorityRecords);
 
 
 % We are authoritative and the Qtype is ANY so we just return the 
@@ -552,11 +546,8 @@ resolve_best_match_referral(Message, _Qname, ?DNS_TYPE_ANY, _Host, _CnameChain, 
   Message;
 resolve_best_match_referral(Message, Qname, Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, _ReferralRecords, AuthorityRecords) ->
   %lager:debug("Best match referral of type ~p", [Qtype]),
-  NewMessage = Message#dns_message{authority = Message#dns_message.authority ++ AuthorityRecords},
-  case is_dnssec(Message, Zone) of
-    true -> erldns_dnssec:sign_message(NewMessage, Qname, Qtype, Zone, [], AuthorityRecords);
-    false -> NewMessage
-  end.
+  ResolvedMessage = Message#dns_message{authority = Message#dns_message.authority ++ AuthorityRecords},
+  sign_records(ResolvedMessage, Qname, Qtype, Zone, [], AuthorityRecords).
 
 
 
@@ -584,11 +575,16 @@ best_match(Qname, Labels, Zone, []) ->
 best_match(_Qname, _Labels, _Zone, WildcardMatches) -> WildcardMatches.
 
 
+%% @doc Replaces any wildcard records in the answers section of
+%% the message with the Qname.
 substitute_wildcards(Message, Qname) ->
   Message#dns_message{
     answers = lists:map(substitute_wildcards_fun(Qname), Message#dns_message.answers)
    }.
 
+%% @doc A higher order function for substituting wildcards with the given Qname.
+%%
+%% @todo Move this to erldns_records
 substitute_wildcards_fun(Qname) ->
   fun(R) ->
       R#dns_rr{name = erldns_records:wildcard_substitution(R#dns_rr.name, Qname)}
@@ -596,7 +592,7 @@ substitute_wildcards_fun(Qname) ->
 
 
 
-%% Function for executing custom lookups by registered handlers.
+%% @doc Function for executing custom lookups by registered handlers.
 -spec custom_lookup(dns:dname(), dns:type(), [dns:rr()]) -> fun(({module(), [dns:type()]}) -> [dns:rr()]).
 custom_lookup(Qname, Qtype, Records) ->
   fun({Module, Types}) ->
@@ -610,14 +606,14 @@ custom_lookup(Qname, Qtype, Records) ->
       end
   end.
 
-% Function for filtering out custom records and replcing them with
+% @doc Function for filtering out custom records and replcing them with
 % records which content from the custom handler.
 filter_records(Records, []) -> Records;
 filter_records(Records, [{Handler,_}|Rest]) ->
   filter_records(Handler:filter(Records), Rest).
 
 
-%% According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
+%% @doc According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
 %% must be set to the value of the minimum field in the SOA content.
 rewrite_soa_ttl(Message) -> Message#dns_message{authority = rewrite_soa_records_ttl(Message#dns_message.authority)}.
 
@@ -632,6 +628,7 @@ additional_processing(Message, _Host, {error, _}) ->
 additional_processing(Message, Host, Zone) ->
   RequiresAdditionalProcessing = requires_additional_processing(Message#dns_message.answers ++ Message#dns_message.authority, []),
   additional_processing(Message, Host, Zone, lists:flatten(RequiresAdditionalProcessing)).
+
 %% No records require additional processing.
 additional_processing(Message, _Host, _Zone, []) ->
   Message;
@@ -660,15 +657,18 @@ requires_additional_processing([Answer|Rest], RequiresAdditional) ->
           end,
   requires_additional_processing(Rest, RequiresAdditional ++ Names).
 
+%% @doc Return true if the zone is signed, DNSSEC is request and DNSSEC is enabled.
 is_dnssec(Message, Zone) ->
   is_signed_zone(Zone) and proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) and erldns_config:use_dnssec().
 
+%% @doc Return true if the zone_signing_key is defined in the zone.
 is_signed_zone(Zone) ->
   case Zone#zone.zone_signing_key of
     undefined -> false;
     _ -> true
   end.
 
+%% @doc Return true if DNSSEC is requested and enabled.
 check_dnssec(Message, Host, Question) ->
   case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
     true ->
@@ -681,5 +681,14 @@ check_dnssec(Message, Host, Question) ->
     false -> false
   end.
 
+%% @doc Returns true if the given Qname is found at the zone apex.
 is_apex(Qname, Zone) ->
   Qname =:= Zone#zone.name.
+
+%% @doc Signs the additional answer and authority records if necessary.
+-spec sign_records(dns:message(), dns:dname(), dns:type(), erldns:zone(), [dns:rr()], [dns:rr()]) -> dns:message().
+sign_records(Message, Qname, Qtype, Zone, AnswerRecords, AuthorityRecords) ->
+  case is_dnssec(Message, Zone) of
+    true -> erldns_dnssec:sign_message(Message, Qname, Qtype, Zone, AnswerRecords, AuthorityRecords);
+    false -> Message
+  end.

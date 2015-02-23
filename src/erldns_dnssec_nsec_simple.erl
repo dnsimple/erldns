@@ -52,12 +52,19 @@ include_nsec_noerror(Message, Qname, Qtype, ZoneWithRecords, _CnameChain, _NameA
       end;
     _ ->
       lager:debug("Name and type do not match, but name is present with another type"),
-      case lists:any(erldns_records:match_name_and_type(Qname, ?DNS_TYPE_CNAME), ZoneWithRecords#zone.records) of
-        true ->
+      case lists:filter(erldns_records:match_name_and_type(Qname, ?DNS_TYPE_CNAME), ZoneWithRecords#zone.records) of
+        [] ->
+          case lists:filter(fun(RR) -> erldns_records:dname_match(Qname, RR#dns_rr.name) end, TypeMatchedRecords) of
+            [] ->
+              lager:debug("Other type is not a CNAME"),
+              Message#dns_message{authority = Message#dns_message.authority ++ NSECRecords};
+            WildcardMatches ->
+              lager:debug("Other type is not a CNAME, but is a wildcard: ~p", [WildcardMatches]),
+              Message
+          end;
+        _ ->
           lager:debug("Other type is CNAME"),
-          Message;
-        false ->
-          Message#dns_message{authority = Message#dns_message.authority ++ NSECRecords}
+          Message
       end
   end;
 include_nsec_noerror(Message, _Qname, _Qtype, _ZoneWithRecords, _CnameChain, _NameAndTypeMatchedRecords, _TypeMatchedRecords) ->
