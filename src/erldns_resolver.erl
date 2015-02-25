@@ -409,16 +409,7 @@ resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords
       %lager:debug("Best match NXDOMAIN"),
       Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN, authority = Message#dns_message.authority ++ Zone#zone.authority, aa = true};
     false ->
-      % TODO: this case does not appear to have any tests in the dnstest suite.
-      % Why is it here?
-      case erldns_config:use_root_hints() of
-        true ->
-          %lager:debug("resolve_best_match() using root hints"),
-          {Authority, Additional} = erldns_records:root_hints(),
-          Message#dns_message{authority = Message#dns_message.authority ++ Authority, additional = Message#dns_message.additional ++ Additional};
-        _ ->
-          Message
-      end
+      Message
   end.
 
 
