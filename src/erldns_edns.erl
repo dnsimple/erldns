@@ -12,7 +12,7 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Placeholder for eventual EDNS0 implementation.
+%% @doc EDNS0 implementation.
 -module(erldns_edns).
 
 -include_lib("dns/include/dns_records.hrl").
