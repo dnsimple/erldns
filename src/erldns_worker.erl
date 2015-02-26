@@ -61,25 +61,30 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc Handle DNS query that comes in over TCP
 -spec handle_tcp_dns_query(gen_tcp:socket(), iodata())  -> ok.
 handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>) ->
-  {ok, {Address, _Port}} = inet:peername(Socket),
-  erldns_events:notify({start_tcp, [{host, Address}]}),
-  case Bin of
-    <<>> -> ok;
-    _ ->
-      case erldns_decoder:decode_message(Bin) of
-        {truncated, _, _} ->
-          lager:info("received truncated request from ~p", [Address]),
-          ok;
-        {trailing_garbage, DecodedMessage, _} ->
-          handle_decoded_tcp_message(DecodedMessage, Socket, Address);
-        {_Error, _, _} ->
-          ok;
-        DecodedMessage ->
-          handle_decoded_tcp_message(DecodedMessage, Socket, Address)
-      end
-  end,
-  erldns_events:notify({end_tcp, [{host, Address}]}),
-  gen_tcp:close(Socket);
+  case inet:peername(Socket) of
+    {ok, {Address, _Port}} ->
+      erldns_events:notify({start_tcp, [{host, Address}]}),
+      case Bin of
+        <<>> -> ok;
+        _ ->
+          case erldns_decoder:decode_message(Bin) of
+            {truncated, _, _} ->
+              lager:info("received truncated request from ~p", [Address]),
+              ok;
+            {trailing_garbage, DecodedMessage, _} ->
+              handle_decoded_tcp_message(DecodedMessage, Socket, Address);
+            {_Error, _, _} ->
+              ok;
+            DecodedMessage ->
+              handle_decoded_tcp_message(DecodedMessage, Socket, Address)
+          end
+      end,
+      erldns_events:notify({end_tcp, [{host, Address}]}),
+      gen_tcp:close(Socket);
+    {error, Reason} ->
+      erldns_events:notify({tcp_error, Reason})
+  end;
+
 handle_tcp_dns_query(Socket, BadPacket) ->
   lager:error("Received bad packet ~p", BadPacket),
   gen_tcp:close(Socket).
