@@ -58,6 +58,11 @@ setup_metrics() ->
   folsom_metrics:new_meter(udp_request_meter),
   folsom_metrics:new_meter(tcp_request_meter),
 
+  folsom_metrics:new_meter(udp_error_meter),
+  folsom_metrics:new_meter(tcp_error_meter),
+  folsom_metrics:new_history(udp_error_history),
+  folsom_metrics:new_history(tcp_error_history),
+
   folsom_metrics:new_histogram(udp_handoff_histogram),
   folsom_metrics:new_histogram(tcp_handoff_histogram),
 
