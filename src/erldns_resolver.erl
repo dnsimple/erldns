@@ -663,12 +663,8 @@ is_signed_zone(Zone) ->
 check_dnssec(Message, Host, Question) ->
   case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
     true ->
-      case erldns_config:use_dnssec() of
-        true -> true;
-        false ->
-          lager:info("DNSSEC requested but not enabled (Host: ~p, Qname: ~p)", [Host, Question#dns_query.name]),
-          false
-      end;
+      erldns_events:notify({dnssec_request, Host, Question#dns_query.name}),
+      erldns_config:use_dnssec();
     false -> false
   end.
 

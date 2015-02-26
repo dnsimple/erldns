@@ -64,6 +64,12 @@ handle_event({tcp_error, Reason}, State) ->
   folsom_metrics:notify({tcp_error_history, Reason}),
   {ok, State};
 
+handle_event({dnssec_request, _Host, _Qname}, State) ->
+  %lager:info("DNSSEC requested (Host: ~p, Qname: ~p)", [Host, Qname]),
+  folsom_metrics:notify(dnssec_request_counter, {inc, 1}),
+  folsom_metrics:notify(dnssec_request_meter, 1),
+  {ok, State};
+
 handle_event(_Event, State) ->
   {ok, State}.
 
