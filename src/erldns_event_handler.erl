@@ -54,6 +54,16 @@ handle_event({end_tcp, [{host, _Host}]}, State) ->
   folsom_metrics:notify({tcp_request_counter, {inc, 1}}),
   {ok, State};
 
+handle_event({udp_error, Reason}, State) ->
+  folsom_metrics:notify({udp_error_meter, 1}),
+  folsom_metrics:notify({udp_error_history, Reason}),
+  {ok, State};
+
+handle_event({tcp_error, Reason}, State) ->
+  folsom_metrics:notify({tcp_error_meter, 1}),
+  folsom_metrics:notify({tcp_error_history, Reason}),
+  {ok, State};
+
 handle_event(_Event, State) ->
   {ok, State}.
 
