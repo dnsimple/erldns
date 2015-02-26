@@ -1897,6 +1897,22 @@
                 "data": {
                     "ip": "10.11.12.13"
                 }
+            },
+            {
+                "name": "proxy.cover.wtest.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "1.2.3.4"
+                }
+            },
+            {
+                "name": "*.cover.wtest.com",
+                "type": "CNAME",
+                "ttl": 3600,
+                "data": {
+                    "dname": "proxy.cover.wtest.com"
+                }
             }
         ]
     },

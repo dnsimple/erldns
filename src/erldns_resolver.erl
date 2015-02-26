@@ -483,7 +483,7 @@ resolve_best_match_with_wildcard_cname(Message, Qname, Qtype, Host, CnameChain, 
   CnameAnswers = CnameRecords,
   CnameRecord = lists:last(CnameAnswers),
   Name = CnameRecord#dns_rr.data#dns_rrdata_cname.dname,
-  NewMessage = Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameAnswers},
+  NewMessage = substitute_wildcards(Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameAnswers}, Qname),
 
 
   % Should the records that are added to the Cname chain be synthesized here?
