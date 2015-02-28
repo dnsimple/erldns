@@ -131,17 +131,6 @@
                 }
             },
             {
-                "name": "dsdelegation.example.com",
-                "type": "DS",
-                "ttl": 120,
-                "data": {
-                    "keytype": 28129,
-                    "alg": 8,
-                    "digest_type": 1,
-                    "digest": "caf1eaaecdabe7616670788f9022454bf5fd9fda"
-                }
-            },
-            {
                 "name": "nxd.example.com",
                 "type": "CNAME",
                 "ttl": 120,
@@ -1193,7 +1182,7 @@
                 "type": "MX",
                 "ttl": 3600,
                 "data": {
-                    "exchange": "smtp-servers.example.com",
+                    "exchange": "",
                     "preference": 10
                 }
             },
@@ -1220,6 +1209,14 @@
                 "ttl": 3600,
                 "data": {
                     "ip": "2.2.2.2"
+                }
+            },
+            {
+                "name": "toroot.test.com",
+                "type": "CNAME",
+                "ttl": 3600,
+                "data": {
+                    "dname": ""
                 }
             },
             {
@@ -1334,6 +1331,17 @@
                 }
             },
             {
+                "name": "_root._tcp.dc.test.com",
+                "type": "SRV",
+                "ttl": 3600,
+                "data": {
+                    "priority": 0,
+                    "weight": 0,
+                    "port": 0,
+                    "target": ""
+                }
+            },
+            {
                 "name": "blah.test.com",
                 "type": "NS",
                 "ttl": 3600,
@@ -1421,7 +1429,7 @@
                 "type": "NS",
                 "ttl": 3600,
                 "data": {
-                    "dname": "ns1.wtest.com"
+                    "dname": ""
                 }
             },
             {
@@ -1429,7 +1437,7 @@
                 "type": "NS",
                 "ttl": 3600,
                 "data": {
-                    "dname": "ns2.wtest.com"
+                    "dname": "ns1.wtest.com"
                 }
             },
             {
@@ -1479,7 +1487,7 @@
                 "type": "CNAME",
                 "ttl": 3600,
                 "data": {
-                    "ip": "server.wtest.com"
+                    "dname": "server.wtest.com"
                 }
             },
             {
@@ -1488,7 +1496,7 @@
                 "ttl": 3600,
                 "data": {
                     "exchange": "smtp-servers.wtest.com",
-                    "server.wtest.com": 10
+                    "preference": 10
                 }
             },
             {
@@ -1569,6 +1577,22 @@
                 "ttl": 3600,
                 "data": {
                     "ip": "10.11.12.13"
+                }
+            },
+            {
+                "name": "proxy.cover.wtest.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "1.2.3.4"
+                }
+            },
+            {
+                "name": "*.cover.wtest.com",
+                "type": "CNAME",
+                "ttl": 3600,
+                "data": {
+                    "dname": "proxy.cover.wtest.com"
                 }
             }
         ]
