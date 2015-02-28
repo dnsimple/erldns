@@ -38,7 +38,7 @@ resolve(Message, AuthorityRecords, Host, [Question|_]) -> resolve(Message, Autho
 %% Step 1: Set the RA bit to false as we do not handle recursive queries.
 resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
   check_dnssec(Message, Host, Question),
-  ResolvedMessage = resolve(Message#dns_message{ra = false}, AuthorityRecords, Qname = Question#dns_query.name, Question#dns_query.type, Host),
+  ResolvedMessage = resolve(Message#dns_message{ra = false, ad = false}, AuthorityRecords, Qname = Question#dns_query.name, Question#dns_query.type, Host),
   substitute_wildcards(ResolvedMessage, Qname).
 
 %% With the extracted Qname and Qtype in hand, find the nearest zone
