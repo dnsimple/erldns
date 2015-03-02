@@ -15,7 +15,11 @@
 %% Functions related to DNS records.
 -module(erldns_records).
 
+-include("erldns.hrl").
 -include_lib("dns/include/dns.hrl").
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 
 -export([optionally_convert_wildcard/2, wildcard_qname/1]).
 -export([default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
@@ -206,3 +210,47 @@ root_hints() ->
     #dns_rr{name = <<"m.root-servers.net">>, type=?DNS_TYPE_A, ttl=3600000, data = #dns_rrdata_a{ip = {202,12,27,33}}}
    ]
   }.
+
+
+
+-ifdef(TEST).
+
+minimum_soa_ttl_test_() ->
+  [
+    ?_assertMatch(#dns_rr{ttl = 3600}, minimum_soa_ttl(#dns_rr{ttl = 3600}, #dns_rrdata_a{})),
+    ?_assertMatch(#dns_rr{ttl = 30}, minimum_soa_ttl(#dns_rr{ttl = 3600}, #dns_rrdata_soa{minimum = 30})),
+    ?_assertMatch(#dns_rr{ttl = 30}, minimum_soa_ttl(#dns_rr{ttl = 30}, #dns_rrdata_soa{minimum = 3600}))
+  ].
+
+replace_name_test_() ->
+  [
+   ?_assertEqual([], lists:map(replace_name(<<"example">>), [])),
+   ?_assertMatch([#dns_rr{name = <<"example">>}], lists:map(replace_name(<<"example">>), [#dns_rr{name = <<"test.com">>}]))
+  ].
+
+match_name_test_() ->
+  [
+    ?_assert(lists:any(match_name(<<"example.com">>), [#dns_rr{name = <<"example.com">>}])),
+    ?_assertNot(lists:any(match_name(<<"example.com">>), [#dns_rr{name = <<"example.net">>}]))
+  ].
+
+match_type_test_() ->
+  [
+    ?_assert(lists:any(match_type(?DNS_TYPE_A), [#dns_rr{type = ?DNS_TYPE_A}])),
+    ?_assertNot(lists:any(match_type(?DNS_TYPE_CNAME), [#dns_rr{type = ?DNS_TYPE_A}]))
+  ].
+
+match_types_test_() ->
+  [
+    ?_assert(lists:any(match_types([?DNS_TYPE_A]), [#dns_rr{type = ?DNS_TYPE_A}])),
+    ?_assert(lists:any(match_types([?DNS_TYPE_A, ?DNS_TYPE_CNAME]), [#dns_rr{type = ?DNS_TYPE_A}])),
+    ?_assertNot(lists:any(match_types([?DNS_TYPE_CNAME]), [#dns_rr{type = ?DNS_TYPE_A}]))
+  ].
+
+match_wildcard_test_() ->
+  [
+    ?_assert(lists:any(match_wildcard(), [#dns_rr{name = <<"*.example.com">>}])),
+    ?_assertNot(lists:any(match_wildcard(), [#dns_rr{name = <<"www.example.com">>}]))
+  ].
+
+-endif.
