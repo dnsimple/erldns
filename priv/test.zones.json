@@ -472,6 +472,14 @@
             },
 
             {
+                "name": "host.*.sub.example.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                  "ip": "192.168.6.1"
+                }
+            },
+            {
                 "name": "ipv6.example.com",
                 "type": "AAAA",
                 "ttl": 120,
@@ -1593,6 +1601,42 @@
                 "ttl": 3600,
                 "data": {
                     "dname": "proxy.cover.wtest.com"
+                }
+            }
+        ]
+    },
+
+    {
+        "name": "minimal.com",
+        "records": [
+            {
+                "name": "minimal.com",
+                "type": "SOA",
+                "data": {
+                    "mname": "ns1.example.com",
+                    "rname": "ahu.example.com",
+                    "serial": 2000081501,
+                    "refresh": 28800,
+                    "retry": 7200,
+                    "expire": 604800,
+                    "minimum": 86400
+                },
+                "ttl": 120
+            },
+            {
+                "name": "minimal.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns1.example.com"
+                }
+            },
+            {
+                "name": "minimal.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns2.example.com"
                 }
             }
         ]
