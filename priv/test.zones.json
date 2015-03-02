@@ -490,7 +490,6 @@
                     "ip": "192.168.6.1"
                 }
             },
-
             {
                 "name": "ipv6.example.com",
                 "type": "AAAA",
