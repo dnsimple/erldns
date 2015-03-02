@@ -12,4 +12,5 @@ clean:
 	./rebar clean
 
 test:
+	./rebar get-deps
 	./rebar eunit skip_deps=true
