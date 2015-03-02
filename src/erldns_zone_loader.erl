@@ -15,8 +15,6 @@
 %% @doc Funcions for loading zones from local or remote sources.
 -module(erldns_zone_loader).
 
--include("erldns.hrl").
-
 -export([load_zones/0]).
 
 -define(FILENAME, "zones.json").
