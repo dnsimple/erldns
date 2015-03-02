@@ -39,6 +39,10 @@
          websocket_path/0,
          websocket_url/0
         ]).
+-export([
+         dnssec_env/0,
+         use_dnssec/0
+        ]).
 
 -export([
          storage_env/0,
@@ -165,6 +169,23 @@ keyget(Key, Data, Default) ->
   end.
 
 
+%% @doc Returns true if DNSSEC is enabled.
+%%
+%% Default: false
+-spec use_dnssec() -> boolean().
+use_dnssec() ->
+  keyget(enabled, get_env(dnssec), false).
+
+dnssec_env() ->
+  get_env(dnssec).
+
+-ifdef(TEST).
+use_dnssec_undefined_test() ->
+  ?assertEqual(false, use_dnssec()).
+
+-endif.
+
+
 %% Zone server configuration
 %% TODO: remove as zone server client logic has been removed
 
@@ -255,4 +276,10 @@ get_env(storage) ->
        {port, undefined}];
     {ok, Env} ->
       Env
+  end;
+get_env(dnssec) ->
+  case application:get_env(erldns, dnssec) of
+    undefined ->
+      [];
+    {ok, Env} -> Env
   end.

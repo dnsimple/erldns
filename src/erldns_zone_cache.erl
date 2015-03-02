@@ -34,6 +34,7 @@
          get_zone_with_records/1,
          get_authority/1,
          get_delegations/1,
+         get_records/1,
          get_records_by_name/1,
          in_zone/1,
          zone_names_and_versions/0
@@ -45,6 +46,7 @@
          put_zone/2,
          put_zone_async/1,
          put_zone_async/2,
+         sign_zone/1,
          delete_zone/1
         ]).
 
@@ -145,6 +147,15 @@ get_delegations(Name) ->
       []
   end.
 
+-spec get_records(dns:dname()) -> [dns:rr()] | [].
+get_records(Name) ->
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      Zone#zone.records;
+    _ ->
+      []
+  end.
+
 %% @doc Return the record set for the given dname.
 -spec get_records_by_name(dns:dname()) -> [dns:rr()].
 get_records_by_name(Name) ->
@@ -203,6 +214,21 @@ put_zone_async({Name, Sha, Records}) ->
 put_zone_async(Name, Zone) ->
   erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   ok.
+
+%% @doc Sign a zone.
+-spec sign_zone(erldns:zone()|binary()) -> ok.
+sign_zone(Zone) when is_record(Zone, zone) ->
+  {ok, KSK} = cutkey:rsa(1024, 1025, [{return, bare}, erlint]),
+  {ok, ZSK} = cutkey:rsa(512, 513, [{return, bare}, erlint]),
+  Zone#zone{key_signing_key = KSK, zone_signing_key = ZSK};
+
+sign_zone(Name) ->
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      SignedZone = index_zone(sign_zone(Zone)),
+      put_zone(Name, SignedZone),
+      SignedZone
+  end.
 
 %% @doc Remove a zone from the cache without waiting for a response.
 -spec delete_zone(binary()) -> any().
@@ -285,9 +311,12 @@ find_zone_in_cache(Qname) ->
   end.
 
 build_zone(Qname, Version, Records) ->
-  RecordsByName = build_named_index(Records),
-  Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
-  #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
+  index_zone(#zone{name = Qname, version = Version, record_count = length(Records), records = Records}).
+
+index_zone(Zone) ->
+  RecordsByName = build_named_index(Zone#zone.records),
+  Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Zone#zone.records),
+  Zone#zone{authority = Authorities, records_by_name = RecordsByName}.
 
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;

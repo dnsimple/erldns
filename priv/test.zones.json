@@ -131,6 +131,17 @@
                 }
             },
             {
+                "name": "dsdelegation.example.com",
+                "type": "DS",
+                "ttl": 120,
+                "data": {
+                    "keytag": 28129,
+                    "alg": 8,
+                    "digest_type": 1,
+                    "digest": "caf1eaaecdabe7616670788f9022454bf5fd9fda"
+                }
+            },
+            {
                 "name": "nxd.example.com",
                 "type": "CNAME",
                 "ttl": 120,
@@ -1414,6 +1425,305 @@
                 }
             }
         ]
+    },
+
+    {
+        "name": "dnssec-parent.com",
+        "records": [
+        {
+          "name": "dnssec-parent.com",
+          "type": "SOA",
+          "ttl": 3600,
+          "data": {
+            "mname": "ns1.dnssec-parent.com",
+            "rname": "ahu.example.com",
+            "serial": 2005092501,
+            "refresh": 28800,
+            "retry": 7200,
+            "expire": 604800,
+            "minimum": 86400
+          }
+        },
+        {
+          "name": "dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns1.dnssec-parent.com"
+          }
+        },
+        {
+          "name": "dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns2.dnssec-parent.com"
+          }
+        },
+
+        {
+          "name": "delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "9.9.9.9"
+          }
+        },
+        {
+          "name": "ns1.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "1.2.3.4"
+          }
+        },
+        {
+          "name": "ns2.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "4.3.2.1"
+          }
+        },
+        {
+          "name": "delegated.dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns1.delegated.dnssec-parent.com"
+          }
+        },
+        {
+          "name": "delegated.dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns2.delegated.dnssec-parent.com"
+          }
+        },
+        {
+          "name": "ns1.delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "4.5.6.7"
+          }
+        },
+        {
+          "name": "ns2.delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "5.6.7.8"
+          }
+        },
+        {
+          "name": "secure-delegated.dnssec-parent.com",
+          "type": "DS",
+          "ttl": 3600,
+          "data": {
+            "keytag": 54319,
+            "alg": 8,
+            "digest_type": 2,
+            "digest": "a0b9c38cd324182af0ef66830d0a0e85a1d58979c9834e18c871779e040857b7"
+          }
+        },
+        {
+          "name": "secure-delegated.dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns1.secure-delegated.dnssec-parent.com"
+          }
+        },
+        {
+          "name": "secure-delegated.dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns2.secure-delegated.dnssec-parent.com"
+          }
+        },
+        {
+          "name": "ns1.secure-delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "1.2.3.4"
+          }
+        },
+        {
+          "name": "ns2.secure-delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "5.6.7.8"
+          }
+        },
+        {
+          "name": "insecure-delegated.ent.ent.auth-ent.dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns.example.com"
+          }
+        },
+
+        {
+          "name": "something1.auth-ent.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "1.1.2.3"
+          }
+        }
+      ]
+    },
+
+    {
+        "name": "secure-delegated.dnssec-parent.com",
+        "records": [
+        {
+          "name": "secure-delegated.dnssec-parent.com",
+          "type": "SOA",
+          "ttl": 3600,
+          "data": {
+            "mname": "ns1.secure-delegated.dnssec-parent.com",
+            "rname": "ahu.example.com",
+            "serial": 2005092501,
+            "refresh": 28800,
+            "retry": 7200,
+            "expire": 604800,
+            "minimum": 86400
+          }
+        },
+        {
+          "name": "secure-delegated.dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns1.secure-delegated.dnssec-parent.com"
+          }
+        },
+        {
+          "name": "secure-delegated.dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns2.secure-delegated.dnssec-parent.com"
+          }
+        },
+        {
+          "name": "secure-delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "9.9.9.9"
+          }
+        },
+        {
+          "name": "ns1.secure-delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "1.2.3.4"
+          }
+        },
+        {
+          "name": "ns2.secure-delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "5.6.7.8"
+          }
+        },
+        {
+          "name": "www.secure-delegated.dnssec-parent.com",
+          "type": "CNAME",
+          "ttl": 3600,
+          "data": {
+            "ip": "secure-delegated.dnssec-parent.com"
+          }
+        }]
+    },
+
+    {
+        "name": "delegated.dnssec-parent.com",
+        "records": [
+        {
+          "name": "delegated.dnssec-parent.com",
+          "type": "SOA",
+          "ttl": 3600,
+          "data": {
+            "mname": "ns1.delegated.dnssec-parent.com",
+            "rname": "ahu.example.com",
+            "serial": 2005092501,
+            "refresh": 28800,
+            "retry": 7200,
+            "expire": 604800,
+            "minimum": 86400
+          }
+        },
+        {
+          "name": "delegated.dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns1.delegated.dnssec-parent.com"
+          }
+        },
+        {
+          "name": "delegated.dnssec-parent.com",
+          "type": "NS",
+          "ttl": 3600,
+          "data": {
+            "dname": "ns2.delegated.dnssec-parent.com"
+          }
+        },
+        {
+          "name": "delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "9.9.9.9"
+          }
+        },
+        {
+          "name": "delegated.dnssec-parent.com",
+          "type": "DS",
+          "ttl": 3600,
+          "data": {
+            "keytag": 44030,
+            "alg": 8,
+            "digest_type": 2,
+            "digest": "D4C3D5552B8679FAEEBC317E5F048B614B2E5F607DC57F1553182D49AB2179F7"
+          }
+        },
+        {
+          "name": "ns1.delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "1.2.3.4"
+          }
+        },
+        {
+          "name": "ns2.delegated.dnssec-parent.com",
+          "type": "A",
+          "ttl": 3600,
+          "data": {
+            "ip": "5.6.7.8"
+          }
+        },
+        {
+          "name": "www.delegated.dnssec-parent.com",
+          "type": "CNAME",
+          "ttl": 3600,
+          "data": {
+            "ip": "delegated.dnssec-parent.com"
+          }
+        }
+      ]
     },
     {
         "name": "wtest.com",
