@@ -49,8 +49,6 @@
 % loaded.
 -spec include_nsec(dns:message(), dns:dname(), dns:type(), erldns:zone(), [dns:dns_rr()]) -> dns:message().
 include_nsec(Message, Qname, Qtype, Zone, CnameChain) when is_record(Message, dns_message) ->
-  lager:debug("include_nsec for ~p, ~p", [Qname, dns:type_name(Qtype)]),
-
   AuthorityRecords =  lists:filter(erldns_records:empty_name_predicate(), Message#dns_message.authority),
   AllRecords = Message#dns_message.answers ++ AuthorityRecords,
   Records = lists:filter(erldns_records:not_match(erldns_records:match_type(?DNS_TYPE_RRSIG)), AllRecords),
@@ -160,28 +158,23 @@ nsec_test(wildcard_no_data) ->
 -spec nsec_action(no_data|name_error|wildcard_answer|wildcard_no_data) -> fun((dns:message(), [[dns:rr()]], dns:dname(), dns:type(), erldns:zone()) -> dns:message()).
 nsec_action(Action = no_data) ->
   % exact match by name, but not type
-  fun(Message, RRSet, Qname, Qtype, Zone) ->
-      lager:debug("NSEC No Data (~p, ~p)", [Qname, dns:type_name(Qtype)]),
+  fun(Message, RRSet, Qname, _Qtype, Zone) ->
       case RRSet of
         [] ->
           Message;
         _ ->
-          %lager:debug("Calling add_nsec for RRSet ~p", [RRSet]),
           ZoneRecords = Zone#zone.records ++ erldns_dnssec:dnskey_rrset(Zone),
           add_nsec(Action, Message, Zone, ZoneRecords, Qname, RRSet)
       end
   end;
 nsec_action(Action = name_error) ->
   % no match by name, including wildcard expansion
-  fun(Message, RRSet, Qname, Qtype, Zone) ->
-      lager:debug("NSEC Name Error (~p, ~p)", [Qname, dns:type_name(Qtype)]),
+  fun(Message, RRSet, Qname, _Qtype, Zone) ->
       case RRSet of
         [] ->
           Message;
         _ ->
-          %lager:debug("Calling add_nsec for RRSet ~p", [RRSet]),
           NSRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), Zone#zone.records),
-          %lager:debug("NS Records: ~p", [NSRecords]),
           ZoneRecordsGlue = lists:flatten(lists:map(fun(NS_RR) ->
                                             {H, _T} = lists:partition(
                                               erldns_records:match_glue(NS_RR#dns_rr.data#dns_rrdata_ns.dname),
@@ -189,7 +182,6 @@ nsec_action(Action = name_error) ->
                                              ),
                                             H
                                         end, NSRecords)),
-          %lager:debug("Zone records glue: ~p", [ZoneRecordsGlue]),
           ZoneRecordsNoGlue = lists:subtract(Zone#zone.records, ZoneRecordsGlue),
 
           ZoneRecords = ZoneRecordsNoGlue ++ erldns_dnssec:dnskey_rrset(Zone),
@@ -198,8 +190,7 @@ nsec_action(Action = name_error) ->
   end;
 nsec_action(Action = wildcard_answer) ->
   % no exact match by name, but match name and type with wildcard expansion
-  fun(Message, RRSet, Qname, Qtype, Zone) ->
-      lager:debug("NSEC Wildcard Answer (~p, ~p)", [Qname, dns:type_name(Qtype)]),
+  fun(Message, RRSet, Qname, _Qtype, Zone) ->
       case RRSet of
         [] ->
           Message;
@@ -209,13 +200,11 @@ nsec_action(Action = wildcard_answer) ->
       end
   end;
 nsec_action(Action = wildcard_no_data) ->
-  fun(Message, RRSet, Qname, Qtype, Zone) ->
-      lager:debug("NSEC Wildcard No Data (~p, ~p)", [Qname, dns:type_name(Qtype)]),
+  fun(Message, RRSet, Qname, _Qtype, Zone) ->
       case RRSet of
         [] ->
           Message;
         _ ->
-          %lager:debug("Calling add_nsec for RRSet ~p", [RRSet]),
           ZoneRecords = Zone#zone.records ++ erldns_dnssec:dnskey_rrset(Zone),
           add_nsec(Action, Message, Zone, ZoneRecords, Qname, RRSet)
       end
@@ -246,16 +235,12 @@ add_nsec(Action = name_error, Message, Zone, ZoneRecords, Qname, [_RR|Rest]) ->
   add_nsec(Action, MessageWithNSEC, Zone, ZoneRecords, Qname, Rest);
 
 add_nsec(Action = wildcard_answer, Message, Zone, ZoneRecords, Qname, [_RR|Rest]) ->
-  %lager:debug("add_nsec ~p case for ~p", [Action, RR#dns_rr.name]),
-
   NSEC = select_nsec(Zone, ZoneRecords, Qname, false),
   Authority = Message#dns_message.authority ++ NSEC,
   MessageWithNSEC = Message#dns_message{authority =  name_order(Authority)},
   add_nsec(Action, MessageWithNSEC, Zone, ZoneRecords, Qname, Rest);
 
 add_nsec(Action = wildcard_no_data, Message, Zone, ZoneRecords, Qname, [_RR|Rest]) ->
-  %lager:debug("add_nsec ~p case for ~p", [Action, RR#dns_rr.name]),
-
   NSEC = select_nsec(Zone, ZoneRecords, Qname, true),
   Authority = Message#dns_message.authority ++ NSEC,
   MessageWithNSEC = Message#dns_message{authority =  name_order(Authority)},
@@ -279,7 +264,6 @@ select_nsec_without_wildcard(Zone, _ZoneRecords, Sname, AllNSEC) ->
   dedupe(non_wildcard_nsec(Zone, Sname, length_order(AllNSEC))).
 
 non_wildcard_nsec(Zone, Sname, AllNSEC) ->
-  %lager:debug("Looking for ~p in all NSEC: ~p", [Sname, lists:map(erldns_records:rr_to_name(), AllNSEC)]),
   case lists:takewhile(fun(R) -> dname_lt(R#dns_rr.name, Sname) end,AllNSEC) of
     [] -> lists:filter(erldns_records:match_name(Zone#zone.name), AllNSEC);
     NSEC -> [lists:last(NSEC)]
@@ -301,7 +285,6 @@ wildcard_nsec(Zone, _Qname, AllNSEC) ->
   Records = Zone#zone.records,
   %Records = erldns_resolver:best_match(Qname, Zone#zone.records),
   WildcardMatches = lists:filter(erldns_records:match_wildcard(), Records),
-  %lager:debug("Wildcard matches: ~p", [WildcardMatches]),
   case WildcardMatches of
     [] -> lists:filter(erldns_records:match_name(Zone#zone.name), AllNSEC);
     _ -> lists:filter(erldns_records:match_name(Zone#zone.name), AllNSEC)

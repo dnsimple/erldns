@@ -30,13 +30,10 @@ sign_message(Message, _Qname, _Qtype, Zone, _AnswerRecords = [], AuthorityRecord
   Message#dns_message{authority = Message#dns_message.authority ++ AuthoritiesRRSig}.
 
 sign_wildcard_message(Message, Qname, Zone, AnswerRecords) ->
-  lager:debug("Sign wildcard message (Qname = ~p)", [Qname]),
-  lager:debug("Answers: ~p", [AnswerRecords]),
   AnswersRRSig = lists:map(erldns_records:replace_name(Qname), erldns_dnssec:sign_rrset(Message, Zone, AnswerRecords)),
   Message#dns_message{answers = Message#dns_message.answers ++ AnswersRRSig, authority = Message#dns_message.authority}.
 
-sign_wildcard_message(Message, Qname, Zone, AnswerRecords, FollowedCname) ->
-  lager:debug("Sign wildcard message (Qname = ~p, CNAME = ~p)", [Qname, FollowedCname]),
+sign_wildcard_message(Message, Qname, Zone, AnswerRecords, _FollowedCname) ->
   AnswersRRSig = lists:map(erldns_records:replace_name(Qname), erldns_dnssec:sign_rrset(Message, Zone, AnswerRecords)),
   Message#dns_message{answers = Message#dns_message.answers ++ AnswersRRSig, authority = Message#dns_message.authority}.
 
@@ -58,7 +55,6 @@ sign_rrsets(Message, Zone, [RRSet|Rest], RRSigs) ->
 -spec sign_rrset(dns:message(), erldns:zone(), [dns:rr()]) -> [dns:rr()].
 sign_rrset(_Message, _Zone, []) -> [];
 sign_rrset(Message, Zone, RRSet) ->
-  lager:debug("Signing RR set: ~p", [RRSet]),
   SignedZone = signed_zone(Zone),
   [SigningKey, KeyTag] = key_and_tag(Message, SignedZone),
   [dnssec:sign_rrset(lists:flatten([RRSet]), Zone#zone.name, KeyTag, ?DNS_ALG_RSASHA256, SigningKey, [])].
