@@ -63,6 +63,10 @@ setup_metrics() ->
   folsom_metrics:new_history(udp_error_history),
   folsom_metrics:new_history(tcp_error_history),
 
+  folsom_metrics:new_meter(empty_response_meter),
+  folsom_metrics:new_counter(empty_response_counter),
+  folsom_metrics:new_history(empty_response_history),
+
   folsom_metrics:new_histogram(udp_handoff_histogram),
   folsom_metrics:new_histogram(tcp_handoff_histogram),
 

@@ -62,7 +62,7 @@ handle_info(_Message, State) ->
 terminate(_Reason, _State) ->
   ok.
 sock_opts() ->
-  [binary].
+  [binary, {reuseaddr, true}].
 new_connection(Socket, State) ->
   inet:setopts(Socket, [{active, once}]),
   {ok, State}.

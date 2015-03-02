@@ -180,9 +180,18 @@ get_authority(MessageOrName) ->
 
 %% Update the message counts and set the QR flag to true.
 complete_response(Message) ->
-  Message#dns_message{
+  notify_empty_response(Message#dns_message{
     anc = length(Message#dns_message.answers),
     auc = length(Message#dns_message.authority),
     adc = length(Message#dns_message.additional),
     qr = true
-   }.
+   }).
+
+notify_empty_response(Message) ->
+  case Message#dns_message.anc + Message#dns_message.auc + Message#dns_message.adc of
+    0 ->
+      erldns_events:notify({empty_response, Message}),
+      Message;
+    _ ->
+      Message
+  end.
