@@ -24,7 +24,7 @@
 -export([optionally_convert_wildcard/2, wildcard_qname/1]).
 -export([default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
 -export([minimum_soa_ttl/2]).
--export([match_name/1, match_type/1, match_name_and_type/2, match_types/1, match_wildcard/0, match_glue/1]).
+-export([match_name/1, match_type/1, match_name_and_type/2, match_types/1, match_wildcard/0, match_delegation/1]).
 -export([replace_name/1]).
 
 %% If the name returned from the DB is a wildcard name then the
@@ -93,7 +93,7 @@ match_wildcard() ->
       lists:any(match_wildcard_label(), dns:dname_to_labels(R#dns_rr.name))
   end.
 
-match_glue(Name) ->
+match_delegation(Name) ->
   fun(R) when is_record(R, dns_rr) ->
       R#dns_rr.data =:= #dns_rrdata_ns{dname=Name}
   end.
@@ -258,6 +258,12 @@ match_wildcard_test_() ->
   [
     ?_assert(lists:any(match_wildcard(), [#dns_rr{name = <<"*.example.com">>}])),
     ?_assertNot(lists:any(match_wildcard(), [#dns_rr{name = <<"www.example.com">>}]))
+  ].
+
+match_delegation_test_() ->
+  [
+    ?_assert(lists:any(match_delegation(<<"ns1.example.com">>), [#dns_rr{data = #dns_rrdata_ns{dname = <<"ns1.example.com">>}}])),
+    ?_assertNot(lists:any(match_delegation(<<"ns1.example.com">>), [#dns_rr{data = #dns_rrdata_ns{dname = <<"ns2.example.com">>}}]))
   ].
 
 match_wildcard_label_test_() ->

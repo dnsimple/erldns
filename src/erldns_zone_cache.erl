@@ -140,7 +140,7 @@ get_authority(Name) ->
 get_delegations(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      lists:filter(fun(R) -> apply(erldns_records:match_type(?DNS_TYPE_NS), [R]) and apply(erldns_records:match_glue(Name), [R]) end, Zone#zone.records);
+      lists:filter(fun(R) -> apply(erldns_records:match_type(?DNS_TYPE_NS), [R]) and apply(erldns_records:match_delegation(Name), [R]) end, Zone#zone.records);
     _ ->
       []
   end.
