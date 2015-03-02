@@ -12,23 +12,21 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Placeholder for eventual EDNS0 implementation.
+%% @doc EDNS0 implementation.
 -module(erldns_edns).
 
 -include_lib("dns/include/dns_records.hrl").
 
--export([handle/1]).
+-export([get_opts/1]).
 
-handle(Message) ->
-  handle_opts(Message, Message#dns_message.additional).
+get_opts(Message) ->
+  get_opts(Message#dns_message.additional, []).
 
-handle_opts(Message, []) ->
-  Message;
-handle_opts(Message, [RR|Rest]) when is_record(RR, dns_optrr) ->
-  NewMessage = case RR#dns_optrr.dnssec of
-                 true -> erldns_dnssec:handle(Message);
-                 false -> Message
-               end,
-  handle_opts(NewMessage, Rest);
-handle_opts(Message, [_|Rest]) ->
-  handle_opts(Message, Rest).
+get_opts([], Opts) ->
+  Opts;
+get_opts([RR|Rest], Opts) when is_record(RR, dns_rr) ->
+  get_opts(Rest, Opts);
+get_opts([RR|Rest], Opts) when is_record(RR, dns_optrr) and RR#dns_optrr.dnssec ->
+  get_opts(Rest, Opts ++ [{dnssec, true}]);
+get_opts([_RR|Rest], Opts) ->
+  get_opts(Rest, Opts).
