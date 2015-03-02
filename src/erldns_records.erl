@@ -36,8 +36,9 @@ optionally_convert_wildcard(Name, Qname) ->
     _ -> Name
   end.
 
-%% Get a wildcard variation of a Qname. Replaces the leading
+%% @doc Get a wildcard variation of a Qname. Replaces the leading
 %% label with an asterisk for wildcard lookup.
+-spec wildcard_qname(dns:dname()) -> dns:dname().
 wildcard_qname(Qname) ->
   [_|Rest] = dns:dname_to_labels(Qname),
   dns:labels_to_dname([<<"*">>] ++ Rest).
@@ -60,6 +61,7 @@ default_priority(Priority) ->
 %%
 %% The first argument is the Record that is being updated.
 %% The second argument is the SOA RR Data.
+-spec minimum_soa_ttl(dns:dns_rr(), dns:dns_rrdata_soa()) -> dns:dns_rr().
 minimum_soa_ttl(Record, Data) when is_record(Data, dns_rrdata_soa) -> Record#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, Record#dns_rr.ttl)};
 minimum_soa_ttl(Record, _) -> Record.
 
