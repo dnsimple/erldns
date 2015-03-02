@@ -93,14 +93,14 @@ match_wildcard() ->
       lists:any(match_wildcard_label(), dns:dname_to_labels(R#dns_rr.name))
   end.
 
-match_delegation(Name) ->
-  fun(R) when is_record(R, dns_rr) ->
-      R#dns_rr.data =:= #dns_rrdata_ns{dname=Name}
-  end.
-
 match_wildcard_label() ->
   fun(L) ->
       L =:= <<"*">>
+  end.
+
+match_delegation(Name) ->
+  fun(R) when is_record(R, dns_rr) ->
+      R#dns_rr.data =:= #dns_rrdata_ns{dname=Name}
   end.
 
 
