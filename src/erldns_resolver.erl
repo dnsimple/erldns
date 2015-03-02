@@ -37,7 +37,7 @@ resolve(Message, AuthorityRecords, Host, [Question|_]) -> resolve(Message, Autho
 %% Start the resolution process on the given question.
 %% Step 1: Set the RA bit to false as we do not handle recursive queries.
 resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
-  resolve(Message#dns_message{ra = false}, AuthorityRecords, Question#dns_query.name, Question#dns_query.type, Host).
+  resolve(Message#dns_message{ra = false, ad = false}, AuthorityRecords, Question#dns_query.name, Question#dns_query.type, Host).
 
 %% With the extracted Qname and Qtype in hand, find the nearest zone
 %% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
