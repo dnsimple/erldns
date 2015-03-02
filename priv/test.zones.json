@@ -1232,7 +1232,7 @@
                 "type": "CNAME",
                 "ttl": 3600,
                 "data": {
-                    "ip": "server1.test.com"
+                    "dname": "server1.test.com"
                 }
             },
             {
