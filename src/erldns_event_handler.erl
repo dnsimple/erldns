@@ -64,6 +64,12 @@ handle_event({tcp_error, Reason}, State) ->
   folsom_metrics:notify({tcp_error_history, Reason}),
   {ok, State};
 
+handle_event({empty_response, Message}, State) ->
+  folsom_metrics:notify({empty_response_meter, 1}),
+  folsom_metrics:notify({empty_response_counter, {inc, 1}}),
+  folsom_metrics:notify({empty_response_history, Message}),
+  {ok, State};
+
 handle_event(_Event, State) ->
   {ok, State}.
 
