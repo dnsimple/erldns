@@ -70,6 +70,11 @@ handle_event({empty_response, Message}, State) ->
   folsom_metrics:notify({empty_response_history, Message}),
   {ok, State};
 
+handle_event({dnssec_request, _Host, _Qname}, State) ->
+  folsom_metrics:notify(dnssec_request_counter, {inc, 1}),
+  folsom_metrics:notify(dnssec_request_meter, 1),
+  {ok, State};
+
 handle_event(_Event, State) ->
   {ok, State}.
 

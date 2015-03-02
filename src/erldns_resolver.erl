@@ -37,6 +37,7 @@ resolve(Message, AuthorityRecords, Host, [Question|_]) -> resolve(Message, Autho
 %% Start the resolution process on the given question.
 %% Step 1: Set the RA bit to false as we do not handle recursive queries.
 resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
+  check_dnssec(Message, Host, Question),
   resolve(Message#dns_message{ra = false, ad = false}, AuthorityRecords, Question#dns_query.name, Question#dns_query.type, Host).
 
 %% With the extracted Qname and Qtype in hand, find the nearest zone
@@ -485,3 +486,12 @@ requires_additional_processing([Answer|Rest], RequiresAdditional) ->
             _ -> []
           end,
   requires_additional_processing(Rest, RequiresAdditional ++ Names).
+
+%% @doc Return true if DNSSEC is requested and enabled.
+check_dnssec(Message, Host, Question) ->
+  case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
+    true ->
+      erldns_events:notify({dnssec_request, Host, Question#dns_query.name});
+    false ->
+      ok
+  end.
