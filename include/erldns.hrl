@@ -22,3 +22,6 @@
     expiry,
     nxdomain
 }).
+
+-define(DNSKEY_ZSK_TYPE, 256).
+-define(DNSKEY_KSK_TYPE, 257).
