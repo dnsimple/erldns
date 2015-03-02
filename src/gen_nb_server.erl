@@ -69,6 +69,7 @@ init([CallbackModule, IpAddr, Port, InitParams]) ->
     {ok, ServerState} ->
       case listen_on(CallbackModule, IpAddr, Port) of
         {ok, Sock} ->
+          process_flag(trap_exit, true),
           {ok, #state{cb=CallbackModule, sock=Sock, server_state=ServerState}};
         Error ->
           CallbackModule:terminate(Error, ServerState),
