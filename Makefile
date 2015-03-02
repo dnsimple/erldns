@@ -1,17 +1,12 @@
-all: build
+all: clean build
 
-deps:
+build:
 	./rebar get-deps
-
-build: deps
 	./rebar compile
 
-fresh: cleandeps build
-
-cleanbuild: clean build
-
-cleandeps:
+fresh:
 	rm -Rf deps
+	./rebar clean
 
 clean:
 	./rebar clean
