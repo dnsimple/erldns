@@ -130,7 +130,7 @@ default_ttl(TTL) ->
     Value -> Value
   end.
 
-% @doc Return the Priority value or 0 if it is undefined.
+%% @doc Return the Priority value or 0 if it is undefined.
 default_priority(Priority) ->
   case Priority of
     undefined -> 0;
