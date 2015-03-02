@@ -20,7 +20,7 @@
 -export([optionally_convert_wildcard/2, wildcard_qname/1]).
 -export([default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
 -export([minimum_soa_ttl/2]).
--export([match_type/1, match_types/1, match_wildcard/0, match_glue/1]).
+-export([match_name/1, match_type/1, match_name_and_type/2, match_types/1, match_wildcard/0, match_glue/1]).
 -export([replace_name/1]).
 
 %% If the name returned from the DB is a wildcard name then the
@@ -38,30 +38,43 @@ wildcard_qname(Qname) ->
   [_|Rest] = dns:dname_to_labels(Qname),
   dns:labels_to_dname([<<"*">>] ++ Rest).
 
-%% Return the TTL value or 3600 if it is undefined.
+%% @doc Return the TTL value or 3600 if it is undefined.
 default_ttl(TTL) ->
   case TTL of
     undefined -> 3600;
     Value -> Value
   end.
 
-%% Return the Priority value or 0 if it is undefined.
+%% @doc Return the Priority value or 0 if it is undefined.
 default_priority(Priority) ->
   case Priority of
     undefined -> 0;
     Value -> Value
   end.
 
-% Applies a minimum TTL based on the SOA minumum value.
+%% @doc Applies a minimum TTL based on the SOA minumum value.
+%%
+%% The first argument is the Record that is being updated.
+%% The second argument is the SOA RR Data.
 minimum_soa_ttl(Record, Data) when is_record(Data, dns_rrdata_soa) -> Record#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, Record#dns_rr.ttl)};
 minimum_soa_ttl(Record, _) -> Record.
 
 
 
 %% Various matching functions.
+match_name(Name) ->
+  fun(R) when is_record(R, dns_rr) ->
+      R#dns_rr.name =:= Name
+  end.
+
 match_type(Type) ->
   fun(R) when is_record(R, dns_rr) ->
       R#dns_rr.type =:= Type
+  end.
+
+match_name_and_type(Name, Type) ->
+  fun(R) when is_record(R, dns_rr) ->
+      (R#dns_rr.name =:= Name) and (R#dns_rr.type =:= Type)
   end.
 
 match_types(Types) ->
