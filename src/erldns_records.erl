@@ -90,15 +90,17 @@ match_types(Types) ->
 
 match_wildcard() ->
   fun(R) when is_record(R, dns_rr) ->
-      lists:any(
-        fun(L) ->
-            L =:= <<"*">>
-        end, dns:dname_to_labels(R#dns_rr.name))
+      lists:any(match_wildcard_label(), dns:dname_to_labels(R#dns_rr.name))
   end.
 
 match_glue(Name) ->
   fun(R) when is_record(R, dns_rr) ->
       R#dns_rr.data =:= #dns_rrdata_ns{dname=Name}
+  end.
+
+match_wildcard_label() ->
+  fun(L) ->
+      L =:= <<"*">>
   end.
 
 
@@ -256,6 +258,12 @@ match_wildcard_test_() ->
   [
     ?_assert(lists:any(match_wildcard(), [#dns_rr{name = <<"*.example.com">>}])),
     ?_assertNot(lists:any(match_wildcard(), [#dns_rr{name = <<"www.example.com">>}]))
+  ].
+
+match_wildcard_label_test_() ->
+  [
+    ?_assert(lists:any(match_wildcard_label(), dns:dname_to_labels(<<"*.example.com">>))),
+    ?_assertNot(lists:any(match_wildcard_label(), dns:dname_to_labels(<<"www.example.com">>)))
   ].
 
 -endif.
