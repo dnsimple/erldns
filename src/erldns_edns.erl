@@ -19,21 +19,21 @@
 
 -export([get_opts/1]).
 
-% @doc Get a property list of EDNS0 options.
-%
-% Supported options are:
-%
-% * {dnssec, true}
+%% @doc Get a property list of EDNS0 options.
+%%
+%% Supported options are:
+%%
+%% * {dnssec, true}
 -spec get_opts(dns:message()) -> [proplists:property()].
 get_opts(Message) ->
   get_opts(Message#dns_message.additional, []).
 
+-spec get_opts([dns:rr()|dns:optrr()], [proplists:property()]) -> [proplists:property()].
 get_opts([], Opts) ->
   Opts;
 get_opts([RR|Rest], Opts) when is_record(RR, dns_rr) ->
   get_opts(Rest, Opts);
-get_opts([RR|Rest], Opts) when is_record(RR, dns_optrr) ->
-  get_opts(Rest, case RR#dns_optrr.dnssec of
-    true -> Opts ++ [{dnssec, true}];
-    false -> Opts
-  end).
+get_opts([RR|Rest], Opts) when is_record(RR, dns_optrr) and RR#dns_optrr.dnssec ->
+  get_opts(Rest, Opts ++ [{dnssec, true}]);
+get_opts([_RR|Rest], Opts) ->
+  get_opts(Rest, Opts).
