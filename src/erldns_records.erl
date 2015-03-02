@@ -217,6 +217,9 @@ root_hints() ->
 
 -ifdef(TEST).
 
+wildcard_qname_test_() ->
+  ?_assertEqual(<<"*.b.example.com">>, wildcard_qname(<<"a.b.example.com">>)).
+
 minimum_soa_ttl_test_() ->
   [
     ?_assertMatch(#dns_rr{ttl = 3600}, minimum_soa_ttl(#dns_rr{ttl = 3600}, #dns_rrdata_a{})),
