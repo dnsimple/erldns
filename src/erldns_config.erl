@@ -164,12 +164,9 @@ keyget(Key, Data, Default) ->
       Value
   end.
 
-% Private functions
 
-parse_address(Address) when is_list(Address) ->
-  {ok, Tuple} = inet_parse:address(Address),
-  Tuple;
-parse_address(Address) -> Address.
+%% Zone server configuration
+%% TODO: remove as zone server client logic has been removed
 
 zone_server_env() ->
   {ok, ZoneServerEnv} = application:get_env(erldns, zone_server),
@@ -205,6 +202,9 @@ websocket_path() ->
 websocket_url() ->
   atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
 
+
+%% Storage configuration
+
 storage_type() ->
   storage_get(type).
 
@@ -226,6 +226,24 @@ storage_port() ->
 storage_env() ->
   get_env(storage).
 
+storage_get(Key) ->
+  get_env_value(Key, storage).
+
+% Private functions
+
+parse_address(Address) when is_list(Address) ->
+  {ok, Tuple} = inet_parse:address(Address),
+  Tuple;
+parse_address(Address) -> Address.
+
+get_env_value(Key, Name) ->
+  case lists:keyfind(Key, 1, get_env(Name)) of
+    false ->
+      undefined;
+    {Key, Value} ->
+      Value
+  end.
+
 get_env(storage) ->
   case application:get_env(erldns, storage) of
     undefined ->
@@ -237,12 +255,4 @@ get_env(storage) ->
        {port, undefined}];
     {ok, Env} ->
       Env
-  end.
-
-storage_get(Key) ->
-  case lists:keyfind(Key, 1, get_env(storage)) of
-    false ->
-      undefined;
-    {Key, Value} ->
-      Value
   end.
