@@ -67,7 +67,7 @@ handle_event({tcp_error, Reason}, State) ->
 handle_event({empty_response, Message}, State) ->
   folsom_metrics:notify({empty_response_meter, 1}),
   folsom_metrics:notify({empty_response_counter, {inc, 1}}),
-  folsom_metrics:notify({empty_response_history, Message}),
+  lager:info("Empty response: ~p", [Message]),
   {ok, State};
 
 handle_event({dnssec_request, _Host, _Qname}, State) ->
