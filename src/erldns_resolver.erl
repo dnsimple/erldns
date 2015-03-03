@@ -287,8 +287,10 @@ resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords
     true ->
       Message#dns_message{rc = ?DNS_RCODE_NXDOMAIN, authority = Zone#zone.authority, aa = true};
     false ->
-      % TODO: this case does not appear to have any tests in the dnstest suite.
-      % Why is it here?
+      % This happens when we have a CNAME to an out-of-balliwick hostname and the query is for
+      % something other than CNAME. Note that the response is still NOERROR here.
+      %
+      % In the dnstest suite, this is hit by cname_to_unauth_any (and others)
       case erldns_config:use_root_hints() of
         true ->
           {Authority, Additional} = erldns_records:root_hints(),
