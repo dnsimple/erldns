@@ -190,6 +190,7 @@ complete_response(Message) ->
 notify_empty_response(Message) ->
   case {Message#dns_message.rc, Message#dns_message.anc + Message#dns_message.auc + Message#dns_message.adc} of
     {?DNS_RCODE_REFUSED, _} ->
+      erldns_events:notify({refused_response, Message#dns_message.questions}),
       Message;
     {_, 0} ->
       erldns_events:notify({empty_response, Message}),
