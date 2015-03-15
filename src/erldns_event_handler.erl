@@ -64,10 +64,21 @@ handle_event({tcp_error, Reason}, State) ->
   folsom_metrics:notify({tcp_error_history, Reason}),
   {ok, State};
 
+handle_event({refused_response, Questions}, State) ->
+  folsom_metrics:notify({refused_response_meter, 1}),
+  folsom_metrics:notify({refused_response_counter, {inc, 1}}),
+  lager:debug("Refused response: ~p", [Questions]),
+  {ok, State};
+
 handle_event({empty_response, Message}, State) ->
   folsom_metrics:notify({empty_response_meter, 1}),
   folsom_metrics:notify({empty_response_counter, {inc, 1}}),
-  folsom_metrics:notify({empty_response_history, Message}),
+  lager:info("Empty response: ~p", [Message]),
+  {ok, State};
+
+handle_event({dnssec_request, _Host, _Qname}, State) ->
+  folsom_metrics:notify(dnssec_request_counter, {inc, 1}),
+  folsom_metrics:notify(dnssec_request_meter, 1),
   {ok, State};
 
 handle_event(_Event, State) ->

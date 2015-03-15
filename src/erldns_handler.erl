@@ -113,7 +113,7 @@ handle(Message, Host, _) ->
 
 do_handle(Message, Host) ->
   NewMessage = handle_message(Message, Host),
-  complete_response(erldns_axfr:optionally_append_soa(erldns_edns:handle(NewMessage))).
+  complete_response(erldns_axfr:optionally_append_soa(NewMessage)).
 
 %% Handle the message by hitting the packet cache and either
 %% using the cached packet or continuing with the lookup process.
@@ -136,9 +136,9 @@ handle_packet_cache_miss(Message, [], _Host) ->
   case erldns_config:use_root_hints() of
     true ->
       {Authority, Additional} = erldns_records:root_hints(),
-      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
+      Message#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED, authority = Authority, additional = Additional};
     _ ->
-      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR}
+      Message#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED}
   end;
 
 %% The packet is not in the cache yet we are authoritative, so try to resolve
@@ -188,8 +188,11 @@ complete_response(Message) ->
    }).
 
 notify_empty_response(Message) ->
-  case Message#dns_message.anc + Message#dns_message.auc + Message#dns_message.adc of
-    0 ->
+  case {Message#dns_message.rc, Message#dns_message.anc + Message#dns_message.auc + Message#dns_message.adc} of
+    {?DNS_RCODE_REFUSED, _} ->
+      erldns_events:notify({refused_response, Message#dns_message.questions}),
+      Message;
+    {_, 0} ->
       erldns_events:notify({empty_response, Message}),
       Message;
     _ ->
