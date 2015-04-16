@@ -452,6 +452,30 @@ json_record_ns_to_erlang_test() ->
                                                               {<<"dname">>, <<"ns1.example.com">>}
                                                              ], undefined])).
 
+json_record_a_to_erlang_test() ->
+  Name = <<"example.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_A,
+                       data = #dns_rrdata_a{
+                                 ip = {1,2,3,4}
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"A">>, 3600, [
+                                                              {<<"ip">>, <<"1.2.3.4">>}
+                                                             ], undefined])).
+
+json_record_aaaa_to_erlang_test() ->
+  Name = <<"example.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_AAAA,
+                       data = #dns_rrdata_aaaa{
+                                 ip = {0,0,0,0,0,0,0,1}
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"AAAA">>, 3600, [
+                                                              {<<"ip">>, <<"::1">>}
+                                                             ], undefined])).
+
 hex_to_bin_test() ->
   ?assertEqual(<<"">>, hex_to_bin(<<"">>)),
   ?assertEqual(<<255, 0, 255>>, hex_to_bin(<<"FF00FF">>)).
