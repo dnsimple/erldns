@@ -411,11 +411,54 @@ base64_to_bin(Bin) when is_binary(Bin) ->
   base64:decode(Bin).
 
 -ifdef(TEST).
+json_record_to_erlang_test() ->
+  Name = <<"example.com">>,
+  ?assertEqual({}, json_record_to_erlang([])),
+  ?assertEqual({}, json_record_to_erlang([Name, <<"SOA">>, 3600, null, null])).
+
+json_record_soa_to_erlang_test() ->
+  Name = <<"example.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_SOA,
+                       data = #dns_rrdata_soa{
+                                 mname = <<"ns1.example.com">>,
+                                 rname = <<"admin.example.com">>,
+                                 serial = 12345,
+                                 refresh = 555,
+                                 retry = 666,
+                                 expire = 777,
+                                 minimum = 888
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"SOA">>, 3600, [
+                                                              {<<"mname">>, <<"ns1.example.com">>},
+                                                              {<<"rname">>, <<"admin.example.com">>},
+                                                              {<<"serial">>, 12345},
+                                                              {<<"refresh">>, 555},
+                                                              {<<"retry">>, 666},
+                                                              {<<"expire">>, 777},
+                                                              {<<"minimum">>, 888}
+                                                             ], undefined])).
+
+json_record_ns_to_erlang_test() ->
+  Name = <<"example.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_NS,
+                       data = #dns_rrdata_ns{
+                                 dname = <<"ns1.example.com">>
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"NS">>, 3600, [
+                                                              {<<"dname">>, <<"ns1.example.com">>}
+                                                             ], undefined])).
+
+hex_to_bin_test() ->
+  ?assertEqual(<<"">>, hex_to_bin(<<"">>)),
+  ?assertEqual(<<255, 0, 255>>, hex_to_bin(<<"FF00FF">>)).
 
 base64_to_bin_test() ->
-  ?assertEqual(base64_to_bin(<<"">>), <<"">>),
-  ?assertEqual(base64_to_bin(<<"AwEAAb+lTDjZCfq7D5N9cNd1ug30wLrbCXB9mVJJQGlQQHpiHHlMaLGGsV2/j5+eojHp+WQUzNpOzrULF6msbEvUuV2gSEnpbueRV4twO8muGE+xeUuseSoHh/aTpA8Z9SPubb01mduqqaUEN5Juz2Q4hF0dSUSJYlJPKhp6NrOgoeyj">>), 
-               <<3,1,0,1,191,165,76,56,217,9,250,187,15,147,125,112,215,
+  ?assertEqual(<<"">>, base64_to_bin(<<"">>)),
+  ?assertEqual(<<3,1,0,1,191,165,76,56,217,9,250,187,15,147,125,112,215,
   117,186,13,244,192,186,219,9,112,125,153,82,73,64,105,
   80,64,122,98,28,121,76,104,177,134,177,93,191,143,159,
   158,162,49,233,249,100,20,204,218,78,206,181,11,23,169,
@@ -423,6 +466,5 @@ base64_to_bin_test() ->
   112,59,201,174,24,79,177,121,75,172,121,42,7,135,246,
   147,164,15,25,245,35,238,109,189,53,153,219,170,169,165,
   4,55,146,110,207,100,56,132,93,29,73,68,137,98,82,79,42,
-  26,122,54,179,160,161,236,163>>).
-
+  26,122,54,179,160,161,236,163>>, base64_to_bin(<<"AwEAAb+lTDjZCfq7D5N9cNd1ug30wLrbCXB9mVJJQGlQQHpiHHlMaLGGsV2/j5+eojHp+WQUzNpOzrULF6msbEvUuV2gSEnpbueRV4twO8muGE+xeUuseSoHh/aTpA8Z9SPubb01mduqqaUEN5Juz2Q4hF0dSUSJYlJPKhp6NrOgoeyj">>)).
 -endif.
