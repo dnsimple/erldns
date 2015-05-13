@@ -274,12 +274,16 @@ is_name_in_zone(Name, Zone) ->
 
 find_zone_in_cache(Qname) ->
   Name = normalize_name(Qname),
-  case dns:dname_to_labels(Name) of
-    [] -> {error, zone_not_found};
-    [_] -> {error, zone_not_found};
-    [_|Labels] ->
-      case erldns_storage:select(zones, Name) of
-        [{Name, Zone}] -> {ok, Zone};
+  find_zone_in_cache(Name, dns:dname_to_labels(Name)).
+
+find_zone_in_cache(_Name, []) ->
+  {error, zone_not_found};
+find_zone_in_cache(Name, [_|Labels]) ->
+  case erldns_storage:select(zones, Name) of
+    [{Name, Zone}] -> {ok, Zone};
+    _ ->
+      case Labels of
+        [] -> {error, zone_not_found};
         _ -> find_zone_in_cache(dns:labels_to_dname(Labels))
       end
   end.
