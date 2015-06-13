@@ -3,7 +3,7 @@
               {vsn,"1.0.0"},
               {mod,{erldns_app,[]}},
               {applications,[kernel,stdlib,inets,crypto,ssl,observer,bear,
-                             folsom,cowlib,ranch,cowboy,hottub]},
+                             folsom,poolboy,cowlib,ranch,cowboy,hottub]},
               {start_phases,[{post_start,[]}]},
               {modules,[erldns,erldns_app,erldns_axfr,erldns_config,
                         erldns_decoder,erldns_dnssec,erldns_edns,
