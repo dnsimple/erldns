@@ -89,8 +89,10 @@ backup_tables() ->
 select(Table, Key) ->
     ets:lookup(Table, Key).
 
-%% @doc Select from ets using match specs.
--spec select(atom(), list(), integer()) -> tuple() | '$end_of_table'.
+%% #doc Select from ets using match specs.
+-spec select(atom(), list(), integer() | infinite) -> tuple() | '$end_of_table'.
+select(Table, MatchSpec, infinite) ->
+  ets:select(Table, MatchSpec);
 select(Table, MatchSpec, Limit) ->
     ets:select(Table, MatchSpec, Limit).
 

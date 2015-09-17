@@ -116,7 +116,7 @@ handle_call(stop, _From, State) ->
   {stop, normal, ok, State}.
 
 handle_cast(sweep, State) ->
-  Keys = erldns_storage:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}]),
+  Keys = erldns_storage:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}], infinite),
   lists:foreach(fun(K) -> erldns_storage:delete(packet_cache, K) end, Keys),
   {noreply, State};
 
