@@ -10,6 +10,7 @@
                   observer,
                   bear,
                   folsom,
+                  poolboy,
                   cowlib,
                   ranch,
                   cowboy,
