@@ -178,7 +178,7 @@ select(Table, Key)->
     mnesia:activity(transaction, Select).
 
 %% @doc Select using a match spec.
--spec select(atom(), list(), infinite | integer()) -> tuple() | '$end_of_table'.
+-spec select(atom(), list(), integer()) -> tuple() | '$end_of_table'.
 select(_Table, MatchSpec, _Limit) ->
     MatchObject = fun() -> mnesia:match_object(MatchSpec) end,
     mnesia:activity(transaction, MatchObject).
