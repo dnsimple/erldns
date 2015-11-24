@@ -91,4 +91,4 @@ init(_Args) ->
               ?CHILD(sample_custom_handler, worker, [])
              ],
 
-  {ok, {{one_for_one, 20, 10}, SysProcs ++ AppPoolSpecs}}.
+  {ok, {{one_for_one, 200, 10}, SysProcs ++ AppPoolSpecs}}.
