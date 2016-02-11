@@ -67,7 +67,7 @@ resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
 
 %% There were no exact matches on name, so move to the best-match resolution.
 resolve(Message, Qname, Qtype, _MatchedRecords = [], Host, CnameChain, Zone) ->
-    best_match_resolution(Message, Qname, Qtype, Host, CnameChain, best_match(Qname, Zone), Zone);
+  best_match_resolution(Message, Qname, Qtype, Host, CnameChain, best_match(Qname, Zone), Zone);
 
 %% There was at least one exact match on name.
 resolve(Message, Qname, Qtype, MatchedRecords, Host, CnameChain, Zone) ->
@@ -479,10 +479,10 @@ check_dnssec(Message, Host, Question) ->
   end.
 
 %% returns the record lookup delegation mdule for a zone.
-get_delegate(Zone) ->
-  case lists:keyfind(Zone, 1, erldns_config:zone_delegates()) of
+get_delegate(#zone{name = Name}) ->
+  case lists:keyfind(Name, 1, erldns_config:zone_delegates()) of
     false -> none;
-    {Zone, Delegate} -> Delegate
+    {Name, Delegate} -> {ok, Delegate}
   end.
 
 
@@ -496,8 +496,8 @@ get_records_by_name(Zone, Qname) ->
 
 get_delegate_records(Zone, Qname) ->
   case get_delegate(Zone) of
-    {ok, Zone} ->
-      Zone:get_records_by_name(Qname);
+    {ok, Delegate} ->
+      Delegate:get_records_by_name(Qname);
     _ ->
       []
   end.
