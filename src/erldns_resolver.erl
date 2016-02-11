@@ -20,6 +20,8 @@
 
 -export([resolve/3]).
 
+-callback get_records_by_name(dns:dname()) -> [dns:rr()].
+
 %% @doc Resolve the questions in the message.
 -spec resolve(dns:message(), [dns:rr()], dns:ip()) -> dns:message().
 resolve(Message, AuthorityRecords, Host) ->
@@ -61,11 +63,11 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain)
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
-  resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone).
+  resolve(Message, Qname, Qtype, get_records_by_name(Zone, Qname), Host, CnameChain, Zone).
 
 %% There were no exact matches on name, so move to the best-match resolution.
 resolve(Message, Qname, Qtype, _MatchedRecords = [], Host, CnameChain, Zone) ->
-  best_match_resolution(Message, Qname, Qtype, Host, CnameChain, best_match(Qname, Zone), Zone);
+    best_match_resolution(Message, Qname, Qtype, Host, CnameChain, best_match(Qname, Zone), Zone);
 
 %% There was at least one exact match on name.
 resolve(Message, Qname, Qtype, MatchedRecords, Host, CnameChain, Zone) ->
@@ -391,12 +393,12 @@ best_match(Qname, Zone) -> best_match(Qname, dns:dname_to_labels(Qname), Zone).
 best_match(_Qname, [], _Zone) -> [];
 best_match(Qname, [_|Rest], Zone) ->
   WildcardName = dns:labels_to_dname([<<"*">>] ++ Rest),
-  best_match(Qname, Rest, Zone,  erldns_zone_cache:get_records_by_name(WildcardName)).
+  best_match(Qname, Rest, Zone,  get_records_by_name(Zone, WildcardName)).
 
 best_match(_Qname, [], _Zone, []) -> [];
 best_match(Qname, Labels, Zone, []) ->
   Name = dns:labels_to_dname(Labels),
-  case erldns_zone_cache:get_records_by_name(Name) of
+  case get_records_by_name(Zone, Name) of
     [] -> best_match(Qname, Labels, Zone);
     Matches -> Matches
   end;
@@ -444,7 +446,7 @@ additional_processing(Message, _Host, _Zone, []) ->
   Message;
 %% There are records with names that require additional processing.
 additional_processing(Message, Host, Zone, Names) ->
-  RRs = lists:flatten(lists:map(fun(Name) -> erldns_zone_cache:get_records_by_name(Name) end, Names)),
+  RRs = lists:flatten(lists:map(fun(Name) -> get_records_by_name(Zone, Name) end, Names)),
   Records = lists:filter(erldns_records:match_types([?DNS_TYPE_A, ?DNS_TYPE_AAAA]), RRs),
   additional_processing(Message, Host, Zone, Names, Records).
 
@@ -474,4 +476,28 @@ check_dnssec(Message, Host, Question) ->
       erldns_events:notify({dnssec_request, Host, Question#dns_query.name});
     false ->
       ok
+  end.
+
+%% returns the record lookup delegation mdule for a zone.
+get_delegate(Zone) ->
+  case lists:keyfind(Zone, 1, erldns_config:zone_delegates()) of
+    false -> none;
+    {Zone, Delegate} -> Delegate
+  end.
+
+
+get_records_by_name(Zone, Qname) ->
+  case erldns_zone_cache:get_records_by_name(Qname) of
+    [] ->
+      get_delegate_records(Zone, Qname);
+    Records ->
+      Records
+  end.
+
+get_delegate_records(Zone, Qname) ->
+  case get_delegate(Zone) of
+    {ok, Zone} ->
+      Zone:get_records_by_name(Qname);
+    _ ->
+      []
   end.
