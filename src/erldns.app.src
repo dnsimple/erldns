@@ -10,6 +10,7 @@
                   base32,
                   dns,
                   ssl,
+                  mnesia,
                   observer,
                   bear,
                   folsom,
