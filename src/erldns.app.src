@@ -6,6 +6,8 @@
                   stdlib,
                   inets,
                   crypto,
+                  %% because dns needs it but it's not included
+                  base32,
                   dns,
                   ssl,
                   observer,
