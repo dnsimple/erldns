@@ -61,14 +61,17 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain)
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
+    lager:info("~p", [Qtype]),
   resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone).
 
 %% There were no exact matches on name, so move to the best-match resolution.
 resolve(Message, Qname, Qtype, _MatchedRecords = [], Host, CnameChain, Zone) ->
+    lager:info("~p", [Qtype]),
   best_match_resolution(Message, Qname, Qtype, Host, CnameChain, best_match(Qname, Zone), Zone);
 
 %% There was at least one exact match on name.
 resolve(Message, Qname, Qtype, MatchedRecords, Host, CnameChain, Zone) ->
+    lager:info("~p", [Qtype]),
   exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone).
 
 
@@ -99,6 +102,7 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
                   _ ->
                     lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
                 end,
+  io:format("~p ~p~n", [Qtype, TypeMatches]),
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
