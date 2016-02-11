@@ -15,6 +15,6 @@
                         erldns_txt,erldns_udp_server,erldns_worker,
                         erldns_zone_cache,erldns_zone_encoder,
                         erldns_zone_loader,erldns_zone_parser,gen_nb_server,
-                        print_delegate,print_handler,sample_custom_handler,
+                        print_delegate,sample_custom_handler,
                         sample_custom_zone_encoder,
                         sample_custom_zone_parser]}]}.
