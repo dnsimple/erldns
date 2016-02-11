@@ -6,6 +6,7 @@
                   stdlib,
                   inets,
                   crypto,
+                  dns,
                   ssl,
                   observer,
                   bear,

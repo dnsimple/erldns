@@ -2,7 +2,7 @@
              [{description,"Erlang Authoritative DNS Server"},
               {vsn,"1.0.0"},
               {mod,{erldns_app,[]}},
-              {applications,[kernel,stdlib,inets,crypto,ssl,observer,bear,
+              {applications,[kernel,stdlib,inets,crypto,dns,ssl,observer,bear,
                              folsom,poolboy,cowlib,ranch,cowboy,hottub]},
               {start_phases,[{post_start,[]}]},
               {modules,[erldns,erldns_app,erldns_axfr,erldns_config,
