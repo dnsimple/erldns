@@ -420,7 +420,7 @@ custom_lookup(Qname, Qtype, Records) ->
       end
   end.
 
-% Function for filtering out custom records and replcing them with
+% Function for filtering out custom records and replacing them with
 % records which content from the custom handler.
 filter_records(Records, []) -> Records;
 filter_records(Records, [{Handler,_}|Rest]) ->
