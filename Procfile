@@ -1,1 +1,1 @@
-dns: erl -config erldns.config -pa ebin deps/**/ebin -s erldns
+dns: rebar3 shell
