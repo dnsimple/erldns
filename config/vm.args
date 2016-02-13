@@ -1,0 +1,6 @@
+-name erldns@127.0.0.1
+
+-setcookie erldns
+
++A 100
++K true
