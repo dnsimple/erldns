@@ -14,10 +14,6 @@
                   observer,
                   bear,
                   folsom,
-                  poolboy,
-                  cowlib,
-                  ranch,
-                  cowboy,
-                  hottub]},
+                  poolboy]},
   {start_phases, [{post_start, []}]}
   ]}.
