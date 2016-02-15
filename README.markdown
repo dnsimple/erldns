@@ -6,13 +6,11 @@ Serve DNS authoritative responses...with Erlang.
 
 ## Building
 
+Install [rebar3](http://www.rebar3.org/).
+
 To build clean:
 
-    ./build.sh
-
-If you've already built once and just want to recompile the erl-dns source:
-
-    ./rebar compile
+    rebar3 compile
 
 ## Zones
 
@@ -30,7 +28,7 @@ Copy it to erldns.config and modify as needed.
 
 Launch directly:
 
-    erl -config erldns.config -pa ebin -pa deps/**/ebin -s erldns
+    rebar3 shell
 
 Or use Foreman:
 
@@ -51,6 +49,10 @@ Here are some queries to try:
     dig -p8053 @127.0.0.1 example.com naptr
 
     dig -p8053 @127.0.0.1 -x 127.0.0.1 ptr
+
+## Running Tests
+
+    rebar3 eunit
 
 ## Performance
 
