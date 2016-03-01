@@ -38,7 +38,7 @@ handle_event(start_servers, State) ->
       lager:info("Starting the UDP and TCP supervisor"),
       %erldns_server_sup:start_link(),
       supervisor:start_child(erldns_sup, 
-                             #{id => erldns_sup,
+                             #{id => erldns_server_sup,
                                start => { erldns_server_sup, start_link, [] },
                                restart => permanent,
                                shutdown => 5000,
