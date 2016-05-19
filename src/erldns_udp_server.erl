@@ -79,7 +79,7 @@ handle_info(timeout, State) ->
   %lager:info("UDP instance timed out"),
   {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
-  Response = folsom_metrics:histogram_timed_update(udp_handoff_histogram, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]),
+  Response = erldns_metrics:timed_update(udp_handoff_histogram, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]),
   inet:setopts(State#state.socket, [{active, once}]),
   Response;
 handle_info(_Message, State) ->
@@ -125,8 +125,8 @@ handle_request(Socket, Host, Port, Bin, State) ->
       gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin}),
       {noreply, State#state{workers = queue:in(Worker, Queue)}};
     {empty, _Queue} ->
-      folsom_metrics:notify({packet_dropped_empty_queue_counter, {inc, 1}}),
-      folsom_metrics:notify({packet_dropped_empty_queue_meter, 1}),
+      erldns_metrics:update(packet_dropped_empty_queue_counter, 1),
+      erldns_metrics:update(packet_dropped_empty_queue_meter, 1),
       lager:info("Queue is empty, dropping packet"),
       {noreply, State}
   end.

@@ -52,40 +52,40 @@ handle_event(start_servers, State) ->
   end;
 
 handle_event({end_udp, [{host, _Host}]}, State) ->
-  folsom_metrics:notify({udp_request_meter, 1}),
-  folsom_metrics:notify({udp_request_counter, {inc, 1}}),
+  erldns_metrics:update(udp_request_meter, 1),
+  erldns_metrics:update(udp_request_counter, 1),
   {ok, State};
 
 handle_event({end_tcp, [{host, _Host}]}, State) ->
-  folsom_metrics:notify({tcp_request_meter, 1}),
-  folsom_metrics:notify({tcp_request_counter, {inc, 1}}),
+  erldns_metrics:update(tcp_request_meter, 1),
+  erldns_metrics:update(tcp_request_counter, 1),
   {ok, State};
 
 handle_event({udp_error, Reason}, State) ->
-  folsom_metrics:notify({udp_error_meter, 1}),
-  folsom_metrics:notify({udp_error_history, Reason}),
+  erldns_metrics:update(udp_error_meter, 1),
+  erldns_metrics:update(udp_error_history, Reason),
   {ok, State};
 
 handle_event({tcp_error, Reason}, State) ->
-  folsom_metrics:notify({tcp_error_meter, 1}),
-  folsom_metrics:notify({tcp_error_history, Reason}),
+  erldns_metrics:update(tcp_error_meter, 1),
+  erldns_metrics:update(tcp_error_history, Reason),
   {ok, State};
 
 handle_event({refused_response, Questions}, State) ->
-  folsom_metrics:notify({refused_response_meter, 1}),
-  folsom_metrics:notify({refused_response_counter, {inc, 1}}),
+  erldns_metrics:update(refused_response_meter, 1),
+  erldns_metrics:update(refused_response_counter, 1),
   lager:debug("Refused response: ~p", [Questions]),
   {ok, State};
 
 handle_event({empty_response, Message}, State) ->
-  folsom_metrics:notify({empty_response_meter, 1}),
-  folsom_metrics:notify({empty_response_counter, {inc, 1}}),
+  erldns_metrics:update(empty_response_meter, 1),
+  erldns_metrics:update(empty_response_counter, 1),
   lager:info("Empty response: ~p", [Message]),
   {ok, State};
 
 handle_event({dnssec_request, _Host, _Qname}, State) ->
-  folsom_metrics:notify(dnssec_request_counter, {inc, 1}),
-  folsom_metrics:notify(dnssec_request_meter, 1),
+  erldns_metrics:update(dnssec_request_counter, 1),
+  erldns_metrics:update(dnssec_request_meter, 1),
   {ok, State};
 
 handle_event(_Event, State) ->

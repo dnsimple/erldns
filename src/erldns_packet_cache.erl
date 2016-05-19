@@ -61,14 +61,14 @@ get(Question, _Host) ->
     [{Question, {Response, ExpiresAt}}] ->
       case timestamp() > ExpiresAt of
         true ->
-          folsom_metrics:notify(cache_expired_meter, 1),
+          erldns_metrics:update(cache_expired_meter, 1),
           {error, cache_expired};
         false ->
-          folsom_metrics:notify(cache_hit_meter, 1),
+          erldns_metrics:update(cache_hit_meter, 1),
           {ok, Response}
       end;
     _ ->
-      folsom_metrics:notify(cache_miss_meter, 1),
+      erldns_metrics:update(cache_miss_meter, 1),
       {error, cache_miss}
   end.
 

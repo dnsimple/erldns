@@ -55,7 +55,7 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Message, State) ->
   {noreply, State}.
 handle_info({tcp, Socket, Bin}, State) ->
-  folsom_metrics:histogram_timed_update(tcp_handoff_histogram, ?MODULE, handle_request, [Socket, Bin]),
+  erldns_metrics:timed_update(tcp_handoff_histogram, ?MODULE, handle_request, [Socket, Bin]),
   {noreply, State};
 handle_info(_Message, State) ->
   {noreply, State}.
