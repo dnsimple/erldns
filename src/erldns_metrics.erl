@@ -103,6 +103,10 @@ init([folsom]) ->
 
 init([exometer]) ->
     application:ensure_all_started(exometer_core),
+
+    % Make sure we have history set up. The config file setting has been flaky.
+    exometer_admin:set_default(['_'], history, [{module, exometer_folsom}]),
+
     exometer:new([erldns, udp_request_counter], counter),
     exometer:new([erldns, tcp_request_counter], counter),
     exometer:new([erldns, udp_request_meter], spiral),
