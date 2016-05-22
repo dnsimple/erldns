@@ -85,7 +85,7 @@ backup_tables() ->
     {error, not_implemented}.
 
 %% @doc Select from ets using key, value.
--spec select(atom(), term()) -> tuple().
+-spec select(atom(), term()) -> [tuple()].
 select(Table, Key) ->
     ets:lookup(Table, Key).
 

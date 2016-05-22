@@ -167,7 +167,7 @@ backup_tables()->
     {error, not_implemented}.
 
 %% @doc Select based on key value.
--spec select(Table :: atom(), Key :: term()) -> tuple().
+-spec select(Table :: atom(), Key :: term()) -> [tuple()].
 select(Table, Key)->
     Select = fun () ->
                      case mnesia:read({Table, Key}) of

@@ -123,7 +123,7 @@ backup_tables() ->
     Module:backup_tables().
 
 %% @doc Call to a module's select. Uses table key pair, and can be considered a "lookup" in terms of ets.
--spec select(atom(), term()) -> tuple().
+-spec select(atom(), term()) -> [tuple()].
 select(Table, Key) ->
     Module = mod(Table),
     Module:select(Table, Key).
