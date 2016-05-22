@@ -52,7 +52,8 @@ start_link() ->
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 %% @doc Throttle the given message if necessary.
--spec throttle(dns:message(), inet:ip_address() | inet:hostname()) -> ok | throttle_result().
+-spec throttle(dns:message(), Context :: {term(), Host :: inet:ip_address() | inet:hostname()}) ->
+    ok | throttle_result().
 throttle(_Message, {tcp, _Host}) ->
   ok;
 throttle(Message, {_, Host}) ->
@@ -105,6 +106,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 
 % Internal API
+-spec(maybe_throttle(inet:ip_address() | inet:hostname()) -> throttle_result()).
 maybe_throttle(Host) ->
   case erldns_storage:select(host_throttle, Host) of
     [{_, {ReqCount, LastRequestAt}}] -> 
@@ -116,9 +118,10 @@ maybe_throttle(Host) ->
       {ok, Host, 1}
   end.
 
-record_request({ThrottleResponse, Host, ReqCount}) ->
+-spec(record_request(throttle_result()) -> throttle_result()).
+record_request(Res = {_ThrottleResponse, Host, ReqCount}) ->
   erldns_storage:insert(host_throttle, {Host, {ReqCount, timestamp()}}),
-  {ThrottleResponse, Host, ReqCount}.
+  Res.
 
 is_throttled({127,0,0,1}, ReqCount, _) -> {false, ReqCount + 1};
 is_throttled(Host, ReqCount, LastRequestAt) ->
