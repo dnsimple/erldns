@@ -47,24 +47,16 @@ create(Name = handler_registry) ->
     create_ets_table(Name, set).
 
 %% @doc Insert value in ets table.
--spec insert(atom(), tuple()) -> ok | {error, Reason :: term()}.
+-spec insert(atom(), tuple()) -> ok.
 insert(Table, Value)->
-    case ets:insert(Table, Value) of
-        true ->
-            ok;
-        Error ->
-            {error, Error}
-    end.
+    true = ets:insert(Table, Value),
+    ok.
 
 %% @doc Delete entire ets table.
--spec delete_table(atom()) -> ok | {error, Reason :: term()}.
+-spec delete_table(atom()) -> ok.
 delete_table(Table)->
-    case ets:delete(Table) of
-        true ->
-            ok;
-        Error ->
-            {error, Error}
-    end.
+    true = ets:delete(Table),
+    ok.
 
 %% @doc Delete an entry in the ets table.Ets always returns true for this function.
 -spec delete(atom(), term()) -> ok.
