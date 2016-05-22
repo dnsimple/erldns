@@ -148,7 +148,7 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
             false ->
               resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords)
           end;
-        {error, authority_not_found} ->
+        {error, _} ->
           resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords)
       end
   end.
