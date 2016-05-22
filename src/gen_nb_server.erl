@@ -27,8 +27,6 @@
 %% API
 -export([start_link/4]).
 
-%% Behavior callbacks
--export([behaviour_info/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -40,18 +38,30 @@
                 sock,
                 server_state}).
 
-%% @hidden
-behaviour_info(callbacks) ->
-  [{init, 1},
-   {handle_call, 3},
-   {handle_cast, 2},
-   {handle_info, 2},
-   {terminate, 2},
-   {sock_opts, 0},
-   {new_connection, 2}];
+-type state() :: term().
 
-behaviour_info(_) ->
-  undefined.
+-callback init(term()) -> {ok, State :: state()}.
+-callback handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: state()) ->
+  {reply, Reply :: term(), NewState :: state()} |
+  {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
+  {noreply, NewState :: state()} |
+  {noreply, NewState :: state(), timeout() | hibernate} |
+  {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
+  {stop, Reason :: term(), NewState :: state()}.
+-callback handle_cast(Request :: term(), State :: state()) ->
+  {noreply, NewState :: state()} |
+  {noreply, NewState :: state(), timeout() | hibernate} |
+  {stop, Reason :: term(), NewState :: term()}.
+-callback handle_info(Info :: timeout | term(), State :: state()) ->
+  {noreply, NewState :: state()} |
+  {noreply, NewState :: state(), timeout() | hibernate} |
+  {stop, Reason :: term(), NewState :: state()}.
+-callback terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), State :: state()) -> term().
+-callback sock_opts() -> [gen_tcp:listen_option()].
+-callback new_connection(Socket :: gen_tcp:socket(), State :: state()) ->
+  {ok, NewServerState :: state()} | {stop, Reason :: term(), NewServerState :: state()}.
+
+-export_type([state/0]).
 
 %% @spec start_link(CallbackModule, IpAddr, Port, InitParams) -> Result
 %% CallbackModule = atom()
