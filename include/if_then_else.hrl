@@ -1,0 +1,4 @@
+-ifndef(IF).
+-compile({parse_transform, if_then_else_xfrm}).
+-define(IF(B,T,F), (if_then_else(B,T,F))).
+-endif.
