@@ -129,7 +129,7 @@ select(Table, Key) ->
     Module:select(Table, Key).
 
 %% @doc Call to a module's select. Uses a matchspec to generate matches.
--spec select(atom(), list(), infinite | integer()) -> tuple() | '$end_of_table'.
+-spec select(atom(), list(), infinite | integer()) -> [tuple()].
 select(Table, MatchSpec, Limit) ->
     Module = mod(Table),
     Module:select(Table, MatchSpec, Limit).
