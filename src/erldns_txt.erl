@@ -34,7 +34,7 @@ parse(Binary) when is_binary(Binary) -> parse(binary_to_list(Binary));
 parse([]) -> [];
 parse([C|Rest]) -> parse_char([C|Rest], C, Rest, [], false).
 
--spec parse(string(), string(), [string()], boolean()) -> [binary()].
+-spec parse(String :: string(), Rest :: string(), Tokens :: [[binary()]], Escaped :: boolean()) -> [binary()] | [[binary()]].
 parse(String, [], [], _) -> [split(String)];
 parse(_, [], Tokens, _) -> Tokens;
 parse(String, [C|Rest], Tokens, Escaped) -> parse_char(String, C, Rest, Tokens, Escaped).
@@ -77,15 +77,16 @@ split(Data, Parts) ->
 
 -ifdef(TEST).
 
+
 parse_test() ->
-  ?assertEqual(parse(""), []),
-  ?assertEqual(parse("test"), [[<<"test">>]]),
-  ?assertEqual(parse(lists:duplicate(270, "x")), [[list_to_binary(lists:duplicate(255, "x")), list_to_binary(lists:duplicate(15, "x"))]]),
-  ?assertEqual(parse(<<"test">>), [[<<"test">>]]),
-  ?assertEqual(parse("\"test\" \"test\""), [[<<"test">>], [<<"test">>]]),
-  ?assertEqual(parse("\\"), [[<<"\\">>]]),
-  ?assertEqual(parse("test\\;"), [[<<"test\\;">>]]),
-  ?assertEqual(parse("test\\"), [[<<"test\\">>]]).
+  ?assertEqual([], parse("")),
+  ?assertEqual([[<<"test">>]], parse("test")),
+  ?assertEqual([[list_to_binary(lists:duplicate(255, "x")), list_to_binary(lists:duplicate(15, "x"))]], parse(lists:duplicate(270, "x"))),
+  ?assertEqual([[<<"test">>]], parse(<<"test">>)),
+  ?assertEqual([[<<"test">>], [<<"test">>]], parse("\"test\" \"test\"")),
+  ?assertEqual([[<<"\\">>]], parse("\\")),
+  ?assertEqual([[<<"test\\;">>]], parse("test\\;")),
+  ?assertEqual([[<<"test\\">>]], parse("test\\")).
 %?assertEqual(parse("\"test\"\""), [[<<"test\"">>]]).
 
 -endif.
