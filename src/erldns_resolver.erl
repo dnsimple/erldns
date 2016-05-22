@@ -148,7 +148,10 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
             false ->
               resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords)
           end;
-        {error, _} ->
+        %%% There is an error condition here that dialyzer doesn't like -
+        %%% {error, no_question}
+        %%% we should / need to deal with it
+        {error, authority_not_found} ->
           resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords)
       end
   end.
