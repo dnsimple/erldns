@@ -292,6 +292,7 @@ build_zone(Qname, Version, Records) ->
   Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
   #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
 
+-spec(build_named_index([#dns_rr{}]) -> dict:dict(binary(), [#dns_rr{}])).
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;
 build_named_index([R|Rest], Idx) ->
