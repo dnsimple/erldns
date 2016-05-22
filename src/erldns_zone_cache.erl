@@ -180,7 +180,7 @@ zone_names_and_versions() ->
 %% used to determine if the zone requires updating.
 %%
 %% This function will build the necessary Zone record before interting.
--spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok.
+-spec put_zone({binary(), binary(), [dns:rr()]}) -> ok.
 put_zone({Name, Sha, Records}) ->
   erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   ok.
