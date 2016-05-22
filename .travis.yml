@@ -1,6 +1,6 @@
 language: erlang
 otp_release:
-  - 17.3
+  - 17.5
 
 script:
   - ./rebar3 compile
