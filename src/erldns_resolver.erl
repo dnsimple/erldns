@@ -27,7 +27,7 @@ resolve(Message, AuthorityRecords, Host) ->
 
 
 %% There were no questions in the message so just return it.
--spec resolve(dns:message(), [dns:rr()], dns:ip(), [dns:question()]) -> dns:message().
+-spec resolve(dns:message(), [dns:rr()], dns:ip(), dns:questions() | dns:query()) -> dns:message().
 resolve(Message, _AuthorityRecords, _Host, []) -> Message;
 %% There is one question in the message; resolve it.
 resolve(Message, AuthorityRecords, Host, [Question]) -> resolve(Message, AuthorityRecords, Host, Question);
