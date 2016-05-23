@@ -1,6 +1,6 @@
 language: erlang
 otp_release:
-  - 17.5
+  - 18.1
 
 script:
   - ./rebar3 compile
@@ -8,3 +8,7 @@ script:
   - ./rebar3 dialyzer
   - ./rebar compile
   - ./rebar skip_deps=true eunit
+
+cache:
+  directories:
+    - $HOME/.cache
