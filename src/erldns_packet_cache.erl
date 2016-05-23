@@ -20,7 +20,7 @@
 
 -behavior(gen_server).
 
--include("if_then_else.hrl").
+-include_lib("parse_xfrm_utils/include/parse_xfrm_utils_if_than_else.hrl").
 
 % API
 -export([start_link/0, get/1, get/2, put/2, sweep/0, clear/0, stop/0]).

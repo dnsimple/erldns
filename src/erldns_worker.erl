@@ -16,7 +16,7 @@
 -module(erldns_worker).
 
 -include_lib("dns/include/dns.hrl").
--include("if_then_else.hrl").
+-include_lib("parse_xfrm_utils/include/parse_xfrm_utils_if_than_else.hrl").
 
 -behaviour(gen_server).
 -behaviour(poolboy_worker).
