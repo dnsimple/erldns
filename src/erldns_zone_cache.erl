@@ -88,7 +88,6 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
   Name = normalize_name(Qname),
   case dns:dname_to_labels(Name) of
     [] -> {error, zone_not_found};
-    [_] -> {error, zone_not_found};
     [_|Labels] ->
       case get_zone(Name) of
         {ok, Zone} -> Zone;
