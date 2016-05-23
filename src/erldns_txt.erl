@@ -22,6 +22,7 @@
 -define(MAX_TXT_SIZE, 255).
 
 -ifdef(TEST).
+-include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
@@ -78,6 +79,10 @@ split(Data, Parts) ->
 -ifdef(TEST).
 
 
+%% Known failure cases:
+%% \
+%% "
+%% "\"
 parse_test() ->
   ?assertEqual([], parse("")),
   ?assertEqual([[<<"test">>]], parse("test")),
@@ -88,5 +93,76 @@ parse_test() ->
   ?assertEqual([[<<"test\\;">>]], parse("test\\;")),
   ?assertEqual([[<<"test\\">>]], parse("test\\")).
 %?assertEqual(parse("\"test\"\""), [[<<"test\"">>]]).
+
+proper_test_() ->
+  [] = proper:module(?MODULE, [{to_file, user}, {numtests, 1000}]).
+
+check_bblist([]) ->
+  true;
+check_bblist([[Binary]|Rest]) when is_binary(Binary) andalso size(Binary) =< ?MAX_TXT_SIZE ->
+  check_bblist(Rest);
+check_bblist(_) ->
+  false.
+
+%% ASCII Strings without " nor end in \
+quoteless_ascii_string1() ->
+  list(oneof([integer(0, 33), integer(35, 255)])).
+quoteless_ascii_string() ->
+  ?SUCHTHAT(
+    String,
+    quoteless_ascii_string1(),
+    begin
+      case lists:reverse(String) of
+        [92|_] ->
+          false;
+        _ ->
+          true
+      end
+    end
+  ).
+
+quoted_ascii_string1() ->
+  %% " has character code 34.
+  ?LET(
+    String,
+    quoteless_ascii_string(),
+    [34] ++ String ++ [34]
+  ).
+
+quoted_ascii_string() ->
+  ?SUCHTHAT(
+    String,
+    quoted_ascii_string1(),
+    begin
+      case lists:reverse(String) of
+        % "\
+        [34, 92|_] ->
+          false;
+        _ ->
+          true
+      end
+    end
+  ).
+
+quoted_and_unquoted_ascii_string_unflattened() ->
+  list(
+    oneof([quoted_ascii_string(), quoteless_ascii_string()])
+  ).
+quoted_and_unquoted_ascii_string() ->
+  ?LET(
+    StringList,
+    quoted_and_unquoted_ascii_string_unflattened(),
+    lists:flatten(StringList)
+  ).
+
+prop_parse_holds_type() ->
+  ?FORALL(
+    ASCIIString,
+    quoted_and_unquoted_ascii_string(),
+    begin
+      BinaryOfBinaryList = parse(ASCIIString),
+      check_bblist(BinaryOfBinaryList)
+    end
+  ).
 
 -endif.
