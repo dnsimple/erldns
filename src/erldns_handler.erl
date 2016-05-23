@@ -132,6 +132,7 @@ handle_message(Message, Host) ->
 %% If the packet is not in the cache and we are not authoritative (because there
 %% is no SOA record for this zone), then answer immediately setting the AA flag to false.
 %% If erldns is configured to use root hints then those will be added to the response.
+-spec(handle_packet_cache_miss(Message :: dns:message(), AuthorityRecords :: dns:authority(), Host :: dns:ip()) -> dns:message()).
 handle_packet_cache_miss(Message, [], _Host) ->
   case erldns_config:use_root_hints() of
     true ->
@@ -147,6 +148,7 @@ handle_packet_cache_miss(Message, [], _Host) ->
 handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
   safe_handle_packet_cache_miss(Message#dns_message{ra = false}, AuthorityRecords, Host).
 
+-spec(safe_handle_packet_cache_miss(Message :: dns:message(), AuthorityRecords :: dns:authority(), Host :: dns:ip()) -> dns:message()).
 safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
   case application:get_env(erldns, catch_exceptions) of
     {ok, false} ->
@@ -174,7 +176,7 @@ maybe_cache_packet(Message, false) ->
 %% Get the SOA authority for the current query.
 get_authority(MessageOrName) ->
   case erldns_zone_cache:get_authority(MessageOrName) of
-    {ok, Authority} -> [Authority];
+    {ok, Authority} -> Authority;
     {error, _} -> []
   end.
 

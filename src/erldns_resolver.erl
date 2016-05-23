@@ -190,6 +190,8 @@ check_if_parent(PossibleParentName, Name) ->
 
 %% There were no exact type matches, but there were other name matches and there are NS records.
 %% Since the Qtype is ANY we indicate we are authoritative and include the NS records.
+-spec(resolve_no_exact_type_match(Message :: dns:message(), Qtype :: 0..255, Host :: any(), CnameChain :: any(), ExactTypeMatches :: dns:answers(), Zone :: #zone{}, MatchedRecords :: [dns:rr()], ReferralRecords :: [dns:rr()], AuthorityRecords :: dns:authority()) ->
+  dns:message()).
 resolve_no_exact_type_match(Message, ?DNS_TYPE_ANY, _Host, _CnameChain, _ExactTypeMatches, _Zone, [], [], AuthorityRecords) ->
   Message#dns_message{aa = true, authority = AuthorityRecords};
 resolve_no_exact_type_match(Message, _Qtype, _Host, _CnameChain, [], Zone, _MatchedRecords, [], _AuthorityRecords) ->
