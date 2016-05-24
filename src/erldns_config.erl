@@ -25,6 +25,7 @@
          use_root_hints/0
         ]).
 -export([
+         zone_delegates/0,
          zone_server_env/0,
          zone_server_max_processes/0,
          zone_server_protocol/0,
@@ -168,6 +169,9 @@ keyget(Key, Data, Default) ->
 %% Zone server configuration
 %% TODO: remove as zone server client logic has been removed
 
+zone_delegates() ->
+    application:get_env(erldns, zone_delegates, []).
+
 zone_server_env() ->
   {ok, ZoneServerEnv} = application:get_env(erldns, zone_server),
   ZoneServerEnv.
@@ -201,7 +205,6 @@ websocket_path() ->
 
 websocket_url() ->
   atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
-
 
 %% Storage configuration
 
@@ -243,6 +246,7 @@ get_env_value(Key, Name) ->
     {Key, Value} ->
       Value
   end.
+
 
 get_env(storage) ->
   case application:get_env(erldns, storage) of
