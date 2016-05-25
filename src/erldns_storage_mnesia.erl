@@ -13,6 +13,10 @@
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 -module(erldns_storage_mnesia).
 
+%% The function takes advantage of mnesia record matches
+
+-dialyzer({nowarn_function, list_table/1}).
+
 -include("erldns.hrl").
 
 %% API
@@ -120,7 +124,7 @@ insert(authorities, #authorities{} = Auth) ->
     end.
 
 %% @doc delete the entire table.
--spec delete_table(atom()) -> true | {aborted, any()}.
+-spec delete_table(atom()) -> ok | {aborted, any()}.
 delete_table(Table) ->
     case mnesia:delete_table(Table) of
         {atomic, ok} ->
@@ -167,7 +171,7 @@ backup_tables()->
     {error, not_implemented}.
 
 %% @doc Select based on key value.
--spec select(Table :: atom(), Key :: term()) -> tuple().
+-spec select(Table :: atom(), Key :: term()) -> [tuple()].
 select(Table, Key)->
     Select = fun () ->
                      case mnesia:read({Table, Key}) of
@@ -178,7 +182,7 @@ select(Table, Key)->
     mnesia:activity(transaction, Select).
 
 %% @doc Select using a match spec.
--spec select(atom(), list(), infinite | integer()) -> tuple() | '$end_of_table'.
+-spec select(atom(), list(), infinite | integer()) -> [tuple()].
 select(_Table, MatchSpec, _Limit) ->
     MatchObject = fun() -> mnesia:match_object(MatchSpec) end,
     mnesia:activity(transaction, MatchObject).
@@ -205,7 +209,8 @@ empty_table(Table) ->
     end.
 
 %% @doc Lists the contents of the given table.
--spec list_table(atom()) -> [] | term().
+-spec list_table(atom()) ->
+    [] | [#zone{}] | [#authorities{}] | [tuple()] | {error, doesnt_exist}.
 list_table(zones) ->
     Pattern = #zone{name ='_', version = '_', authority = '_', record_count = '_',
                     records = '_', records_by_name = '_', records_by_type = '_'},

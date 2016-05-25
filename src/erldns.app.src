@@ -6,6 +6,8 @@
                   stdlib,
                   inets,
                   crypto,
+                  dns,
+                  jsx,
                   ssl,
                   mnesia,
                   observer,

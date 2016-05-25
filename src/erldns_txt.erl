@@ -22,6 +22,7 @@
 -define(MAX_TXT_SIZE, 255).
 
 -ifdef(TEST).
+-include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
@@ -34,7 +35,7 @@ parse(Binary) when is_binary(Binary) -> parse(binary_to_list(Binary));
 parse([]) -> [];
 parse([C|Rest]) -> parse_char([C|Rest], C, Rest, [], false).
 
--spec parse(string(), string(), [string()], boolean()) -> [binary()].
+-spec parse(String :: string(), Rest :: string(), Tokens :: [[binary()]], Escaped :: boolean()) -> [binary()] | [[binary()]].
 parse(String, [], [], _) -> [split(String)];
 parse(_, [], Tokens, _) -> Tokens;
 parse(String, [C|Rest], Tokens, Escaped) -> parse_char(String, C, Rest, Tokens, Escaped).
@@ -77,15 +78,91 @@ split(Data, Parts) ->
 
 -ifdef(TEST).
 
+
+%% Known failure cases:
+%% \
+%% "
+%% "\"
 parse_test() ->
-  ?assertEqual(parse(""), []),
-  ?assertEqual(parse("test"), [[<<"test">>]]),
-  ?assertEqual(parse(lists:duplicate(270, "x")), [[list_to_binary(lists:duplicate(255, "x")), list_to_binary(lists:duplicate(15, "x"))]]),
-  ?assertEqual(parse(<<"test">>), [[<<"test">>]]),
-  ?assertEqual(parse("\"test\" \"test\""), [[<<"test">>], [<<"test">>]]),
-  ?assertEqual(parse("\\"), [[<<"\\">>]]),
-  ?assertEqual(parse("test\\;"), [[<<"test\\;">>]]),
-  ?assertEqual(parse("test\\"), [[<<"test\\">>]]).
+  ?assertEqual([], parse("")),
+  ?assertEqual([[<<"test">>]], parse("test")),
+  ?assertEqual([[list_to_binary(lists:duplicate(255, "x")), list_to_binary(lists:duplicate(15, "x"))]], parse(lists:duplicate(270, "x"))),
+  ?assertEqual([[<<"test">>]], parse(<<"test">>)),
+  ?assertEqual([[<<"test">>], [<<"test">>]], parse("\"test\" \"test\"")),
+  ?assertEqual([[<<"\\">>]], parse("\\")),
+  ?assertEqual([[<<"test\\;">>]], parse("test\\;")),
+  ?assertEqual([[<<"test\\">>]], parse("test\\")).
 %?assertEqual(parse("\"test\"\""), [[<<"test\"">>]]).
+
+proper_test_() ->
+  [] = proper:module(?MODULE, [{to_file, user}, {numtests, 1000}]).
+
+check_bblist([]) ->
+  true;
+check_bblist([[Binary]|Rest]) when is_binary(Binary) andalso size(Binary) =< ?MAX_TXT_SIZE ->
+  check_bblist(Rest);
+check_bblist(_) ->
+  false.
+
+%% ASCII Strings without " nor end in \
+quoteless_ascii_string1() ->
+  list(oneof([integer(0, 33), integer(35, 255)])).
+quoteless_ascii_string() ->
+  ?SUCHTHAT(
+    String,
+    quoteless_ascii_string1(),
+    begin
+      case lists:reverse(String) of
+        [92|_] ->
+          false;
+        _ ->
+          true
+      end
+    end
+  ).
+
+quoted_ascii_string1() ->
+  %% " has character code 34.
+  ?LET(
+    String,
+    quoteless_ascii_string(),
+    [34] ++ String ++ [34]
+  ).
+
+quoted_ascii_string() ->
+  ?SUCHTHAT(
+    String,
+    quoted_ascii_string1(),
+    begin
+      case lists:reverse(String) of
+        % "\
+        [34, 92|_] ->
+          false;
+        _ ->
+          true
+      end
+    end
+  ).
+
+quoted_and_unquoted_ascii_string_unflattened() ->
+  list(
+    oneof([quoted_ascii_string(), quoteless_ascii_string()])
+  ).
+quoted_and_unquoted_ascii_string() ->
+  ?LET(
+    StringList,
+    quoted_and_unquoted_ascii_string_unflattened(),
+    lists:flatten(StringList)
+  ).
+
+prop_parse_holds_type() ->
+  ?FORALL(
+    ASCIIString,
+    quoted_and_unquoted_ascii_string(),
+    begin
+      BinaryOfBinaryList = parse(ASCIIString),
+      check_bblist(BinaryOfBinaryList)
+    end
+  ).
 
 -endif.
