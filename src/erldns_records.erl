@@ -177,6 +177,7 @@ name_type(Type) when is_binary(Type) ->
     ?DNS_TYPE_MAILB_BSTR -> ?DNS_TYPE_MAILB_NUMBER;
     ?DNS_TYPE_MAILA_BSTR -> ?DNS_TYPE_MAILA_NUMBER;
     ?DNS_TYPE_ANY_BSTR -> ?DNS_TYPE_ANY_NUMBER;
+    ?DNS_TYPE_CAA_BSTR -> ?DNS_TYPE_CAA_NUMBER;
     ?DNS_TYPE_DLV_BSTR -> ?DNS_TYPE_DLV_NUMBER;
     _ -> undefined
   end.

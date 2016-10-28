@@ -237,6 +237,17 @@ json_record_to_erlang([Name, <<"AAAA">>, Ttl, Data, _Context]) ->
       {}
   end;
 
+json_record_to_erlang([Name, <<"CAA">>, Ttl, Data, _Context]) ->
+  #dns_rr{
+     name = Name,
+     type = ?DNS_TYPE_CAA,
+     data = #dns_rrdata_caa{
+               flags = erldns_config:keyget(<<"flags">>, Data),
+               tag = erldns_config:keyget(<<"tag">>, Data),
+               value = erldns_config:keyget(<<"value">>, Data)
+              },
+     ttl = Ttl};
+
 json_record_to_erlang([Name, <<"CNAME">>, Ttl, Data, _Context]) ->
   #dns_rr{
      name = Name,

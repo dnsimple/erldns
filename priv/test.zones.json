@@ -51,6 +51,16 @@
                 }
             },
             {
+                "name": "caa.example.com",
+                "type": "CAA",
+                "ttl": 3600,
+                "data": {
+                    "flags": 0,
+                    "tag": "issue",
+                    "value": "example.net"
+                }
+            },
+            {
                 "name": "rns.example.com",
                 "type": "A",
                 "ttl": 120,
