@@ -33,6 +33,16 @@
                 }
             },
             {
+                "name": "example.com",
+                "type": "CAA",
+                "ttl": 3600,
+                "data": {
+                    "flags": 0,
+                    "tag": "issue",
+                    "value": "example.net"
+                }
+            },
+            {
                 "name": "www.example.com",
                 "type": "CNAME",
                 "ttl": 120,

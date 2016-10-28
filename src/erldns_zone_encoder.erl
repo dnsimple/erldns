@@ -153,6 +153,8 @@ encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SRV, Ttl, Data}) ->
   encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_NAPTR, Ttl, Data}) ->
   encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_CAA, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
   lager:debug("Unable to encode record: ~p", [Record]),
   [].
@@ -183,6 +185,8 @@ encode_data({dns_rrdata_a, Address}) ->
   list_to_binary(inet_parse:ntoa(Address));
 encode_data({dns_rrdata_aaaa, Address}) ->
   list_to_binary(inet_parse:ntoa(Address));
+encode_data({dns_rrdata_caa, Flags, Tag, Value}) ->
+  erlang:iolist_to_binary(io_lib:format("~w ~s \"~s\"", [Flags, Tag, Value]));
 encode_data({dns_rrdata_cname, Dname}) ->
   erlang:iolist_to_binary(io_lib:format("~s.", [Dname]));
 encode_data({dns_rrdata_mx, Preference, Dname}) ->
