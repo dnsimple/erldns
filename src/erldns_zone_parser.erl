@@ -114,7 +114,7 @@ json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
 json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}], Parsers) ->
   json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}, {<<"keys">>, []}], Parsers);
 
-json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}, {<<"keys">>, _Keys}], Parsers) ->
+json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers) ->
   Records = lists:map(
               fun(JsonRecord) ->
                   Data = json_record_to_list(JsonRecord),
@@ -133,7 +133,18 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
   FilteredRecords = lists:filter(record_filter(), Records),
   DistinctRecords = lists:usort(FilteredRecords),
   % lager:debug("After parsing for ~p: ~p", [Name, DistinctRecords]),
-  {Name, Sha, DistinctRecords}.
+  {Name, Sha, DistinctRecords, parse_json_keys(JsonKeys)}.
+
+parse_json_keys(JsonKeys) -> parse_json_keys(JsonKeys, []).
+
+parse_json_keys([], Keys) -> Keys;
+parse_json_keys([[{<<"ksk">>, Ksk}, {<<"zsk">>, Zsk}, {<<"until">>, ValidUntil}]|Rest], Keys) ->
+  KeySet = #keyset{
+     key_signing_key = Ksk,
+     zone_signing_key = Zsk,
+     valid_until = ValidUntil
+  },
+  parse_json_keys(Rest, [KeySet | Keys]).
 
 record_filter() ->
   fun(R) ->

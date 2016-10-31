@@ -180,9 +180,9 @@ zone_names_and_versions() ->
 %% used to determine if the zone requires updating.
 %%
 %% This function will build the necessary Zone record before interting.
--spec put_zone({binary(), binary(), [dns:rr()]}) -> ok.
-put_zone({Name, Sha, Records}) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+-spec put_zone({binary(), binary(), [dns:rr()], [#keyset{}]}) -> ok.
+put_zone({Name, Sha, Records, Keys}) ->
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, Keys)}),
   ok.
 
 %% @doc Put a zone into the cache and wait for a response.
@@ -192,9 +192,9 @@ put_zone(Name, Zone) ->
   ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
--spec put_zone_async({binary(), binary(), [#dns_rr{}]}) -> ok.
-put_zone_async({Name, Sha, Records}) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+-spec put_zone_async({binary(), binary(), [#dns_rr{}], [#keyset{}]}) -> ok.
+put_zone_async({Name, Sha, Records, Keys}) ->
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, Keys)}),
   ok.
 
 %% @doc Put a zone into the cache without waiting for a response.
@@ -229,16 +229,16 @@ handle_call({put, Name, Zone}, _From, State) ->
   erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   {reply, ok, State};
 
-handle_call({put, Name, Sha, Records}, _From, State) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+handle_call({put, Name, Sha, Records, Keys}, _From, State) ->
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, Keys)}),
   {reply, ok, State}.
 
 handle_cast({put, Name, Zone}, State) ->
   erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   {noreply, State};
 
-handle_cast({put, Name, Sha, Records}, State) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
+handle_cast({put, Name, Sha, Records, Keys}, State) ->
+  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, Keys)}),
   {noreply, State};
 
 handle_cast({delete, Name}, State) ->
@@ -287,10 +287,10 @@ find_zone_in_cache(Name, [_|Labels]) ->
       end
   end.
 
-build_zone(Qname, Version, Records) ->
+build_zone(Qname, Version, Records, Keys) ->
   RecordsByName = build_named_index(Records),
   Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
-  #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
+  #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName, keysets = Keys}.
 
 -spec(build_named_index([#dns_rr{}]) -> dict:dict(binary(), [#dns_rr{}])).
 build_named_index(Records) -> build_named_index(Records, dict:new()).

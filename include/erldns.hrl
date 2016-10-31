@@ -1,5 +1,11 @@
 -include_lib("dns/include/dns_records.hrl").
 
+-record(keyset, {
+    key_signing_key :: crypto:rsa_private(),
+    zone_signing_key :: crypto:rsa_private(),
+    valid_until :: binary()
+  }).
+
 -record(zone, {
     name :: dns:dname(),
     version :: binary(),
@@ -10,8 +16,7 @@
     %% records_by_type is no longer in use, but cannot (easily) be deleted due to Mnesia schema evolution
     %% We cannot set it to undefined, because, again, when fetched from Mnesia, it may be set
     records_by_type :: term(),
-    key_signing_key :: crypto:rsa_private(),
-    zone_signing_key :: crypto:rsa_private()
+    keysets :: [#keyset{}]
   }).
 
 -record(authorities, {
