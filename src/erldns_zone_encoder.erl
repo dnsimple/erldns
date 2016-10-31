@@ -100,6 +100,7 @@ zone_to_json(Zone, Encoders) ->
                               {<<"name">>, Zone#zone.name},
                               {<<"version">>, Zone#zone.version},
                               {<<"records">>, FilteredRecords}
+                              % Note: Private key material is purposely omitted
                              ]}
                ]
               }]).
