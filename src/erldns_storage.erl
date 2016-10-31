@@ -65,9 +65,9 @@ handle_cast(_Msg, State) ->
 
 %% @doc Backups the tables in the given period
 handle_info(timeout, State) ->
-    Before = now(),
+    Before = erlang:timestamp(),
     {error, not_implemented} = backup_tables(),
-    TimeSpentMs = timer:now_diff(now(), Before) div 1000,
+    TimeSpentMs = timer:now_diff(erlang:timestamp(), Before) div 1000,
     {noreply, State, max((?POLL_WAIT_HOURS * 60000) - TimeSpentMs, 0)};
 handle_info(_Info, State) ->
     {noreply, State, 0}.
@@ -123,13 +123,13 @@ backup_tables() ->
     Module:backup_tables().
 
 %% @doc Call to a module's select. Uses table key pair, and can be considered a "lookup" in terms of ets.
--spec select(atom(), term()) -> tuple().
+-spec select(atom(), term()) -> [tuple()].
 select(Table, Key) ->
     Module = mod(Table),
     Module:select(Table, Key).
 
 %% @doc Call to a module's select. Uses a matchspec to generate matches.
--spec select(atom(), list(), integer()) -> tuple() | '$end_of_table'.
+-spec select(atom(), list(), infinite | integer()) -> [tuple()].
 select(Table, MatchSpec, Limit) ->
     Module = mod(Table),
     Module:select(Table, MatchSpec, Limit).

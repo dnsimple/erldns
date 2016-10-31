@@ -20,6 +20,8 @@
 
 -behavior(gen_server).
 
+-include_lib("parse_xfrm_utils/include/parse_xfrm_utils_if_than_else.hrl").
+
 % API
 -export([start_link/0, get/1, get/2, put/2, sweep/0, clear/0, stop/0]).
 
@@ -75,14 +77,16 @@ get(Question, _Host) ->
 %% @doc Put the response in the cache for the given question.
 -spec put(dns:question(), dns:message()) -> ok.
 put(Question, Response) ->
-  case ?ENABLED of
-    true ->
+  ?IF(
+    ?ENABLED,
+    begin
       %lager:debug("Set packet in cache for ~p", [Question]),
-      gen_server:call(?SERVER, {set_packet, [Question, Response]});
-    _ ->
+      gen_server:call(?SERVER, {set_packet, [Question, Response]})
+    end,
+    begin
       %lager:debug("Packet cache not enabled (Q: ~p)", [Question]),
       ok
-  end.
+    end).
 
 %% @doc Remove all old cached packets from the cache.
 -spec sweep() -> any().
@@ -116,7 +120,7 @@ handle_call(stop, _From, State) ->
   {stop, normal, ok, State}.
 
 handle_cast(sweep, State) ->
-  Keys = erldns_storage:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}]),
+  Keys = erldns_storage:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}], infinite),
   lists:foreach(fun(K) -> erldns_storage:delete(packet_cache, K) end, Keys),
   {noreply, State};
 

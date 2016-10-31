@@ -51,7 +51,7 @@ start_link(_Name, Family, Address, Port) ->
 init([]) ->
   {ok, #state{}}.
 handle_call(_Request, _From, State) ->
-  {ok, State}.
+  {reply, ok, State}.
 handle_cast(_Message, State) ->
   {noreply, State}.
 handle_info({tcp, Socket, Bin}, State) ->

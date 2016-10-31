@@ -1,3 +1,14 @@
 language: erlang
 otp_release:
-   - 17.3
+  - 18.2.1
+
+script:
+  - ./rebar3 compile
+  - ./rebar3 eunit
+  - ./rebar3 dialyzer
+  - ./rebar compile
+  - ./rebar skip_deps=true eunit
+
+cache:
+  directories:
+    - $HOME/.cache

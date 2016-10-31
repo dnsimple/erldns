@@ -56,7 +56,7 @@ start_link() ->
 %% @doc Takes a JSON zone and turns it into the tuple {Name, Sha, Records}.
 %%
 %% The default timeout for parsing is currently 30 seconds.
--spec zone_to_erlang(binary()) -> [{binary(), binary(), [dns:rr()]}].
+-spec zone_to_erlang(binary()) -> {binary(), binary(), [dns:rr()]}.
 zone_to_erlang(Zone) ->
   gen_server:call(?SERVER, {parse_zone, Zone}, ?PARSE_TIMEOUT).
 
@@ -243,6 +243,17 @@ json_record_to_erlang([Name, <<"AAAA">>, Ttl, Data, _Context]) ->
       lager:error("Failed to parse AAAA record address ~p: ~p", [Ip, Reason]),
       {}
   end;
+
+json_record_to_erlang([Name, <<"CAA">>, Ttl, Data, _Context]) ->
+  #dns_rr{
+     name = Name,
+     type = ?DNS_TYPE_CAA,
+     data = #dns_rrdata_caa{
+               flags = erldns_config:keyget(<<"flags">>, Data),
+               tag = erldns_config:keyget(<<"tag">>, Data),
+               value = erldns_config:keyget(<<"value">>, Data)
+              },
+     ttl = Ttl};
 
 json_record_to_erlang([Name, <<"CNAME">>, Ttl, Data, _Context]) ->
   #dns_rr{

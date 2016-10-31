@@ -20,14 +20,16 @@
 
 -export([resolve/3]).
 
+-callback get_records_by_name(dns:dname()) -> [dns:rr()].
+
 %% @doc Resolve the questions in the message.
--spec resolve(dns:message(), [dns:rr()], dns:ip()) -> dns:message().
+-spec resolve(Message :: dns:message(), AuthorityRecords :: [dns:rr()], Host :: dns:ip()) -> dns:message().
 resolve(Message, AuthorityRecords, Host) ->
   resolve(Message, AuthorityRecords, Host, Message#dns_message.questions).
 
 
 %% There were no questions in the message so just return it.
--spec resolve(dns:message(), [dns:rr()], dns:ip(), [dns:question()]) -> dns:message().
+-spec resolve(dns:message(), [dns:rr()], dns:ip(), dns:questions() | dns:query()) -> dns:message().
 resolve(Message, _AuthorityRecords, _Host, []) -> Message;
 %% There is one question in the message; resolve it.
 resolve(Message, AuthorityRecords, Host, [Question]) -> resolve(Message, AuthorityRecords, Host, Question);
@@ -61,7 +63,7 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain)
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
-  resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone).
+  resolve(Message, Qname, Qtype, get_records_by_name(Zone, Qname), Host, CnameChain, Zone).
 
 %% There were no exact matches on name, so move to the best-match resolution.
 resolve(Message, Qname, Qtype, _MatchedRecords = [], Host, CnameChain, Zone) ->
@@ -110,6 +112,17 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
 
 %% There were no matches for exact name and type, so now we are looking for NS records
 %% in the exact name matches.
+-spec(resolve_exact_match(
+    Message :: dns:message(),
+    Qname :: dns:dname(),
+    Qtype :: 0..255,
+    Host :: any(),
+    CnameChain :: any(),
+    MatchedRecords :: [dns:rr()],
+    Zone :: #zone{},
+    ExactTypeMatches :: dns:answers(),
+    AuthorityRecords :: dns:authority()) ->
+  dns:message()).
 resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _ExactTypeMatches = [], AuthorityRecords) ->
   ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), MatchedRecords), % Query matched records for NS type
   resolve_no_exact_type_match(Message, Qtype, Host, CnameChain, [], Zone, MatchedRecords, ReferralRecords, AuthorityRecords);
@@ -135,10 +148,10 @@ resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, Matc
 resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
   % NOTE: this is a potential bug because it assumes the last record is the one to examine.
   Answer = lists:last(MatchedRecords),
-  case NSRecords = erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
-    [] ->
-      resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords = []);
-    _ ->
+  case erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
+    NSRecords = [] ->
+      resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords);
+    NSRecords ->
       NSRecord = lists:last(NSRecords),
       case erldns_zone_cache:get_authority(Qname) of
         {ok, [SoaRecord]} ->
@@ -187,12 +200,10 @@ check_if_parent(PossibleParentName, Name) ->
 
 %% There were no exact type matches, but there were other name matches and there are NS records.
 %% Since the Qtype is ANY we indicate we are authoritative and include the NS records.
-resolve_no_exact_type_match(Message, ?DNS_TYPE_ANY, _Host, _CnameChain, _ExactTypeMatches, _Zone, [], [], AuthorityRecords) ->
-  Message#dns_message{aa = true, authority = AuthorityRecords};
+-spec(resolve_no_exact_type_match(Message :: dns:message(), Qtype :: 0..255, Host :: any(), CnameChain :: any(), ExactTypeMatches :: dns:answers(), Zone :: #zone{}, MatchedRecords :: [dns:rr()], ReferralRecords :: [dns:rr()], AuthorityRecords :: dns:authority()) ->
+  dns:message()).
 resolve_no_exact_type_match(Message, _Qtype, _Host, _CnameChain, [], Zone, _MatchedRecords, [], _AuthorityRecords) ->
   Message#dns_message{aa = true, authority = Zone#zone.authority};
-resolve_no_exact_type_match(Message, _Qtype, _Host, _CnameChain, ExactTypeMatches, _Zone, _MatchedRecords, [], _AuthorityRecords) ->
-  Message#dns_message{aa = true, answers = Message#dns_message.answers ++ ExactTypeMatches};
 resolve_no_exact_type_match(Message, Qtype, _Host, _CnameChain, _ExactTypeMatches, _Zone, MatchedRecords, ReferralRecords, AuthorityRecords) ->
   resolve_exact_match_referral(Message, Qtype, MatchedRecords, ReferralRecords, AuthorityRecords).
 
@@ -391,12 +402,12 @@ best_match(Qname, Zone) -> best_match(Qname, dns:dname_to_labels(Qname), Zone).
 best_match(_Qname, [], _Zone) -> [];
 best_match(Qname, [_|Rest], Zone) ->
   WildcardName = dns:labels_to_dname([<<"*">>] ++ Rest),
-  best_match(Qname, Rest, Zone,  erldns_zone_cache:get_records_by_name(WildcardName)).
+  best_match(Qname, Rest, Zone,  get_records_by_name(Zone, WildcardName)).
 
 best_match(_Qname, [], _Zone, []) -> [];
 best_match(Qname, Labels, Zone, []) ->
   Name = dns:labels_to_dname(Labels),
-  case erldns_zone_cache:get_records_by_name(Name) of
+  case get_records_by_name(Zone, Name) of
     [] -> best_match(Qname, Labels, Zone);
     Matches -> Matches
   end;
@@ -418,7 +429,7 @@ custom_lookup(Qname, Qtype, Records) ->
       end
   end.
 
-% Function for filtering out custom records and replcing them with
+% Function for filtering out custom records and replacing them with
 % records which content from the custom handler.
 filter_records(Records, []) -> Records;
 filter_records(Records, [{Handler,_}|Rest]) ->
@@ -444,7 +455,7 @@ additional_processing(Message, _Host, _Zone, []) ->
   Message;
 %% There are records with names that require additional processing.
 additional_processing(Message, Host, Zone, Names) ->
-  RRs = lists:flatten(lists:map(fun(Name) -> erldns_zone_cache:get_records_by_name(Name) end, Names)),
+  RRs = lists:flatten(lists:map(fun(Name) -> get_records_by_name(Zone, Name) end, Names)),
   Records = lists:filter(erldns_records:match_types([?DNS_TYPE_A, ?DNS_TYPE_AAAA]), RRs),
   additional_processing(Message, Host, Zone, Names, Records).
 
@@ -474,4 +485,28 @@ check_dnssec(Message, Host, Question) ->
       erldns_events:notify({dnssec_request, Host, Question#dns_query.name});
     false ->
       ok
+  end.
+
+%% returns the record lookup delegation mdule for a zone.
+get_delegate(#zone{name = Name}) ->
+  case lists:keyfind(Name, 1, erldns_config:zone_delegates()) of
+    false -> none;
+    {Name, Delegate} -> {ok, Delegate}
+  end.
+
+
+get_records_by_name(Zone, Qname) ->
+  case erldns_zone_cache:get_records_by_name(Qname) of
+    [] ->
+      get_delegate_records(Zone, Qname);
+    Records ->
+      Records
+  end.
+
+get_delegate_records(Zone, Qname) ->
+  case get_delegate(Zone) of
+    {ok, Delegate} ->
+      Delegate:get_records_by_name(Qname);
+    _ ->
+      []
   end.

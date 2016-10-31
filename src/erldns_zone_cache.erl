@@ -88,7 +88,6 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
   Name = normalize_name(Qname),
   case dns:dname_to_labels(Name) of
     [] -> {error, zone_not_found};
-    [_] -> {error, zone_not_found};
     [_|Labels] ->
       case get_zone(Name) of
         {ok, Zone} -> Zone;
@@ -181,7 +180,7 @@ zone_names_and_versions() ->
 %% used to determine if the zone requires updating.
 %%
 %% This function will build the necessary Zone record before interting.
--spec put_zone({binary(), binary(), [#dns_rr{}]}) -> ok.
+-spec put_zone({binary(), binary(), [dns:rr()]}) -> ok.
 put_zone({Name, Sha, Records}) ->
   erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records)}),
   ok.
@@ -293,6 +292,7 @@ build_zone(Qname, Version, Records) ->
   Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
   #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName}.
 
+-spec(build_named_index([#dns_rr{}]) -> dict:dict(binary(), [#dns_rr{}])).
 build_named_index(Records) -> build_named_index(Records, dict:new()).
 build_named_index([], Idx) -> Idx;
 build_named_index([R|Rest], Idx) ->
