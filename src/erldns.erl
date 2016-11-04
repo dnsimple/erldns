@@ -15,7 +15,12 @@
 %% @doc Convenience API to start erl-dns directly.
 -module(erldns).
 
+-include("erldns.hrl").
+
 -export([start/0]).
+
+-export_type([keyset/0]).
+-type keyset() :: #keyset{}.
 
 -spec start() -> any().
 start() ->
