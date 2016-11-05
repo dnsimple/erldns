@@ -209,29 +209,16 @@ init([]) ->
 % ----------------------------------------------------------------------------------------------------
 % gen_server callbacks
 
-%% @doc Write the zone into the cache.
-handle_call({put, Name, Zone}, _From, State) ->
-  erldns_storage:insert(zones, {normalize_name(Name), Zone}),
-  {reply, ok, State};
-
-handle_call({put, Name, Sha, Records, Keys}, _From, State) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, Keys)}),
+handle_call(Message, _From, State) ->
+  lager:debug("Received unsupported call: ~p", [Message]),
   {reply, ok, State}.
-
-handle_cast({put, Name, Zone}, State) ->
-  erldns_storage:insert(zones, {normalize_name(Name), Zone}),
-  {noreply, State};
-
-handle_cast({put, Name, Sha, Records, Keys}, State) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, Keys)}),
-  {noreply, State};
 
 handle_cast({delete, Name}, State) ->
   erldns_storage:delete(zones, normalize_name(Name)),
   {noreply, State};
 
 handle_cast(Message, State) ->
-  lager:debug("Received unsupported message: ~p", [Message]),
+  lager:debug("Received unsupported cast: ~p", [Message]),
   {noreply, State}.
 
 handle_info(_Message, State) ->
