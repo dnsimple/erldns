@@ -183,9 +183,9 @@ put_zone({Name, Sha, Records, Keys}) ->
   put_zone(normalize_name(Name), build_zone(Name, Sha, Records, Keys)).
 
 %% @doc Put a zone into the cache and wait for a response.
--spec put_zone(binary(), #zone{}) -> ok.
+-spec put_zone(binary(), erldns:zone()) -> ok.
 put_zone(Name, Zone) ->
-  erldns_storage:insert(zones, {normalize_name(Name), Zone}),
+  erldns_storage:insert(zones, {normalize_name(Name), sign_zone(Name, Zone)}),
   ok.
 
 %% @doc Remove a zone from the cache without waiting for a response.
@@ -275,5 +275,28 @@ build_named_index([R|Rest], Idx) ->
       build_named_index(Rest, dict:store(normalize_name(R#dns_rr.name), [R], Idx))
   end.
 
+%% @doc Converts a domain name to lower case.
 normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
 normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
+
+%% @doc Returns a function that generates RRSIG records for a zone using the zone's signing keys.
+zone_signer(Name, Zone) ->
+  fun(Keyset) ->
+      KeyRRs = lists:filter(erldns_records:match_type(?DNS_TYPE_DNSKEY), Zone#zone.records),
+      KSK = dnssec:add_keytag_to_dnskey(lists:last(lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 257 end, KeyRRs))),
+      SignedKeyRRs = dnssec:sign_rr(KeyRRs, normalize_name(Name), KSK#dns_rr.data#dns_rrdata_dnskey.key_tag, KSK#dns_rr.data#dns_rrdata_dnskey.alg, Keyset#keyset.key_signing_key, []),
+
+      ZSK = dnssec:add_keytag_to_dnskey(lists:last(lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 256 end, KeyRRs))),
+      RRs = lists:filter(fun(RR) -> (RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY) end, Zone#zone.records),
+      SignedRRs = dnssec:sign_rr(RRs, normalize_name(Name), ZSK#dns_rr.data#dns_rrdata_dnskey.key_tag, ZSK#dns_rr.data#dns_rrdata_dnskey.alg, Keyset#keyset.zone_signing_key, []),
+
+      SignedKeyRRs ++ SignedRRs
+  end.
+
+-spec(sign_zone(binary(), erldns:zone()) -> erldns:zone()).
+sign_zone(_Name, Zone = #zone{keysets = []}) ->
+  Zone;
+sign_zone(Name, Zone) ->
+  lager:debug("Signing zone ~p", [Zone#zone.name]),
+  RRSigRecords = lists:flatten(lists:map(zone_signer(Name, Zone), Zone#zone.keysets)),
+  build_zone(Zone#zone.name, Zone#zone.version, Zone#zone.records ++ RRSigRecords, Zone#zone.keysets).
