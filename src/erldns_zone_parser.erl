@@ -138,13 +138,18 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
 parse_json_keys(JsonKeys) -> parse_json_keys(JsonKeys, []).
 
 parse_json_keys([], Keys) -> Keys;
-parse_json_keys([[{<<"ksk">>, Ksk}, {<<"zsk">>, Zsk}, {<<"until">>, ValidUntil}]|Rest], Keys) ->
+parse_json_keys([[{<<"ksk">>, KskBin}, {<<"zsk">>, ZskBin}, {<<"until">>, ValidUntil}]|Rest], Keys) ->
   KeySet = #keyset{
-     key_signing_key = Ksk,
-     zone_signing_key = Zsk,
+     key_signing_key = to_crypto_key(KskBin),
+     zone_signing_key = to_crypto_key(ZskBin),
      valid_until = ValidUntil
   },
   parse_json_keys(Rest, [KeySet | Keys]).
+
+to_crypto_key(RsaKeyBin) ->
+  % Where E is the public exponent, N is public modulus and D is the private exponent
+  [_,_,M,E,N|_] = tuple_to_list(public_key:pem_entry_decode(lists:last(public_key:pem_decode(RsaKeyBin)))),
+  [E,M,N].
 
 record_filter() ->
   fun(R) ->
