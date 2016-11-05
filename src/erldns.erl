@@ -19,8 +19,9 @@
 
 -export([start/0]).
 
--export_type([keyset/0]).
+-export_type([keyset/0, zone/0]).
 -type keyset() :: #keyset{}.
+-type zone() :: #zone{}.
 
 -spec start() -> any().
 start() ->
