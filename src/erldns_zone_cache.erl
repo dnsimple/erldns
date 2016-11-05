@@ -43,8 +43,6 @@
 -export([
          put_zone/1,
          put_zone/2,
-         put_zone_async/1,
-         put_zone_async/2,
          delete_zone/1
         ]).
 
@@ -182,24 +180,11 @@ zone_names_and_versions() ->
 %% This function will build the necessary Zone record before interting.
 -spec put_zone({binary(), binary(), [dns:rr()], [erldns:keyset()]}) -> ok.
 put_zone({Name, Sha, Records, Keys}) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, Keys)}),
-  ok.
+  put_zone(normalize_name(Name), build_zone(Name, Sha, Records, Keys)).
 
 %% @doc Put a zone into the cache and wait for a response.
 -spec put_zone(binary(), #zone{}) -> ok.
 put_zone(Name, Zone) ->
-  erldns_storage:insert(zones, {normalize_name(Name), Zone}),
-  ok.
-
-%% @doc Put a zone into the cache without waiting for a response.
--spec put_zone_async({binary(), binary(), [dns:rr()], [erldns:keyset()]}) -> ok.
-put_zone_async({Name, Sha, Records, Keys}) ->
-  erldns_storage:insert(zones, {normalize_name(Name), build_zone(Name, Sha, Records, Keys)}),
-  ok.
-
-%% @doc Put a zone into the cache without waiting for a response.
--spec put_zone_async(binary(), #zone{}) -> ok.
-put_zone_async(Name, Zone) ->
   erldns_storage:insert(zones, {normalize_name(Name), Zone}),
   ok.
 
