@@ -44,6 +44,7 @@ resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_
 
 %% With the extracted Qname and Qtype in hand, find the nearest zone
 %% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
+-spec resolve(dns:message(), [dns:rr()], dns:dname(), dns:type(), dns:ip()) -> dns:message().
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), % Zone lookup
   Records = resolve(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
@@ -55,7 +56,7 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain)
   case erldns_config:use_root_hints() of
     true ->
       {Authority, Additional} = erldns_records:root_hints(),
-      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Additional};
+      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Message#dns_message.additional ++ Additional};
     _ ->
       Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR}
   end;
@@ -305,7 +306,7 @@ resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords
       case erldns_config:use_root_hints() of
         true ->
           {Authority, Additional} = erldns_records:root_hints(),
-          Message#dns_message{authority = Authority, additional = Additional};
+          Message#dns_message{authority = Authority, additional = Message#dns_message.additional ++ Additional};
         _ ->
           Message
       end
@@ -464,7 +465,7 @@ additional_processing(Message, _Host, _Zone, _Names, []) ->
   Message;
 %% Additional A records were found, so we add them to the additional section.
 additional_processing(Message, _Host, _Zone, _Names, Records) ->
-  Message#dns_message{additional=Message#dns_message.additional ++ Records}.
+  Message#dns_message{additional = Message#dns_message.additional ++ Records}.
 
 
 
