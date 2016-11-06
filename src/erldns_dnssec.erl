@@ -21,15 +21,27 @@
 -export([handle/4]).
 
 handle(Message, Zone, Qname, Qtype) ->
-  RRSigRecords = case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
-    true ->
-      lager:debug("DNSSEC requested for ~p", [Zone#zone.name]),
-      Records = erldns_zone_cache:get_records_by_name(Qname),
-      lists:filter(match_type_covered(Qtype), lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), Records));
-    false ->
-      []
-  end,
+  lager:debug("Handle DNSSEC for ~p ~p", [Qname, Qtype]),
+  RRSigRecords = handle(Message, Zone, Qname, Qtype, proplists:get_bool(dnssec, erldns_edns:get_opts(Message))),
   Message#dns_message{answers = Message#dns_message.answers ++ RRSigRecords}.
+
+handle(Message, Zone, Qname, Qtype, _DnssecRequested = true) ->
+  lager:debug("DNSSEC requested for ~p", [Zone#zone.name]),
+  Records = erldns_zone_cache:get_records_by_name(Qname),
+  RRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), Records),
+  lists:filter(match_type_covered(match_type(Message, Qtype)), RRSigRecords);
+handle(_Message, _Zone, _Qname, _Qtype, _DnssecRequest = false) ->
+  [].
+
+% Returns the type to match on when looking up the RRSIG records
+%
+% If there is a CNAME present in the answers then that type must be used for the RRSIG, otherwise
+% the Qtype is used.
+match_type(Message, Qtype) ->
+  case lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), Message#dns_message.answers) of
+    [] -> Qtype;
+    _ -> ?DNS_TYPE_CNAME
+  end.
 
 match_type_covered(Qtype) ->
   fun(RRSig) ->
