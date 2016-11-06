@@ -21,16 +21,16 @@
 -export([handle/4]).
 
 handle(Message, Zone, Qname, Qtype) ->
-  RRSigRecords = handle(Message, Zone, Qname, Qtype, proplists:get_bool(dnssec, erldns_edns:get_opts(Message))),
-  Message#dns_message{answers = Message#dns_message.answers ++ RRSigRecords}.
+  handle(Message, Zone, Qname, Qtype, proplists:get_bool(dnssec, erldns_edns:get_opts(Message))).
 
 handle(Message, Zone, Qname, Qtype, _DnssecRequested = true) ->
   lager:debug("DNSSEC requested for ~p", [Zone#zone.name]),
   Records = erldns_zone_cache:get_records_by_name(Qname),
-  RRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), Records),
-  lists:filter(match_type_covered(match_type(Message, Qtype)), RRSigRecords);
-handle(_Message, _Zone, _Qname, _Qtype, _DnssecRequest = false) ->
-  [].
+  AllRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), Records),
+  RRSigRecords = lists:filter(match_type_covered(match_type(Message, Qtype)), AllRRSigRecords),
+  Message#dns_message{answers = Message#dns_message.answers ++ RRSigRecords};
+handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false) ->
+  Message.
 
 % Returns the type to match on when looking up the RRSIG records
 %
