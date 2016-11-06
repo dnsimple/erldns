@@ -51,16 +51,16 @@ start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %% @doc Try to retrieve a cached response for the given question.
--spec get(dns:question()) -> {ok, dns:message()} | {error, cache_expired} | {error, cache_miss}.
-get(Question) ->
-  get(Question, unknown).
+-spec get(dns:question() | {dns:question(), [dns:rr()]}) -> {ok, dns:message()} | {error, cache_expired} | {error, cache_miss}.
+get(Key) ->
+  get(Key, unknown).
 
 %% @doc Try to retrieve a cached response for the given question sent
 %% by the given host.
--spec get(dns:question(), dns:ip()) -> {ok, dns:message()} | {error, cache_expired} | {error, cache_miss}.
-get(Question, _Host) ->
-  case erldns_storage:select(packet_cache, Question) of
-    [{Question, {Response, ExpiresAt}}] ->
+-spec get(dns:question() | {dns:question(), [dns:rr()]}, dns:ip()) -> {ok, dns:message()} | {error, cache_expired} | {error, cache_miss}.
+get(Key, _Host) ->
+  case erldns_storage:select(packet_cache, Key) of
+    [{Key, {Response, ExpiresAt}}] ->
       case timestamp() > ExpiresAt of
         true ->
           folsom_metrics:notify(cache_expired_meter, 1),
@@ -75,16 +75,16 @@ get(Question, _Host) ->
   end.
 
 %% @doc Put the response in the cache for the given question.
--spec put(dns:question(), dns:message()) -> ok.
-put(Question, Response) ->
+-spec put(dns:question() | {dns:question(), [dns:rr()]}, dns:message()) -> ok.
+put(Key, Response) ->
   ?IF(
     ?ENABLED,
     begin
-      %lager:debug("Set packet in cache for ~p", [Question]),
-      gen_server:call(?SERVER, {set_packet, [Question, Response]})
+      %lager:debug("Set packet in cache for ~p", [Key]),
+      gen_server:call(?SERVER, {set_packet, [Key, Response]})
     end,
     begin
-      %lager:debug("Packet cache not enabled (Q: ~p)", [Question]),
+      %lager:debug("Packet cache not enabled (Q: ~p)", [Key]),
       ok
     end).
 
@@ -112,8 +112,8 @@ init([TTL]) ->
   {ok, Tref} = timer:apply_interval(?SWEEP_INTERVAL, ?MODULE, sweep, []),
   {ok, #state{ttl = TTL, tref = Tref}}.
 
-handle_call({set_packet, [Question, Response]}, _From, State) ->
-  erldns_storage:insert(packet_cache, {Question, {Response, timestamp() + State#state.ttl}}),
+handle_call({set_packet, [Key, Response]}, _From, State) ->
+  erldns_storage:insert(packet_cache, {Key, {Response, timestamp() + State#state.ttl}}),
   {reply, ok, State};
 
 handle_call(stop, _From, State) ->
