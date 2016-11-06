@@ -21,7 +21,6 @@
 -export([handle/4]).
 
 handle(Message, Zone, Qname, Qtype) ->
-  lager:debug("Handle DNSSEC for ~p ~p", [Qname, Qtype]),
   RRSigRecords = handle(Message, Zone, Qname, Qtype, proplists:get_bool(dnssec, erldns_edns:get_opts(Message))),
   Message#dns_message{answers = Message#dns_message.answers ++ RRSigRecords}.
 
