@@ -15,7 +15,23 @@
 %% @doc Placeholder for eventual DNSSEC implementation.
 -module(erldns_dnssec).
 
--export([handle/1]).
+-include_lib("dns/include/dns.hrl").
+-include("erldns.hrl").
 
-handle(Message) ->
-  Message.
+-export([handle/4]).
+
+handle(Message, Zone, Qname, Qtype) ->
+  RRSigRecords = case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
+    true ->
+      lager:debug("DNSSEC requested for ~p", [Zone#zone.name]),
+      Records = erldns_zone_cache:get_records_by_name(Qname),
+      lists:filter(match_type_covered(Qtype), lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), Records));
+    false ->
+      []
+  end,
+  Message#dns_message{answers = Message#dns_message.answers ++ RRSigRecords}.
+
+match_type_covered(Qtype) ->
+  fun(RRSig) ->
+      RRSig#dns_rr.data#dns_rrdata_rrsig.type_covered =:= Qtype
+  end.

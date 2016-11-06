@@ -47,7 +47,7 @@ resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), % Zone lookup
   Records = resolve(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
-  additional_processing(rewrite_soa_ttl(Records), Host, Zone).
+  erldns_dnssec:handle(additional_processing(rewrite_soa_ttl(Records), Host, Zone), Zone, Qname, Qtype).
 
 %% No SOA was found for the Qname so we return the root hints
 %% Note: it seems odd that we are indicating we are authoritative here.
