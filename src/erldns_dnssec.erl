@@ -21,9 +21,12 @@
 -export([handle/4]).
 
 handle(Message, Zone, Qname, Qtype) ->
-  handle(Message, Zone, Qname, Qtype, proplists:get_bool(dnssec, erldns_edns:get_opts(Message))).
+  handle(Message, Zone, Qname, Qtype, proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets).
 
-handle(Message, Zone, Qname, Qtype, _DnssecRequested = true) ->
+handle(Message, _Zone, _Qname, _Qtype, _DnssecRequested = true, []) ->
+  % DNSSEC requested, zone unsigned
+  Message;
+handle(Message, Zone, Qname, Qtype, _DnssecRequested = true, Keysets) ->
   lager:debug("DNSSEC requested for ~p", [Zone#zone.name]),
   Authority = lists:last(Zone#zone.authority),
   Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
@@ -37,16 +40,16 @@ handle(Message, Zone, Qname, Qtype, _DnssecRequested = true) ->
       NextDname = dns:labels_to_dname([<<"\000">>] ++ dns:dname_to_labels(Qname)),
       Types = lists:usort(lists:map(fun(RR) -> RR#dns_rr.type end, Records) ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]),
       NsecRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NSEC, ttl = Ttl, data = #dns_rrdata_nsec{next_dname = NextDname, types = Types}}],
-      NsecRRSigRecords = sign_nsec(NsecRecords, Zone#zone.name, Zone#zone.keysets),
+      NsecRRSigRecords = sign_nsec(NsecRecords, Zone#zone.name, Keysets),
 
-      Message#dns_message{authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords};
+      Message#dns_message{ad = true, authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords};
     _ ->
       AllRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), Records),
       RRSigRecords = lists:filter(match_type_covered(match_type(Message, Qtype)), AllRRSigRecords),
 
-      Message#dns_message{answers = Message#dns_message.answers ++ RRSigRecords}
+      Message#dns_message{ad = true, answers = Message#dns_message.answers ++ RRSigRecords}
   end;
-handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false) ->
+handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false, _) ->
   Message.
 
 % Returns the type to match on when looking up the RRSIG records
