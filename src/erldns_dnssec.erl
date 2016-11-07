@@ -25,10 +25,27 @@ handle(Message, Zone, Qname, Qtype) ->
 
 handle(Message, Zone, Qname, Qtype, _DnssecRequested = true) ->
   lager:debug("DNSSEC requested for ~p", [Zone#zone.name]),
+  Authority = lists:last(Zone#zone.authority),
+  Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
   Records = erldns_zone_cache:get_records_by_name(Qname),
-  AllRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), Records),
-  RRSigRecords = lists:filter(match_type_covered(match_type(Message, Qtype)), AllRRSigRecords),
-  Message#dns_message{answers = Message#dns_message.answers ++ RRSigRecords};
+  case Message#dns_message.answers of
+    [] ->
+      ApexRecords = erldns_zone_cache:get_records_by_name(Zone#zone.name),
+      ApexRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), ApexRecords),
+      SoaRRSigRecords = lists:filter(match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords),
+
+      NextDname = dns:labels_to_dname([<<"\000">>] ++ dns:dname_to_labels(Qname)),
+      Types = lists:usort(lists:map(fun(RR) -> RR#dns_rr.type end, Records) ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]),
+      NsecRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NSEC, ttl = Ttl, data = #dns_rrdata_nsec{next_dname = NextDname, types = Types}}],
+      NsecRRSigRecords = sign_nsec(NsecRecords, Zone#zone.name, Zone#zone.keysets),
+
+      Message#dns_message{authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords};
+    _ ->
+      AllRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), Records),
+      RRSigRecords = lists:filter(match_type_covered(match_type(Message, Qtype)), AllRRSigRecords),
+
+      Message#dns_message{answers = Message#dns_message.answers ++ RRSigRecords}
+  end;
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false) ->
   Message.
 
@@ -46,3 +63,17 @@ match_type_covered(Qtype) ->
   fun(RRSig) ->
       RRSig#dns_rr.data#dns_rrdata_rrsig.type_covered =:= Qtype
   end.
+
+sign_nsec(NsecRecords, ZoneName, Keysets) ->
+  lists:flatten(lists:map(
+      fun(Keyset) ->
+          ZSK = find_zone_signing_key(ZoneName),
+          Keytag = ZSK#dns_rr.data#dns_rrdata_dnskey.key_tag,
+          Alg = ZSK#dns_rr.data#dns_rrdata_dnskey.alg,
+          PrivateKey = Keyset#keyset.zone_signing_key,
+          dnssec:sign_rr(NsecRecords, ZoneName, Keytag, Alg, PrivateKey, []) end, Keysets)).
+
+find_zone_signing_key(ZoneName) ->
+  {ok, ZoneWithRecords} = erldns_zone_cache:get_zone_with_records(ZoneName),
+  KeyRRs = lists:filter(erldns_records:match_type(?DNS_TYPE_DNSKEY), ZoneWithRecords#zone.records),
+  dnssec:add_keytag_to_dnskey(lists:last(lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 256 end, KeyRRs))).
