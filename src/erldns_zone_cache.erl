@@ -70,7 +70,7 @@ start_link() ->
 %% @doc Find a zone for a given qname.
 -spec find_zone(dns:dname()) -> #zone{} | {error, zone_not_found} | {error, not_authoritative}.
 find_zone(Qname) ->
-  find_zone(normalize_name(Qname), get_authority(Qname)).
+  find_zone(erldns:normalize_name(Qname), get_authority(Qname)).
 
 %% @doc Find a zone for a given qname.
 -spec find_zone(dns:dname(), {error, any()} | {ok, dns:rr()} | [dns:rr()] | dns:rr()) -> #zone{} | {error, zone_not_found} | {error, not_authoritative}.
@@ -83,7 +83,7 @@ find_zone(_Qname, []) ->
 find_zone(Qname, Authorities) when is_list(Authorities) ->
   find_zone(Qname, lists:last(Authorities));
 find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
-  Name = normalize_name(Qname),
+  Name = erldns:normalize_name(Qname),
   case dns:dname_to_labels(Name) of
     [] -> {error, zone_not_found};
     [_|Labels] ->
@@ -101,7 +101,7 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
 %% the dname in any way, it will simply look up the name in the underlying data store.
 -spec get_zone(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
 get_zone(Name) ->
-  NormalizedName = normalize_name(Name),
+  NormalizedName = erldns:normalize_name(Name),
   case erldns_storage:select(zones, NormalizedName) of
     [{NormalizedName, Zone}] -> {ok, Zone#zone{name = NormalizedName, records = [], records_by_name=trimmed}};
     _ -> {error, zone_not_found}
@@ -110,7 +110,7 @@ get_zone(Name) ->
 %% @doc Get a zone for the specific name, including the records for the zone.
 -spec get_zone_with_records(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
 get_zone_with_records(Name) ->
-  NormalizedName = normalize_name(Name),
+  NormalizedName = erldns:normalize_name(Name),
   case erldns_storage:select(zones, NormalizedName) of
     [{NormalizedName, Zone}] -> {ok, Zone};
     _ -> {error, zone_not_found}
@@ -126,7 +126,7 @@ get_authority(Message) when is_record(Message, dns_message) ->
       get_authority(Question#dns_query.name)
   end;
 get_authority(Name) ->
-  case find_zone_in_cache(normalize_name(Name)) of
+  case find_zone_in_cache(erldns:normalize_name(Name)) of
     {ok, Zone} -> {ok, Zone#zone.authority};
     _ -> {error, authority_not_found}
   end.
@@ -147,7 +147,7 @@ get_delegations(Name) ->
 get_records_by_name(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      case dict:find(normalize_name(Name), Zone#zone.records_by_name) of
+      case dict:find(erldns:normalize_name(Name), Zone#zone.records_by_name) of
         {ok, RecordSet} -> RecordSet;
         _ -> []
       end;
@@ -180,12 +180,12 @@ zone_names_and_versions() ->
 %% This function will build the necessary Zone record before interting.
 -spec put_zone({binary(), binary(), [dns:rr()], [erldns:keyset()]}) -> ok.
 put_zone({Name, Sha, Records, Keys}) ->
-  put_zone(normalize_name(Name), build_zone(Name, Sha, Records, Keys)).
+  put_zone(erldns:normalize_name(Name), build_zone(Name, Sha, Records, Keys)).
 
 %% @doc Put a zone into the cache and wait for a response.
 -spec put_zone(binary(), erldns:zone()) -> ok.
 put_zone(Name, Zone) ->
-  erldns_storage:insert(zones, {normalize_name(Name), sign_zone(Zone)}),
+  erldns_storage:insert(zones, {erldns:normalize_name(Name), sign_zone(Zone)}),
   ok.
 
 %% @doc Remove a zone from the cache without waiting for a response.
@@ -214,7 +214,7 @@ handle_call(Message, _From, State) ->
   {reply, ok, State}.
 
 handle_cast({delete, Name}, State) ->
-  erldns_storage:delete(zones, normalize_name(Name)),
+  erldns_storage:delete(zones, erldns:normalize_name(Name)),
   {noreply, State};
 
 handle_cast(Message, State) ->
@@ -233,7 +233,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 % Internal API
 is_name_in_zone(Name, Zone) ->
-  case dict:is_key(normalize_name(Name), Zone#zone.records_by_name) of
+  case dict:is_key(erldns:normalize_name(Name), Zone#zone.records_by_name) of
     true -> true;
     false ->
       case dns:dname_to_labels(Name) of
@@ -244,7 +244,7 @@ is_name_in_zone(Name, Zone) ->
   end.
 
 find_zone_in_cache(Qname) ->
-  Name = normalize_name(Qname),
+  Name = erldns:normalize_name(Qname),
   find_zone_in_cache(Name, dns:dname_to_labels(Name)).
 
 find_zone_in_cache(_Name, []) ->
@@ -270,14 +270,10 @@ build_named_index([], Idx) -> Idx;
 build_named_index([R|Rest], Idx) ->
   case dict:find(R#dns_rr.name, Idx) of
     {ok, Records} ->
-      build_named_index(Rest, dict:store(normalize_name(R#dns_rr.name), Records ++ [R], Idx));
+      build_named_index(Rest, dict:store(erldns:normalize_name(R#dns_rr.name), Records ++ [R], Idx));
     error ->
-      build_named_index(Rest, dict:store(normalize_name(R#dns_rr.name), [R], Idx))
+      build_named_index(Rest, dict:store(erldns:normalize_name(R#dns_rr.name), [R], Idx))
   end.
-
-%% @doc Converts a domain name to lower case.
-normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
-normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).
 
 -spec(sign_zone(erldns:zone()) -> erldns:zone()).
 sign_zone(Zone = #zone{keysets = []}) ->
