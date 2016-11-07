@@ -70,13 +70,7 @@ match_type_covered(Qtype) ->
 sign_nsec(NsecRecords, ZoneName, Keysets) ->
   lists:flatten(lists:map(
       fun(Keyset) ->
-          ZSK = find_zone_signing_key(ZoneName),
-          Keytag = ZSK#dns_rr.data#dns_rrdata_dnskey.key_tag,
-          Alg = ZSK#dns_rr.data#dns_rrdata_dnskey.alg,
+          Keytag = Keyset#keyset.zone_signing_key_tag,
+          Alg = Keyset#keyset.zone_signing_alg,
           PrivateKey = Keyset#keyset.zone_signing_key,
           dnssec:sign_rr(NsecRecords, ZoneName, Keytag, Alg, PrivateKey, []) end, Keysets)).
-
-find_zone_signing_key(ZoneName) ->
-  {ok, ZoneWithRecords} = erldns_zone_cache:get_zone_with_records(ZoneName),
-  KeyRRs = lists:filter(erldns_records:match_type(?DNS_TYPE_DNSKEY), ZoneWithRecords#zone.records),
-  dnssec:add_keytag_to_dnskey(lists:last(lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 256 end, KeyRRs))).

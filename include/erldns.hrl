@@ -3,8 +3,10 @@
 -record(keyset, {
     key_signing_key :: crypto:rsa_private(),
     key_signing_key_tag :: non_neg_integer(),
+    key_signing_alg :: non_neg_integer(),
     zone_signing_key :: crypto:rsa_private(),
     zone_signing_key_tag :: non_neg_integer(),
+    zone_signing_alg :: non_neg_integer(),
     inception :: binary(),
     valid_until :: binary()
   }).

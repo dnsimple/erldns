@@ -283,12 +283,14 @@ normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(bina
 zone_signer(Name, Zone) ->
   fun(Keyset) ->
       KeyRRs = lists:filter(erldns_records:match_type(?DNS_TYPE_DNSKEY), Zone#zone.records),
-      KSK = dnssec:add_keytag_to_dnskey(lists:last(lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 257 end, KeyRRs))),
-      SignedKeyRRs = dnssec:sign_rr(KeyRRs, normalize_name(Name), KSK#dns_rr.data#dns_rrdata_dnskey.key_tag, KSK#dns_rr.data#dns_rrdata_dnskey.alg, Keyset#keyset.key_signing_key, []),
+      KSKTag = Keyset#keyset.key_signing_key_tag,
+      KSKAlg = Keyset#keyset.key_signing_alg,
+      SignedKeyRRs = dnssec:sign_rr(KeyRRs, normalize_name(Name), KSKTag, KSKAlg, Keyset#keyset.key_signing_key, []),
 
-      ZSK = dnssec:add_keytag_to_dnskey(lists:last(lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 256 end, KeyRRs))),
       RRs = lists:filter(fun(RR) -> (RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY) end, Zone#zone.records),
-      SignedRRs = dnssec:sign_rr(RRs, normalize_name(Name), ZSK#dns_rr.data#dns_rrdata_dnskey.key_tag, ZSK#dns_rr.data#dns_rrdata_dnskey.alg, Keyset#keyset.zone_signing_key, []),
+      ZSKTag = Keyset#keyset.zone_signing_key_tag,
+      ZSKAlg = Keyset#keyset.zone_signing_alg,
+      SignedRRs = dnssec:sign_rr(RRs, normalize_name(Name), ZSKTag, ZSKAlg, Keyset#keyset.zone_signing_key, []),
 
       SignedKeyRRs ++ SignedRRs
   end.

@@ -138,12 +138,14 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
 parse_json_keys(JsonKeys) -> parse_json_keys(JsonKeys, []).
 
 parse_json_keys([], Keys) -> Keys;
-parse_json_keys([[{<<"ksk">>, KskBin}, {<<"ksk_keytag">>, KskKeytag}, {<<"zsk">>, ZskBin}, {<<"zsk_keytag">>, ZskKeytag}, {<<"inception">>, Inception}, {<<"until">>, ValidUntil}]|Rest], Keys) ->
+parse_json_keys([[{<<"ksk">>, KskBin}, {<<"ksk_keytag">>, KskKeytag}, {<<"ksk_alg">>, KskAlg}, {<<"zsk">>, ZskBin}, {<<"zsk_keytag">>, ZskKeytag}, {<<"zsk_alg">>, ZskAlg}, {<<"inception">>, Inception}, {<<"until">>, ValidUntil}]|Rest], Keys) ->
   KeySet = #keyset{
      key_signing_key = to_crypto_key(KskBin),
      key_signing_key_tag = KskKeytag,
+     key_signing_alg = KskAlg,
      zone_signing_key = to_crypto_key(ZskBin),
      zone_signing_key_tag = ZskKeytag,
+     zone_signing_alg = ZskAlg,
      inception = Inception,
      valid_until = ValidUntil
   },
