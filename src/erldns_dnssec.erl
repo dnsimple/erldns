@@ -19,6 +19,8 @@
 -include("erldns.hrl").
 
 -export([handle/4]).
+-export([key_rrset_signer/2, zone_rrset_signer/2]).
+-export([rrsig_for_zone_rrset/2]).
 
 handle(Message, Zone, Qname, Qtype) ->
   handle(Message, Zone, Qname, Qtype, proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets).
@@ -26,7 +28,7 @@ handle(Message, Zone, Qname, Qtype) ->
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequested = true, []) ->
   % DNSSEC requested, zone unsigned
   Message;
-handle(Message, Zone, Qname, Qtype, _DnssecRequested = true, Keysets) ->
+handle(Message, Zone, Qname, Qtype, _DnssecRequested = true, _Keysets) ->
   lager:debug("DNSSEC requested for ~p", [Zone#zone.name]),
   Authority = lists:last(Zone#zone.authority),
   Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
@@ -40,7 +42,7 @@ handle(Message, Zone, Qname, Qtype, _DnssecRequested = true, Keysets) ->
       NextDname = dns:labels_to_dname([<<"\000">>] ++ dns:dname_to_labels(Qname)),
       Types = lists:usort(lists:map(fun(RR) -> RR#dns_rr.type end, Records) ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]),
       NsecRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NSEC, ttl = Ttl, data = #dns_rrdata_nsec{next_dname = NextDname, types = Types}}],
-      NsecRRSigRecords = sign_nsec(NsecRecords, Zone#zone.name, Keysets),
+      NsecRRSigRecords = rrsig_for_zone_rrset(Zone, NsecRecords),
 
       Message#dns_message{ad = true, authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords};
     _ ->
@@ -67,10 +69,21 @@ match_type_covered(Qtype) ->
       RRSig#dns_rr.data#dns_rrdata_rrsig.type_covered =:= Qtype
   end.
 
-sign_nsec(NsecRecords, ZoneName, Keysets) ->
-  lists:flatten(lists:map(
-      fun(Keyset) ->
-          Keytag = Keyset#keyset.zone_signing_key_tag,
-          Alg = Keyset#keyset.zone_signing_alg,
-          PrivateKey = Keyset#keyset.zone_signing_key,
-          dnssec:sign_rr(NsecRecords, ZoneName, Keytag, Alg, PrivateKey, []) end, Keysets)).
+rrsig_for_zone_rrset(Zone, RRs) ->
+  lists:flatten(lists:map(zone_rrset_signer(Zone#zone.name, RRs), Zone#zone.keysets)).
+
+key_rrset_signer(ZoneName, RRs) ->
+  fun(Keyset) ->
+      Keytag = Keyset#keyset.key_signing_key_tag,
+      Alg = Keyset#keyset.key_signing_alg,
+      PrivateKey = Keyset#keyset.key_signing_key,
+      dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [])
+  end.
+
+zone_rrset_signer(ZoneName, RRs) ->
+  fun(Keyset) ->
+      Keytag = Keyset#keyset.zone_signing_key_tag,
+      Alg = Keyset#keyset.zone_signing_alg,
+      PrivateKey = Keyset#keyset.zone_signing_key,
+      dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [])
+  end.
