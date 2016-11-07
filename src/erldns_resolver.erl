@@ -114,7 +114,7 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
-      NewRecords = lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers())),
+      NewRecords = maybe_sign_rrset(Message, lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers())), Zone),
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, NewRecords, AuthorityRecords);
     _ ->
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, TypeMatches, AuthorityRecords)
@@ -334,7 +334,7 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, Matche
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
-      NewRecords = lists:map(erldns_records:replace_name(Qname), lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers()))),
+      NewRecords = maybe_sign_rrset(Message, lists:map(erldns_records:replace_name(Qname), lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers()))), Zone),
       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], NewRecords);
     _ ->
       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], TypeMatches)
@@ -519,4 +519,17 @@ get_delegate_records(Zone, Qname) ->
       Delegate:get_records_by_name(Qname);
     _ ->
       []
+  end.
+
+maybe_sign_rrset(Message, Records, Zone) ->
+  case {proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets}  of
+    {true, []} ->
+      % DNSSEC requested, zone not signed
+      Records;
+    {true, _} ->
+      % DNSSEC requested, zone signed
+      Records ++ erldns_dnssec:rrsig_for_zone_rrset(Zone, Records);
+    {false, _} ->
+      % DNSSEC not requested
+      Records
   end.
