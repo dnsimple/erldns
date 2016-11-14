@@ -146,8 +146,8 @@ parse_json_keys([[{<<"ksk">>, KskBin}, {<<"ksk_keytag">>, KskKeytag}, {<<"ksk_al
      zone_signing_key = to_crypto_key(ZskBin),
      zone_signing_key_tag = ZskKeytag,
      zone_signing_alg = ZskAlg,
-     inception = Inception,
-     valid_until = ValidUntil
+     inception = iso8601:parse(Inception),
+     valid_until = iso8601:parse(ValidUntil)
   },
   parse_json_keys(Rest, [KeySet | Keys]).
 
