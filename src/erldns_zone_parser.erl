@@ -109,7 +109,10 @@ code_change(_, State, _) ->
 
 % Internal API
 json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
-  json_to_erlang([{<<"name">>, Name}, {<<"sha">>, ""}, {<<"records">>, JsonRecords}], Parsers);
+  json_to_erlang([{<<"name">>, Name}, {<<"sha">>, ""}, {<<"records">>, JsonRecords}, {<<"keys">>, []}], Parsers);
+
+json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers) ->
+  json_to_erlang([{<<"name">>, Name}, {<<"sha">>, ""}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers);
 
 json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}], Parsers) ->
   json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}, {<<"keys">>, []}], Parsers);
