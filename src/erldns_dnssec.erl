@@ -22,17 +22,20 @@
 -export([key_rrset_signer/2, zone_rrset_signer/2]).
 -export([rrsig_for_zone_rrset/2]).
 
+%% @doc Apply DNSSEC records to the given message if the zone is signed
+%% and DNSSEC is requested.
+-spec(handle(dns:message(), erldns:zone(), dns:name(), dns:type()) -> dns:message()).
 handle(Message, Zone, Qname, Qtype) ->
   handle(Message, Zone, Qname, Qtype, proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets).
 
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequested = true, []) ->
   % DNSSEC requested, zone unsigned
   Message;
-handle(Message, Zone, Qname, Qtype, _DnssecRequested = true, _Keysets) ->
+handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
   lager:debug("DNSSEC requested for ~p", [Zone#zone.name]),
   Authority = lists:last(Zone#zone.authority),
   Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
-  Records = erldns_zone_cache:get_records_by_name(Qname),
+  {ok, ZoneWithRecords} = erldns_zone_cache:get_zone_with_records(Zone#zone.name),
   case Message#dns_message.answers of
     [] ->
       ApexRecords = erldns_zone_cache:get_records_by_name(Zone#zone.name),
@@ -40,30 +43,29 @@ handle(Message, Zone, Qname, Qtype, _DnssecRequested = true, _Keysets) ->
       SoaRRSigRecords = lists:filter(match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords),
 
       NextDname = dns:labels_to_dname([<<"\000">>] ++ dns:dname_to_labels(Qname)),
-      Types = lists:usort(lists:map(fun(RR) -> RR#dns_rr.type end, Records) ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]),
+      Types = lists:usort(lists:map(fun(RR) -> RR#dns_rr.type end, ZoneWithRecords#zone.records) ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]),
       NsecRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NSEC, ttl = Ttl, data = #dns_rrdata_nsec{next_dname = NextDname, types = Types}}],
       NsecRRSigRecords = rrsig_for_zone_rrset(Zone, NsecRecords),
 
       Message#dns_message{ad = true, authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords};
     _ ->
-      AllRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), Records),
-      RRSigRecords = lists:filter(match_type_covered(match_type(Message, Qtype)), AllRRSigRecords),
-
-      Message#dns_message{ad = true, answers = Message#dns_message.answers ++ RRSigRecords}
+      RRSigs = find_rrsigs(Message, ZoneWithRecords#zone.records),
+      Message#dns_message{ad = true, answers = Message#dns_message.answers ++ RRSigs}
   end;
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false, _) ->
   Message.
 
-% Returns the type to match on when looking up the RRSIG records
-%
-% If there is a CNAME present in the answers then that type must be used for the RRSIG, otherwise
-% the Qtype is used.
-match_type(Message, Qtype) ->
-  case lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), Message#dns_message.answers) of
-    [] -> Qtype;
-    _ -> ?DNS_TYPE_CNAME
-  end.
+-spec(find_rrsigs(dns:message(), [dns:rr()]) -> [dns:rr()]).
+find_rrsigs(Message, Records) ->
+  NamesAndTypes = lists:usort(lists:map(fun(RR) -> {RR#dns_rr.name, RR#dns_rr.type} end, Message#dns_message.answers)),
+  lists:flatten(
+    lists:map(
+      fun({Name, Type}) ->
+          NamedRRSigs = lists:filter(erldns_records:match_name_and_type(Name, ?DNS_TYPE_RRSIG), Records),
+          lists:filter(match_type_covered(Type), NamedRRSigs)
+      end, NamesAndTypes)).
 
+-spec(match_type_covered(dns:type()) -> fun((dns:rr()) -> boolean())).
 match_type_covered(Qtype) ->
   fun(RRSig) ->
       RRSig#dns_rr.data#dns_rrdata_rrsig.type_covered =:= Qtype
@@ -72,6 +74,7 @@ match_type_covered(Qtype) ->
 rrsig_for_zone_rrset(Zone, RRs) ->
   lists:flatten(lists:map(zone_rrset_signer(Zone#zone.name, RRs), Zone#zone.keysets)).
 
+-spec(key_rrset_signer(dns:name(), [dns:rr()]) -> fun((erldns:keyset()) -> dns:rr())).
 key_rrset_signer(ZoneName, RRs) ->
   fun(Keyset) ->
       Keytag = Keyset#keyset.key_signing_key_tag,
