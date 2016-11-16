@@ -31,7 +31,7 @@ handle(Message, Zone, Qname, Qtype) ->
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequested = true, []) ->
   % DNSSEC requested, zone unsigned
   Message;
-handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
+handle(Message, Zone, Qname, Qtype, _DnssecRequested = true, _Keysets) ->
   lager:debug("DNSSEC requested for ~p", [Zone#zone.name]),
   Authority = lists:last(Zone#zone.authority),
   Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
@@ -49,8 +49,13 @@ handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
 
       Message#dns_message{ad = true, authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords};
     _ ->
-      RRSigs = find_rrsigs(Message, ZoneWithRecords#zone.records),
-      Message#dns_message{ad = true, answers = Message#dns_message.answers ++ RRSigs}
+      case Qtype of
+        ?DNS_TYPE_ANY ->
+          Message#dns_message{ad = true};
+        _ ->
+          RRSigs = find_rrsigs(Message, ZoneWithRecords#zone.records),
+          Message#dns_message{ad = true, answers = Message#dns_message.answers ++ RRSigs}
+      end
   end;
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false, _) ->
   Message.
