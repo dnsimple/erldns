@@ -31,7 +31,7 @@ handle(Message, Zone, Qname, Qtype) ->
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequested = true, []) ->
   % DNSSEC requested, zone unsigned
   Message;
-handle(Message, Zone, Qname, Qtype, _DnssecRequested = true, _Keysets) ->
+handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
   lager:debug("DNSSEC requested for ~p", [Zone#zone.name]),
   Authority = lists:last(Zone#zone.authority),
   Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
@@ -43,19 +43,14 @@ handle(Message, Zone, Qname, Qtype, _DnssecRequested = true, _Keysets) ->
       SoaRRSigRecords = lists:filter(match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords),
 
       NextDname = dns:labels_to_dname([<<"\000">>] ++ dns:dname_to_labels(Qname)),
-      Types = lists:usort(lists:map(fun(RR) -> RR#dns_rr.type end, ZoneWithRecords#zone.records) ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]),
+      Types = record_types_for_name(Qname, ZoneWithRecords#zone.records),
       NsecRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NSEC, ttl = Ttl, data = #dns_rrdata_nsec{next_dname = NextDname, types = Types}}],
       NsecRRSigRecords = rrsig_for_zone_rrset(Zone, NsecRecords),
 
       Message#dns_message{ad = true, authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords};
     _ ->
-      case Qtype of
-        ?DNS_TYPE_ANY ->
-          Message#dns_message{ad = true};
-        _ ->
-          RRSigs = find_rrsigs(Message, ZoneWithRecords#zone.records),
-          Message#dns_message{ad = true, answers = Message#dns_message.answers ++ RRSigs}
-      end
+      RRSigs = find_rrsigs(Message, ZoneWithRecords#zone.records),
+      Message#dns_message{ad = true, answers = lists:usort(Message#dns_message.answers ++ RRSigs)}
   end;
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false, _) ->
   Message.
@@ -69,6 +64,11 @@ find_rrsigs(Message, Records) ->
           NamedRRSigs = lists:filter(erldns_records:match_name_and_type(Name, ?DNS_TYPE_RRSIG), Records),
           lists:filter(match_type_covered(Type), NamedRRSigs)
       end, NamesAndTypes)).
+
+record_types_for_name(Name, Records) ->
+  RecordsAtName = lists:filter(erldns_records:match_name(Name), Records),
+  TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
+  lists:usort(TypesCovered ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]).
 
 -spec(match_type_covered(dns:type()) -> fun((dns:rr()) -> boolean())).
 match_type_covered(Qtype) ->
