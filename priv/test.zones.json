@@ -34,30 +34,6 @@
             },
             {
                 "name": "example.com",
-                "type": "DNSKEY",
-                "ttl": 120,
-                "data": {
-                    "flags": 256,
-                    "protocol": 3,
-                    "alg": 8,
-                    "public_key": "MFswDQYJKoZIhvcNAQEBBQADSgAwRwJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jTCaEwnpE74YHCLegKAAn+efeZrT/EBBrzlacCAgIB",
-                    "key_tag": 0
-                }
-            },
-            {
-                "name": "example.com",
-                "type": "DNSKEY",
-                "ttl": 120,
-                "data": {
-                    "flags": 257,
-                    "protocol": 3,
-                    "alg": 8,
-                    "public_key": "MIGeMA0GCSqGSIb3DQEBAQUAA4GMADCBiAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USChEW0fLYT/QkAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+CfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHSU8htjdwICBAE=",
-                    "key_tag": 0
-                }
-            },
-            {
-                "name": "example.com",
                 "type": "MX",
                 "ttl": 120,
                 "data": {
@@ -1185,8 +1161,1197 @@
                 }
             }
         ],
-        "keys":[{"ksk":"-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USCh\nEW0fLYT/QkAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+C\nfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHSU8htjdwICBAEC\ngYEAlpYTHWYrcd0HQXO3F9lPqwwfHUt7VBaSEUYrk3N3ZYCWvmV1qyKbB/kb1SBs\n4GfW1vP966HXCffnX92LDXYxi7It3TJaKmo8aF/leN7w8WLNJXUayEoQKUfKLprj\nN14Jx/tgMu7I/BOoHId8b7e57pBKtDiSF6WWn3K7tNPbfmkCQQDST41m62mC4MAa\nDsUdyM0Vg/tjduGqnygryCDEXDabdg95a3wMk0SQCQzZFHGNYnsXcffTqGs/y+5w\nQWxyOGSNAkEAzHFkDJla30NiiKvhu7dY+0+dGrfMA7pNUh+LGdXe5QFdjwwxqPbF\n7NMGXKMdB8agSCxGZC3bxdvYNF9LULzhEwJABpDYNSoQx+UMvaEN5XTpLmCHuS1r\nsmhfKZPcDx8Z7mAYda3wZEuHQq+cf6i5XhOO9P5QKpKeslHLAMHa7NaNgQJBAI03\nGGacYLwui32fbzb8BYRg82Kga/OW6btY+O6hNs6iSR2gBlQ9j3Tgrzo+N4R/NQSl\nc05wGO2RnBUwlu0XUckCQHfHsWHVrrADTpalbv+FTDyWd0ouHXBmDecVZh3e7/ue\ncdMoblzeasvgp8CjFa9U+uDozY+aL6TNIpG++nn4lNw=\n-----END RSA PRIVATE KEY-----\n","ksk_keytag":37440,"ksk_alg":8,"zsk":"-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jT\nCaEwnpE74YHCLegKAAn+efeZrT/EBBrzlacCAgIBAkBh9VGFW2SJk1I9SBQaDIA9\nchdrrx+PHibSyozwT4eAPmd6OFoLausc7ls6v9evPeb+Yj3g0JXvTGp6BgNhFqLR\nAiEA1+ievAEBVM6IlOmpiTwlaWe/HV6MokBBq1G/tvJS0M8CIQDPm/DUsoTEv/Jj\n6O3U9hNcPLbvKMMGld2wbf7nrQmzqQIhAJrhwTaFdjnXhmfUB9a33vRIbSaIsLxA\nDyuM+03XP+YhAiEAmJIJz7WX9uPkCIy8wO655Hh4dt4UkBFRE98OqkHIwGkCIFFv\nN8rJojI+oEiJyNjEjWZD4qoUMUp3+YBl0htAJUE2\n-----END RSA PRIVATE KEY-----\n","zsk_keytag":49016,"zsk_alg":8,"inception":"2016-11-14T11:36:58.851612Z","until":"2017-02-12T11:36:58.849384Z"}]
     },
+
+    {
+        "name": "example-dnssec.com",
+        "records": [
+            {
+                "name": "example-dnssec.com",
+                "type": "SOA",
+                "data": {
+                    "mname": "ns1.example-dnssec.com",
+                    "rname": "ahu.example-dnssec.com",
+                    "serial": 2000081501,
+                    "refresh": 28800,
+                    "retry": 7200,
+                    "expire": 604800,
+                    "minimum": 86400
+                },
+                "ttl": 100000
+            },
+            {
+                "name": "example-dnssec.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns1.example-dnssec.com"
+                }
+            },
+            {
+                "name": "example-dnssec.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns2.example-dnssec.com"
+                }
+            },
+            {
+                "name": "example-dnssec.com",
+                "type": "DNSKEY",
+                "ttl": 120,
+                "data": {
+                    "flags": 256,
+                    "protocol": 3,
+                    "alg": 8,
+                    "public_key": "MFswDQYJKoZIhvcNAQEBBQADSgAwRwJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jTCaEwnpE74YHCLegKAAn+efeZrT/EBBrzlacCAgIB",
+                    "key_tag": 0
+                }
+            },
+            {
+                "name": "example-dnssec.com",
+                "type": "DNSKEY",
+                "ttl": 120,
+                "data": {
+                    "flags": 257,
+                    "protocol": 3,
+                    "alg": 8,
+                    "public_key": "MIGeMA0GCSqGSIb3DQEBAQUAA4GMADCBiAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USChEW0fLYT/QkAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+CfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHSU8htjdwICBAE=",
+                    "key_tag": 0
+                }
+            },
+            {
+                "name": "example-dnssec.com",
+                "type": "MX",
+                "ttl": 120,
+                "data": {
+                    "exchange": "smtp-servers.example-dnssec.com",
+                    "preference": 10
+                }
+            },
+            {
+                "name": "example-dnssec.com",
+                "type": "MX",
+                "ttl": 120,
+                "data": {
+                    "exchange": "smtp-servers.test.com",
+                    "preference": 15
+                }
+            },
+            {
+                "name": "caa.example-dnssec.com",
+                "type": "CAA",
+                "ttl": 3600,
+                "data": {
+                    "flags": 0,
+                    "tag": "issue",
+                    "value": "example.net"
+                }
+            },
+            {
+                "name": "rns.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                  "ip": "1.2.3.4"
+                }
+            },
+            {
+                "name": "rns.example-dnssec.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                  "dname": "rns.example-dnssec.com"
+                }
+            },
+            {
+                "name": "ns1.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.1.1"
+                }
+            },
+            {
+                "name": "ns1.example-dnssec.com",
+                "type": "AAAA",
+                "ttl": 120,
+                "data": {
+                    "ip": "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+                }
+            },
+            {
+                "name": "ns2.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.1.2"
+                }
+            },
+            {
+                "name": "double.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.5.1"
+                }
+            },
+            {
+                "name": "localhost.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "127.0.0.1"
+                }
+            },
+            {
+                "name": "www.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "outpost.example-dnssec.com"
+                }
+            },
+            {
+                "name": "unauth.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "no-idea.example.org"
+                }
+            },
+            {
+                "name": "dsdelegation.example-dnssec.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns.example-dnssec.com"
+                }
+            },
+            {
+                "name": "nxd.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "nxdomain.example-dnssec.com"
+                }
+            },
+            {
+                "name": "hwinfo.example-dnssec.com",
+                "type": "HINFO",
+                "ttl": 120,
+                "data": {
+                    "cpu": "abc",
+                    "os": "def"
+                }
+            },
+            {
+                "name": "smtp-servers.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.0.2"
+                }
+            },
+            {
+                "name": "smtp-servers.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.0.3"
+                }
+            },
+            {
+                "name": "smtp-servers.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.0.4"
+                }
+            },
+            {
+                "name": "outpost.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.2.1"
+                }
+            },
+            {
+                "name": "start.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "x.y.z.w1.example-dnssec.com"
+                }
+            },
+            {
+                "name": "*.w1.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "x.y.z.w2.example-dnssec.com"
+                }
+            },
+            {
+                "name": "*.w2.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "x.y.z.w3.example-dnssec.com"
+                }
+            },
+            {
+                "name": "*.w3.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "x.y.z.w4.example-dnssec.com"
+                }
+            },
+            {
+                "name": "*.w4.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "x.y.z.w5.example-dnssec.com"
+                }
+            },
+            {
+                "name": "*.w5.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "1.2.3.5"
+                }
+            },
+            {
+                "name": "start1.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "start2.example-dnssec.com"
+                }
+            },
+            {
+                "name": "start2.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "start3.example-dnssec.com"
+                }
+            },
+            {
+                "name": "start3.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "start4.example-dnssec.com"
+                }
+            },
+            {
+                "name": "start4.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.2.2"
+                }
+            },
+            {
+                "name": "loop1.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "loop2.example-dnssec.com"
+                }
+            },
+            {
+                "name": "loop2.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "loop3.example-dnssec.com"
+                }
+            },
+            {
+                "name": "loop3.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "loop1.example-dnssec.com"
+                }
+            },
+            {
+                "name": "external.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "somewhere.else.net"
+                }
+            },
+            {
+                "name": "semi-external.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "bla.something.wtest.com"
+                }
+            },
+            {
+                "name": "server1.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "server1.france.example-dnssec.com"
+                }
+            },
+            {
+                "name": "france.example-dnssec.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns1.otherprovider.net"
+                }
+            },
+            {
+                "name": "france.example-dnssec.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns2.otherprovider.net"
+                }
+            },
+            {
+                "name": "usa.example-dnssec.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "usa-ns1.usa.example-dnssec.com"
+                }
+            },
+            {
+                "name": "usa.example-dnssec.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "usa-ns2.usa.example-dnssec.com"
+                }
+            },
+            {
+                "name": "usa-ns1.usa.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.4.1"
+                }
+            },
+            {
+                "name": "usa-ns2.usa.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.4.2"
+                }
+            },
+            {
+                "name": "italy.example-dnssec.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "italy-ns1.example-dnssec.com"
+                }
+            },
+            {
+                "name": "italy.example-dnssec.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "italy-ns2.example-dnssec.com"
+                }
+            },
+            {
+                "name": "italy-ns1.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.5.1"
+                }
+            },
+            {
+                "name": "italy-ns2.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.5.2"
+                }
+            },
+            {
+                "name": "mail.example-dnssec.com",
+                "type": "MX",
+                "ttl": 120,
+                "data": {
+                    "exchange": "smtp1.example-dnssec.com",
+                    "preference": 25
+                }
+            },
+            {
+                "name": "smtp1.example-dnssec.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "outpost.example-dnssec.com"
+                }
+            },
+            {
+                "name": "external-mail.example-dnssec.com",
+                "type": "MX",
+                "ttl": 120,
+                "data": {
+                    "exchange": "server1.test.com",
+                    "preference": 25
+                }
+            },
+            {
+                "name": "text.example-dnssec.com",
+                "type": "TXT",
+                "ttl": 120,
+                "data": {
+                    "txt": "\"Hi, this is some text\""
+                }
+            },
+            {
+                "name": "multitext.example-dnssec.com",
+                "type": "TXT",
+                "ttl": 120,
+                "data": {
+                    "txt": "\"text part one\" \"text part two\" \"text part three\""
+                }
+            },
+            {
+                "name": "escapedtext.example-dnssec.com",
+                "type": "TXT",
+                "ttl": 120,
+                "data": {
+                    "txt": "\"begin\" \"the \\\"middle\\\" p\\\\art\" \"the end\""
+                }
+            },
+
+            {
+                "name": "text0.example-dnssec.com",
+                "type": "TXT",
+                "ttl": 120,
+                "data": {
+                    "txt": "k=rsa; p=one"
+                }
+            },
+            {
+                "name": "text1.example-dnssec.com",
+                "type": "TXT",
+                "ttl": 120,
+                "data": {
+                    "txt": "k=rsa\\; p=one"
+                }
+            },
+            {
+                "name": "text2.example-dnssec.com",
+                "type": "TXT",
+                "ttl": 120,
+                "data": {
+                    "txt": "k=rsa\\\\; p=one"
+                }
+            },
+            {
+                "name": "text3.example-dnssec.com",
+                "type": "TXT",
+                "ttl": 120,
+                "data": {
+                    "txt": "k=rsa\\\\\\; p=one"
+                }
+            },
+
+            {
+                "name": "host.*.sub.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.6.1"
+                }
+            },
+            {
+                "name": "ipv6.example-dnssec.com",
+                "type": "AAAA",
+                "ttl": 120,
+                "data": {
+                    "ip": "2001:6A8:0:1:210:4BFF:FE4B:4C61"
+                }
+            },
+            {
+                "name": "together-too-much.example-dnssec.com",
+                "type": "MX",
+                "ttl": 120,
+                "data": {
+                    "exchange": "toomuchinfo-a.example-dnssec.com",
+                    "preference": 25
+                }
+            },
+            {
+                "name": "together-too-much.example-dnssec.com",
+                "type": "MX",
+                "ttl": 120,
+                "data": {
+                    "exchange": "toomuchinfo-b.example-dnssec.com",
+                    "preference": 25
+                }
+            },
+            
+            
+            
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.1"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.2"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.3"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.4"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.5"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.6"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.7"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.8"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.9"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.10"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.11"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.12"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.13"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.14"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.15"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.16"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.17"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.18"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.19"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.20"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.21"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.22"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.23"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.24"}
+  },
+
+  {
+  "name": "toomuchinfo-a.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.25"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.26"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.27"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.28"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.29"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.30"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.31"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.32"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.33"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.34"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.35"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.36"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.37"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.38"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.39"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.40"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.41"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.42"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.43"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.44"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.45"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.46"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.47"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.48"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.49"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.50"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.51"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.52"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.53"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.54"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.55"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.56"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.57"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.58"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.59"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.60"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.61"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.62"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.63"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.64"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.65"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.66"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.67"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.68"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.69"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.70"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.71"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.72"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.73"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.74"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.75"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.76"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.77"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.78"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.79"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.80"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.81"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.82"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.83"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.84"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.85"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.86"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.87"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.88"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.89"}
+  },
+
+  {
+  "name": "toomuchinfo-b.example-dnssec.com",
+  "type": "A",
+  "ttl": 120,
+  "data": {"ip": "192.168.99.90"}
+  },
+
+
+            {
+                "comment": "Insert all of the hosts here"
+            },
+            {
+                "name": "double.example-dnssec.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.5.1"
+                }
+            }
+        ],
+        "keys":[{"ksk":"-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USCh\nEW0fLYT/QkAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+C\nfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHSU8htjdwICBAEC\ngYEAlpYTHWYrcd0HQXO3F9lPqwwfHUt7VBaSEUYrk3N3ZYCWvmV1qyKbB/kb1SBs\n4GfW1vP966HXCffnX92LDXYxi7It3TJaKmo8aF/leN7w8WLNJXUayEoQKUfKLprj\nN14Jx/tgMu7I/BOoHId8b7e57pBKtDiSF6WWn3K7tNPbfmkCQQDST41m62mC4MAa\nDsUdyM0Vg/tjduGqnygryCDEXDabdg95a3wMk0SQCQzZFHGNYnsXcffTqGs/y+5w\nQWxyOGSNAkEAzHFkDJla30NiiKvhu7dY+0+dGrfMA7pNUh+LGdXe5QFdjwwxqPbF\n7NMGXKMdB8agSCxGZC3bxdvYNF9LULzhEwJABpDYNSoQx+UMvaEN5XTpLmCHuS1r\nsmhfKZPcDx8Z7mAYda3wZEuHQq+cf6i5XhOO9P5QKpKeslHLAMHa7NaNgQJBAI03\nGGacYLwui32fbzb8BYRg82Kga/OW6btY+O6hNs6iSR2gBlQ9j3Tgrzo+N4R/NQSl\nc05wGO2RnBUwlu0XUckCQHfHsWHVrrADTpalbv+FTDyWd0ouHXBmDecVZh3e7/ue\ncdMoblzeasvgp8CjFa9U+uDozY+aL6TNIpG++nn4lNw=\n-----END RSA PRIVATE KEY-----\n","ksk_keytag":37440,"ksk_alg":8,"zsk":"-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jT\nCaEwnpE74YHCLegKAAn+efeZrT/EBBrzlacCAgIBAkBh9VGFW2SJk1I9SBQaDIA9\nchdrrx+PHibSyozwT4eAPmd6OFoLausc7ls6v9evPeb+Yj3g0JXvTGp6BgNhFqLR\nAiEA1+ievAEBVM6IlOmpiTwlaWe/HV6MokBBq1G/tvJS0M8CIQDPm/DUsoTEv/Jj\n6O3U9hNcPLbvKMMGld2wbf7nrQmzqQIhAJrhwTaFdjnXhmfUB9a33vRIbSaIsLxA\nDyuM+03XP+YhAiEAmJIJz7WX9uPkCIy8wO655Hh4dt4UkBFRE98OqkHIwGkCIFFv\nN8rJojI+oEiJyNjEjWZD4qoUMUp3+YBl0htAJUE2\n-----END RSA PRIVATE KEY-----\n","zsk_keytag":49016,"zsk_alg":8,"inception":"2016-11-14T11:36:58.851612Z","until":"2017-02-12T11:36:58.849384Z"}]
+    },    
+
     {
         "name": "test.com",
         "records": [
@@ -1448,9 +2613,274 @@
                     "txt": "\u00c5LAND ISLANDS"
                 }
             }
+        ]
+    },
+
+    {
+        "name": "test-dnssec.com",
+        "records": [
+            {
+                "name": "test-dnssec.com",
+                "type": "SOA",
+                "data": {
+                    "mname": "ns1.test-dnssec.com",
+                    "rname": "ahu.example.com",
+                    "serial": 2005092501,
+                    "refresh": 28800,
+                    "retry": 7200,
+                    "expire": 604800,
+                    "minimum": 86400
+                },
+                "ttl": 3600
+            },
+            {
+                "name": "test-dnssec.com",
+                "type": "NS",
+                "ttl": 3600,
+                "data": {
+                    "dname": "ns1.test-dnssec.com"
+                }
+            },
+            {
+                "name": "test-dnssec.com",
+                "type": "NS",
+                "ttl": 3600,
+                "data": {
+                    "dname": "ns2.test-dnssec.com"
+                }
+            },
+            {
+                "name": "test-dnssec.com",
+                "type": "MX",
+                "ttl": 3600,
+                "data": {
+                    "exchange": "",
+                    "preference": 10
+                }
+            },
+            {
+                "name": "test-dnssec.com",
+                "type": "MX",
+                "ttl": 3600,
+                "data": {
+                    "exchange": "smtp-servers.test-dnssec.com",
+                    "preference": 15
+                }
+            },
+            {
+                "name": "ns1.test-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "1.1.1.1"
+                }
+            },
+            {
+                "name": "ns2.test-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "2.2.2.2"
+                }
+            },
+            {
+                "name": "toroot.test-dnssec.com",
+                "type": "CNAME",
+                "ttl": 3600,
+                "data": {
+                    "dname": ""
+                }
+            },
+            {
+                "name": "www.test-dnssec.com",
+                "type": "CNAME",
+                "ttl": 3600,
+                "data": {
+                    "dname": "server1.test-dnssec.com"
+                }
+            },
+            {
+                "name": "server1.test-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "1.2.3.4"
+                }
+            },
+            {
+                "name": "server1.test-dnssec.com",
+                "type": "RP",
+                "ttl": 3600,
+                "data": {
+                    "mbox": "ahu.ds9a.nl",
+                    "txt": "counter.test-dnssec.com"
+                }
+            },
+            {
+                "name": "*.test.test-dnssec.com",
+                "type": "CNAME",
+                "ttl": 3600,
+                "data": {
+                    "dname": "server1.test-dnssec.com"
+                }
+            },
+            {
+                "name": "www.test.test-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "4.3.2.1"
+                }
+            },
+            {
+                "name": "sub.test.test-dnssec.com",
+                "type": "NS",
+                "ttl": 3600,
+                "data": {
+                    "dname": "ns-test.example.net.test-dnssec.com"
+                }
+            },
+            {
+                "name": "enum.test-dnssec.com",
+                "type": "NAPTR",
+                "ttl": 3600,
+                "data": {
+                    "order": 100,
+                    "preference": 50,
+                    "flags": "u",
+                    "services": "e2u+sip",
+                    "regexp": "",
+                    "replacement": "testuser.domain.com"
+                }
+            },
+            {
+                "name": "counter.test-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "1.1.1.5"
+                }
+            },
+            {
+                "name": "counter.test-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "1.1.1.5"
+                }
+            },
+            {
+                "name": "_ldap._tcp.dc.test-dnssec.com",
+                "type": "SRV",
+                "ttl": 3600,
+                "data": {
+                    "priority": 0,
+                    "weight": 100,
+                    "port": 389,
+                    "target": "server2.example.net"
+                }
+            },
+            {
+                "name": "_double._tcp.dc.test-dnssec.com",
+                "type": "SRV",
+                "ttl": 3600,
+                "data": {
+                    "priority": 0,
+                    "weight": 100,
+                    "port": 389,
+                    "target": "server1.test-dnssec.com"
+                }
+            },
+            {
+                "name": "_double._tcp.dc.test-dnssec.com",
+                "type": "SRV",
+                "ttl": 3600,
+                "data": {
+                    "priority": 1,
+                    "weight": 100,
+                    "port": 389,
+                    "target": "server1.test-dnssec.com"
+                }
+            },
+            {
+                "name": "_root._tcp.dc.test-dnssec.com",
+                "type": "SRV",
+                "ttl": 3600,
+                "data": {
+                    "priority": 0,
+                    "weight": 0,
+                    "port": 0,
+                    "target": ""
+                }
+            },
+            {
+                "name": "blah.test-dnssec.com",
+                "type": "NS",
+                "ttl": 3600,
+                "data": {
+                    "dname": "blah.test-dnssec.com"
+                }
+            },
+            {
+                "name": "blah.test-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "192.168.6.1"
+                }
+            },
+            {
+                "name": "very-long-txt.test-dnssec.com",
+                "type": "TXT",
+                "ttl": 3600,
+                "data": {
+                    "txt": "A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long!"
+                }
+            },
+            {
+                "name": "within-server.test-dnssec.com",
+                "type": "CNAME",
+                "ttl": 3600,
+                "data": {
+                    "dname": "outpost.example.com"
+                }
+            },
+            {
+                "name": "_underscore.test-dnssec.com",
+                "type": "TXT",
+                "ttl": 3600,
+                "data": {
+                    "txt": "underscores are terrible"
+                }
+            },
+            {
+                "name": "b.c.test-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "5.6.7.8"
+                }
+            },
+            {
+                "name": "*.a.b.c.test-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "8.7.6.5"
+                }
+            },
+            {
+                "name": "aland.test-dnssec.com",
+                "type": "TXT",
+                "ttl": 3600,
+                "data": {
+                    "txt": "\u00c5LAND ISLANDS"
+                }
+            }
         ],
         "keys":[{"ksk":"-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USCh\nEW0fLYT/QkAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+C\nfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHSU8htjdwICBAEC\ngYEAlpYTHWYrcd0HQXO3F9lPqwwfHUt7VBaSEUYrk3N3ZYCWvmV1qyKbB/kb1SBs\n4GfW1vP966HXCffnX92LDXYxi7It3TJaKmo8aF/leN7w8WLNJXUayEoQKUfKLprj\nN14Jx/tgMu7I/BOoHId8b7e57pBKtDiSF6WWn3K7tNPbfmkCQQDST41m62mC4MAa\nDsUdyM0Vg/tjduGqnygryCDEXDabdg95a3wMk0SQCQzZFHGNYnsXcffTqGs/y+5w\nQWxyOGSNAkEAzHFkDJla30NiiKvhu7dY+0+dGrfMA7pNUh+LGdXe5QFdjwwxqPbF\n7NMGXKMdB8agSCxGZC3bxdvYNF9LULzhEwJABpDYNSoQx+UMvaEN5XTpLmCHuS1r\nsmhfKZPcDx8Z7mAYda3wZEuHQq+cf6i5XhOO9P5QKpKeslHLAMHa7NaNgQJBAI03\nGGacYLwui32fbzb8BYRg82Kga/OW6btY+O6hNs6iSR2gBlQ9j3Tgrzo+N4R/NQSl\nc05wGO2RnBUwlu0XUckCQHfHsWHVrrADTpalbv+FTDyWd0ouHXBmDecVZh3e7/ue\ncdMoblzeasvgp8CjFa9U+uDozY+aL6TNIpG++nn4lNw=\n-----END RSA PRIVATE KEY-----\n","ksk_keytag":37440,"ksk_alg":8,"zsk":"-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jT\nCaEwnpE74YHCLegKAAn+efeZrT/EBBrzlacCAgIBAkBh9VGFW2SJk1I9SBQaDIA9\nchdrrx+PHibSyozwT4eAPmd6OFoLausc7ls6v9evPeb+Yj3g0JXvTGp6BgNhFqLR\nAiEA1+ievAEBVM6IlOmpiTwlaWe/HV6MokBBq1G/tvJS0M8CIQDPm/DUsoTEv/Jj\n6O3U9hNcPLbvKMMGld2wbf7nrQmzqQIhAJrhwTaFdjnXhmfUB9a33vRIbSaIsLxA\nDyuM+03XP+YhAiEAmJIJz7WX9uPkCIy8wO655Hh4dt4UkBFRE98OqkHIwGkCIFFv\nN8rJojI+oEiJyNjEjWZD4qoUMUp3+YBl0htAJUE2\n-----END RSA PRIVATE KEY-----\n","zsk_keytag":49016,"zsk_alg":8,"inception":"2016-11-14T11:36:58.851612Z","until":"2017-02-12T11:36:58.849384Z"}]
-    },
+    },    
+
     {
         "name": "wtest.com",
         "records": [
@@ -1640,8 +3070,199 @@
                 }
             }
         ],
-        "keys":[{"ksk":"-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USCh\nEW0fLYT/QkAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+C\nfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHSU8htjdwICBAEC\ngYEAlpYTHWYrcd0HQXO3F9lPqwwfHUt7VBaSEUYrk3N3ZYCWvmV1qyKbB/kb1SBs\n4GfW1vP966HXCffnX92LDXYxi7It3TJaKmo8aF/leN7w8WLNJXUayEoQKUfKLprj\nN14Jx/tgMu7I/BOoHId8b7e57pBKtDiSF6WWn3K7tNPbfmkCQQDST41m62mC4MAa\nDsUdyM0Vg/tjduGqnygryCDEXDabdg95a3wMk0SQCQzZFHGNYnsXcffTqGs/y+5w\nQWxyOGSNAkEAzHFkDJla30NiiKvhu7dY+0+dGrfMA7pNUh+LGdXe5QFdjwwxqPbF\n7NMGXKMdB8agSCxGZC3bxdvYNF9LULzhEwJABpDYNSoQx+UMvaEN5XTpLmCHuS1r\nsmhfKZPcDx8Z7mAYda3wZEuHQq+cf6i5XhOO9P5QKpKeslHLAMHa7NaNgQJBAI03\nGGacYLwui32fbzb8BYRg82Kga/OW6btY+O6hNs6iSR2gBlQ9j3Tgrzo+N4R/NQSl\nc05wGO2RnBUwlu0XUckCQHfHsWHVrrADTpalbv+FTDyWd0ouHXBmDecVZh3e7/ue\ncdMoblzeasvgp8CjFa9U+uDozY+aL6TNIpG++nn4lNw=\n-----END RSA PRIVATE KEY-----\n","ksk_keytag":37440,"ksk_alg":8,"zsk":"-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jT\nCaEwnpE74YHCLegKAAn+efeZrT/EBBrzlacCAgIBAkBh9VGFW2SJk1I9SBQaDIA9\nchdrrx+PHibSyozwT4eAPmd6OFoLausc7ls6v9evPeb+Yj3g0JXvTGp6BgNhFqLR\nAiEA1+ievAEBVM6IlOmpiTwlaWe/HV6MokBBq1G/tvJS0M8CIQDPm/DUsoTEv/Jj\n6O3U9hNcPLbvKMMGld2wbf7nrQmzqQIhAJrhwTaFdjnXhmfUB9a33vRIbSaIsLxA\nDyuM+03XP+YhAiEAmJIJz7WX9uPkCIy8wO655Hh4dt4UkBFRE98OqkHIwGkCIFFv\nN8rJojI+oEiJyNjEjWZD4qoUMUp3+YBl0htAJUE2\n-----END RSA PRIVATE KEY-----\n","zsk_keytag":49016,"zsk_alg":8,"inception":"2016-11-14T11:36:58.851612Z","until":"2017-02-12T11:36:58.849384Z"}]
     },
+
+    {
+        "name": "wtest-dnssec.com",
+        "records": [
+            {
+                "name": "wtest-dnssec.com",
+                "type": "SOA",
+                "data": {
+                    "mname": "ns1.wtest-dnssec.com",
+                    "rname": "ahu.example.com",
+                    "serial": 2005092501,
+                    "refresh": 28800,
+                    "retry": 7200,
+                    "expire": 604800,
+                    "minimum": 86400
+                },
+                "ttl": 3600
+            },
+            {
+                "name": "wtest-dnssec.com",
+                "type": "NS",
+                "ttl": 3600,
+                "data": {
+                    "dname": ""
+                }
+            },
+            {
+                "name": "wtest-dnssec.com",
+                "type": "NS",
+                "ttl": 3600,
+                "data": {
+                    "dname": "ns1.wtest-dnssec.com"
+                }
+            },
+            {
+                "name": "wtest-dnssec.com",
+                "type": "MX",
+                "ttl": 3600,
+                "data": {
+                    "exchange": "smtp-servers.example.com",
+                    "preference": 10
+                }
+            },
+            {
+                "name": "wtest-dnssec.com",
+                "type": "MX",
+                "ttl": 3600,
+                "data": {
+                    "exchange": "smtp-servers.wtest-dnssec.com",
+                    "preference": 15
+                }
+            },
+            {
+                "name": "wtest-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "9.9.9.9"
+                }
+            },
+            {
+                "name": "ns1.wtest-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "2.3.4.5"
+                }
+            },
+            {
+                "name": "ns2.wtest-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "5.6.7.8"
+                }
+            },
+            {
+                "name": "*.wtest-dnssec.com",
+                "type": "CNAME",
+                "ttl": 3600,
+                "data": {
+                    "dname": "server.wtest-dnssec.com"
+                }
+            },
+            {
+                "name": "secure.wtest-dnssec.com",
+                "type": "MX",
+                "ttl": 3600,
+                "data": {
+                    "exchange": "smtp-servers.wtest-dnssec.com",
+                    "preference": 10
+                }
+            },
+            {
+                "name": "server1.wtest-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "1.2.3.4"
+                }
+            },
+            {
+                "name": "something.wtest-dnssec.com",
+                "type": "TXT",
+                "ttl": 3600,
+                "data": {
+                    "txt": "make the empty non-terminal non-empty"
+                }
+            },
+            {
+                "name": "*.something.wtest-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "4.3.2.1"
+                }
+            },
+            {
+                "name": "*.a.b.c.d.e.wtest-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "6.7.8.9"
+                }
+            },
+            {
+                "name": "e.wtest-dnssec.com",
+                "type": "TXT",
+                "ttl": 3600,
+                "data": {
+                    "txt": "non-empty"
+                }
+            },
+            {
+                "name": "d.e.wtest-dnssec.com",
+                "type": "TXT",
+                "ttl": 3600,
+                "data": {
+                    "txt": "non-empty"
+                }
+            },
+            {
+                "name": "c.d.e.wtest-dnssec.com",
+                "type": "TXT",
+                "ttl": 3600,
+                "data": {
+                    "txt": "non-empty"
+                }
+            },
+            {
+                "name": "b.c.d.e.wtest-dnssec.com",
+                "type": "TXT",
+                "ttl": 3600,
+                "data": {
+                    "txt": "non-empty"
+                }
+            },
+            {
+                "name": "a.b.c.d.e.wtest-dnssec.com",
+                "type": "TXT",
+                "ttl": 3600,
+                "data": {
+                    "txt": "non-empty"
+                }
+            },
+            {
+                "name": "a.something.wtest-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "10.11.12.13"
+                }
+            },
+            {
+                "name": "proxy.cover.wtest-dnssec.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "1.2.3.4"
+                }
+            },
+            {
+                "name": "*.cover.wtest-dnssec.com",
+                "type": "CNAME",
+                "ttl": 3600,
+                "data": {
+                    "dname": "proxy.cover.wtest-dnssec.com"
+                }
+            }
+        ],
+        "keys":[{"ksk":"-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USCh\nEW0fLYT/QkAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+C\nfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHSU8htjdwICBAEC\ngYEAlpYTHWYrcd0HQXO3F9lPqwwfHUt7VBaSEUYrk3N3ZYCWvmV1qyKbB/kb1SBs\n4GfW1vP966HXCffnX92LDXYxi7It3TJaKmo8aF/leN7w8WLNJXUayEoQKUfKLprj\nN14Jx/tgMu7I/BOoHId8b7e57pBKtDiSF6WWn3K7tNPbfmkCQQDST41m62mC4MAa\nDsUdyM0Vg/tjduGqnygryCDEXDabdg95a3wMk0SQCQzZFHGNYnsXcffTqGs/y+5w\nQWxyOGSNAkEAzHFkDJla30NiiKvhu7dY+0+dGrfMA7pNUh+LGdXe5QFdjwwxqPbF\n7NMGXKMdB8agSCxGZC3bxdvYNF9LULzhEwJABpDYNSoQx+UMvaEN5XTpLmCHuS1r\nsmhfKZPcDx8Z7mAYda3wZEuHQq+cf6i5XhOO9P5QKpKeslHLAMHa7NaNgQJBAI03\nGGacYLwui32fbzb8BYRg82Kga/OW6btY+O6hNs6iSR2gBlQ9j3Tgrzo+N4R/NQSl\nc05wGO2RnBUwlu0XUckCQHfHsWHVrrADTpalbv+FTDyWd0ouHXBmDecVZh3e7/ue\ncdMoblzeasvgp8CjFa9U+uDozY+aL6TNIpG++nn4lNw=\n-----END RSA PRIVATE KEY-----\n","ksk_keytag":37440,"ksk_alg":8,"zsk":"-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jT\nCaEwnpE74YHCLegKAAn+efeZrT/EBBrzlacCAgIBAkBh9VGFW2SJk1I9SBQaDIA9\nchdrrx+PHibSyozwT4eAPmd6OFoLausc7ls6v9evPeb+Yj3g0JXvTGp6BgNhFqLR\nAiEA1+ievAEBVM6IlOmpiTwlaWe/HV6MokBBq1G/tvJS0M8CIQDPm/DUsoTEv/Jj\n6O3U9hNcPLbvKMMGld2wbf7nrQmzqQIhAJrhwTaFdjnXhmfUB9a33vRIbSaIsLxA\nDyuM+03XP+YhAiEAmJIJz7WX9uPkCIy8wO655Hh4dt4UkBFRE98OqkHIwGkCIFFv\nN8rJojI+oEiJyNjEjWZD4qoUMUp3+YBl0htAJUE2\n-----END RSA PRIVATE KEY-----\n","zsk_keytag":49016,"zsk_alg":8,"inception":"2016-11-14T11:36:58.851612Z","until":"2017-02-12T11:36:58.849384Z"}]
+    },    
 
     {
         "name": "minimal.com",
@@ -1676,9 +3297,70 @@
                     "dname": "ns2.example.com"
                 }
             }
+        ]
+    },
+
+    {
+        "name": "minimal-dnssec.com",
+        "records": [
+            {
+                "name": "minimal-dnssec.com",
+                "type": "SOA",
+                "data": {
+                    "mname": "ns1.example.com",
+                    "rname": "ahu.example.com",
+                    "serial": 2000081501,
+                    "refresh": 28800,
+                    "retry": 7200,
+                    "expire": 604800,
+                    "minimum": 86400
+                },
+                "ttl": 120
+            },
+            {
+                "name": "minimal-dnssec.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns1.example.com"
+                }
+            },
+            {
+                "name": "minimal-dnssec.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns2.example.com"
+                }
+            },
+            {
+                "name": "minimal-dnssec.com",
+                "type": "DNSKEY",
+                "ttl": 120,
+                "data": {
+                    "flags": 256,
+                    "protocol": 3,
+                    "alg": 8,
+                    "public_key": "MFswDQYJKoZIhvcNAQEBBQADSgAwRwJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jTCaEwnpE74YHCLegKAAn+efeZrT/EBBrzlacCAgIB",
+                    "key_tag": 0
+                }
+            },
+            {
+                "name": "minimal-dnssec.com",
+                "type": "DNSKEY",
+                "ttl": 120,
+                "data": {
+                    "flags": 257,
+                    "protocol": 3,
+                    "alg": 8,
+                    "public_key": "MIGeMA0GCSqGSIb3DQEBAQUAA4GMADCBiAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USChEW0fLYT/QkAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+CfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHSU8htjdwICBAE=",
+                    "key_tag": 0
+                }
+            }
         ],
         "keys":[{"ksk":"-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USCh\nEW0fLYT/QkAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+C\nfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHSU8htjdwICBAEC\ngYEAlpYTHWYrcd0HQXO3F9lPqwwfHUt7VBaSEUYrk3N3ZYCWvmV1qyKbB/kb1SBs\n4GfW1vP966HXCffnX92LDXYxi7It3TJaKmo8aF/leN7w8WLNJXUayEoQKUfKLprj\nN14Jx/tgMu7I/BOoHId8b7e57pBKtDiSF6WWn3K7tNPbfmkCQQDST41m62mC4MAa\nDsUdyM0Vg/tjduGqnygryCDEXDabdg95a3wMk0SQCQzZFHGNYnsXcffTqGs/y+5w\nQWxyOGSNAkEAzHFkDJla30NiiKvhu7dY+0+dGrfMA7pNUh+LGdXe5QFdjwwxqPbF\n7NMGXKMdB8agSCxGZC3bxdvYNF9LULzhEwJABpDYNSoQx+UMvaEN5XTpLmCHuS1r\nsmhfKZPcDx8Z7mAYda3wZEuHQq+cf6i5XhOO9P5QKpKeslHLAMHa7NaNgQJBAI03\nGGacYLwui32fbzb8BYRg82Kga/OW6btY+O6hNs6iSR2gBlQ9j3Tgrzo+N4R/NQSl\nc05wGO2RnBUwlu0XUckCQHfHsWHVrrADTpalbv+FTDyWd0ouHXBmDecVZh3e7/ue\ncdMoblzeasvgp8CjFa9U+uDozY+aL6TNIpG++nn4lNw=\n-----END RSA PRIVATE KEY-----\n","ksk_keytag":37440,"ksk_alg":8,"zsk":"-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jT\nCaEwnpE74YHCLegKAAn+efeZrT/EBBrzlacCAgIBAkBh9VGFW2SJk1I9SBQaDIA9\nchdrrx+PHibSyozwT4eAPmd6OFoLausc7ls6v9evPeb+Yj3g0JXvTGp6BgNhFqLR\nAiEA1+ievAEBVM6IlOmpiTwlaWe/HV6MokBBq1G/tvJS0M8CIQDPm/DUsoTEv/Jj\n6O3U9hNcPLbvKMMGld2wbf7nrQmzqQIhAJrhwTaFdjnXhmfUB9a33vRIbSaIsLxA\nDyuM+03XP+YhAiEAmJIJz7WX9uPkCIy8wO655Hh4dt4UkBFRE98OqkHIwGkCIFFv\nN8rJojI+oEiJyNjEjWZD4qoUMUp3+YBl0htAJUE2\n-----END RSA PRIVATE KEY-----\n","zsk_keytag":49016,"zsk_alg":8,"inception":"2016-11-14T11:36:58.851612Z","until":"2017-02-12T11:36:58.849384Z"}]
     },
+
     {
       "name": "example",
       "records": [
