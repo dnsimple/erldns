@@ -21,6 +21,9 @@
 -export([handle/4]).
 -export([key_rrset_signer/2, zone_rrset_signer/2]).
 -export([rrsig_for_zone_rrset/2]).
+-export([maybe_sign_rrset/3]).
+
+-define(NEXT_DNAME_PART, <<"\000">>).
 
 %% @doc Apply DNSSEC records to the given message if the zone is signed
 %% and DNSSEC is requested.
@@ -28,6 +31,7 @@
 handle(Message, Zone, Qname, Qtype) ->
   handle(Message, Zone, Qname, Qtype, proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets).
 
+-spec(handle(dns:message(), erldns:zone(), dns:name(), dns:type(), boolean(), [erldns:keyset()]) -> dns:message()).
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequested = true, []) ->
   % DNSSEC requested, zone unsigned
   Message;
@@ -40,42 +44,51 @@ handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
     [] ->
       ApexRecords = erldns_zone_cache:get_records_by_name(Zone#zone.name),
       ApexRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), ApexRecords),
-      SoaRRSigRecords = lists:filter(match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords),
+      SoaRRSigRecords = lists:filter(erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords),
 
-      NextDname = dns:labels_to_dname([<<"\000">>] ++ dns:dname_to_labels(Qname)),
+      NextDname = dns:labels_to_dname([?NEXT_DNAME_PART] ++ dns:dname_to_labels(Qname)),
       Types = record_types_for_name(Qname, ZoneWithRecords#zone.records),
       NsecRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NSEC, ttl = Ttl, data = #dns_rrdata_nsec{next_dname = NextDname, types = Types}}],
       NsecRRSigRecords = rrsig_for_zone_rrset(Zone, NsecRecords),
 
-      Message#dns_message{ad = true, authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords};
+      erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true, authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords}, Zone));
     _ ->
-      RRSigs = find_rrsigs(Message, ZoneWithRecords#zone.records),
-      Message#dns_message{ad = true, answers = lists:usort(Message#dns_message.answers ++ RRSigs)}
+      AnswerSignatures = find_rrsigs(ZoneWithRecords#zone.records, Message#dns_message.answers),
+      AuthoritySignatures = find_rrsigs(ZoneWithRecords#zone.records, Message#dns_message.authority),
+      erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true, answers = Message#dns_message.answers ++ AnswerSignatures, authority = Message#dns_message.authority ++ AuthoritySignatures}, Zone))
   end;
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false, _) ->
   Message.
 
--spec(find_rrsigs(dns:message(), [dns:rr()]) -> [dns:rr()]).
-find_rrsigs(Message, Records) ->
-  NamesAndTypes = lists:usort(lists:map(fun(RR) -> {RR#dns_rr.name, RR#dns_rr.type} end, Message#dns_message.answers)),
+-spec(find_rrsigs([dns:rr()], [dns:rr()]) -> [dns:rr()]).
+find_rrsigs(ZoneRecords, MessageRecords) ->
+  NamesAndTypes = lists:usort(lists:map(fun(RR) -> {RR#dns_rr.name, RR#dns_rr.type} end, MessageRecords)),
   lists:flatten(
     lists:map(
       fun({Name, Type}) ->
-          NamedRRSigs = lists:filter(erldns_records:match_name_and_type(Name, ?DNS_TYPE_RRSIG), Records),
-          lists:filter(match_type_covered(Type), NamedRRSigs)
+          NamedRRSigs = lists:filter(erldns_records:match_name_and_type(Name, ?DNS_TYPE_RRSIG), ZoneRecords),
+          lists:filter(erldns_records:match_type_covered(Type), NamedRRSigs)
       end, NamesAndTypes)).
+
+-spec(sign_unsigned(dns:message(), erldns:zone()) -> dns:message()).
+sign_unsigned(Message, Zone) ->
+  UnsignedAnswers = find_unsigned_records(Message#dns_message.answers),
+  AnswerSignatures = erldns_dnssec:rrsig_for_zone_rrset(Zone, UnsignedAnswers),
+  Message#dns_message{answers = Message#dns_message.answers ++ AnswerSignatures}.
+
+-spec(find_unsigned_records([dns:rr()]) -> [dns:rr()]).
+find_unsigned_records(Records) ->
+  lists:filter(
+    fun(RR) ->
+        (RR#dns_rr.type =/= ?DNS_TYPE_RRSIG) and (lists:filter(erldns_records:match_name_and_type(RR#dns_rr.name, ?DNS_TYPE_RRSIG), Records) =:= [])
+    end, Records).
 
 record_types_for_name(Name, Records) ->
   RecordsAtName = lists:filter(erldns_records:match_name(Name), Records),
   TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
   lists:usort(TypesCovered ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]).
 
--spec(match_type_covered(dns:type()) -> fun((dns:rr()) -> boolean())).
-match_type_covered(Qtype) ->
-  fun(RRSig) ->
-      RRSig#dns_rr.data#dns_rrdata_rrsig.type_covered =:= Qtype
-  end.
-
+-spec(rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()]).
 rrsig_for_zone_rrset(Zone, RRs) ->
   lists:flatten(lists:map(zone_rrset_signer(Zone#zone.name, RRs), Zone#zone.keysets)).
 
@@ -91,6 +104,7 @@ key_rrset_signer(ZoneName, RRs) ->
       dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [{inception, Inception},{expiration, Expiration}])
   end.
 
+-spec(zone_rrset_signer(dns:name(), [dns:rr()]) -> fun((erldns:keyset()) -> dns:rr())).
 zone_rrset_signer(ZoneName, RRs) ->
   fun(Keyset) ->
       Keytag = Keyset#keyset.zone_signing_key_tag,
@@ -100,4 +114,23 @@ zone_rrset_signer(ZoneName, RRs) ->
       Expiration = dns:unix_time(Keyset#keyset.valid_until),
 
       dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [{inception, Inception},{expiration, Expiration}])
+  end.
+
+%% @doc This function will potentially sign the given RR set if the following
+%% conditions are true:
+%%
+%% - DNSSEC is requested
+%% - The zone is signed
+-spec(maybe_sign_rrset(dns:message(), [dns:rr()], erldns:zone()) -> [dns:rr()]).
+maybe_sign_rrset(Message, Records, Zone) ->
+  case {proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets}  of
+    {true, []} ->
+      % DNSSEC requested, zone not signed
+      Records;
+    {true, _} ->
+      % DNSSEC requested, zone signed
+      Records ++ erldns_dnssec:rrsig_for_zone_rrset(Zone, Records);
+    {false, _} ->
+      % DNSSEC not requested
+      Records
   end.

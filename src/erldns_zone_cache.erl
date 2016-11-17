@@ -281,5 +281,16 @@ sign_zone(Zone = #zone{keysets = []}) ->
 sign_zone(Zone) ->
   lager:debug("Signing zone ~p", [Zone#zone.name]),
   KeyRRSigRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Zone#zone.name, lists:filter(erldns_records:match_type(?DNS_TYPE_DNSKEY), Zone#zone.records)), Zone#zone.keysets)),
+  % TODO: remove wildcard signatures as they will not be used but are taking up space
   ZoneRRSigRecords = lists:flatten(lists:map(erldns_dnssec:zone_rrset_signer(Zone#zone.name, lists:filter(fun(RR) -> (RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY) end, Zone#zone.records)), Zone#zone.keysets)),
-  build_zone(Zone#zone.name, Zone#zone.version, Zone#zone.records ++ KeyRRSigRecords ++ ZoneRRSigRecords, Zone#zone.keysets).
+  build_zone(Zone#zone.name, Zone#zone.version, Zone#zone.records ++ KeyRRSigRecords ++ rewrite_soa_rrsig_ttl(Zone#zone.records, ZoneRRSigRecords -- lists:filter(erldns_records:match_wildcard(), ZoneRRSigRecords)), Zone#zone.keysets).
+
+rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
+  SoaRR = lists:last(lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), ZoneRecords)),
+  lists:map(
+    fun(RR) ->
+        case RR#dns_rr.type of
+          ?DNS_TYPE_RRSIG -> erldns_records:minimum_soa_ttl(RR, SoaRR#dns_rr.data);
+          _ -> RR
+        end
+    end, RRSigRecords).

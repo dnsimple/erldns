@@ -57,7 +57,10 @@ resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), % Zone lookup
   Records = resolve(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
-  erldns_dnssec:handle(additional_processing(rewrite_soa_ttl(Records), Host, Zone), Zone, Qname, Qtype).
+  sort_answers(erldns_dnssec:handle(additional_processing(erldns_records:rewrite_soa_ttl(Records), Host, Zone), Zone, Qname, Qtype)).
+
+sort_answers(Message) ->
+  Message#dns_message{answers = lists:usort(Message#dns_message.answers)}.
 
 %% No SOA was found for the Qname so we return the root hints
 %% Note: it seems odd that we are indicating we are authoritative here.
@@ -114,7 +117,7 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
-      NewRecords = maybe_sign_rrset(Message, lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers())), Zone),
+      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers())), Zone),
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, NewRecords, AuthorityRecords);
     _ ->
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, TypeMatches, AuthorityRecords)
@@ -334,7 +337,7 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, Matche
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
-      NewRecords = maybe_sign_rrset(Message, lists:map(erldns_records:replace_name(Qname), lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers()))), Zone),
+      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, lists:map(erldns_records:replace_name(Qname), lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers()))), Zone),
       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], NewRecords);
     _ ->
       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], TypeMatches)
@@ -446,14 +449,6 @@ filter_records(Records, [{Handler,_}|Rest]) ->
   filter_records(Handler:filter(Records), Rest).
 
 
-
-%% According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
-%% must be set to the value of the minimum field in the SOA content.
-rewrite_soa_ttl(Message) -> rewrite_soa_ttl(Message, Message#dns_message.authority, []).
-rewrite_soa_ttl(Message, [], NewAuthority) -> Message#dns_message{authority = NewAuthority};
-rewrite_soa_ttl(Message, [R|Rest], NewAuthority) -> rewrite_soa_ttl(Message, Rest, NewAuthority ++ [erldns_records:minimum_soa_ttl(R, R#dns_rr.data)]).
-
-
 %% See if additional processing is necessary.
 additional_processing(Message, _Host, {error, _}) ->
   Message;
@@ -519,17 +514,4 @@ get_delegate_records(Zone, Qname) ->
       Delegate:get_records_by_name(Qname);
     _ ->
       []
-  end.
-
-maybe_sign_rrset(Message, Records, Zone) ->
-  case {proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets}  of
-    {true, []} ->
-      % DNSSEC requested, zone not signed
-      Records;
-    {true, _} ->
-      % DNSSEC requested, zone signed
-      Records ++ erldns_dnssec:rrsig_for_zone_rrset(Zone, Records);
-    {false, _} ->
-      % DNSSEC not requested
-      Records
   end.
