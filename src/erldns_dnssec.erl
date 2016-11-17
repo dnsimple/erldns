@@ -25,11 +25,68 @@
 
 -define(NEXT_DNAME_PART, <<"\000">>).
 
+%% @doc Given a zone and a set of records, return the RRSIG records.
+-spec(rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()]).
+rrsig_for_zone_rrset(Zone, RRs) ->
+  lists:flatten(lists:map(zone_rrset_signer(Zone#zone.name, RRs), Zone#zone.keysets)).
+
+%% @doc Return a function that can be used to sign the given records using the key signing key.
+%% The function accepts a keyset, allowing the zone signing mechanism to iterate through available
+%% keysets, applying the key signing key from each keyset.
+-spec(key_rrset_signer(dns:name(), [dns:rr()]) -> fun((erldns:keyset()) -> dns:rr())).
+key_rrset_signer(ZoneName, RRs) ->
+  fun(Keyset) ->
+      Keytag = Keyset#keyset.key_signing_key_tag,
+      Alg = Keyset#keyset.key_signing_alg,
+      PrivateKey = Keyset#keyset.key_signing_key,
+      Inception = dns:unix_time(Keyset#keyset.inception),
+      Expiration = dns:unix_time(Keyset#keyset.valid_until),
+
+      dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [{inception, Inception},{expiration, Expiration}])
+  end.
+
+%% @doc Return a function that can be used to sign the given records using the zone signing key.
+%% The function accepts a keyset, allowing the zone signing mechanism to iterate through available
+%% keysets, applying the zone signing key from each keyset.
+-spec(zone_rrset_signer(dns:name(), [dns:rr()]) -> fun((erldns:keyset()) -> dns:rr())).
+zone_rrset_signer(ZoneName, RRs) ->
+  fun(Keyset) ->
+      Keytag = Keyset#keyset.zone_signing_key_tag,
+      Alg = Keyset#keyset.zone_signing_alg,
+      PrivateKey = Keyset#keyset.zone_signing_key,
+      Inception = dns:unix_time(Keyset#keyset.inception),
+      Expiration = dns:unix_time(Keyset#keyset.valid_until),
+
+      dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [{inception, Inception},{expiration, Expiration}])
+  end.
+
+%% @doc This function will potentially sign the given RR set if the following
+%% conditions are true:
+%%
+%% - DNSSEC is requested
+%% - The zone is signed
+-spec(maybe_sign_rrset(dns:message(), [dns:rr()], erldns:zone()) -> [dns:rr()]).
+maybe_sign_rrset(Message, Records, Zone) ->
+  case {proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets}  of
+    {true, []} ->
+      % DNSSEC requested, zone not signed
+      Records;
+    {true, _} ->
+      % DNSSEC requested, zone signed
+      Records ++ erldns_dnssec:rrsig_for_zone_rrset(Zone, Records);
+    {false, _} ->
+      % DNSSEC not requested
+      Records
+  end.
+
 %% @doc Apply DNSSEC records to the given message if the zone is signed
 %% and DNSSEC is requested.
 -spec(handle(dns:message(), erldns:zone(), dns:name(), dns:type()) -> dns:message()).
 handle(Message, Zone, Qname, Qtype) ->
   handle(Message, Zone, Qname, Qtype, proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets).
+
+
+%%% Internal functions
 
 -spec(handle(dns:message(), erldns:zone(), dns:name(), dns:type(), boolean(), [erldns:keyset()]) -> dns:message()).
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequested = true, []) ->
@@ -88,49 +145,4 @@ record_types_for_name(Name, Records) ->
   TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
   lists:usort(TypesCovered ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]).
 
--spec(rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()]).
-rrsig_for_zone_rrset(Zone, RRs) ->
-  lists:flatten(lists:map(zone_rrset_signer(Zone#zone.name, RRs), Zone#zone.keysets)).
 
--spec(key_rrset_signer(dns:name(), [dns:rr()]) -> fun((erldns:keyset()) -> dns:rr())).
-key_rrset_signer(ZoneName, RRs) ->
-  fun(Keyset) ->
-      Keytag = Keyset#keyset.key_signing_key_tag,
-      Alg = Keyset#keyset.key_signing_alg,
-      PrivateKey = Keyset#keyset.key_signing_key,
-      Inception = dns:unix_time(Keyset#keyset.inception),
-      Expiration = dns:unix_time(Keyset#keyset.valid_until),
-
-      dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [{inception, Inception},{expiration, Expiration}])
-  end.
-
--spec(zone_rrset_signer(dns:name(), [dns:rr()]) -> fun((erldns:keyset()) -> dns:rr())).
-zone_rrset_signer(ZoneName, RRs) ->
-  fun(Keyset) ->
-      Keytag = Keyset#keyset.zone_signing_key_tag,
-      Alg = Keyset#keyset.zone_signing_alg,
-      PrivateKey = Keyset#keyset.zone_signing_key,
-      Inception = dns:unix_time(Keyset#keyset.inception),
-      Expiration = dns:unix_time(Keyset#keyset.valid_until),
-
-      dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [{inception, Inception},{expiration, Expiration}])
-  end.
-
-%% @doc This function will potentially sign the given RR set if the following
-%% conditions are true:
-%%
-%% - DNSSEC is requested
-%% - The zone is signed
--spec(maybe_sign_rrset(dns:message(), [dns:rr()], erldns:zone()) -> [dns:rr()]).
-maybe_sign_rrset(Message, Records, Zone) ->
-  case {proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets}  of
-    {true, []} ->
-      % DNSSEC requested, zone not signed
-      Records;
-    {true, _} ->
-      % DNSSEC requested, zone signed
-      Records ++ erldns_dnssec:rrsig_for_zone_rrset(Zone, Records);
-    {false, _} ->
-      % DNSSEC not requested
-      Records
-  end.
