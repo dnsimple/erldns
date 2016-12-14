@@ -20,8 +20,6 @@
 
 -behavior(gen_server).
 
--include_lib("parse_xfrm_utils/include/parse_xfrm_utils_if_than_else.hrl").
-
 % API
 -export([start_link/0, get/1, get/2, put/2, sweep/0, clear/0, stop/0]).
 
@@ -35,11 +33,10 @@
         ]).
 
 -define(SERVER, ?MODULE).
--define(ENABLED, true).
--define(SWEEP_INTERVAL, 1000 * 60 * 3). % Every 3 minutes
 
 -record(state, {
           ttl :: non_neg_integer(),
+          ttl_overrides :: [{binary(), non_neg_integer()}],
           tref :: timer:tref()
          }).
 
@@ -77,16 +74,12 @@ get(Key, _Host) ->
 %% @doc Put the response in the cache for the given question.
 -spec put(dns:question() | {dns:question(), [dns:rr()]}, dns:message()) -> ok.
 put(Key, Response) ->
-  ?IF(
-    ?ENABLED,
-    begin
-      %lager:debug("Set packet in cache for ~p", [Key]),
-      gen_server:call(?SERVER, {set_packet, [Key, Response]})
-    end,
-    begin
-      %lager:debug("Packet cache not enabled (Q: ~p)", [Key]),
+  case erldns_config:packet_cache_enabled() of
+    true ->
+      gen_server:call(?SERVER, {set_packet, [Key, Response]});
+    _ ->
       ok
-    end).
+  end.
 
 %% @doc Remove all old cached packets from the cache.
 -spec sweep() -> any().
@@ -106,11 +99,11 @@ stop() ->
 %% Gen server hooks
 -spec init([non_neg_integer()]) -> {ok, #state{}}.
 init([]) ->
-  init([20]);
+  init([erldns_config:packet_cache_default_ttl()]);
 init([TTL]) ->
   erldns_storage:create(packet_cache),
-  {ok, Tref} = timer:apply_interval(?SWEEP_INTERVAL, ?MODULE, sweep, []),
-  {ok, #state{ttl = TTL, tref = Tref}}.
+  {ok, Tref} = timer:apply_interval(erldns_config:packet_cache_sweep_interval(), ?MODULE, sweep, []),
+  {ok, #state{ttl = TTL, ttl_overrides = erldns_config:packet_cache_ttl_overrides(), tref = Tref}}.
 
 handle_call({set_packet, [Key, Response]}, _From, State) ->
   erldns_storage:insert(packet_cache, {Key, {Response, timestamp() + State#state.ttl}}),
