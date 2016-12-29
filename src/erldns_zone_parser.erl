@@ -40,6 +40,10 @@
 -define(SERVER, ?MODULE).
 -define(PARSE_TIMEOUT, 30 * 1000).
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -record(state, {parsers}).
 
 %% Public API
@@ -52,7 +56,7 @@ start_link() ->
 %% @doc Takes a JSON zone and turns it into the tuple {Name, Sha, Records}.
 %%
 %% The default timeout for parsing is currently 30 seconds.
--spec zone_to_erlang(binary()) -> {binary(), binary(), [dns:rr()]}.
+-spec zone_to_erlang(binary()) -> {binary(), binary(), [dns:rr()], [erldns:keyset()]}.
 zone_to_erlang(Zone) ->
   gen_server:call(?SERVER, {parse_zone, Zone}, ?PARSE_TIMEOUT).
 
@@ -105,9 +109,15 @@ code_change(_, State, _) ->
 
 % Internal API
 json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
-  json_to_erlang([{<<"name">>, Name}, {<<"sha">>, ""}, {<<"records">>, JsonRecords}], Parsers);
+  json_to_erlang([{<<"name">>, Name}, {<<"sha">>, ""}, {<<"records">>, JsonRecords}, {<<"keys">>, []}], Parsers);
+
+json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers) ->
+  json_to_erlang([{<<"name">>, Name}, {<<"sha">>, ""}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers);
 
 json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}], Parsers) ->
+  json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}, {<<"keys">>, []}], Parsers);
+
+json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers) ->
   Records = lists:map(
               fun(JsonRecord) ->
                   Data = json_record_to_list(JsonRecord),
@@ -126,7 +136,28 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
   FilteredRecords = lists:filter(record_filter(), Records),
   DistinctRecords = lists:usort(FilteredRecords),
   % lager:debug("After parsing for ~p: ~p", [Name, DistinctRecords]),
-  {Name, Sha, DistinctRecords}.
+  {Name, Sha, DistinctRecords, parse_json_keys(JsonKeys)}.
+
+parse_json_keys(JsonKeys) -> parse_json_keys(JsonKeys, []).
+
+parse_json_keys([], Keys) -> Keys;
+parse_json_keys([[{<<"ksk">>, KskBin}, {<<"ksk_keytag">>, KskKeytag}, {<<"ksk_alg">>, KskAlg}, {<<"zsk">>, ZskBin}, {<<"zsk_keytag">>, ZskKeytag}, {<<"zsk_alg">>, ZskAlg}, {<<"inception">>, Inception}, {<<"until">>, ValidUntil}]|Rest], Keys) ->
+  KeySet = #keyset{
+     key_signing_key = to_crypto_key(KskBin),
+     key_signing_key_tag = KskKeytag,
+     key_signing_alg = KskAlg,
+     zone_signing_key = to_crypto_key(ZskBin),
+     zone_signing_key_tag = ZskKeytag,
+     zone_signing_alg = ZskAlg,
+     inception = iso8601:parse(Inception),
+     valid_until = iso8601:parse(ValidUntil)
+  },
+  parse_json_keys(Rest, [KeySet | Keys]).
+
+to_crypto_key(RsaKeyBin) ->
+  % Where E is the public exponent, N is public modulus and D is the private exponent
+  [_,_,M,E,N|_] = tuple_to_list(public_key:pem_entry_decode(lists:last(public_key:pem_decode(RsaKeyBin)))),
+  [E,M,N].
 
 record_filter() ->
   fun(R) ->
@@ -359,6 +390,45 @@ json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data, _Context]) ->
               },
      ttl = Ttl};
 
+json_record_to_erlang([Name, <<"DS">>, Ttl, Data, _Context]) ->
+  try hex_to_bin(erldns_config:keyget(<<"digest">>, Data)) of
+    Digest ->
+      #dns_rr{
+         name = Name,
+         type = ?DNS_TYPE_DS,
+         data = #dns_rrdata_ds{
+                   keytag = erldns_config:keyget(<<"keytag">>, Data),
+                   alg = erldns_config:keyget(<<"alg">>, Data),
+                   digest_type = erldns_config:keyget(<<"digest_type">>, Data),
+                   digest = Digest
+                  },
+         ttl = Ttl}
+  catch
+    Exception:Reason ->
+      lager:error("Error parsing DS ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason]),
+      {}
+  end;
+
+json_record_to_erlang([Name, <<"DNSKEY">>, Ttl, Data, _Context]) ->
+  try base64_to_bin(erldns_config:keyget(<<"public_key">>, Data)) of
+    PublicKey ->
+      dnssec:add_keytag_to_dnskey(
+        #dns_rr{
+           name = Name,
+           type = ?DNS_TYPE_DNSKEY,
+           data = #dns_rrdata_dnskey{
+                     flags = erldns_config:keyget(<<"flags">>, Data),
+                     protocol = erldns_config:keyget(<<"protocol">>, Data),
+                     alg = erldns_config:keyget(<<"alg">>, Data),
+                     public_key = PublicKey
+                    },
+           ttl = Ttl})
+  catch
+    Exception:Reason ->
+      lager:error("Error parsing DNSKEY: ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason]),
+      {}
+  end;
+
 json_record_to_erlang(_Data) ->
   %lager:debug("Cannot convert ~p", [Data]),
   {}.
@@ -371,3 +441,89 @@ hex_to_bin(Bin) when is_binary(Bin) ->
             end
         end,
   << <<(Fun(A,B))>> || <<A, B>> <= Bin >>.
+
+base64_to_bin(Bin) when is_binary(Bin) ->
+  base64:decode(Bin).
+
+-ifdef(TEST).
+json_record_to_erlang_test() ->
+  Name = <<"example.com">>,
+  ?assertEqual({}, json_record_to_erlang([])),
+  ?assertEqual({}, json_record_to_erlang([Name, <<"SOA">>, 3600, null, null])).
+
+json_record_soa_to_erlang_test() ->
+  Name = <<"example.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_SOA,
+                       data = #dns_rrdata_soa{
+                                 mname = <<"ns1.example.com">>,
+                                 rname = <<"admin.example.com">>,
+                                 serial = 12345,
+                                 refresh = 555,
+                                 retry = 666,
+                                 expire = 777,
+                                 minimum = 888
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"SOA">>, 3600, [
+                                                              {<<"mname">>, <<"ns1.example.com">>},
+                                                              {<<"rname">>, <<"admin.example.com">>},
+                                                              {<<"serial">>, 12345},
+                                                              {<<"refresh">>, 555},
+                                                              {<<"retry">>, 666},
+                                                              {<<"expire">>, 777},
+                                                              {<<"minimum">>, 888}
+                                                             ], undefined])).
+
+json_record_ns_to_erlang_test() ->
+  Name = <<"example.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_NS,
+                       data = #dns_rrdata_ns{
+                                 dname = <<"ns1.example.com">>
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"NS">>, 3600, [
+                                                              {<<"dname">>, <<"ns1.example.com">>}
+                                                             ], undefined])).
+
+json_record_a_to_erlang_test() ->
+  Name = <<"example.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_A,
+                       data = #dns_rrdata_a{
+                                 ip = {1,2,3,4}
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"A">>, 3600, [
+                                                              {<<"ip">>, <<"1.2.3.4">>}
+                                                             ], undefined])).
+
+json_record_aaaa_to_erlang_test() ->
+  Name = <<"example.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_AAAA,
+                       data = #dns_rrdata_aaaa{
+                                 ip = {0,0,0,0,0,0,0,1}
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"AAAA">>, 3600, [
+                                                              {<<"ip">>, <<"::1">>}
+                                                             ], undefined])).
+
+hex_to_bin_test() ->
+  ?assertEqual(<<"">>, hex_to_bin(<<"">>)),
+  ?assertEqual(<<255, 0, 255>>, hex_to_bin(<<"FF00FF">>)).
+
+base64_to_bin_test() ->
+  ?assertEqual(<<"">>, base64_to_bin(<<"">>)),
+  ?assertEqual(<<3,1,0,1,191,165,76,56,217,9,250,187,15,147,125,112,215,
+  117,186,13,244,192,186,219,9,112,125,153,82,73,64,105,
+  80,64,122,98,28,121,76,104,177,134,177,93,191,143,159,
+  158,162,49,233,249,100,20,204,218,78,206,181,11,23,169,
+  172,108,75,212,185,93,160,72,73,233,110,231,145,87,139,
+  112,59,201,174,24,79,177,121,75,172,121,42,7,135,246,
+  147,164,15,25,245,35,238,109,189,53,153,219,170,169,165,
+  4,55,146,110,207,100,56,132,93,29,73,68,137,98,82,79,42,
+  26,122,54,179,160,161,236,163>>, base64_to_bin(<<"AwEAAb+lTDjZCfq7D5N9cNd1ug30wLrbCXB9mVJJQGlQQHpiHHlMaLGGsV2/j5+eojHp+WQUzNpOzrULF6msbEvUuV2gSEnpbueRV4twO8muGE+xeUuseSoHh/aTpA8Z9SPubb01mduqqaUEN5Juz2Q4hF0dSUSJYlJPKhp6NrOgoeyj">>)).
+-endif.

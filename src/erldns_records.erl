@@ -23,8 +23,8 @@
 
 -export([optionally_convert_wildcard/2, wildcard_qname/1]).
 -export([default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
--export([minimum_soa_ttl/2]).
--export([match_name/1, match_type/1, match_name_and_type/2, match_types/1, match_wildcard/0, match_delegation/1]).
+-export([minimum_soa_ttl/2, rewrite_soa_ttl/1]).
+-export([match_name/1, match_type/1, match_name_and_type/2, match_types/1, match_wildcard/0, match_delegation/1, match_type_covered/1]).
 -export([replace_name/1]).
 
 %% If the name returned from the DB is a wildcard name then the
@@ -65,6 +65,11 @@ default_priority(Priority) ->
 minimum_soa_ttl(Record, Data) when is_record(Data, dns_rrdata_soa) -> Record#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, Record#dns_rr.ttl)};
 minimum_soa_ttl(Record, _) -> Record.
 
+%% According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
+%% must be set to the value of the minimum field in the SOA content.
+rewrite_soa_ttl(Message) -> rewrite_soa_ttl(Message, Message#dns_message.authority, []).
+rewrite_soa_ttl(Message, [], NewAuthority) -> Message#dns_message{authority = NewAuthority};
+rewrite_soa_ttl(Message, [R|Rest], NewAuthority) -> rewrite_soa_ttl(Message, Rest, NewAuthority ++ [minimum_soa_ttl(R, R#dns_rr.data)]).
 
 
 %% Various matching functions.
@@ -103,6 +108,11 @@ match_delegation(Name) ->
       R#dns_rr.data =:= #dns_rrdata_ns{dname=Name}
   end.
 
+-spec(match_type_covered(dns:type()) -> fun((dns:rr()) -> boolean())).
+match_type_covered(Qtype) ->
+  fun(RRSig) ->
+      RRSig#dns_rr.data#dns_rrdata_rrsig.type_covered =:= Qtype
+  end.
 
 
 %% Replacement functions.
