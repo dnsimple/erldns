@@ -412,17 +412,17 @@ json_record_to_erlang([Name, <<"DS">>, Ttl, Data, _Context]) ->
 json_record_to_erlang([Name, <<"DNSKEY">>, Ttl, Data, _Context]) ->
   try base64_to_bin(erldns_config:keyget(<<"public_key">>, Data)) of
     PublicKey ->
-    #dns_rr{
-       name = Name,
-       type = ?DNS_TYPE_DNSKEY,
-       data = #dns_rrdata_dnskey{
-                 flags = erldns_config:keyget(<<"flags">>, Data),
-                 protocol = erldns_config:keyget(<<"protocol">>, Data),
-                 alg = erldns_config:keyget(<<"alg">>, Data),
-                 public_key = PublicKey,
-                 key_tag = erldns_config:keyget(<<"keytag">>, Data)
-                },
-       ttl = Ttl}
+      dnssec:add_keytag_to_dnskey(
+        #dns_rr{
+           name = Name,
+           type = ?DNS_TYPE_DNSKEY,
+           data = #dns_rrdata_dnskey{
+                     flags = erldns_config:keyget(<<"flags">>, Data),
+                     protocol = erldns_config:keyget(<<"protocol">>, Data),
+                     alg = erldns_config:keyget(<<"alg">>, Data),
+                     public_key = PublicKey
+                    },
+           ttl = Ttl})
   catch
     Exception:Reason ->
       lager:error("Error parsing DNSKEY: ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason]),
