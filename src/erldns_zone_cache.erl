@@ -283,15 +283,20 @@ sign_zone(Zone) ->
   DnskeyRRs = lists:filter(erldns_records:match_type(?DNS_TYPE_DNSKEY), Zone#zone.records),
   KeyRRSigRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets)),
 
+  verify_zone(Zone, DnskeyRRs, KeyRRSigRecords),
+
+  % TODO: remove wildcard signatures as they will not be used but are taking up space
+  ZoneRRSigRecords = lists:flatten(lists:map(erldns_dnssec:zone_rrset_signer(Zone#zone.name, lists:filter(fun(RR) -> (RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY) end, Zone#zone.records)), Zone#zone.keysets)),
+  build_zone(Zone#zone.name, Zone#zone.version, Zone#zone.records ++ KeyRRSigRecords ++ rewrite_soa_rrsig_ttl(Zone#zone.records, ZoneRRSigRecords -- lists:filter(erldns_records:match_wildcard(), ZoneRRSigRecords)), Zone#zone.keysets).
+
+-spec(verify_zone(erldns:zone(), [dns:rr()], [dns:rr()]) -> boolean()).
+verify_zone(_, DnskeyRRs, KeyRRSigRecords) ->
   KSKDnskey = lists:last(lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 257 end, DnskeyRRs)),
   RRSig = lists:last(KeyRRSigRecords),
   lager:debug("Attempting to verify RRSIG with ~p", [KSKDnskey]),
   VerifyResult = dnssec:verify_rrsig(RRSig, DnskeyRRs, [KSKDnskey], []),
   lager:debug("KSK verified? ~p", [VerifyResult]),
-
-  % TODO: remove wildcard signatures as they will not be used but are taking up space
-  ZoneRRSigRecords = lists:flatten(lists:map(erldns_dnssec:zone_rrset_signer(Zone#zone.name, lists:filter(fun(RR) -> (RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY) end, Zone#zone.records)), Zone#zone.keysets)),
-  build_zone(Zone#zone.name, Zone#zone.version, Zone#zone.records ++ KeyRRSigRecords ++ rewrite_soa_rrsig_ttl(Zone#zone.records, ZoneRRSigRecords -- lists:filter(erldns_records:match_wildcard(), ZoneRRSigRecords)), Zone#zone.keysets).
+  VerifyResult.
 
 rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
   SoaRR = lists:last(lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), ZoneRecords)),

@@ -33,7 +33,7 @@ rrsig_for_zone_rrset(Zone, RRs) ->
 %% @doc Return a function that can be used to sign the given records using the key signing key.
 %% The function accepts a keyset, allowing the zone signing mechanism to iterate through available
 %% keysets, applying the key signing key from each keyset.
--spec(key_rrset_signer(dns:name(), [dns:rr()]) -> fun((erldns:keyset()) -> dns:rr())).
+-spec(key_rrset_signer(dns:name(), [dns:rr()]) -> fun((erldns:keyset()) -> [dns:rr()])).
 key_rrset_signer(ZoneName, RRs) ->
   fun(Keyset) ->
       Keytag = Keyset#keyset.key_signing_key_tag,
@@ -48,7 +48,7 @@ key_rrset_signer(ZoneName, RRs) ->
 %% @doc Return a function that can be used to sign the given records using the zone signing key.
 %% The function accepts a keyset, allowing the zone signing mechanism to iterate through available
 %% keysets, applying the zone signing key from each keyset.
--spec(zone_rrset_signer(dns:name(), [dns:rr()]) -> fun((erldns:keyset()) -> dns:rr())).
+-spec(zone_rrset_signer(dns:name(), [dns:rr()]) -> fun((erldns:keyset()) -> [dns:rr()])).
 zone_rrset_signer(ZoneName, RRs) ->
   fun(Keyset) ->
       Keytag = Keyset#keyset.zone_signing_key_tag,
