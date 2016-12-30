@@ -139,7 +139,7 @@ handle_decoded_udp_message(DecodedMessage, Socket, Host, Port) ->
   case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
     {false, EncodedMessage} ->
       %lager:debug("Sending encoded response to ~p", [DestHost]),
-      inet_udp:send(Socket, DestHost, Port, EncodedMessage);
+      gen_udp:send(Socket, DestHost, Port, EncodedMessage);
     {true, EncodedMessage, Message} when is_record(Message, dns_message)->
       gen_udp:send(Socket, DestHost, Port, EncodedMessage);
     {false, EncodedMessage, _TsigMac} ->
