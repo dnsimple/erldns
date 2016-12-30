@@ -290,13 +290,19 @@ sign_zone(Zone) ->
   build_zone(Zone#zone.name, Zone#zone.version, Zone#zone.records ++ KeyRRSigRecords ++ rewrite_soa_rrsig_ttl(Zone#zone.records, ZoneRRSigRecords -- lists:filter(erldns_records:match_wildcard(), ZoneRRSigRecords)), Zone#zone.keysets).
 
 -spec(verify_zone(erldns:zone(), [dns:rr()], [dns:rr()]) -> boolean()).
-verify_zone(_, DnskeyRRs, KeyRRSigRecords) ->
-  KSKDnskey = lists:last(lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 257 end, DnskeyRRs)),
-  RRSig = lists:last(KeyRRSigRecords),
-  lager:debug("Attempting to verify RRSIG with ~p", [KSKDnskey]),
-  VerifyResult = dnssec:verify_rrsig(RRSig, DnskeyRRs, [KSKDnskey], []),
-  lager:debug("KSK verified? ~p", [VerifyResult]),
-  VerifyResult.
+verify_zone(Zone, DnskeyRRs, KeyRRSigRecords) ->
+  lager:debug("Verify zone ~p", [Zone#zone.name]),
+  case lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 257 end, DnskeyRRs) of
+    [] -> false;
+    KSKs -> 
+      lager:debug("KSKs: ~p", [KSKs]),
+      KSKDnskey = lists:last(KSKs),
+      RRSig = lists:last(KeyRRSigRecords),
+      lager:debug("Attempting to verify RRSIG with ~p", [KSKDnskey]),
+      VerifyResult = dnssec:verify_rrsig(RRSig, DnskeyRRs, [KSKDnskey], []),
+      lager:debug("KSK verified? ~p", [VerifyResult]),
+      VerifyResult
+  end.
 
 rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
   SoaRR = lists:last(lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), ZoneRecords)),
