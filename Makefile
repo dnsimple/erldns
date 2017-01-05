@@ -14,3 +14,5 @@ clean:
 test:
 	./rebar get-deps
 	./rebar eunit skip_deps=true
+	./rebar3 eunit
+	./rebar3 dialyzer
