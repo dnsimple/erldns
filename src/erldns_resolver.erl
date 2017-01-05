@@ -126,15 +126,15 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
 %% There were no matches for exact name and type, so now we are looking for NS records
 %% in the exact name matches.
 -spec(resolve_exact_match(
-    Message :: dns:message(),
-    Qname :: dns:dname(),
-    Qtype :: 0..255,
-    Host :: any(),
-    CnameChain :: any(),
-    MatchedRecords :: [dns:rr()],
-    Zone :: #zone{},
-    ExactTypeMatches :: dns:answers(),
-    AuthorityRecords :: dns:authority()) ->
+        Message :: dns:message(),
+        Qname :: dns:dname(),
+        Qtype :: 0..255,
+        Host :: any(),
+        CnameChain :: any(),
+        MatchedRecords :: [dns:rr()],
+        Zone :: #zone{},
+        ExactTypeMatches :: dns:answers(),
+        AuthorityRecords :: dns:authority()) ->
   dns:message()).
 resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _ExactTypeMatches = [], AuthorityRecords) ->
   ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), MatchedRecords), % Query matched records for NS type
