@@ -178,15 +178,14 @@ zone_names_and_versions() ->
 %% used to determine if the zone requires updating.
 %%
 %% This function will build the necessary Zone record before interting.
--spec put_zone({binary(), binary(), [dns:rr()], [erldns:keyset()]}) -> ok.
+-spec put_zone({binary(), binary(), [dns:rr()], [erldns:keyset()]}) -> ok | {error, Reason :: term()}.
 put_zone({Name, Sha, Records, Keys}) ->
   put_zone(erldns:normalize_name(Name), build_zone(Name, Sha, Records, Keys)).
 
 %% @doc Put a zone into the cache and wait for a response.
--spec put_zone(binary(), erldns:zone()) -> ok.
+-spec put_zone(binary(), erldns:zone()) -> ok | {error, Reason :: term()}.
 put_zone(Name, Zone) ->
-  erldns_storage:insert(zones, {erldns:normalize_name(Name), sign_zone(Zone)}),
-  ok.
+  erldns_storage:insert(zones, {erldns:normalize_name(Name), sign_zone(Zone)}).
 
 %% @doc Remove a zone from the cache without waiting for a response.
 -spec delete_zone(binary()) -> any().
