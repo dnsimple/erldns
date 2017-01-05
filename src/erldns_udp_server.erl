@@ -32,6 +32,7 @@
 -export([handle_request/5]).
 
 -define(SERVER, ?MODULE).
+-define(DEFAULT_UDP_RECBUF, 1024 * 1024). % 1 MB
 
 -record(state, {address, port, socket, workers}).
 
@@ -80,7 +81,7 @@ handle_info(timeout, State) ->
   {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
   Response = folsom_metrics:histogram_timed_update(udp_handoff_histogram, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]),
-  inet:setopts(State#state.socket, [{active, once}]),
+  inet:setopts(State#state.socket, [{active, 100}]),
   Response;
 handle_info(_Message, State) ->
   {noreply, State}.
@@ -96,8 +97,8 @@ start(Port, InetFamily) ->
 
 start(Address, Port, InetFamily) ->
   lager:info("Starting UDP server for ~p on address ~p and port ~p", [InetFamily, Address, Port]),
-  case gen_udp:open(Port, [binary, {active, once}, {reuseaddr, true},
-                           {read_packets, 1000}, {ip, Address}, InetFamily]) of
+  case gen_udp:open(Port, [binary, {active, 100}, {reuseaddr, true},
+                           {read_packets, 1000}, {ip, Address}, {recbuf, ?DEFAULT_UDP_RECBUF}, InetFamily]) of
     {ok, Socket} -> 
       lager:info("UDP server (~p, address: ~p) opened socket: ~p", [InetFamily, Address, Socket]),
       {ok, Socket};
@@ -108,8 +109,8 @@ start(Address, Port, InetFamily) ->
 
 start(Address, Port, InetFamily, SocketOpts) ->
   lager:info("Starting UDP server for ~p on address ~p and port ~p (sockopts: ~p)", [InetFamily, Address, Port, SocketOpts]),
-  case gen_udp:open(Port, [{reuseaddr, true}, binary, {active, once},
-                           {read_packets, 1000}, {ip, Address}, InetFamily|SocketOpts]) of
+  case gen_udp:open(Port, [{reuseaddr, true}, binary, {active, 100},
+                           {read_packets, 1000}, {ip, Address}, {recbuf, ?DEFAULT_UDP_RECBUF}, InetFamily|SocketOpts]) of
     {ok, Socket} -> 
       lager:info("UDP server (~p, address: ~p) opened socket: ~p", [InetFamily, Address, Socket]),
       {ok, Socket};
