@@ -32,7 +32,10 @@ load_zones() ->
       lists:foreach(
         fun(JsonZone) ->
             Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-            erldns_zone_cache:put_zone(Zone)
+            case erldns_zone_cache:put_zone(Zone) of
+              {error, Reason} -> lager:error("Failed to load zone ~p: ~p", [JsonZone, Reason]);
+              _ -> ok
+            end
         end, JsonZones),
       lager:info("Loaded ~p zones", [length(JsonZones)]),
       {ok, length(JsonZones)};
