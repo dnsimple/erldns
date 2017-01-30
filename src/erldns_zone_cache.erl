@@ -117,7 +117,7 @@ get_zone_with_records(Name) ->
   end.
 
 %% @doc Find the SOA record for the given DNS question.
--spec get_authority(dns:message() | dns:dname()) -> {error, no_question} | {error, no_authority} | {ok, dns:rr()}.
+-spec get_authority(dns:message() | dns:dname()) -> {error, no_question} | {error, authority_not_found} | {ok, dns:rr()}.
 get_authority(Message) when is_record(Message, dns_message) ->
   case Message#dns_message.questions of
     [] -> {error, no_question};
