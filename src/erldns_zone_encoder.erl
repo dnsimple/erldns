@@ -109,6 +109,7 @@ record_filter() ->
   fun(R) ->
       case R of
         [] -> false;
+        {} -> false;
         _ -> true
       end
   end.
