@@ -178,7 +178,10 @@ zone_names_and_versions() ->
 %% used to determine if the zone requires updating.
 %%
 %% This function will build the necessary Zone record before interting.
--spec put_zone({binary(), binary(), [dns:rr()], [erldns:keyset()]}) -> ok | {error, Reason :: term()}.
+-spec put_zone({Name, Sha, Records, Keys} | {Name, Sha, Records}) -> ok | {error, Reason :: term()}
+  when Name :: binary(), Sha :: binary(), Records :: [dns:rr()], Keys :: [erldns:keyset()].
+put_zone({Name, Sha, Records}) ->
+    put_zone({Name, Sha, Records, []});
 put_zone({Name, Sha, Records, Keys}) ->
   put_zone(erldns:normalize_name(Name), build_zone(Name, Sha, Records, Keys)).
 
