@@ -147,10 +147,7 @@ get_delegations(Name) ->
 get_records_by_name(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      case dict:find(erldns:normalize_name(Name), Zone#zone.records_by_name) of
-        {ok, RecordSet} -> RecordSet;
-        _ -> []
-      end;
+      maps:get(erldns:normalize_name(Name), Zone#zone.records_by_name, []);
     _ ->
       []
   end.
@@ -232,7 +229,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 % Internal API
 is_name_in_zone(Name, Zone) ->
-  case dict:is_key(erldns:normalize_name(Name), Zone#zone.records_by_name) of
+  case maps:is_key(erldns:normalize_name(Name), Zone#zone.records_by_name) of
     true -> true;
     false ->
       case dns:dname_to_labels(Name) of
@@ -263,16 +260,13 @@ build_zone(Qname, Version, Records, Keys) ->
   Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
   #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName, keysets = Keys}.
 
--spec(build_named_index([#dns_rr{}]) -> dict:dict(binary(), [#dns_rr{}])).
-build_named_index(Records) -> build_named_index(Records, dict:new()).
-build_named_index([], Idx) -> Idx;
-build_named_index([R|Rest], Idx) ->
-  case dict:find(R#dns_rr.name, Idx) of
-    {ok, Records} ->
-      build_named_index(Rest, dict:store(erldns:normalize_name(R#dns_rr.name), Records ++ [R], Idx));
-    error ->
-      build_named_index(Rest, dict:store(erldns:normalize_name(R#dns_rr.name), [R], Idx))
-  end.
+-spec(build_named_index([#dns_rr{}]) -> #{binary() => [#dns_rr{}]}).
+build_named_index(Records) ->
+  Idx0 = lists:foldl(fun (R, Idx) ->
+    Name = erldns:normalize_name(R#dns_rr.name),
+    maps:update_with(Name, fun (RR) -> [R | RR] end, [R], Idx)
+  end, #{}, Records),
+  maps:map(fun (_K, V) -> lists:reverse(V) end, Idx0).
 
 -spec(sign_zone(erldns:zone()) -> erldns:zone()).
 sign_zone(Zone = #zone{keysets = []}) ->
