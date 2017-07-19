@@ -108,7 +108,7 @@ handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
       NsecRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NSEC, ttl = Ttl, data = #dns_rrdata_nsec{next_dname = NextDname, types = Types}}],
       NsecRRSigRecords = rrsig_for_zone_rrset(Zone, NsecRecords),
 
-      erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true, authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords}, Zone));
+      erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true, rc = ?DNS_RCODE_NOERROR, authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords}, Zone));
     _ ->
       AnswerSignatures = find_rrsigs(ZoneWithRecords#zone.records, Message#dns_message.answers),
       AuthoritySignatures = find_rrsigs(ZoneWithRecords#zone.records, Message#dns_message.authority),
