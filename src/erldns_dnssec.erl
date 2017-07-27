@@ -103,7 +103,7 @@ handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
       ApexRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), ApexRecords),
       SoaRRSigRecords = lists:filter(erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords),
 
-      NextDname = dns:labels_to_dname([?NEXT_DNAME_PART] ++ dns:dname_to_labels(Qname)),
+      NextDname = erldns:normalize_name(dns:labels_to_dname([?NEXT_DNAME_PART] ++ dns:dname_to_labels(Qname))),
       Types = record_types_for_name(Qname, ZoneWithRecords#zone.records),
       NsecRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NSEC, ttl = Ttl, data = #dns_rrdata_nsec{next_dname = NextDname, types = Types}}],
       NsecRRSigRecords = rrsig_for_zone_rrset(Zone, NsecRecords),
