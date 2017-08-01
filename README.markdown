@@ -16,9 +16,11 @@ If you've already built once and just want to recompile the erl-dns source:
 
 ## Zones
 
-Zones are loaded in from JSON, either locally or through a zone server (more info coming on this).
+Zones are loaded from JSON.
 
 Example JSON files are in the priv/ directory.
+
+You can also write new systems to load zones by writing the zones directly to the zone cache using `erldns_zone_cache:put_zone/1`.
 
 ## Configuration
 
