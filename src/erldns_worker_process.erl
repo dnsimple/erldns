@@ -111,7 +111,6 @@ max_payload_size(Message) ->
 
 simulate_timeout(_, false) -> ok;
 simulate_timeout(DecodedMessage, true) ->
-  % Timeout test code
   [Question] = DecodedMessage#dns_message.questions,
   Name = Question#dns_query.name,
   lager:info("qname: ~p", [Name]),
