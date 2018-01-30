@@ -33,7 +33,6 @@
 -define(REDIRECT_TO_LOOPBACK, false).
 -define(LOOPBACK_DEST, {127, 0, 0, 10}).
 -define(DEST_HOST(Host), ?IF(?REDIRECT_TO_LOOPBACK, ?LOOPBACK_DEST, Host)).
--define(SIMULATE_TIMEOUT, false).
 
 -record(state, {}).
 
@@ -44,7 +43,9 @@ init(_Args) ->
   {ok, #state{}}.
 
 handle_call({process, DecodedMessage, Socket, {tcp, Address}}, _From, State) ->
-  simulate_timeout(DecodedMessage, ?SIMULATE_TIMEOUT),
+  % Uncomment this and the function implementation to simulate a timeout when
+  % querying www.example.com with the test zones
+  % simulate_timeout(DecodedMessage),  
   
   erldns_events:notify({start_handle, tcp, [{host, Address}]}),
   Response = erldns_handler:handle(DecodedMessage, {tcp, Address}),
@@ -62,7 +63,9 @@ handle_call({process, DecodedMessage, Socket, {tcp, Address}}, _From, State) ->
   {reply, ok, State}; 
 
 handle_call({process, DecodedMessage, Socket, Port, {udp, Host}}, _From, State) ->
-  simulate_timeout(DecodedMessage, ?SIMULATE_TIMEOUT),
+  % Uncomment this and the function implementation to simulate a timeout when
+  % querying www.example.com with the test zones
+  % simulate_timeout(DecodedMessage),
 
   Response = erldns_handler:handle(DecodedMessage, {udp, Host}),
   DestHost = ?DEST_HOST(Host),
@@ -109,14 +112,13 @@ max_payload_size(Message) ->
     _ -> ?MAX_PACKET_SIZE
   end.
 
-simulate_timeout(_, false) -> ok;
-simulate_timeout(DecodedMessage, true) ->
-  [Question] = DecodedMessage#dns_message.questions,
-  Name = Question#dns_query.name,
-  lager:info("qname: ~p", [Name]),
-  case Name of
-    <<"www.example.com">> ->
-      timer:sleep(3000);
-    _ ->
-      ok
-  end.
+%simulate_timeout(DecodedMessage) ->
+  %[Question] = DecodedMessage#dns_message.questions,
+  %Name = Question#dns_query.name,
+  %lager:info("qname: ~p", [Name]),
+  %case Name of
+    %<<"www.example.com">> ->
+      %timer:sleep(3000);
+    %_ ->
+      %ok
+  %end.
