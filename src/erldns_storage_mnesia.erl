@@ -137,24 +137,14 @@ delete_table(Table) ->
 %% in the table creation.
 -spec delete(Table :: atom(), Key :: term()) -> ok | any().
 delete(zones, Key)->
-  case mnesia:dirty_delete({zones, Key}) of
-    ok ->
-      ok;
-    Error ->
-      {error, Error}
-  end;
+  mnesia:dirty_delete({zones, Key});
 delete(Table, Key)->
   case mnesia:is_transaction() of
     true ->
       Delete = fun() -> mnesia:delete({Table, Key}) end,
       mnesia:activity(transaction, Delete);
     false ->
-      case mnesia:dirty_delete({Table, Key}) of
-        ok ->
-          ok;
-        Error ->
-          {error, Error}
-      end
+      mnesia:dirty_delete({Table, Key})
   end.
 
 
