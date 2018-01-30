@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2015, Aetrion LLC
+%% Copyright (c) 2012-2018, Aetrion LLC
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
@@ -12,14 +12,16 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Worker module that processes a single DNS packet.
+%% @doc Worker module that asynchronously accepts a single DNS packet and
+%% hands it to a worker process that has a set timeout.
 -module(erldns_worker).
 
 -include_lib("dns/include/dns.hrl").
--include_lib("parse_xfrm_utils/include/parse_xfrm_utils_if_than_else.hrl").
+
+-define(DEFAULT_UDP_PROCESS_TIMEOUT, 500).
+-define(DEFAULT_TCP_PROCESS_TIMEOUT, 1000).
 
 -behaviour(gen_server).
--behaviour(poolboy_worker).
 
 -export([start_link/1]).
 -export([init/1,
@@ -30,29 +32,40 @@
          code_change/3
         ]).
 
--record(state, {}).
-
-
-
--define(MAX_PACKET_SIZE, 512).
--define(REDIRECT_TO_LOOPBACK, false).
--define(LOOPBACK_DEST, {127, 0, 0, 10}).
--define(DEST_HOST(Host), ?IF(?REDIRECT_TO_LOOPBACK, ?LOOPBACK_DEST, Host)).
+-record(state, {worker_process_sup, worker_process}).
 
 start_link(Args) ->
   gen_server:start_link(?MODULE, Args, []).
 
-init(_Args) ->
-  {ok, #state{}}.
+init([WorkerId]) ->
+  {ok, WorkerProcessSup} = erldns_worker_process_sup:start_link([WorkerId]),
+  WorkerProcess = lists:last(supervisor:which_children(WorkerProcessSup)),
+  {ok, #state{worker_process_sup = WorkerProcessSup, worker_process = WorkerProcess}}.
 
-handle_call({tcp_query, Socket, Bin}, _From, State) ->
-  {reply, handle_tcp_dns_query(Socket, Bin), State};
-handle_call(_Request, _From, State) ->
+handle_call(_Request, From, State) ->
+  lager:debug("Received unexpected call in erldns_worker from: ~p", [From]),
   {reply, ok, State}.
 
+handle_cast({tcp_query, Socket, Bin}, State) ->
+  case handle_tcp_dns_query(Socket, Bin, {State#state.worker_process_sup, State#state.worker_process}) of
+    ok ->
+      {noreply, State};
+    {error, timeout, NewWorkerPid} ->
+      {Id, _, Type, Modules} = State#state.worker_process,
+      {noreply, State#state{worker_process = {Id, NewWorkerPid, Type, Modules}}};
+    _ ->
+      {noreply, State}
+  end;
 handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
-  handle_udp_dns_query(Socket, Host, Port, Bin),
-  {noreply, State};
+  case handle_udp_dns_query(Socket, Host, Port, Bin, {State#state.worker_process_sup, State#state.worker_process}) of
+    ok ->
+      {noreply, State};
+    {error, timeout, NewWorkerPid} ->
+      {Id, _, Type, Modules} = State#state.worker_process,
+      {noreply, State#state{worker_process = {Id, NewWorkerPid, Type, Modules}}};
+    _ ->
+      {noreply, State}
+  end;
 handle_cast(_Msg, State) ->
   {noreply, State}.
 handle_info(_Info, State) ->
@@ -63,12 +76,12 @@ code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
 
 %% @doc Handle DNS query that comes in over TCP
--spec handle_tcp_dns_query(gen_tcp:socket(), iodata())  -> ok.
-handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>) ->
+-spec handle_tcp_dns_query(gen_tcp:socket(), iodata(), {pid(), term()})  -> ok.
+handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerProcess}) ->
   case inet:peername(Socket) of
     {ok, {Address, _Port}} ->
       erldns_events:notify({start_tcp, [{host, Address}]}),
-      case Bin of
+      Result = case Bin of
         <<>> -> ok;
         _ ->
           case erldns_decoder:decode_message(Bin) of
@@ -76,86 +89,81 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>) ->
               lager:info("received truncated request from ~p", [Address]),
               ok;
             {trailing_garbage, DecodedMessage, _} ->
-              handle_decoded_tcp_message(DecodedMessage, Socket, Address);
+              handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, WorkerProcess});
             {_Error, _, _} ->
               ok;
             DecodedMessage ->
-              handle_decoded_tcp_message(DecodedMessage, Socket, Address)
+              handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, WorkerProcess})
           end
       end,
       erldns_events:notify({end_tcp, [{host, Address}]}),
-      gen_tcp:close(Socket);
+      gen_tcp:close(Socket),
+      Result;
     {error, Reason} ->
       erldns_events:notify({tcp_error, Reason})
   end;
 
-handle_tcp_dns_query(Socket, BadPacket) ->
+handle_tcp_dns_query(Socket, BadPacket, _) ->
   lager:error("Received bad packet ~p", BadPacket),
   gen_tcp:close(Socket).
 
-handle_decoded_tcp_message(DecodedMessage, Socket, Address) ->
-  erldns_events:notify({start_handle, tcp, [{host, Address}]}),
-  Response = erldns_handler:handle(DecodedMessage, {tcp, Address}),
-  erldns_events:notify({end_handle, tcp, [{host, Address}]}),
-  case erldns_encoder:encode_message(Response) of
-    {false, EncodedMessage} ->
-      send_tcp_message(Socket, EncodedMessage);
-    {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-      send_tcp_message(Socket, EncodedMessage);
-    {false, EncodedMessage, _TsigMac} ->
-      send_tcp_message(Socket, EncodedMessage);
-    {true, EncodedMessage, _TsigMac, _Message} ->
-      send_tcp_message(Socket, EncodedMessage)
+handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
+  try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, {tcp, Address}}, _Timeout = ?DEFAULT_TCP_PROCESS_TIMEOUT) of
+    _ -> ok
+  catch
+    exit:{timeout, _} ->
+      handle_timeout(DecodedMessage, WorkerProcessSup, WorkerProcessId);
+    Error:Reason ->
+      lager:error("Worker process crashed: ~p:~p", [Error, Reason]),
+      {error, {Error, Reason}}
   end.
-
-send_tcp_message(Socket, EncodedMessage) ->
-  BinLength = byte_size(EncodedMessage),
-  TcpEncodedMessage = <<BinLength:16, EncodedMessage/binary>>,
-  gen_tcp:send(Socket, TcpEncodedMessage).
 
 
 %% @doc Handle DNS query that comes in over UDP
--spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary()) -> ok.
-handle_udp_dns_query(Socket, Host, Port, Bin) ->
+-spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary(), {pid(), term()}) -> ok | {error, not_owner | timeout | inet:posix() | atom()} | {error, timeout, term()}.
+handle_udp_dns_query(Socket, Host, Port, Bin, {WorkerProcessSup, WorkerProcess}) ->
   %lager:debug("handle_udp_dns_query(~p ~p ~p)", [Socket, Host, Port]),
   erldns_events:notify({start_udp, [{host, Host}]}),
-  case erldns_decoder:decode_message(Bin) of
+  Result = case erldns_decoder:decode_message(Bin) of
     {trailing_garbage, DecodedMessage, _} ->
-      handle_decoded_udp_message(DecodedMessage, Socket, Host, Port);
+      handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, WorkerProcess});
     {_Error, _, _} ->
       ok;
     DecodedMessage ->
-      handle_decoded_udp_message(DecodedMessage, Socket, Host, Port)
+      handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, WorkerProcess})
   end,
   erldns_events:notify({end_udp, [{host, Host}]}),
-  ok.
+  Result.
 
--spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number()) ->
-  ok | {error, not_owner | inet:posix()}.
-handle_decoded_udp_message(DecodedMessage, Socket, Host, Port) ->
-  Response = erldns_handler:handle(DecodedMessage, {udp, Host}),
-  DestHost = ?DEST_HOST(Host),
-
-  case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
-    {false, EncodedMessage} ->
-      %lager:debug("Sending encoded response to ~p", [DestHost]),
-      gen_udp:send(Socket, DestHost, Port, EncodedMessage);
-    {true, EncodedMessage, Message} when is_record(Message, dns_message)->
-      gen_udp:send(Socket, DestHost, Port, EncodedMessage);
-    {false, EncodedMessage, _TsigMac} ->
-      gen_udp:send(Socket, DestHost, Port, EncodedMessage);
-    {true, EncodedMessage, _TsigMac, _Message} ->
-      gen_udp:send(Socket, DestHost, Port, EncodedMessage)
+-spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number(), {pid(), term()}) ->
+  ok | {error, not_owner | timeout | inet:posix() | atom()} | {error, timeout, term()}.
+handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
+  try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, Port, {udp, Host}}, _Timeout = ?DEFAULT_UDP_PROCESS_TIMEOUT) of
+    _ -> ok
+  catch
+    exit:{timeout, _} ->
+      handle_timeout(DecodedMessage, WorkerProcessSup, WorkerProcessId);
+    Error:Reason ->
+      lager:error("Worker process crashed: ~p:~p", [Error, Reason]),
+      {error, {Error, Reason}}
   end.
 
-%% Determine the max payload size by looking for additional
-%% options passed by the client.
-max_payload_size(Message) ->
-  case Message#dns_message.additional of
-    [Opt|_] when is_record(Opt, dns_optrr) ->
-      case Opt#dns_optrr.udp_payload_size of
-        [] -> ?MAX_PACKET_SIZE;
-        _ -> Opt#dns_optrr.udp_payload_size
-      end;
-    _ -> ?MAX_PACKET_SIZE
+-spec handle_timeout(dns:message(), pid(), term()) -> {error, timeout, term()} | {error, timeout}.
+handle_timeout(DecodedMessage, WorkerProcessSup, WorkerProcessId) ->
+  lager:debug("Worker timeout for ~p", [DecodedMessage]),
+  
+  folsom_metrics:notify({worker_timeout_counter, {inc, 1}}),
+  folsom_metrics:notify({worker_timeout_meter, 1}),
+
+  TerminateResult = supervisor:terminate_child(WorkerProcessSup, WorkerProcessId),
+  lager:debug("Terminate result: ~p", [TerminateResult]),
+
+  case supervisor:restart_child(WorkerProcessSup, WorkerProcessId) of
+    {ok, NewChild} ->
+      {error, timeout, NewChild};
+    {ok, NewChild, _} ->
+      {error, timeout, NewChild};
+    {error, Error} ->
+      lager:debug("Restart failed: ~p", Error),
+      {error, timeout}
   end.
