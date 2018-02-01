@@ -79,6 +79,9 @@ setup_metrics() ->
   folsom_metrics:new_counter(packet_dropped_empty_queue_counter),
   folsom_metrics:new_meter(packet_dropped_empty_queue_meter),
 
+  folsom_metrics:new_counter(worker_timeout_counter),
+  folsom_metrics:new_meter(worker_timeout_meter),
+
   folsom_metrics:new_meter(cache_hit_meter),
   folsom_metrics:new_meter(cache_expired_meter),
   folsom_metrics:new_meter(cache_miss_meter),

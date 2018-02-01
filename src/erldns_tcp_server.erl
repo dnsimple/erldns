@@ -31,11 +31,11 @@
         ]).
 
 % Internal API
--export([handle_request/2]).
+-export([handle_request/3]).
 
 -define(SERVER, ?MODULE).
 
--record(state, {port}).
+-record(state, {port, workers}).
 
 %% Public API
 -spec start_link(atom(), inet | inet6) -> {ok, pid()} | ignore | {error, term()}.
@@ -49,14 +49,14 @@ start_link(_Name, Family, Address, Port) ->
 
 %% gen_server hooks
 init([]) ->
-  {ok, #state{}}.
+  {ok, #state{workers = make_workers(queue:new())}}.
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 handle_cast(_Message, State) ->
   {noreply, State}.
 handle_info({tcp, Socket, Bin}, State) ->
-  folsom_metrics:histogram_timed_update(tcp_handoff_histogram, ?MODULE, handle_request, [Socket, Bin]),
-  {noreply, State};
+  Response = folsom_metrics:histogram_timed_update(tcp_handoff_histogram, ?MODULE, handle_request, [Socket, Bin, State]),
+  Response;
 handle_info(_Message, State) ->
   {noreply, State}.
 terminate(_Reason, _State) ->
@@ -69,7 +69,27 @@ new_connection(Socket, State) ->
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
-handle_request(Socket, Bin) ->
-  poolboy:transaction(tcp_worker_pool, fun(Worker) ->
-                                           gen_server:call(Worker, {tcp_query, Socket, Bin})
-                                       end).
+handle_request(Socket, Bin, State) ->
+  case queue:out(State#state.workers) of
+    {{value, Worker}, Queue} ->
+      gen_server:cast(Worker, {tcp_query, Socket, Bin}),
+      {noreply, State#state{workers = queue:in(Worker, Queue)}};
+    {empty, _Queue} ->
+      folsom_metrics:notify({packet_dropped_empty_queue_counter, {inc, 1}}),
+      folsom_metrics:notify({packet_dropped_empty_queue_meter, 1}),
+      lager:info("Queue is empty, dropping packet"),
+      {noreply, State}
+  end.
+
+make_workers(Queue) ->
+  make_workers(Queue, erldns_config:get_num_workers()).
+make_workers(Queue, NumWorkers) ->
+  make_workers(Queue, NumWorkers, 1).
+make_workers(Queue, NumWorkers, N) ->
+  case N < NumWorkers of
+    true ->
+      {ok, WorkerPid} = erldns_worker:start_link([{tcp, N}]),
+      make_workers(queue:in(WorkerPid, Queue), NumWorkers, N + 1);
+    false ->
+      Queue
+  end.

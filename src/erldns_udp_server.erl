@@ -141,7 +141,7 @@ make_workers(Queue, NumWorkers) ->
 make_workers(Queue, NumWorkers, N) ->
   case N < NumWorkers of
     true ->
-      {ok, WorkerPid} = erldns_worker:start_link([]),
+      {ok, WorkerPid} = erldns_worker:start_link([{udp, N}]),
       make_workers(queue:in(WorkerPid, Queue), NumWorkers, N + 1);
     false ->
       Queue
