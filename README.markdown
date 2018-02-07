@@ -2,7 +2,7 @@
 
 Serve DNS authoritative responses...with Erlang.
 
-[![Build Status](https://travis-ci.org/aetrion/erl-dns.png?branch=master)](https://travis-ci.org/aetrion/erl-dns)
+[![Build Status](https://travis-ci.org/dnsimple/erl-dns.png?branch=master)](https://travis-ci.org/dnsimple/erl-dns)
 
 ## Building
 
@@ -60,9 +60,9 @@ In our environment (DNSimple) we are seeing 30 to 65 µs handoff times to retrei
 
 ## Design
 
-The erldns_resolver module will attempt to find zone data in the zone cache. If you're embedding erl-dns in your application the easiest thing to do is to load the zone cache once the zone cache gen_server starts push an updated zone into the cache each time data changes.
+The `erldns_resolver` module will attempt to find zone data in the zone cache. If you're embedding erl-dns in your application the easiest thing to do is to load the zone cache once the zone cache `gen_server` starts push an updated zone into the cache each time data changes.
 
-To insert a zone, use erldns_zone_cache:put_zone({Name, Records}) where Name is a binary term such as <<"example.com">> and Records is a list of dns_rr records (whose definitions can be found in deps/dns/include/dns_records.hrl). The name of each record must be the fully qualified domain name (including the zone part).
+To insert a zone, use `erldns_zone_cache:put_zone({Name, Records})` where Name is a binary term such as <<"example.com">> and Records is a list of `dns_rr` records (whose definitions can be found in `deps/dns/include/dns_records.hrl`). The name of each record must be the fully qualified domain name (including the zone part).
 
 Here's an example:
 
