@@ -1,18 +1,17 @@
 all: clean build
 
 build:
-	./rebar get-deps
-	./rebar compile
+	./rebar3 get-deps
+	./rebar3 compile
 
 fresh:
 	rm -Rf deps
-	./rebar clean
+	./rebar3 clean
 
 clean:
-	./rebar clean
+	./rebar3 clean
 
 test:
-	./rebar get-deps
-	./rebar eunit skip_deps=true
+	./rebar3 get-deps
 	./rebar3 eunit
 	./rebar3 dialyzer
