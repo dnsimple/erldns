@@ -7,8 +7,6 @@ script:
   - ./rebar3 compile
   - ./rebar3 eunit
   - ./rebar3 dialyzer
-  - ./rebar compile
-  - ./rebar skip_deps=true eunit
 
 cache:
   directories:
