@@ -1,3 +1,3 @@
 #!/bin/sh
 
-erl -config erldns.config -pa ebin deps/**/ebin -s erldns
+erl -config erldns.config -pa _build/default/lib/**/ebin -s erldns
