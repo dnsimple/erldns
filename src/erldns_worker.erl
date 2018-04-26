@@ -108,14 +108,20 @@ handle_tcp_dns_query(Socket, BadPacket, _) ->
   gen_tcp:close(Socket).
 
 handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
-  try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, {tcp, Address}}, _Timeout = ?DEFAULT_TCP_PROCESS_TIMEOUT) of
-    _ -> ok
-  catch
-    exit:{timeout, _} ->
-      handle_timeout(DecodedMessage, WorkerProcessSup, WorkerProcessId);
-    Error:Reason ->
-      lager:error("Worker process crashed: ~p:~p", [Error, Reason]),
-      {error, {Error, Reason}}
+  case DecodedMessage#dns_message.qr of
+    false ->
+      try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, {tcp, Address}}, _Timeout = ?DEFAULT_TCP_PROCESS_TIMEOUT) of
+        _ -> ok
+      catch
+        exit:{timeout, _} ->
+          handle_timeout(DecodedMessage, WorkerProcessSup, WorkerProcessId);
+        Error:Reason ->
+          lager:error("Worker process crashed: ~p:~p", [Error, Reason]),
+          {error, {Error, Reason}}
+      end;
+    true ->
+      lager:info("Dropping request that is not a question"),
+      {error, not_a_question}
   end.
 
 
@@ -138,14 +144,20 @@ handle_udp_dns_query(Socket, Host, Port, Bin, {WorkerProcessSup, WorkerProcess})
 -spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number(), {pid(), term()}) ->
   ok | {error, not_owner | timeout | inet:posix() | atom()} | {error, timeout, term()}.
 handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
-  try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, Port, {udp, Host}}, _Timeout = ?DEFAULT_UDP_PROCESS_TIMEOUT) of
-    _ -> ok
-  catch
-    exit:{timeout, _} ->
-      handle_timeout(DecodedMessage, WorkerProcessSup, WorkerProcessId);
-    Error:Reason ->
-      lager:error("Worker process crashed: ~p:~p", [Error, Reason]),
-      {error, {Error, Reason}}
+  case DecodedMessage#dns_message.qr of
+    false ->
+      try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, Port, {udp, Host}}, _Timeout = ?DEFAULT_UDP_PROCESS_TIMEOUT) of
+        _ -> ok
+      catch
+        exit:{timeout, _} ->
+          handle_timeout(DecodedMessage, WorkerProcessSup, WorkerProcessId);
+        Error:Reason ->
+          lager:error("Worker process crashed: ~p:~p", [Error, Reason]),
+          {error, {Error, Reason}}
+      end;
+    true ->
+      lager:info("Dropping request that is not a question"),
+      {error, not_a_question}
   end.
 
 -spec handle_timeout(dns:message(), pid(), term()) -> {error, timeout, term()} | {error, timeout}.
