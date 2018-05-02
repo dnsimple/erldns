@@ -34,7 +34,7 @@ decode_message(Bin) ->
         M -> M
       catch
         Exception:Reason ->
-          lager:error("Error decoding ~p (~p:~p)", [Bin, Exception, Reason]),
+          lager:error("Error decoding message (data: ~p, exception: ~p, reason: ~p)", [Bin, Exception, Reason]),
           {formerr, Reason, Bin}
       end
   end.

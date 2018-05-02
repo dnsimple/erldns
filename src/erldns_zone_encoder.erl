@@ -52,13 +52,13 @@ zone_to_json(Zone) ->
 %% @doc Register a list of encoder modules.
 -spec register_encoders([module()]) -> ok.
 register_encoders(Modules) ->
-  lager:info("Registering custom encoders: ~p", [Modules]),
+  lager:info("Registering custom encoders (modules: ~p)", [Modules]),
   gen_server:call(?SERVER, {register_encoders, Modules}).
 
 %% @doc Register a single encoder module.
 -spec register_encoder(module()) -> ok.
 register_encoder(Module) ->
-  lager:info("Registering customer encoder: ~p", [Module]),
+  lager:info("Registering customer encoder (module: ~p)", [Module]),
   gen_server:call(?SERVER, {register_encoder, Module}).
 
 
@@ -123,10 +123,10 @@ encode(Encoders) ->
   end.
 
 encode_record(Record, Encoders) ->
-  lager:debug("Encoding record ~p", [Record]),
+  lager:debug("Encoding record (record: ~p)", [Record]),
   case encode_record(Record) of
     [] ->
-      lager:debug("Trying custom encoders: ~p", [Encoders]),
+      lager:debug("Trying custom encoders (encoders: ~p)", [Encoders]),
       try_custom_encoders(Record, Encoders);
     EncodedRecord -> EncodedRecord
   end.
@@ -164,7 +164,7 @@ encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_DNSKEY, Ttl, Data}) ->
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_RRSIG, Ttl, Data}) ->
   encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
-  lager:debug("Unable to encode record: ~p", [Record]),
+  lager:warning("Unable to encode record (record: ~p)", [Record]),
   [].
 
 encode_record(Name, Type, Ttl, Data) ->
@@ -179,7 +179,7 @@ encode_record(Name, Type, Ttl, Data) ->
 try_custom_encoders(_Record, []) ->
   {};
 try_custom_encoders(Record, [Encoder|Rest]) ->
-  lager:debug("Trying custom encoder ~p", [Encoder]),
+  lager:debug("Trying custom encoder (encoder: ~p)", [Encoder]),
   case Encoder:encode_record(Record) of
     [] -> try_custom_encoders(Record, Rest);
     EncodedData -> EncodedData
@@ -219,5 +219,5 @@ encode_data({dns_rrdata_dnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
 encode_data({dns_rrdata_rrsig, TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature}) ->
   erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~w ~w ~w ~w ~w ~s", [TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature]));
 encode_data(Data) ->
-  lager:debug("Unable to encode data: ~p", [Data]),
+  lager:debug("Unable to encode rrdata (data: ~p)", [Data]),
   {}.
