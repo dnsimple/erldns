@@ -275,7 +275,7 @@ restart_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
       Message
   end;
 % The CNAME is not in a zone, do not restart the query, return the answer.
-restart_query(Message, Name, Qtype, Host, CnameChain, Zone, false) ->
+restart_query(Message, _Name, _Qtype, _Host, _CnameChain, _Zone, false) ->
   Message.
 
 % Delegated, but in the same zone.
