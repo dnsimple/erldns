@@ -247,7 +247,7 @@ resolve_exact_match_referral(Message, _, _MatchedRecords, _ReferralRecords, Auth
 
 
 % There is a CNAME record and the request was for a CNAME record so append the CNAME records to
-% the answers section..
+% the answers section.
 resolve_exact_match_with_cname(Message, ?DNS_TYPE_CNAME, _Host, _CnameChain, _MatchedRecords, _Zone, CnameRecords) ->
   Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
 % There is a CNAME record, however the Qtype is not CNAME, check for a CNAME loop before continuing.
@@ -265,13 +265,18 @@ resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, _MatchedRecords
 
 
 
-% The CNAME is in the zone so we do not need to look it up again.
+% The CNAME is in a zone. If it is the same zone, then continue the chain, otherwise return the message
 restart_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
-  resolve(Message, Name, Qtype, Zone, Host, CnameChain);
-% The CNAME is not in the zone, so we need to find the zone using the
-% CNAME content.
-restart_query(Message, Name, Qtype, Host, CnameChain, _Zone, false) ->
-  resolve(Message, Name, Qtype, erldns_zone_cache:find_zone(Name), Host, CnameChain).
+  Parent = check_if_parent(Zone#zone.name, Name),
+  case Parent of
+    true ->
+      resolve(Message, Name, Qtype, Zone, Host, CnameChain);
+    false ->
+      Message
+  end;
+% The CNAME is not in a zone, do not restart the query, return the answer.
+restart_query(Message, Name, Qtype, Host, CnameChain, Zone, false) ->
+  Message.
 
 % Delegated, but in the same zone.
 restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
