@@ -27,7 +27,17 @@
 %% exception.
 -spec encode_message(dns:message()) -> dns:message_bin().
 encode_message(Response) ->
-  encode_message(Response, []).
+  case application:get_env(erldns, catch_exceptions) of
+    {ok, false} -> dns:encode_message(Response);
+    _ ->
+      try dns:encode_message(Response) of
+        M -> M
+      catch
+        Exception:Reason ->
+          lager:error("Error encoding (response: ~p, exception: ~p, reason: ~p)", [Response, Exception, Reason]),
+          encode_message(build_error_response(Response))
+      end
+  end.
 
 %% @doc Encode the DNS message into its binary representation. Use the
 %% Opts argument to pass in encoding options.
