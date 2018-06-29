@@ -53,7 +53,8 @@ handle_cast({tcp_query, Socket, Bin}, State) ->
     {error, timeout, NewWorkerPid} ->
       {Id, _, Type, Modules} = State#state.worker_process,
       {noreply, State#state{worker_process = {Id, NewWorkerPid, Type, Modules}}};
-    _ ->
+    Error ->
+      lager:error("Error handling TCP query (error: ~p)", [Error]),
       {noreply, State}
   end;
 handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
@@ -63,7 +64,8 @@ handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
     {error, timeout, NewWorkerPid} ->
       {Id, _, Type, Modules} = State#state.worker_process,
       {noreply, State#state{worker_process = {Id, NewWorkerPid, Type, Modules}}};
-    _ ->
+    Error ->
+      lager:error("Error handling UDP query (error: ~p)", [Error]),
       {noreply, State}
   end;
 handle_cast(_Msg, State) ->

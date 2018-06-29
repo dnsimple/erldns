@@ -58,8 +58,8 @@ encode_message(Response, Opts) ->
         M -> M
       catch
         Exception:Reason ->
-          lager:error("Error encoding (response: ~p, exception: ~p, reason: ~p)", [Response, Exception, Reason]),
-          encode_message(build_error_response(Response))
+          lager:error("Error encoding with truncation (response: ~p, exception: ~p, reason: ~p)", [Response, Exception, Reason]),
+          {false, encode_message(build_error_response(Response))}
       end
   end.
 
