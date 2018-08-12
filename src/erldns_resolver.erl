@@ -95,6 +95,7 @@ exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, 
 
 %% No CNAME records found in the records with the Qname
 exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _CnameRecords = []) ->
+  lager:debug("exact_match_resolution(Message, ~p, ~p, Host, CnameChain, ~p, Zone, [])", [Qname, Qtype, MatchedRecords]),
   resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone);
 
 %% CNAME records found in the records for the Qname
@@ -155,10 +156,12 @@ resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, Host, CnameChain, Matche
 
 %% There was an exact type match for an NS query and an SOA record.
 resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords) ->
+  lager:debug("resolve_exact_type_match(Message, _, ~p, _, _, ~p, _, _)", [?DNS_TYPE_NS, MatchedRecords]),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
 
 %% There was an exact type match for something other than an NS record and we are authoritative because there is an SOA record.
 resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
+  lager:debug("resolve_exact_type_match(Message, ~p, ~p, Host, CnameChain, ~p, Zone, _)", [Qname, Qtype, MatchedRecords]),
   % NOTE: this is a potential bug because it assumes the last record is the one to examine.
   Answer = lists:last(MatchedRecords),
   case erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
@@ -180,7 +183,8 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
   end.
 
 %% We are authoritative and there were no NS records here.
-resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, _NSRecords = []) ->
+resolve_exact_type_match(Message, Qname, Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, _NSRecords = []) ->
+  lager:debug("resolve_exact_type_match(Message, ~p, ~p, _, ~p, _, _, [])", [Qname, Qtype, MatchedRecords]),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
 
 %% We are authoritative and there are NS records here.
@@ -290,8 +294,15 @@ restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, false) ->
 % There was no exact match for the Qname, so we use the best matches that were
 % returned by the best_match() function.
 best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone) ->
-  ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), BestMatchRecords), % NS lookup
-  best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, ReferralRecords).
+  DnameReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_DNAME), BestMatchRecords), % DNAME lookup
+  case DnameReferralRecords of
+    [] ->
+      ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), BestMatchRecords), % NS lookup
+      best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, ReferralRecords);
+    DnameRecords ->
+      resolve_best_match_with_dname(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, DnameRecords)
+  end.
+  
 
 % There were no NS records in the best matches.
 best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, []) ->
@@ -310,7 +321,8 @@ resolve_best_match(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zo
   CnameRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), lists:map(erldns_records:replace_name(Qname), BestMatchRecords)),
   resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, CnameRecords);
 %% It is not a wildcard.
-resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, false) ->
+resolve_best_match(Message, Qname, Qtype, _Host, _CnameChain, _BestMatchRecords, Zone, false) ->
+  lager:debug("Non-wildcard best match (Message, ~p, ~p, _Host, _CnameChain, _BestMatchRecords, Zone, false)", [Qname, Qtype]),
   [Question|_] = Message#dns_message.questions,
   case Qname =:= Question#dns_query.name of
     true ->
@@ -328,6 +340,25 @@ resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords
           Message
       end
   end.
+
+% Best match was a DNAME record
+resolve_best_match_with_dname(Message, Qname, Qtype, _Host, _CnameChain, BestMatchRecords, _Zone, DnameRecords) ->
+  lager:debug("Non-wildcard best match DNAME (Message, ~p, ~p, Host, CnameChain, ~p, Zone, ~p)", [Qname, Qtype, BestMatchRecords, DnameRecords]),
+  % Possible bug if there are multiple DNAME records present
+  DnameRecord = lists:last(DnameRecords),
+  CnameRecord = synthesize_cname_for_dname(DnameRecord, Qname),
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = [DnameRecord, CnameRecord]}.
+
+% Synthesizes the CNAME data required when responding to a DNAME query
+synthesize_cname_for_dname(DnameRecord, Qname) ->
+  Left = dns:dname_to_labels(erldns_records:remove_tail(dns:dname_to_labels(Qname), dns:dname_to_labels(DnameRecord#dns_rr.name))),
+  CnameContent = dns:labels_to_dname(Left ++ dns:dname_to_labels(DnameRecord#dns_rr.data#dns_rrdata_dname.dname)),
+  #dns_rr{
+     name = Qname,
+     type = ?DNS_TYPE_CNAME,
+     data = #dns_rrdata_cname{dname = CnameContent},
+     ttl = DnameRecord#dns_rr.ttl
+    }.
 
 
 % It's a wildcard CNAME

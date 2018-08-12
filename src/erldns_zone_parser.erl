@@ -285,6 +285,13 @@ json_record_to_erlang([Name, <<"CNAME">>, Ttl, Data, _Context]) ->
      data = #dns_rrdata_cname{dname = erldns_config:keyget(<<"dname">>, Data)},
      ttl = Ttl};
 
+json_record_to_erlang([Name, <<"DNAME">>, Ttl, Data, _Contact]) ->
+  #dns_rr{
+     name = Name,
+     type = ?DNS_TYPE_DNAME,
+     data = #dns_rrdata_dname{dname = erldns_config:keyget(<<"dname">>, Data)},
+     ttl = Ttl};
+
 json_record_to_erlang([Name, <<"MX">>, Ttl, Data, _Context]) ->
   #dns_rr{
      name = Name,

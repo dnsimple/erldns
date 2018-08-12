@@ -2612,6 +2612,14 @@
                 "data": {
                     "txt": "\u00c5LAND ISLANDS"
                 }
+            },
+            {
+                "name": "d.test.com",
+                "type": "DNAME",
+                "ttl": 3600,
+                "data": {
+                    "dname": "d2.test2.com"
+                }
             }
         ]
     },

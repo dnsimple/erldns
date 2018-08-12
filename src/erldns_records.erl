@@ -26,6 +26,7 @@
 -export([minimum_soa_ttl/2, rewrite_soa_ttl/1]).
 -export([match_name/1, match_type/1, match_name_and_type/2, match_types/1, match_wildcard/0, match_delegation/1, match_type_covered/1]).
 -export([replace_name/1]).
+-export([remove_tail/2, synthesize_cname_for_dname/2]).
 
 %% If the name returned from the DB is a wildcard name then the
 %% Original Qname needs to be returned in its place.
@@ -42,6 +43,25 @@ optionally_convert_wildcard(Name, Qname) ->
 wildcard_qname(Qname) ->
   [_|Rest] = dns:dname_to_labels(Qname),
   dns:labels_to_dname([<<"*">>] ++ Rest).
+
+% Given a name, removes parent name part.
+%
+% Thus given the name x.www.example.com, and the parent example.com, the result is <<"x.www">>.
+-spec remove_tail(dns:labels(), dns:labels()) -> dns:labels().
+remove_tail(Name, Parent) ->
+  dns:labels_to_dname(lists:reverse(lists:subtract(lists:reverse(Name), lists:reverse(Parent)))).
+  
+% Synthesizes the CNAME record required when responding to a DNAME query
+-spec synthesize_cname_for_name(dns:rr(), dns:qname()).
+synthesize_cname_for_dname(DnameRecord, Qname) ->
+  Left = dns:dname_to_labels(erldns_records:remove_tail(dns:dname_to_labels(Qname), dns:dname_to_labels(DnameRecord#dns_rr.name))),
+  CnameContent = dns:labels_to_dname(Left ++ dns:dname_to_labels(DnameRecord#dns_rr.data#dns_rrdata_dname.dname)),
+  #dns_rr{
+     name = Qname,
+     type = ?DNS_TYPE_CNAME,
+     data = #dns_rrdata_cname{dname = CnameContent},
+     ttl = DnameRecord#dns_rr.ttl
+    }.
 
 %% @doc Return the TTL value or 3600 if it is undefined.
 default_ttl(TTL) ->
