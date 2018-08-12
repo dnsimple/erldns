@@ -346,19 +346,8 @@ resolve_best_match_with_dname(Message, Qname, Qtype, _Host, _CnameChain, BestMat
   lager:debug("Non-wildcard best match DNAME (Message, ~p, ~p, Host, CnameChain, ~p, Zone, ~p)", [Qname, Qtype, BestMatchRecords, DnameRecords]),
   % Possible bug if there are multiple DNAME records present
   DnameRecord = lists:last(DnameRecords),
-  CnameRecord = synthesize_cname_for_dname(DnameRecord, Qname),
+  CnameRecord = erldns_records:synthesize_cname_for_dname(DnameRecord, Qname),
   Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = [DnameRecord, CnameRecord]}.
-
-% Synthesizes the CNAME data required when responding to a DNAME query
-synthesize_cname_for_dname(DnameRecord, Qname) ->
-  Left = dns:dname_to_labels(erldns_records:remove_tail(dns:dname_to_labels(Qname), dns:dname_to_labels(DnameRecord#dns_rr.name))),
-  CnameContent = dns:labels_to_dname(Left ++ dns:dname_to_labels(DnameRecord#dns_rr.data#dns_rrdata_dname.dname)),
-  #dns_rr{
-     name = Qname,
-     type = ?DNS_TYPE_CNAME,
-     data = #dns_rrdata_cname{dname = CnameContent},
-     ttl = DnameRecord#dns_rr.ttl
-    }.
 
 
 % It's a wildcard CNAME

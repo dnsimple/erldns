@@ -52,7 +52,7 @@ remove_tail(Name, Parent) ->
   dns:labels_to_dname(lists:reverse(lists:subtract(lists:reverse(Name), lists:reverse(Parent)))).
   
 % Synthesizes the CNAME record required when responding to a DNAME query
--spec synthesize_cname_for_name(dns:rr(), dns:qname()).
+-spec synthesize_cname_for_dname(dns:rr(), dns:qname()) -> dns:dns_rr().
 synthesize_cname_for_dname(DnameRecord, Qname) ->
   Left = dns:dname_to_labels(erldns_records:remove_tail(dns:dname_to_labels(Qname), dns:dname_to_labels(DnameRecord#dns_rr.name))),
   CnameContent = dns:labels_to_dname(Left ++ dns:dname_to_labels(DnameRecord#dns_rr.data#dns_rrdata_dname.dname)),
