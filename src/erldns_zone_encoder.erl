@@ -141,6 +141,8 @@ encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_AAAA, Ttl, Data}) ->
   encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_CNAME, Ttl, Data}) ->
   encode_record(Name, Type, Ttl, Data);
+encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_DNAME, Ttl, Data}) ->
+  encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_MX, Ttl, Data}) ->
   encode_record(Name, Type, Ttl, Data);
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_HINFO, Ttl, Data}) ->
@@ -196,6 +198,8 @@ encode_data({dns_rrdata_aaaa, Address}) ->
 encode_data({dns_rrdata_caa, Flags, Tag, Value}) ->
   erlang:iolist_to_binary(io_lib:format("~w ~s \"~s\"", [Flags, Tag, Value]));
 encode_data({dns_rrdata_cname, Dname}) ->
+  erlang:iolist_to_binary(io_lib:format("~s.", [Dname]));
+encode_data({dns_rrdata_dname, Dname}) ->
   erlang:iolist_to_binary(io_lib:format("~s.", [Dname]));
 encode_data({dns_rrdata_mx, Preference, Dname}) ->
   erlang:iolist_to_binary(io_lib:format("~w ~s.", [Preference, Dname]));
