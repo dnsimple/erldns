@@ -33,7 +33,8 @@
          get_zone/1,
          get_zone_with_records/1,
          get_authority/1,
-         get_delegations/1,
+         get_delegations/2,
+         get_zone_cut_records/1,
          get_records_by_name/1,
          in_zone/1,
          zone_names_and_versions/0
@@ -131,16 +132,18 @@ get_authority(Name) ->
     _ -> {error, authority_not_found}
   end.
 
-%% @doc Get the list of NS and glue records for the given name. This function
+%% @doc Get the list of NS and glue records from the given record list for the given name. This function
 %% will always return a list, even if it is empty.
--spec get_delegations(dns:dname()) -> [dns:rr()] | [].
-get_delegations(Name) ->
+get_delegations(Name, Records) ->
+  lists:filter(fun(R) -> apply(erldns_records:match_type(?DNS_TYPE_NS), [R]) and apply(erldns_records:match_delegation(Name), [R]) end, Records).
+
+get_zone_cut_records(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      lists:filter(fun(R) -> apply(erldns_records:match_type(?DNS_TYPE_NS), [R]) and apply(erldns_records:match_delegation(Name), [R]) end, Zone#zone.records);
+      lists:filter(fun(R) -> apply(erldns_records:match_types([?DNS_TYPE_DNAME, ?DNS_TYPE_NS]), [R]) and not apply(erldns_records:match_name(Name), [R]) end, Zone#zone.records);
     _ ->
       []
-  end.
+end.
 
 %% @doc Return the record set for the given dname.
 -spec get_records_by_name(dns:dname()) -> [dns:rr()].

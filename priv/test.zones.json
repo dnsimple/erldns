@@ -2566,6 +2566,14 @@
                 }
             },
             {
+                "name": "occluded.blah.test.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "1.2.3.4"
+                }
+            },
+            {
                 "name": "very-long-txt.test.com",
                 "type": "TXT",
                 "ttl": 3600,
@@ -2619,6 +2627,14 @@
                 "ttl": 3600,
                 "data": {
                     "dname": "d2.test2.com"
+                }
+            },
+            {
+                "name": "exists.d.test.com",
+                "type": "A",
+                "ttl": 3600,
+                "data": {
+                    "ip": "1.2.3.4"
                 }
             }
         ]

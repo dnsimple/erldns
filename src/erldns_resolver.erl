@@ -164,7 +164,14 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
   lager:debug("resolve_exact_type_match(Message, ~p, ~p, Host, CnameChain, ~p, Zone, _)", [Qname, Qtype, MatchedRecords]),
   % NOTE: this is a potential bug because it assumes the last record is the one to examine.
   Answer = lists:last(MatchedRecords),
-  case erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
+
+  % TODO: if there is a zone cut due to delegation (NS, DNAME, and CNAME?) then the occluded
+  % record MUST not be shown.
+  ZoneCutRecords = erldns_zone_cache:get_zone_cut_records(Zone#zone.name),
+  ParentZoneCutRecords = lists:filter(fun(R) -> erldns_records:check_if_parent(R#dns_rr.name, Answer#dns_rr.name) end, ZoneCutRecords),
+  lager:debug("Parent zone cut records: ~p", [ParentZoneCutRecords]),
+
+  case erldns_zone_cache:get_delegations(Answer#dns_rr.name, ParentZoneCutRecords) of
     NSRecords = [] ->
       resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords);
     NSRecords ->
@@ -199,21 +206,13 @@ resolve_exact_type_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecord
     false ->
       % TODO: only restart delegation if the NS record is on a parent node
       % if it is a sibling then we should not restart
-      case check_if_parent(Name, Answer#dns_rr.name) of
+      case erldns_records:check_if_parent(Name, Answer#dns_rr.name) of
         true ->
           restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name));
         false ->
           Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords}
       end
   end.
-
-%% Returns true if the first domain name is a parent of the second domain name.
-check_if_parent(PossibleParentName, Name) ->
-  case lists:subtract(dns:dname_to_labels(PossibleParentName), dns:dname_to_labels(Name)) of
-    [] -> true;
-    _ -> false
-  end.
-
 
 %% There were no exact type matches, but there were other name matches and there are NS records.
 %% Since the Qtype is ANY we indicate we are authoritative and include the NS records.
@@ -271,12 +270,9 @@ resolve_exact_match_with_cname(Message, Qtype, Host, CnameChain, _MatchedRecords
 
 % The CNAME is in a zone. If it is the same zone, then continue the chain, otherwise return the message
 restart_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
-  Parent = check_if_parent(Zone#zone.name, Name),
-  case Parent of
-    true ->
-      resolve(Message, Name, Qtype, Zone, Host, CnameChain);
-    false ->
-      Message
+  case erldns_records:check_if_parent(Zone#zone.name, Name) of
+    true -> resolve(Message, Name, Qtype, Zone, Host, CnameChain);
+    false -> Message
   end;
 % The CNAME is not in a zone, do not restart the query, return the answer.
 restart_query(Message, _Name, _Qtype, _Host, _CnameChain, _Zone, false) ->
