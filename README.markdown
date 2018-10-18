@@ -88,8 +88,8 @@ erldns_zone_cache:put_zone({
 
 Folsom is used to gather runtime metrics and statistics.
 
-There is an HTTP API for querying metric data available at https://github.com/aetrion/erldns-metrics
+There is an HTTP API for querying metric data available at https://github.com/dnsimple/erldns-metrics
 
 ## Admin
 
-There is a administrative API for querying the current zone cache and for basic control. You can find it in https://github.com/aetrion/erldns-admin
+There is a administrative API for querying the current zone cache and for basic control. You can find it in https://github.com/dnsimple/erldns-admin
