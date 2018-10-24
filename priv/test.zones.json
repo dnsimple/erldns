@@ -1198,6 +1198,18 @@
             },
             {
                 "name": "example-dnssec.com",
+                "type": "CDNSKEY",
+                "ttl": 120,
+                "data": {
+                    "flags": 256,
+                    "protocol": 3,
+                    "alg": 8,
+                    "public_key": "MFswDQYJKoZIhvcNAQEBBQADSgAwRwJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jTCaEwnpE74YHCLegKAAn+efeZrT/EBBrzlacCAgIB",
+                    "key_tag": 0
+                }
+            },
+            {
+                "name": "example-dnssec.com",
                 "type": "DNSKEY",
                 "ttl": 120,
                 "data": {
