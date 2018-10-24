@@ -428,6 +428,26 @@ json_record_to_erlang([Name, <<"DNSKEY">>, Ttl, Data, _Context]) ->
       {}
   end;
 
+json_record_to_erlang([Name, <<"CDNSKEY">>, Ttl, Data, _Context]) ->
+  try base64_to_bin(erldns_config:keyget(<<"public_key">>, Data)) of
+    PublicKey ->
+      dnssec:add_keytag_to_cdnskey(
+        #dns_rr{
+           name = Name,
+           type = ?DNS_TYPE_CDNSKEY,
+           data = #dns_rrdata_cdnskey{
+                     flags = erldns_config:keyget(<<"flags">>, Data),
+                     protocol = erldns_config:keyget(<<"protocol">>, Data),
+                     alg = erldns_config:keyget(<<"alg">>, Data),
+                     public_key = PublicKey
+                    },
+           ttl = Ttl})
+  catch
+    Exception:Reason ->
+      lager:error("Error parsing CDNSKEY (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
+      {}
+  end;
+
 json_record_to_erlang(Data) ->
   lager:warning("Unsupported record (data: ~p)", [Data]),
   {}.
