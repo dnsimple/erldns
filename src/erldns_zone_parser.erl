@@ -408,6 +408,25 @@ json_record_to_erlang([Name, <<"DS">>, Ttl, Data, _Context]) ->
       {}
   end;
 
+json_record_to_erlang([Name, <<"CDS">>, Ttl, Data, _Context]) ->
+  try hex_to_bin(erldns_config:keyget(<<"digest">>, Data)) of
+    Digest ->
+      #dns_rr{
+         name = Name,
+         type = ?DNS_TYPE_CDS,
+         data = #dns_rrdata_ds{
+                   keytag = erldns_config:keyget(<<"keytag">>, Data),
+                   alg = erldns_config:keyget(<<"alg">>, Data),
+                   digest_type = erldns_config:keyget(<<"digest_type">>, Data),
+                   digest = Digest
+                  },
+         ttl = Ttl}
+  catch
+    Exception:Reason ->
+      lager:error("Error parsing CDS (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
+      {}
+  end;
+
 json_record_to_erlang([Name, <<"DNSKEY">>, Ttl, Data, _Context]) ->
   try base64_to_bin(erldns_config:keyget(<<"public_key">>, Data)) of
     PublicKey ->
