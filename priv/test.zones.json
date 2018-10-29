@@ -1198,6 +1198,17 @@
             },
             {
                 "name": "example-dnssec.com",
+                "type": "CDS",
+                "ttl": 120,
+                "data": {
+                    "alg": 8,
+                    "digest": "4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA",
+                    "digest_type": 2,
+                    "key_tag": 0
+                }
+            },
+            {
+                "name": "example-dnssec.com",
                 "type": "CDNSKEY",
                 "ttl": 120,
                 "data": {
