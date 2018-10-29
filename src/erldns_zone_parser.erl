@@ -414,7 +414,7 @@ json_record_to_erlang([Name, <<"CDS">>, Ttl, Data, _Context]) ->
       #dns_rr{
          name = Name,
          type = ?DNS_TYPE_CDS,
-         data = #dns_rrdata_ds{
+         data = #dns_rrdata_cds{
                    keytag = erldns_config:keyget(<<"keytag">>, Data),
                    alg = erldns_config:keyget(<<"alg">>, Data),
                    digest_type = erldns_config:keyget(<<"digest_type">>, Data),
