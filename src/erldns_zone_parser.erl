@@ -549,6 +549,24 @@ json_record_aaaa_to_erlang_test() ->
                                                                {<<"ip">>, <<"::1">>}
                                                               ], undefined])).
 
+json_record_cds_to_erlang_test() ->
+  Name = <<"example-dnssec.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_CDS,
+                       data = #dns_rrdata_cds{
+                                  keytag = 0,
+                                  digest_type = 2,
+                                  alg = 8,
+                                  digest = hex_to_bin(<<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>)
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"CDS">>, 3600, [
+                                                              {<<"keytag">>, 0},
+                                                              {<<"digest_type">>, 2},
+                                                              {<<"alg">>, 8},
+                                                              {<<"digest">>, <<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>}
+                                                             ], undefined])).
+
 hex_to_bin_test() ->
   ?assertEqual(<<"">>, hex_to_bin(<<"">>)),
   ?assertEqual(<<255, 0, 255>>, hex_to_bin(<<"FF00FF">>)).
