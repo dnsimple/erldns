@@ -408,6 +408,25 @@ json_record_to_erlang([Name, <<"DS">>, Ttl, Data, _Context]) ->
       {}
   end;
 
+json_record_to_erlang([Name, <<"CDS">>, Ttl, Data, _Context]) ->
+  try hex_to_bin(erldns_config:keyget(<<"digest">>, Data)) of
+    Digest ->
+      #dns_rr{
+         name = Name,
+         type = ?DNS_TYPE_CDS,
+         data = #dns_rrdata_cds{
+                   keytag = erldns_config:keyget(<<"keytag">>, Data),
+                   alg = erldns_config:keyget(<<"alg">>, Data),
+                   digest_type = erldns_config:keyget(<<"digest_type">>, Data),
+                   digest = Digest
+                  },
+         ttl = Ttl}
+  catch
+    Exception:Reason ->
+      lager:error("Error parsing CDS (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
+      {}
+  end;
+
 json_record_to_erlang([Name, <<"DNSKEY">>, Ttl, Data, _Context]) ->
   try base64_to_bin(erldns_config:keyget(<<"public_key">>, Data)) of
     PublicKey ->
@@ -425,6 +444,26 @@ json_record_to_erlang([Name, <<"DNSKEY">>, Ttl, Data, _Context]) ->
   catch
     Exception:Reason ->
       lager:error("Error parsing DNSKEY (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
+      {}
+  end;
+
+json_record_to_erlang([Name, <<"CDNSKEY">>, Ttl, Data, _Context]) ->
+  try base64_to_bin(erldns_config:keyget(<<"public_key">>, Data)) of
+    PublicKey ->
+      dnssec:add_keytag_to_cdnskey(
+        #dns_rr{
+           name = Name,
+           type = ?DNS_TYPE_CDNSKEY,
+           data = #dns_rrdata_cdnskey{
+                     flags = erldns_config:keyget(<<"flags">>, Data),
+                     protocol = erldns_config:keyget(<<"protocol">>, Data),
+                     alg = erldns_config:keyget(<<"alg">>, Data),
+                     public_key = PublicKey
+                    },
+           ttl = Ttl})
+  catch
+    Exception:Reason ->
+      lager:error("Error parsing CDNSKEY (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
       {}
   end;
 
@@ -509,6 +548,24 @@ json_record_aaaa_to_erlang_test() ->
                json_record_to_erlang([Name, <<"AAAA">>, 3600, [
                                                                {<<"ip">>, <<"::1">>}
                                                               ], undefined])).
+
+json_record_cds_to_erlang_test() ->
+  Name = <<"example-dnssec.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_CDS,
+                       data = #dns_rrdata_cds{
+                                  keytag = 0,
+                                  digest_type = 2,
+                                  alg = 8,
+                                  digest = hex_to_bin(<<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>)
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"CDS">>, 3600, [
+                                                              {<<"keytag">>, 0},
+                                                              {<<"digest_type">>, 2},
+                                                              {<<"alg">>, 8},
+                                                              {<<"digest">>, <<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>}
+                                                             ], undefined])).
 
 hex_to_bin_test() ->
   ?assertEqual(<<"">>, hex_to_bin(<<"">>)),

@@ -1198,6 +1198,29 @@
             },
             {
                 "name": "example-dnssec.com",
+                "type": "CDS",
+                "ttl": 120,
+                "data": {
+                    "alg": 8,
+                    "digest": "4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA",
+                    "digest_type": 2,
+                    "keytag": 0
+                }
+            },
+            {
+                "name": "example-dnssec.com",
+                "type": "CDNSKEY",
+                "ttl": 120,
+                "data": {
+                    "flags": 256,
+                    "protocol": 3,
+                    "alg": 8,
+                    "public_key": "MFswDQYJKoZIhvcNAQEBBQADSgAwRwJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jTCaEwnpE74YHCLegKAAn+efeZrT/EBBrzlacCAgIB",
+                    "key_tag": 0
+                }
+            },
+            {
+                "name": "example-dnssec.com",
                 "type": "DNSKEY",
                 "ttl": 120,
                 "data": {
