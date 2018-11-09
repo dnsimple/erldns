@@ -472,7 +472,7 @@ json_record_to_erlang(Data) ->
   {}.
 
 % For supporting CDS0 record format where Digest is "0"
-hex_to_bin(<<"0">>) -> <<"0">>;
+hex_to_bin(<<"0">>) -> <<0>>;
 hex_to_bin(Bin) when is_binary(Bin) ->
   Fun = fun(A, B) ->
             case io_lib:fread("~16u", [A, B]) of
@@ -578,7 +578,7 @@ json_record_cds0_to_erlang_test() ->
                                   keytag = 0,
                                   digest_type = 0,
                                   alg = 0,
-                                  digest = <<"0">>
+                                  digest = <<0>>
                                 },
                        ttl = 3600},
                json_record_to_erlang([Name, <<"CDS">>, 3600, [
@@ -629,7 +629,7 @@ json_record_cdnskey0_to_erlang_test() ->
 
 hex_to_bin_test() ->
   ?assertEqual(<<"">>, hex_to_bin(<<"">>)),
-  ?assertEqual(<<"0">>, hex_to_bin(<<"0">>)),
+  ?assertEqual(<<0>>, hex_to_bin(<<"0">>)),
   ?assertEqual(<<255, 0, 255>>, hex_to_bin(<<"FF00FF">>)).
 
 
