@@ -218,6 +218,8 @@ encode_data({dns_rrdata_naptr, Order, Preference, Flags, Services, Regexp, Repla
   erlang:iolist_to_binary(io_lib:format("~w ~w ~s ~s ~s ~s", [Order, Preference, Flags, Services, Regexp, Replacements]));
 encode_data({dns_rrdata_ds, Keytag, Alg, DigestType, Digest}) ->
   erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s", [Keytag, Alg, DigestType, Digest]));
+encode_data({dns_rrdata_cds, 0, 0, 0, <<0>>}) ->
+  erlang:iolist_to_binary("0 0 0 0");
 encode_data({dns_rrdata_cds, Keytag, Alg, DigestType, Digest}) ->
   erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s", [Keytag, Alg, DigestType, Digest]));
 encode_data({dns_rrdata_dnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
