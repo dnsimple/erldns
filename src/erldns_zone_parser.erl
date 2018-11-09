@@ -471,6 +471,8 @@ json_record_to_erlang(Data) ->
   lager:warning("Unsupported record (data: ~p)", [Data]),
   {}.
 
+% For supporting CDS0 record format where Digest is "0"
+hex_to_bin(<<"0">>) -> <<"0">>;
 hex_to_bin(Bin) when is_binary(Bin) ->
   Fun = fun(A, B) ->
             case io_lib:fread("~16u", [A, B]) of
@@ -566,10 +568,29 @@ json_record_cds_to_erlang_test() ->
                                                               {<<"alg">>, 8},
                                                               {<<"digest">>, <<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>}
                                                              ], undefined])).
+json_record_cds0_to_erlang_test() ->
+  Name = <<"example-dnssec.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_CDS,
+                       data = #dns_rrdata_cds{
+                                  keytag = 0,
+                                  digest_type = 0,
+                                  alg = 0,
+                                  digest = <<"0">>
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"CDS">>, 3600, [
+                                                              {<<"keytag">>, 0},
+                                                              {<<"digest_type">>, 0},
+                                                              {<<"alg">>, 0},
+                                                              {<<"digest">>, <<"0">>}
+                                                             ], undefined])).
 
 hex_to_bin_test() ->
   ?assertEqual(<<"">>, hex_to_bin(<<"">>)),
+  ?assertEqual(<<"0">>, hex_to_bin(<<"0">>)),
   ?assertEqual(<<255, 0, 255>>, hex_to_bin(<<"FF00FF">>)).
+
 
 base64_to_bin_test() ->
   ?assertEqual(<<"">>, base64_to_bin(<<"">>)),
