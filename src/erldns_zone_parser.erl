@@ -482,6 +482,8 @@ hex_to_bin(Bin) when is_binary(Bin) ->
         end,
   << <<(Fun(A,B))>> || <<A, B>> <= Bin >>.
 
+% For supporting CDNSKEY0 record format where Digest is "0"
+base64_to_bin(<<"0">>) -> <<"0">>;
 base64_to_bin(Bin) when is_binary(Bin) ->
   base64:decode(Bin).
 
@@ -586,6 +588,45 @@ json_record_cds0_to_erlang_test() ->
                                                               {<<"digest">>, <<"0">>}
                                                              ], undefined])).
 
+json_record_cdnskey_to_erlang_test() ->
+  Name = <<"example-dnssec.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_CDNSKEY,
+                       data = #dns_rrdata_cdnskey{
+                                 flags = 257,
+                                 key_tag = 37440,
+                                 protocol = 3,
+                                 alg = 8,
+                                 public_key = [19950023884812141327069378526778424537821842682002326291664262861042243956868777019282790007759923364993897500365841, 322952729755131673734701209779560665954996175375376404453022988413912494776066645912342444415690645262643588770289772100982887500120087051315598339205817329813622689564541984611947665709742982003245799028497525519171546189867352183906279970741859214126016198414430241793]
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"CDNSKEY">>, 3600, [
+                                                                  {<<"flags">>, 257},
+                                                                  {<<"key_tag">>, 0},
+                                                                  {<<"protocol">>, 3},
+                                                                  {<<"alg">>, 8},
+                                                                  {<<"public_key">>, <<"MIGeMA0GCSqGSIb3DQEBAQUAA4GMADCBiAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USChEW0fLYT/QkAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+CfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHSU8htjdwICBAE=">>}
+                                                                 ], undefined])).
+json_record_cdnskey0_to_erlang_test() ->
+  Name = <<"example-dnssec.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_CDNSKEY,
+                       data = #dns_rrdata_cdnskey{
+                                 flags = 0,
+                                 key_tag = 13056,
+                                 protocol = 3,
+                                 alg = 0,
+                                 public_key = <<"0">>
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"CDNSKEY">>, 3600, [
+                                                                  {<<"flags">>, 0},
+                                                                  {<<"key_tag">>, 0},
+                                                                  {<<"protocol">>, 3},
+                                                                  {<<"alg">>, 0},
+                                                                  {<<"public_key">>, <<"0">>}
+                                                                 ], undefined])).
+
 hex_to_bin_test() ->
   ?assertEqual(<<"">>, hex_to_bin(<<"">>)),
   ?assertEqual(<<"0">>, hex_to_bin(<<"0">>)),
@@ -594,6 +635,7 @@ hex_to_bin_test() ->
 
 base64_to_bin_test() ->
   ?assertEqual(<<"">>, base64_to_bin(<<"">>)),
+  ?assertEqual(<<"0">>, base64_to_bin(<<"0">>)),
   ?assertEqual(<<3,1,0,1,191,165,76,56,217,9,250,187,15,147,125,112,215,
                  117,186,13,244,192,186,219,9,112,125,153,82,73,64,105,
                  80,64,122,98,28,121,76,104,177,134,177,93,191,143,159,
