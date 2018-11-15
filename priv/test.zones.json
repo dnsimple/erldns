@@ -1199,7 +1199,7 @@
                     "flags": 0,
                     "protocol": 3,
                     "alg": 0,
-                    "public_key": "MA==",
+                    "public_key": "AA==",
                     "key_tag": 0
                 }
             },
