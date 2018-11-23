@@ -1,5 +1,64 @@
 [
     {
+        "name": "withzonecut.com",
+        "records": [
+            {
+                "name": "withzonecut.com",
+                "type": "SOA",
+                "data": {
+                    "mname": "ns1.example.com",
+                    "rname": "ahu.example.com",
+                    "serial": 2000081501,
+                    "refresh": 28800,
+                    "retry": 7200,
+                    "expire": 604800,
+                    "minimum": 86400
+                },
+                "ttl": 100000
+            },
+            {
+                "name": "withzonecut.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns1.example.com"
+                }
+            },
+            {
+                "name": "withzonecut.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns2.example.com"
+                }
+            },
+            {
+                "name": "zonecut.withzonecut.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns1.cutwithzonecut.com"
+                }
+            },
+            {
+                "name": "zonecut.withzonecut.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns2.cutwithzonecut.com"
+                }
+            },
+            {
+                "name": "child.zonecut.withzonecut.com",
+                "type": "A",
+                "ttl": 120,
+                "data": {
+                    "ip": "192.168.1.1"
+                }
+            }
+        ]
+    },
+    {
         "name": "example.com",
         "records": [
             {
