@@ -50,10 +50,11 @@
             },
             {
                 "name": "child.zonecut.withzonecut.com",
-                "type": "A",
+                "type": "MX",
                 "ttl": 120,
                 "data": {
-                    "ip": "192.168.1.1"
+                    "exchange": "smtp-servers.example.com",
+                    "preference": 10
                 }
             }
         ]
