@@ -78,10 +78,10 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain)
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
   Result = resolve(Message, Qname, Qtype, get_records_by_name(Zone, Qname), Host, CnameChain, Zone),
   case detect_zonecut(Zone, Qname) of
-    {zonecut, Records} ->
-      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, answers = [], authority = Records};
-    no_zonecut ->
-      Result
+    [] ->
+      Result;
+    Records ->
+      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, answers = [], authority = Records}
   end.
 
 %% There were no exact matches on name, so move to the best-match resolution.
@@ -509,23 +509,23 @@ detect_zonecut(Zone, Qname) when is_binary(Qname) ->
   detect_zonecut(Zone, dns:dname_to_labels(Qname));
 
 detect_zonecut(_Zone, []) ->
-  no_zonecut;
+  [];
 
 detect_zonecut(_Zone, [_Label]) ->
-  no_zonecut;
+  [];
 
 detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
   Qname = dns:labels_to_dname(Labels),
   Records = get_records_by_name(Zone, Qname),
   case dns:compare_dname(zone_authority_name(Zone#zone.authority), Qname) of
   true ->
-      no_zonecut;
+      [];
   false ->
       case lists:filter(erldns_records:match_type(?DNS_TYPE_NS), Records) of
         [] ->
           detect_zonecut(Zone, ParentLabels);
-        NSRecords ->
-          {zonecut, NSRecords}
+        ZonecutNSRecords ->
+          ZonecutNSRecords
       end
   end.
 
