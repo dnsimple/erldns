@@ -516,12 +516,11 @@ detect_zonecut(_Zone, [_Label]) ->
 
 detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
   Qname = dns:labels_to_dname(Labels),
-  Records = get_records_by_name(Zone, Qname),
   case dns:compare_dname(zone_authority_name(Zone#zone.authority), Qname) of
   true ->
       [];
   false ->
-      case lists:filter(erldns_records:match_type(?DNS_TYPE_NS), Records) of
+      case lists:filter(erldns_records:match_type(?DNS_TYPE_NS), get_records_by_name(Zone, Qname)) of
         [] ->
           detect_zonecut(Zone, ParentLabels);
         ZonecutNSRecords ->
