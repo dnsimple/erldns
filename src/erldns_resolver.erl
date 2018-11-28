@@ -76,11 +76,12 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain)
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
+  Result = resolve(Message, Qname, Qtype, get_records_by_name(Zone, Qname), Host, CnameChain, Zone),
   case detect_zonecut(Zone, Qname) of
     {zonecut, Records} ->
-      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Records};
+      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, answers = [], authority = Records};
     no_zonecut ->
-      resolve(Message, Qname, Qtype, get_records_by_name(Zone, Qname), Host, CnameChain, Zone)
+      Result
   end.
 
 %% There were no exact matches on name, so move to the best-match resolution.
@@ -520,20 +521,12 @@ detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
   true ->
       no_zonecut;
   false ->
-      case is_zonecut(Records) of
-        true ->
-          {zonecut, Records};
-        false ->
-          detect_zonecut(Zone, ParentLabels)
+      case lists:filter(erldns_records:match_type(?DNS_TYPE_NS), Records) of
+        [] ->
+          detect_zonecut(Zone, ParentLabels);
+        NSRecords ->
+          {zonecut, NSRecords}
       end
-  end.
-
-is_zonecut([]) ->
-  false;
-is_zonecut([Record | Records]) ->
-  case Record#dns_rr.type of
-   ?DNS_TYPE_NS  -> true;
-   _ -> is_zonecut(Records)
   end.
 
 
