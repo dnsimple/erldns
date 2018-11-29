@@ -81,7 +81,8 @@ resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
     [] ->
       Result;
     Records ->
-      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, answers = [], authority = Records}
+      Answers = lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), Result#dns_message.answers),
+      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Records, answers = Answers}
   end.
 
 %% There were no exact matches on name, so move to the best-match resolution.
