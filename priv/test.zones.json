@@ -56,6 +56,14 @@
                     "exchange": "smtp-servers.example.com",
                     "preference": 10
                 }
+            },
+            {
+                "name": "cnamerecord.zonecut.withzonecut.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "somewhere.else.net"
+                }
             }
         ]
     },
