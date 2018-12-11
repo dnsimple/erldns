@@ -81,8 +81,18 @@ resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
     [] ->
       Result;
     Records ->
-      Answers = lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), Result#dns_message.answers),
-      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Records, answers = Answers}
+      case lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), Result#dns_message.answers) of
+        [] ->
+          Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Records, answers = []};
+        CnameAnswers ->
+          FilteredCnameAnswers = lists:filter(fun(RR) ->
+                        case detect_zonecut(Zone, RR#dns_rr.data#dns_rrdata_cname.dname) of
+                          [] -> false;
+                          _ -> true
+                        end
+                      end, CnameAnswers),
+          Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Records, answers = FilteredCnameAnswers}
+      end
   end.
 
 %% There were no exact matches on name, so move to the best-match resolution.
@@ -517,10 +527,13 @@ detect_zonecut(_Zone, [_Label]) ->
 
 detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
   Qname = dns:labels_to_dname(Labels),
+  lager:debug("Zone authority name: ~p", [zone_authority_name(Zone#zone.authority)]),
   case dns:compare_dname(zone_authority_name(Zone#zone.authority), Qname) of
   true ->
+      lager:debug("Result of dname compare is true, return []"),
       [];
   false ->
+      lager:debug("Result of dname compare is false"),
       case lists:filter(erldns_records:match_type(?DNS_TYPE_NS), get_records_by_name(Zone, Qname)) of
         [] ->
           detect_zonecut(Zone, ParentLabels);
