@@ -81,18 +81,14 @@ resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
     [] ->
       Result;
     Records ->
-      case lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), Result#dns_message.answers) of
-        [] ->
-          Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Records, answers = []};
-        CnameAnswers ->
-          FilteredCnameAnswers = lists:filter(fun(RR) ->
-                        case detect_zonecut(Zone, RR#dns_rr.data#dns_rrdata_cname.dname) of
-                          [] -> false;
-                          _ -> true
-                        end
-                      end, CnameAnswers),
-          Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Records, answers = FilteredCnameAnswers}
-      end
+      CnameAnswers = lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), Result#dns_message.answers),
+      FilteredCnameAnswers = lists:filter(fun(RR) ->
+                                              case detect_zonecut(Zone, RR#dns_rr.data#dns_rrdata_cname.dname) of
+                                                [] -> false;
+                                                _ -> true
+                                              end
+                                          end, CnameAnswers),
+      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Records, answers = FilteredCnameAnswers}
   end.
 
 %% There were no exact matches on name, so move to the best-match resolution.
