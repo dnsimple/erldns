@@ -1,5 +1,73 @@
 [
     {
+        "name": "withzonecut.com",
+        "records": [
+            {
+                "name": "withzonecut.com",
+                "type": "SOA",
+                "data": {
+                    "mname": "ns1.example.com",
+                    "rname": "ahu.example.com",
+                    "serial": 2000081501,
+                    "refresh": 28800,
+                    "retry": 7200,
+                    "expire": 604800,
+                    "minimum": 86400
+                },
+                "ttl": 100000
+            },
+            {
+                "name": "withzonecut.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns1.example.com"
+                }
+            },
+            {
+                "name": "withzonecut.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns2.example.com"
+                }
+            },
+            {
+                "name": "zonecut.withzonecut.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns1.cutwithzonecut.com"
+                }
+            },
+            {
+                "name": "zonecut.withzonecut.com",
+                "type": "NS",
+                "ttl": 120,
+                "data": {
+                    "dname": "ns2.cutwithzonecut.com"
+                }
+            },
+            {
+                "name": "child.zonecut.withzonecut.com",
+                "type": "MX",
+                "ttl": 120,
+                "data": {
+                    "exchange": "smtp-servers.example.com",
+                    "preference": 10
+                }
+            },
+            {
+                "name": "cnamerecord.zonecut.withzonecut.com",
+                "type": "CNAME",
+                "ttl": 120,
+                "data": {
+                    "dname": "somewhere.else.net"
+                }
+            }
+        ]
+    },
+    {
         "name": "example.com",
         "records": [
             {
