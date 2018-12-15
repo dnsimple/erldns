@@ -126,7 +126,13 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
                   case apply_context_options(Data) of
                     pass ->
                       case json_record_to_erlang(Data) of
-                        {} -> try_custom_parsers(Data, Parsers);
+                        {} ->
+                          case try_custom_parsers(Data, Parsers) of
+                            {} ->
+                                lager:warning("Unsupported record (data: ~p)", [Data]),
+                                {};
+                            ParsedRecord -> ParsedRecord
+                          end;
                         ParsedRecord -> ParsedRecord
                       end;
                     _ ->
@@ -467,8 +473,7 @@ json_record_to_erlang([Name, <<"CDNSKEY">>, Ttl, Data, _Context]) ->
       {}
   end;
 
-json_record_to_erlang(Data) ->
-  lager:warning("Unsupported record (data: ~p)", [Data]),
+json_record_to_erlang(_Data) ->
   {}.
 
 hex_to_bin(Bin) when is_binary(Bin) ->
