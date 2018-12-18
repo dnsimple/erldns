@@ -523,13 +523,10 @@ detect_zonecut(_Zone, [_Label]) ->
 
 detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
   Qname = dns:labels_to_dname(Labels),
-  lager:debug("Zone authority name: ~p", [zone_authority_name(Zone#zone.authority)]),
   case dns:compare_dname(zone_authority_name(Zone#zone.authority), Qname) of
   true ->
-      lager:debug("Result of dname compare is true, return []"),
       [];
   false ->
-      lager:debug("Result of dname compare is false"),
       case lists:filter(erldns_records:match_type(?DNS_TYPE_NS), get_records_by_name(Zone, Qname)) of
         [] ->
           detect_zonecut(Zone, ParentLabels);
