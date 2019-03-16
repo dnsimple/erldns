@@ -1,3 +1,4 @@
+.rebar3
 *.beam
 *.dump
 erldns.config
@@ -10,4 +11,3 @@ zones.json
 .eunit/
 db/
 _build/
-rebar.lock
