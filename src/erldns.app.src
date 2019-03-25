@@ -13,7 +13,6 @@
                   mnesia,
                   bear,
                   folsom,
-                  iso8601,
-                  poolboy]},
+                  iso8601]},
   {start_phases, [{post_start, []}]}
   ]}.

@@ -13,7 +13,6 @@
  {<<"iso8601">>,{pkg,<<"iso8601">>,<<"1.3.1">>},0},
  {<<"jsx">>,{pkg,<<"jsx">>,<<"2.9.0">>},0},
  {<<"lager">>,{pkg,<<"lager">>,<<"3.6.9">>},0},
- {<<"poolboy">>,{pkg,<<"poolboy">>,<<"1.5.2">>},0},
  {<<"recon">>,{pkg,<<"recon">>,<<"2.4.0">>},0}]}.
 [
 {pkg_hash,[
@@ -23,6 +22,5 @@
  {<<"iso8601">>, <<"D1CEE73F56D71C35590C6B2DB2074873BF410BABAAB768F6EA566366D8CA4810">>},
  {<<"jsx">>, <<"D2F6E5F069C00266CAD52FB15D87C428579EA4D7D73A33669E12679E203329DD">>},
  {<<"lager">>, <<"387BCD836DC0C8AD9C6D90A0E0CE5B29676847950CBC527BCCC194A02028DE8E">>},
- {<<"poolboy">>, <<"392B007A1693A64540CEAD79830443ABF5762F5D30CF50BC95CB2C1AAAFA006B">>},
  {<<"recon">>, <<"901FF78B39C754FB4D6FD72DCF0DBD398967BBD2E4D59C08D4D7AA44A73DE91D">>}]}
 ].
