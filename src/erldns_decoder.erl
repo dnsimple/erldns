@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2015, Aetrion LLC
+%% Copyright (c) 2012-2018, DNSimple Corporation
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
@@ -34,7 +34,7 @@ decode_message(Bin) ->
         M -> M
       catch
         Exception:Reason ->
-          lager:error("Error decoding ~p (~p:~p)", [Bin, Exception, Reason]),
+          lager:error("Error decoding message (data: ~p, exception: ~p, reason: ~p)", [Bin, Exception, Reason]),
           {formerr, Reason, Bin}
       end
   end.

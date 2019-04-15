@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2015, Aetrion LLC
+%% Copyright (c) 2012-2018, DNSimple Corporation
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
@@ -27,7 +27,17 @@
 %% exception.
 -spec encode_message(dns:message()) -> dns:message_bin().
 encode_message(Response) ->
-  encode_message(Response, []).
+  case application:get_env(erldns, catch_exceptions) of
+    {ok, false} -> dns:encode_message(Response);
+    _ ->
+      try dns:encode_message(Response) of
+        M -> M
+      catch
+        Exception:Reason ->
+          lager:error("Error encoding (response: ~p, exception: ~p, reason: ~p)", [Response, Exception, Reason]),
+          encode_message(build_error_response(Response))
+      end
+  end.
 
 %% @doc Encode the DNS message into its binary representation. Use the
 %% Opts argument to pass in encoding options.
@@ -48,8 +58,8 @@ encode_message(Response, Opts) ->
         M -> M
       catch
         Exception:Reason ->
-          lager:error("Error encoding ~p (~p:~p)", [Response, Exception, Reason]),
-          encode_message(build_error_response(Response))
+          lager:error("Error encoding with truncation (response: ~p, exception: ~p, reason: ~p)", [Response, Exception, Reason]),
+          {false, encode_message(build_error_response(Response))}
       end
   end.
 

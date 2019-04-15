@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2015, Aetrion LLC
+%% Copyright (c) 2012-2018, DNSimple Corporation
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
@@ -209,7 +209,7 @@ init([]) ->
 % gen_server callbacks
 
 handle_call(Message, _From, State) ->
-  lager:debug("Received unsupported call: ~p", [Message]),
+  lager:debug("Received unsupported call (message: ~p)", [Message]),
   {reply, ok, State}.
 
 handle_cast({delete, Name}, State) ->
@@ -217,7 +217,7 @@ handle_cast({delete, Name}, State) ->
   {noreply, State};
 
 handle_cast(Message, State) ->
-  lager:debug("Received unsupported cast: ~p", [Message]),
+  lager:debug("Received unsupported cast (message: ~p)", [Message]),
   {noreply, State}.
 
 handle_info(_Message, State) ->
@@ -275,7 +275,7 @@ build_named_index(Records) ->
 sign_zone(Zone = #zone{keysets = []}) ->
   Zone;
 sign_zone(Zone) ->
-  lager:debug("Signing zone ~p", [Zone#zone.name]),
+  lager:debug("Signing zone (name: ~p)", [Zone#zone.name]),
   DnskeyRRs = lists:filter(erldns_records:match_type(?DNS_TYPE_DNSKEY), Zone#zone.records),
   KeyRRSigRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets)),
 
@@ -287,16 +287,16 @@ sign_zone(Zone) ->
 
 -spec(verify_zone(erldns:zone(), [dns:rr()], [dns:rr()]) -> boolean()).
 verify_zone(Zone, DnskeyRRs, KeyRRSigRecords) ->
-  lager:debug("Verify zone ~p", [Zone#zone.name]),
+  lager:debug("Verify zone (name: ~p)", [Zone#zone.name]),
   case lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 257 end, DnskeyRRs) of
     [] -> false;
     KSKs -> 
       lager:debug("KSKs: ~p", [KSKs]),
       KSKDnskey = lists:last(KSKs),
       RRSig = lists:last(KeyRRSigRecords),
-      lager:debug("Attempting to verify RRSIG with ~p", [KSKDnskey]),
+      lager:debug("Attempting to verify RRSIG (key: ~p)", [KSKDnskey]),
       VerifyResult = dnssec:verify_rrsig(RRSig, DnskeyRRs, [KSKDnskey], []),
-      lager:debug("KSK verified? ~p", [VerifyResult]),
+      lager:debug("KSK verification (verified?: ~p)", [VerifyResult]),
       VerifyResult
   end.
 

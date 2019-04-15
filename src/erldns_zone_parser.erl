@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2015, Aetrion LLC
+%% Copyright (c) 2012-2018, DNSimple Corporation
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
@@ -63,13 +63,13 @@ zone_to_erlang(Zone) ->
 %% @doc Register a list of custom parser modules.
 -spec register_parsers([module()]) -> ok.
 register_parsers(Modules) ->
-  lager:info("Registering custom parsers: ~p", [Modules]),
+  lager:info("Registering custom parsers (modules: ~p)", [Modules]),
   gen_server:call(?SERVER, {register_parsers, Modules}).
 
 %% @doc Regiaer a custom parser module.
 -spec register_parser(module()) -> ok.
 register_parser(Module) ->
-  lager:info("Registering custom parser: ~p", [Module]),
+  lager:info("Registering custom parser (module: ~p)", [Module]),
   gen_server:call(?SERVER, {register_parser, Module}).
 
 -spec list_parsers() -> [module()].
@@ -126,7 +126,13 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
                   case apply_context_options(Data) of
                     pass ->
                       case json_record_to_erlang(Data) of
-                        {} -> try_custom_parsers(Data, Parsers);
+                        {} ->
+                          case try_custom_parsers(Data, Parsers) of
+                            {} ->
+                                lager:warning("Unsupported record (data: ~p)", [Data]),
+                                {};
+                            ParsedRecord -> ParsedRecord
+                          end;
                         ParsedRecord -> ParsedRecord
                       end;
                     _ ->
@@ -135,7 +141,6 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
               end, JsonRecords),
   FilteredRecords = lists:filter(record_filter(), Records),
   DistinctRecords = lists:usort(FilteredRecords),
-  % lager:debug("After parsing for ~p: ~p", [Name, DistinctRecords]),
   {Name, Sha, DistinctRecords, parse_json_keys(JsonKeys)}.
 
 parse_json_keys(JsonKeys) -> parse_json_keys(JsonKeys, []).
@@ -221,7 +226,7 @@ try_custom_parsers(Data, [Parser|Rest]) ->
 
 % Internal converters
 json_record_to_erlang([Name, Type, _Ttl, null, _]) ->
-  lager:error("record name=~p type=~p has null data", [Name, Type]),
+  lager:error("Record has null data (name: ~p, type: ~p)", [Name, Type]),
   {};
 
 json_record_to_erlang([Name, <<"SOA">>, Ttl, Data, _Context]) ->
@@ -254,7 +259,7 @@ json_record_to_erlang([Name, <<"A">>, Ttl, Data, _Context]) ->
     {ok, Address} ->
       #dns_rr{name = Name, type = ?DNS_TYPE_A, data = #dns_rrdata_a{ip = Address}, ttl = Ttl};
     {error, Reason} ->
-      lager:error("Failed to parse A record address ~p: ~p", [Ip, Reason]),
+      lager:error("Failed to parse A record address (ip: ~p, reason: ~p)", [Ip, Reason]),
       {}
   end;
 
@@ -264,7 +269,7 @@ json_record_to_erlang([Name, <<"AAAA">>, Ttl, Data, _Context]) ->
     {ok, Address} ->
       #dns_rr{name = Name, type = ?DNS_TYPE_AAAA, data = #dns_rrdata_aaaa{ip = Address}, ttl = Ttl};
     {error, Reason} ->
-      lager:error("Failed to parse AAAA record address ~p: ~p", [Ip, Reason]),
+      lager:error("Failed to parse AAAA record address (ip: ~p, reason: ~p)", [Ip, Reason]),
       {}
   end;
 
@@ -327,7 +332,7 @@ json_record_to_erlang([Name, <<"TXT">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      lager:error("Error parsing TXT ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason])
+      lager:error("Error parsing TXT (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason])
   end;
 
 
@@ -360,7 +365,7 @@ json_record_to_erlang([Name, <<"SSHFP">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      lager:error("Error parsing SSHFP ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason]),
+      lager:error("Error parsing SSHFP (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
       {}
   end;
 
@@ -405,7 +410,26 @@ json_record_to_erlang([Name, <<"DS">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      lager:error("Error parsing DS ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason]),
+      lager:error("Error parsing DS (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
+      {}
+  end;
+
+json_record_to_erlang([Name, <<"CDS">>, Ttl, Data, _Context]) ->
+  try hex_to_bin(erldns_config:keyget(<<"digest">>, Data)) of
+    Digest ->
+      #dns_rr{
+         name = Name,
+         type = ?DNS_TYPE_CDS,
+         data = #dns_rrdata_cds{
+                   keytag = erldns_config:keyget(<<"keytag">>, Data),
+                   alg = erldns_config:keyget(<<"alg">>, Data),
+                   digest_type = erldns_config:keyget(<<"digest_type">>, Data),
+                   digest = Digest
+                  },
+         ttl = Ttl}
+  catch
+    Exception:Reason ->
+      lager:error("Error parsing CDS (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
       {}
   end;
 
@@ -425,12 +449,31 @@ json_record_to_erlang([Name, <<"DNSKEY">>, Ttl, Data, _Context]) ->
            ttl = Ttl})
   catch
     Exception:Reason ->
-      lager:error("Error parsing DNSKEY: ~p: ~p (~p: ~p)", [Name, Data, Exception, Reason]),
+      lager:error("Error parsing DNSKEY (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
+      {}
+  end;
+
+json_record_to_erlang([Name, <<"CDNSKEY">>, Ttl, Data, _Context]) ->
+  try base64_to_bin(erldns_config:keyget(<<"public_key">>, Data)) of
+    PublicKey ->
+      dnssec:add_keytag_to_cdnskey(
+        #dns_rr{
+           name = Name,
+           type = ?DNS_TYPE_CDNSKEY,
+           data = #dns_rrdata_cdnskey{
+                     flags = erldns_config:keyget(<<"flags">>, Data),
+                     protocol = erldns_config:keyget(<<"protocol">>, Data),
+                     alg = erldns_config:keyget(<<"alg">>, Data),
+                     public_key = PublicKey
+                    },
+           ttl = Ttl})
+  catch
+    Exception:Reason ->
+      lager:error("Error parsing CDNSKEY (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
       {}
   end;
 
 json_record_to_erlang(_Data) ->
-  %lager:debug("Cannot convert ~p", [Data]),
   {}.
 
 hex_to_bin(Bin) when is_binary(Bin) ->
@@ -510,6 +553,24 @@ json_record_aaaa_to_erlang_test() ->
                json_record_to_erlang([Name, <<"AAAA">>, 3600, [
                                                                {<<"ip">>, <<"::1">>}
                                                               ], undefined])).
+
+json_record_cds_to_erlang_test() ->
+  Name = <<"example-dnssec.com">>,
+  ?assertEqual(#dns_rr{name = Name,
+                       type = ?DNS_TYPE_CDS,
+                       data = #dns_rrdata_cds{
+                                  keytag = 0,
+                                  digest_type = 2,
+                                  alg = 8,
+                                  digest = hex_to_bin(<<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>)
+                                },
+                       ttl = 3600},
+               json_record_to_erlang([Name, <<"CDS">>, 3600, [
+                                                              {<<"keytag">>, 0},
+                                                              {<<"digest_type">>, 2},
+                                                              {<<"alg">>, 8},
+                                                              {<<"digest">>, <<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>}
+                                                             ], undefined])).
 
 hex_to_bin_test() ->
   ?assertEqual(<<"">>, hex_to_bin(<<"">>)),

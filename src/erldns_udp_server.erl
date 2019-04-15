@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2015, Aetrion LLC
+%% Copyright (c) 2012-2018, DNSimple Corporation
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
@@ -77,7 +77,6 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Message, State) ->
   {noreply, State}.
 handle_info(timeout, State) ->
-  %lager:info("UDP instance timed out"),
   {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
   Response = folsom_metrics:histogram_timed_update(udp_handoff_histogram, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]),
@@ -96,11 +95,11 @@ start(Port, InetFamily) ->
   start(erldns_config:get_address(InetFamily), Port, InetFamily).
 
 start(Address, Port, InetFamily) ->
-  lager:info("Starting UDP server for ~p on address ~p and port ~p", [InetFamily, Address, Port]),
+  lager:info("Starting UDP server (family: ~p, address: ~p, port: ~p)", [InetFamily, Address, Port]),
   case gen_udp:open(Port, [binary, {active, 100}, {reuseaddr, true},
                            {read_packets, 1000}, {ip, Address}, {recbuf, ?DEFAULT_UDP_RECBUF}, InetFamily]) of
     {ok, Socket} -> 
-      lager:info("UDP server (~p, address: ~p) opened socket: ~p", [InetFamily, Address, Socket]),
+      lager:info("UDP server (family: ~p, address: ~p, socket: ~p)", [InetFamily, Address, Socket]),
       {ok, Socket};
     {error, eacces} ->
       lager:error("Failed to open UDP socket. Need to run as sudo?"),
@@ -108,11 +107,11 @@ start(Address, Port, InetFamily) ->
   end.
 
 start(Address, Port, InetFamily, SocketOpts) ->
-  lager:info("Starting UDP server for ~p on address ~p and port ~p (sockopts: ~p)", [InetFamily, Address, Port, SocketOpts]),
+  lager:info("Starting UDP server (family: ~p, address: ~p, port ~p, sockopts: ~p)", [InetFamily, Address, Port, SocketOpts]),
   case gen_udp:open(Port, [{reuseaddr, true}, binary, {active, 100},
                            {read_packets, 1000}, {ip, Address}, {recbuf, ?DEFAULT_UDP_RECBUF}, InetFamily|SocketOpts]) of
     {ok, Socket} -> 
-      lager:info("UDP server (~p, address: ~p) opened socket: ~p", [InetFamily, Address, Socket]),
+      lager:info("UDP server (family: ~p, address: ~p, socket: ~p, sockopts: ~p)", [InetFamily, Address, Socket, SocketOpts]),
       {ok, Socket};
     {error, eacces} ->
       lager:error("Failed to open UDP socket. Need to run as sudo?"),

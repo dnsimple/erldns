@@ -49,11 +49,11 @@ create(schema) ->
     ok ->
       ok;
     {error, Reason} ->
-      lager:warning("Could not stop mnesia for reason ~p~n", [Reason])
+      lager:warning("Could not stop mnesia (reason: ~p)", [Reason])
   end,
   case mnesia:create_schema([node()]) of
     {error, {_, {already_exists, _}}} ->
-      lager:warning("The schema already exists on node ~p.~n", [node()]),
+      lager:warning("The schema already exists (node: ~p)", [node()]),
       ok;
     ok ->
       ok
@@ -73,8 +73,7 @@ create(zones) ->
                             {record_name, zone},
                             {disc_copies, [node()]}]) of
     {aborted, {already_exists, zones}} ->
-      lager:warning("The zone table already exists on node ~p.~n",
-                    [node()]),
+      lager:warning("The zone table already exists (node: ~p)", [node()]),
       ok;
     {atomic, ok} ->
       ok;
@@ -87,8 +86,7 @@ create(authorities) ->
                            [{attributes, record_info(fields, authorities)},
                             {disc_copies, [node()]}]) of
     {aborted, {already_exists, authorities}} ->
-      lager:warning("The authority table already exists on node ~p.~n",
-                    [node()]),
+      lager:warning("The authority table already exists (node: ~p)", [node()]),
       ok;
     {atomic, ok} ->
       ok;

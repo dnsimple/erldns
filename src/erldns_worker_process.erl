@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2018, Aetrion LLC
+%% Copyright (c) 2012-2018, DNSimple Corporation
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
@@ -42,6 +42,7 @@ start_link(Args) ->
 init(_Args) ->
   {ok, #state{}}.
 
+% Process a TCP request. Does not truncate the response.
 handle_call({process, DecodedMessage, Socket, {tcp, Address}}, _From, State) ->
   % Uncomment this and the function implementation to simulate a timeout when
   % querying www.example.com with the test zones
@@ -50,18 +51,11 @@ handle_call({process, DecodedMessage, Socket, {tcp, Address}}, _From, State) ->
   erldns_events:notify({start_handle, tcp, [{host, Address}]}),
   Response = erldns_handler:handle(DecodedMessage, {tcp, Address}),
   erldns_events:notify({end_handle, tcp, [{host, Address}]}),
-  case erldns_encoder:encode_message(Response) of
-    {false, EncodedMessage} ->
-      send_tcp_message(Socket, EncodedMessage);
-    {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-      send_tcp_message(Socket, EncodedMessage);
-    {false, EncodedMessage, _TsigMac} ->
-      send_tcp_message(Socket, EncodedMessage);
-    {true, EncodedMessage, _TsigMac, _Message} ->
-      send_tcp_message(Socket, EncodedMessage)
-  end,
+  EncodedMessage = erldns_encoder:encode_message(Response),
+  send_tcp_message(Socket, EncodedMessage),
   {reply, ok, State}; 
 
+% Process a UDP request. May truncate the response.
 handle_call({process, DecodedMessage, Socket, Port, {udp, Host}}, _From, State) ->
   % Uncomment this and the function implementation to simulate a timeout when
   % querying www.example.com with the test zones

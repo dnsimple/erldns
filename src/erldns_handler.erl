@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2015, Aetrion LLC
+%% Copyright (c) 2012-2018, DNSimple Corporation
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
@@ -59,11 +59,10 @@ get_handlers() ->
 % gen_server callbacks
 
 init([]) ->
-  %lager:info("Initialized the handler_registry"),
   {ok, #state{handlers=[]}}.
 
 handle_call({register_handler, RecordTypes, Module}, _, State) ->
-  %lager:info("Registered handler ~p for types ~p", [Module, RecordTypes]),
+  %lager:info("Registered handler (module: ~p, types: ~p)", [Module, RecordTypes]),
   {reply, ok, State#state{handlers = State#state.handlers ++ [{Module, RecordTypes}]}};
 handle_call({get_handlers}, _, State) ->
   {reply, State#state.handlers, State}.
@@ -88,7 +87,7 @@ handle(Message, Context = {_, Host}) when is_record(Message, dns_message) ->
 %% The message was bad so just return it.
 %% TODO: consider just throwing away the message
 handle(BadMessage, {_, Host}) ->
-  lager:error("Received a bad message: ~p from ~p", [BadMessage, Host]),
+  lager:error("Received a bad message (message: ~p, host: ~p)", [BadMessage, Host]),
   BadMessage.
 
 %% We throttle ANY queries to discourage use of our authoritative name servers
@@ -159,7 +158,7 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
         Exception:Reason ->
-          lager:error("Error answering request: ~p (~p)", [Exception, Reason]),
+          lager:error("Error answering request (exception: ~p, reason: ~p)", [Exception, Reason]),
           Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
       end
   end.
