@@ -60,7 +60,21 @@ resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   sort_answers(erldns_dnssec:handle(additional_processing(erldns_records:rewrite_soa_ttl(Records), Host, Zone), Zone, Qname, Qtype)).
 
 sort_answers(Message) ->
-  Message#dns_message{answers = lists:usort(Message#dns_message.answers)}.
+  Message#dns_message{answers = lists:usort(fun sort_fun/2, Message#dns_message.answers)}.
+
+-spec sort_fun(dns:rr(), dns:rr()) -> boolean().
+sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME, data = #dns_rrdata_cname{dname=Name}},
+         #dns_rr{type = ?DNS_TYPE_CNAME, name = Name}) ->
+  true;
+sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME, name = Name},
+         #dns_rr{type = ?DNS_TYPE_CNAME, data = #dns_rrdata_cname{dname=Name}}) ->
+  false;
+sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME}, #dns_rr{}) ->
+  true;
+sort_fun(#dns_rr{}, #dns_rr{type = ?DNS_TYPE_CNAME}) ->
+  false;
+sort_fun(A, B) ->
+  A =< B.
 
 %% No SOA was found for the Qname so we return the root hints
 %% Note: it seems odd that we are indicating we are authoritative here.
