@@ -20,8 +20,6 @@
         ]}
     ]},
   {lager, [
-      {handlers, [
-          {lager_file_backend, [{file, "log/debug.log"}, {level, debug}]}
-        ]}
+      {error_logger_redirect, false}
     ]}
 ].
