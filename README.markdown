@@ -6,13 +6,14 @@ Serve DNS authoritative responses...with Erlang.
 
 ## Building
 
-To build clean:
+To build:
 
-    ./build.sh
+   make 
 
-If you've already built once and just want to recompile the erl-dns source:
+To start fresh:
 
-    ./rebar compile
+  make fresh
+  make
 
 ## Zones
 
