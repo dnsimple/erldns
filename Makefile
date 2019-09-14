@@ -5,7 +5,7 @@ build:
 	./rebar3 compile
 
 fresh:
-	rm -Rf deps
+	rm -Rf _build
 	./rebar3 clean
 
 clean:
