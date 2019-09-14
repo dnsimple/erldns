@@ -300,6 +300,7 @@ verify_zone(Zone, DnskeyRRs, KeyRRSigRecords) ->
       VerifyResult
   end.
 
+% Rewrite the RRSIG TTL so it follows the same rewrite rules as the SOA TTL.
 rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
   SoaRR = lists:last(lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), ZoneRecords)),
   lists:map(
