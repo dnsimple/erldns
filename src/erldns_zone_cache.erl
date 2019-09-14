@@ -305,7 +305,13 @@ rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
   lists:map(
     fun(RR) ->
         case RR#dns_rr.type of
-          ?DNS_TYPE_RRSIG -> erldns_records:minimum_soa_ttl(RR, SoaRR#dns_rr.data);
+          ?DNS_TYPE_RRSIG ->
+            case RR#dns_rr.data#dns_rrdata_rrsig.type_covered of
+              ?DNS_TYPE_SOA ->
+                erldns_records:minimum_soa_ttl(RR, SoaRR#dns_rr.data);
+              _ ->
+                RR
+            end;
           _ -> RR
         end
     end, RRSigRecords).
