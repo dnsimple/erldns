@@ -1,3 +1,4 @@
+rebar3
 .rebar3
 *.beam
 *.dump
