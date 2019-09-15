@@ -19,7 +19,6 @@
 
 -behavior(gen_server).
 
--include_lib("parse_xfrm_utils/include/parse_xfrm_utils_if_than_else.hrl").
 -include_lib("dns/include/dns_records.hrl").
 
 %% API
@@ -54,20 +53,49 @@ start_link() ->
 %% @doc Throttle the given message if necessary.
 -spec throttle(dns:message(), Context :: {term(), Host :: inet:ip_address() | inet:hostname()}) ->
   ok | throttle_result().
+-if(not(ENABLED)).
+throttle(_Message, {_, _Host}) ->
+    %% lager:debug("Throttle not enabled"),
+    ok.
+-else.
 throttle(_Message, {tcp, _Host}) ->
   ok;
 throttle(Message, {_, Host}) ->
-  ?IF(?ENABLED,
-      begin
-        case lists:filter(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Message#dns_message.questions) of
-          [] -> ok;
-          _ -> record_request(maybe_throttle(Host))
-        end
-      end,
-      begin
-        %lager:debug("Throttle not enabled"),
-        ok
-      end).
+    case lists:filter(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Message#dns_message.questions) of
+        [] -> ok;
+        _ -> record_request(maybe_throttle(Host))
+    end.
+
+%% Internal
+-spec(maybe_throttle(inet:ip_address() | inet:hostname()) -> throttle_result()).
+maybe_throttle(Host) ->
+  case erldns_storage:select(host_throttle, Host) of
+    [{_, {ReqCount, LastRequestAt}}] ->
+      case is_throttled(Host, ReqCount, LastRequestAt) of
+        {true, NewReqCount} -> {throttled, Host, NewReqCount};
+        {false, NewReqCount} -> {ok, Host, NewReqCount}
+      end;
+    [] ->
+      {ok, Host, 1}
+  end.
+
+-spec(record_request(throttle_result()) -> throttle_result()).
+record_request(Res = {_ThrottleResponse, Host, ReqCount}) ->
+  erldns_storage:insert(host_throttle, {Host, {ReqCount, timestamp()}}),
+  Res.
+
+is_throttled({127,0,0,1}, ReqCount, _) -> {false, ReqCount + 1};
+is_throttled(Host, ReqCount, LastRequestAt) ->
+  ExceedsLimit = ReqCount >= ?LIMIT,
+  Expired = timestamp() - LastRequestAt > ?EXPIRATION,
+  case Expired of
+    true ->
+      erldns_storage:delete(host_throttle, Host),
+      {false, 1};
+    false ->
+      {ExceedsLimit, ReqCount + 1}
+  end.
+-endif.
 
 %% @doc Sweep the query throttle table for expired host records.
 -spec sweep() -> any().
@@ -104,36 +132,7 @@ terminate(_Reason, _State) ->
 code_change(_PreviousVersion, State, _Extra) ->
   {ok, State}.
 
-
-% Internal API
--spec(maybe_throttle(inet:ip_address() | inet:hostname()) -> throttle_result()).
-maybe_throttle(Host) ->
-  case erldns_storage:select(host_throttle, Host) of
-    [{_, {ReqCount, LastRequestAt}}] -> 
-      case is_throttled(Host, ReqCount, LastRequestAt) of
-        {true, NewReqCount} -> {throttled, Host, NewReqCount};
-        {false, NewReqCount} -> {ok, Host, NewReqCount}
-      end;
-    [] -> 
-      {ok, Host, 1}
-  end.
-
--spec(record_request(throttle_result()) -> throttle_result()).
-record_request(Res = {_ThrottleResponse, Host, ReqCount}) ->
-  erldns_storage:insert(host_throttle, {Host, {ReqCount, timestamp()}}),
-  Res.
-
-is_throttled({127,0,0,1}, ReqCount, _) -> {false, ReqCount + 1};
-is_throttled(Host, ReqCount, LastRequestAt) ->
-  ExceedsLimit = ReqCount >= ?LIMIT,
-  Expired = timestamp() - LastRequestAt > ?EXPIRATION,
-  case Expired of
-    true -> 
-      erldns_storage:delete(host_throttle, Host),
-      {false, 1};
-    false -> 
-      {ExceedsLimit, ReqCount + 1}
-  end.
+%% Internal API
 
 timestamp() ->
   {TM, TS, _} = os:timestamp(),

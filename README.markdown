@@ -33,7 +33,7 @@ Copy it to erldns.config and modify as needed.
 
 Launch directly:
 
-    erl -config erldns.config -pa ebin -pa deps/**/ebin -s erldns
+    rebar3 shell
 
 Or use Foreman:
 

@@ -1,9 +1,11 @@
 language: erlang
 sudo: false
 otp_release:
-  - 21.0 
+  - 21.0
 
 script:
+  - wget https://s3.amazonaws.com/rebar3/rebar3
+  - chmod +x rebar3
   - ./rebar3 compile
   - ./rebar3 eunit
   - ./rebar3 dialyzer

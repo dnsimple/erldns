@@ -16,7 +16,6 @@
 -module(erldns_worker_process).
 
 -include_lib("dns/include/dns.hrl").
--include_lib("parse_xfrm_utils/include/parse_xfrm_utils_if_than_else.hrl").
 
 -behaviour(gen_server).
 
@@ -32,7 +31,12 @@
 -define(MAX_PACKET_SIZE, 512).
 -define(REDIRECT_TO_LOOPBACK, false).
 -define(LOOPBACK_DEST, {127, 0, 0, 10}).
--define(DEST_HOST(Host), ?IF(?REDIRECT_TO_LOOPBACK, ?LOOPBACK_DEST, Host)).
+
+-if(?REDIRECT_TO_LOOPBACK).
+-define(DEST_HOST(_Host), ?LOOPBACK_DEST).
+-else.
+-define(DEST_HOST(Host), Host).
+-endif.
 
 -record(state, {}).
 
