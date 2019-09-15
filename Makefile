@@ -7,7 +7,6 @@ $(REBAR):
 	wget $(REBAR_URL) && chmod +x rebar3
 
 build: $(REBAR)
-	$(REBAR) get-deps
 	$(REBAR) compile
 
 fresh: $(REBAR)
@@ -18,6 +17,5 @@ clean: $(REBAR)
 	$(REBAR) clean
 
 test: $(REBAR)
-	$(REBAR) get-deps
 	$(REBAR) eunit
 	$(REBAR) dialyzer
