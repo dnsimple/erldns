@@ -16,7 +16,7 @@
 %% hands it to a worker process that has a set timeout.
 -module(erldns_worker).
 
--include_lib("dns/include/dns.hrl").
+-include_lib("dns_erlang/include/dns.hrl").
 
 -define(DEFAULT_UDP_PROCESS_TIMEOUT, 500).
 -define(DEFAULT_TCP_PROCESS_TIMEOUT, 1000).

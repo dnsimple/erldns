@@ -15,7 +15,7 @@
 %% @doc Worker module that processes a single DNS packet.
 -module(erldns_worker_process).
 
--include_lib("dns/include/dns.hrl").
+-include_lib("dns_erlang/include/dns.hrl").
 
 -behaviour(gen_server).
 

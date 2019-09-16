@@ -1,28 +1,22 @@
 {"1.1.0",
-[{<<"base32">>,
-  {git,"https://github.com/dnsimple/base32_erlang.git",
-       {ref,"8b1ebce8895662b05970f481c9ce1a9f44add50b"}},
-  1},
+[{<<"base32">>,{pkg,<<"base32">>,<<"0.1.0">>},1},
  {<<"bear">>,{pkg,<<"bear">>,<<"0.8.7">>},1},
- {<<"dns">>,
-  {git,"git://github.com/dnsimple/dns_erlang.git",
-       {ref,"f637bf991af01a46d80f5250a1cc19a37cc4ccd6"}},
-  0},
  {<<"dns_erlang">>,{pkg,<<"dns_erlang">>,<<"1.0.0">>},0},
- {<<"folsom">>,{pkg,<<"folsom">>,<<"0.8.7">>},0},
+ {<<"folsom">>,{pkg,<<"folsom">>,<<"0.8.8">>},0},
  {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},1},
  {<<"iso8601">>,{pkg,<<"iso8601">>,<<"1.3.1">>},0},
- {<<"jsx">>,{pkg,<<"jsx">>,<<"2.9.0">>},0},
- {<<"lager">>,{pkg,<<"lager">>,<<"3.6.9">>},0},
- {<<"recon">>,{pkg,<<"recon">>,<<"2.4.0">>},0}]}.
+ {<<"jsx">>,{pkg,<<"jsx">>,<<"2.10.0">>},0},
+ {<<"lager">>,{pkg,<<"lager">>,<<"3.8.0">>},0},
+ {<<"recon">>,{pkg,<<"recon">>,<<"2.5.0">>},0}]}.
 [
 {pkg_hash,[
+ {<<"base32">>, <<"044F6DC95709727CA2176F3E97A41DDAA76B5BC690D3536908618C0CB32616A2">>},
  {<<"bear">>, <<"16264309AE5D005D03718A5C82641FCC259C9E8F09ADEB6FD79CA4271168656F">>},
  {<<"dns_erlang">>, <<"3849B0A65F16FDA40BA734CF12CA259966FB2CB6E7F6C17F486716EEB724CDC0">>},
- {<<"folsom">>, <<"A885F0AEEE4C84270954C88A55A5A473D6B2C7493E32FFDC5765412DD555A951">>},
+ {<<"folsom">>, <<"9A2B02010F6727CB1948EF34E21CB66F3554B63355C3A31E8BCB10FB172C3170">>},
  {<<"goldrush">>, <<"F06E5D5F1277DA5C413E84D5A2924174182FB108DABB39D5EC548B27424CD106">>},
  {<<"iso8601">>, <<"D1CEE73F56D71C35590C6B2DB2074873BF410BABAAB768F6EA566366D8CA4810">>},
- {<<"jsx">>, <<"D2F6E5F069C00266CAD52FB15D87C428579EA4D7D73A33669E12679E203329DD">>},
- {<<"lager">>, <<"387BCD836DC0C8AD9C6D90A0E0CE5B29676847950CBC527BCCC194A02028DE8E">>},
- {<<"recon">>, <<"901FF78B39C754FB4D6FD72DCF0DBD398967BBD2E4D59C08D4D7AA44A73DE91D">>}]}
+ {<<"jsx">>, <<"77760560D6AC2B8C51FD4C980E9E19B784016AA70BE354CE746472C33BEB0B1C">>},
+ {<<"lager">>, <<"3402B9A7E473680CA179FC2F1D827CAB88DD37DD1E6113090C6F45EF05228A1C">>},
+ {<<"recon">>, <<"2F7FCBEC2C35034BADE2F9717F77059DC54EB4E929A3049CA7BA6775C0BD66CD">>}]}
 ].

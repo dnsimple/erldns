@@ -15,7 +15,7 @@
 %% @doc Resolve a DNS query.
 -module(erldns_resolver).
 
--include_lib("dns/include/dns.hrl").
+-include_lib("dns_erlang/include/dns.hrl").
 -include("erldns.hrl").
 
 -export([resolve/3]).

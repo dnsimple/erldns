@@ -15,7 +15,7 @@
 %% @doc Sample custom encoder.
 -module(sample_custom_zone_encoder).
 
--include_lib("dns/include/dns.hrl").
+-include_lib("dns_erlang/include/dns.hrl").
 -include("erldns.hrl").
 
 -export([encode_record/1]).

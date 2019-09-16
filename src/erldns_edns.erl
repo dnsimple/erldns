@@ -15,7 +15,7 @@
 %% @doc EDNS0 implementation.
 -module(erldns_edns).
 
--include_lib("dns/include/dns_records.hrl").
+-include_lib("dns_erlang/include/dns_records.hrl").
 
 -export([get_opts/1]).
 

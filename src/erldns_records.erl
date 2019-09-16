@@ -16,7 +16,7 @@
 -module(erldns_records).
 
 -include("erldns.hrl").
--include_lib("dns/include/dns.hrl").
+-include_lib("dns_erlang/include/dns.hrl").
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.

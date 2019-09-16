@@ -15,7 +15,7 @@
 %% @doc Implementation of AXFR with IP address whitelisting required.
 -module(erldns_axfr).
 
--include_lib("dns/include/dns.hrl").
+-include_lib("dns_erlang/include/dns.hrl").
 
 -export([is_enabled/2, optionally_append_soa/1]).
 

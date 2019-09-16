@@ -15,7 +15,7 @@
 %% @doc Example of a custom handler.
 -module(sample_custom_handler).
 
--include_lib("dns/include/dns.hrl").
+-include_lib("dns_erlang/include/dns.hrl").
 -include("erldns.hrl").
 
 -behavior(gen_server).

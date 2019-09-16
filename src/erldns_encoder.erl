@@ -16,7 +16,7 @@
 %% system crash.
 -module(erldns_encoder).
 
--include_lib("dns/include/dns_records.hrl").
+-include_lib("dns_erlang/include/dns_records.hrl").
 
 -export([encode_message/1, encode_message/2]).
 

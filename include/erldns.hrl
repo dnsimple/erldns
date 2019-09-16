@@ -1,4 +1,4 @@
--include_lib("dns/include/dns_records.hrl").
+-include_lib("dns_erlang/include/dns_records.hrl").
 
 -record(keyset, {
     key_signing_key :: crypto:rsa_private(),
