@@ -2,7 +2,7 @@
 
 Serve DNS authoritative responses...with Erlang.
 
-[![Build Status](https://travis-ci.org/dnsimple/erl-dns.png?branch=master)](https://travis-ci.org/dnsimple/erl-dns)
+[![Build Status](https://travis-ci.org/dnsimple/erldns.png?branch=master)](https://travis-ci.org/dnsimple/erldns)
 
 ## Building
 
