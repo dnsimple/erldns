@@ -1,3 +1,4 @@
+% -*- mode: Erlang; -*-
 {application, erldns,
  [{description, "Erlang Authoritative DNS Server"},
   {vsn, "1.0.0"},
