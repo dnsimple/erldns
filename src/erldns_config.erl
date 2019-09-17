@@ -88,12 +88,21 @@ get_servers() ->
              {processes, keyget(processes, Server, 1)}
             ]
         end, Servers);
-    _ -> []
+    undefined ->
+        lists:map(fun (Family) ->
+            [{name, Family},
+             {address, get_address(Family)},
+             {port, get_port()},
+             {family, Family}]
+        end, [inet, inet6])
   end.
 
 -ifdef(TEST).
 get_servers_undefined_test() ->
-  ?assertEqual([], get_servers()).
+  ?assertEqual([
+    [{name, inet}, {address, ?DEFAULT_IPV4_ADDRESS}, {port, ?DEFAULT_PORT}, {family, inet}],
+    [{name, inet6}, {address, ?DEFAULT_IPV6_ADDRESS}, {port, ?DEFAULT_PORT}, {family, inet6}]
+  ], get_servers()).
 
 get_servers_empty_list_test() ->
   application:set_env(erldns, servers, []),
