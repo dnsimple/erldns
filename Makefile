@@ -9,6 +9,9 @@ $(REBAR):
 build: $(REBAR)
 	$(REBAR) compile
 
+release: $(REBAR)
+	$(REBAR) release
+
 fresh: $(REBAR)
 	rm -Rf _build
 	$(REBAR) clean
