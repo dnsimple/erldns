@@ -35,9 +35,9 @@ Launch directly:
 
     rebar3 shell
 
-Or use Foreman:
+Or build a distribution with `rebar3 release` and run the release:
 
-    foreman start
+    ./_build/default/rel/erldns/bin/erldns foreground
 
 ## Querying
 
