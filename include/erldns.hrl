@@ -16,7 +16,7 @@
     version :: binary(),
     authority = [] :: [dns:rr()],
     record_count = 0 :: non_neg_integer(),
-    records = [] :: [dns:rr()],
+    records = [] :: [dns:rr()] | trimmed,
     records_by_name ::  #{binary() => [dns:rr()]} | trimmed,
     %% records_by_type is no longer in use, but cannot (easily) be deleted due to Mnesia schema evolution
     %% We cannot set it to undefined, because, again, when fetched from Mnesia, it may be set

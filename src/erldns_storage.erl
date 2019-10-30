@@ -168,7 +168,7 @@ load_zones(Filename) when is_list(Filename) ->
       lists:foreach(
         fun(JsonZone) ->
             Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-            ok = erldns_zone_cache:put_zone(Zone)
+            erldns_zone_cache:put_zone(Zone)
         end, JsonZones),
       lager:debug("Loaded zones (count: ~p)", [length(JsonZones)]),
       {ok, length(JsonZones)};

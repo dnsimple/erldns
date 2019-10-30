@@ -167,6 +167,8 @@ get_records_by_name(Name) ->
   % lager:info("get_records_by_name(Name) calls find_zone_in_cache(Name)"),
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
+      %lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), '_'}, '$1'},[],['$$']}], infinite));
+
       case erldns_storage:select(zone_records, {erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name)}) of
         [] -> [];
         [{_, Records}] -> Records
@@ -207,28 +209,29 @@ put_zone({Name, Sha, Records, Keys}) ->
   {Zone, _} = build_zone(Name, Sha, Records, Keys),
   SignedZone = sign_zone(Zone),
   NamedRecords = build_named_index(SignedZone#zone.records),
-  %put_zone(erldns:normalize_name(Name), SignedZone),
-  put_zone(erldns:normalize_name(Name), SignedZone#zone{records = trimmed}),
-  put_zone_records(erldns:normalize_name(Name), NamedRecords).
+  case put_zone(erldns:normalize_name(Name), SignedZone#zone{records = trimmed}) of
+    ok -> put_zone_records(erldns:normalize_name(Name), NamedRecords);
+    {error, Reason} -> {error, Reason}
+  end.
 
 %% @doc Put a zone into the cache and wait for a response.
--spec put_zone(binary(), erldns:zone()) -> ok | {error, Reason :: term()}.
+-spec put_zone(dns:name(), _) -> ok | {error, Reason :: term()}.
 put_zone(Name, Zone) ->
   erldns_storage:insert(zones, {erldns:normalize_name(Name), Zone}).
 
+-spec put_zone_records(dns:name(), map()) -> ok.
 put_zone_records(Name, RecordsByName) ->
   put_zone_records_entry(Name, maps:next(maps:iterator(RecordsByName))).
 
 put_zone_records_entry(_, none) ->
-  none;
+  ok;
 put_zone_records_entry(Name, {K, V, I}) ->
-  % lager:info("Insert ~p", [{{Name, K}, V}]),
   erldns_storage:insert(zone_records, {{erldns:normalize_name(Name), erldns:normalize_name(K)}, V}),
   put_zone_records_typed_entry(Name, K, maps:next(maps:iterator(build_typed_index(V)))),
   put_zone_records_entry(Name, maps:next(I)).
 
 put_zone_records_typed_entry(_, _, none) ->
-  none;
+  ok;
 put_zone_records_typed_entry(ZoneName, Fqdn, {K, V, I}) ->
   erldns_storage:insert(zone_records_typed, {{erldns:normalize_name(ZoneName), erldns:normalize_name(Fqdn), K}, V}),
   put_zone_records_typed_entry(ZoneName, Fqdn, maps:next(I)).
