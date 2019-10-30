@@ -36,6 +36,8 @@ create(Name = zones) ->
   create_ets_table(Name, set);
 create(Name = zone_records) ->
   create_ets_table(Name, set);
+create(Name = zone_records_typed) ->
+  create_ets_table(Name, set);
 create(Name = authorities) ->
   create_ets_table(Name, set);
 %% These tables should always use ets. Due to their functionality

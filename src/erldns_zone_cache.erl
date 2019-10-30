@@ -144,7 +144,8 @@ get_delegations(Name) ->
   %lager:info("get_delegations(Name) calls find_zone_in_cache(Name)"),
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      lists:filter(fun(R) -> apply(erldns_records:match_type(?DNS_TYPE_NS), [R]) and apply(erldns_records:match_delegation(Name), [R]) end, Zone#zone.records);
+      Records = lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), '_', ?DNS_TYPE_NS}, '$1'},[],['$$']}], infinite)),
+      lists:filter(erldns_records:match_delegation(Name), Records);
     _ ->
       []
   end.
@@ -211,7 +212,14 @@ put_zone_records_entry(_, none) ->
 put_zone_records_entry(Name, {K, V, I}) ->
   % lager:info("Insert ~p", [{{Name, K}, V}]),
   erldns_storage:insert(zone_records, {{erldns:normalize_name(Name), erldns:normalize_name(K)}, V}),
+  put_zone_records_typed_entry(Name, K, maps:next(maps:iterator(build_typed_index(V)))),
   put_zone_records_entry(Name, maps:next(I)).
+
+put_zone_records_typed_entry(_, _, none) ->
+  none;
+put_zone_records_typed_entry(ZoneName, Fqdn, {K, V, I}) ->
+  erldns_storage:insert(zone_records_typed, {{erldns:normalize_name(ZoneName), erldns:normalize_name(Fqdn), K}, V}),
+  put_zone_records_typed_entry(ZoneName, Fqdn, maps:next(I)).
 
 %% @doc Remove a zone from the cache without waiting for a response.
 -spec delete_zone(binary()) -> any().
@@ -229,6 +237,7 @@ init([]) ->
   erldns_storage:create(schema),
   erldns_storage:create(zones),
   erldns_storage:create(zone_records),
+  erldns_storage:create(zone_records_typed),
   erldns_storage:create(authorities),
   {ok, #state{parsers = []}}.
 
@@ -298,6 +307,13 @@ build_named_index(Records) ->
     maps:update_with(Name, fun (RR) -> [R | RR] end, [R], Idx)
   end, #{}, Records),
   maps:map(fun (_K, V) -> lists:reverse(V) end, NamedIndex).
+
+-spec(build_typed_index([#dns_rr{}]) -> #{dns:type() => [#dns_rr{}]}).
+build_typed_index(Records) ->
+  TypedIndex = lists:foldl(fun (R, Idx) ->
+    maps:update_with(R#dns_rr.type, fun (RR) -> [R | RR] end, [R], Idx)
+  end, #{}, Records),
+  maps:map(fun (_K, V) -> lists:reverse(V) end, TypedIndex).
 
 -spec(sign_zone(erldns:zone()) -> erldns:zone()).
 sign_zone(Zone = #zone{keysets = []}) ->
