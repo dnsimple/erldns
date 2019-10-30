@@ -56,7 +56,7 @@ resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_
 %% If the request required DNSSEC, apply the DNSSEC records
 -spec resolve(dns:message(), [dns:rr()], dns:dname(), dns:type(), dns:ip()) -> dns:message().
 resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
-  Zone =erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), 
+  Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), 
   Records = resolve(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
   sort_answers(erldns_dnssec:handle(additional_processing(erldns_records:rewrite_soa_ttl(Records), Host, Zone), Zone, Qname, Qtype)).
 
