@@ -40,6 +40,7 @@
          get_authority/1,
          get_delegations/1,
          get_records_by_name/1,
+         get_records_by_name_and_type/2,
          in_zone/1,
          zone_names_and_versions/0
         ]).
@@ -150,6 +151,16 @@ get_delegations(Name) ->
       []
   end.
 
+%% @doc Get all records for the given type and given name.
+-spec get_records_by_name_and_type(dns:dname(), dns:type()) -> [dns:rr()].
+get_records_by_name_and_type(Name, Type) ->
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), Type}, '$1'},[],['$$']}], infinite));
+    _ ->
+      []
+  end.
+
 %% @doc Return the record set for the given dname.
 -spec get_records_by_name(dns:dname()) -> [dns:rr()].
 get_records_by_name(Name) ->
@@ -196,7 +207,8 @@ put_zone({Name, Sha, Records, Keys}) ->
   {Zone, _} = build_zone(Name, Sha, Records, Keys),
   SignedZone = sign_zone(Zone),
   NamedRecords = build_named_index(SignedZone#zone.records),
-  put_zone(erldns:normalize_name(Name), SignedZone),
+  %put_zone(erldns:normalize_name(Name), SignedZone),
+  put_zone(erldns:normalize_name(Name), SignedZone#zone{records = trimmed}),
   put_zone_records(erldns:normalize_name(Name), NamedRecords).
 
 %% @doc Put a zone into the cache and wait for a response.

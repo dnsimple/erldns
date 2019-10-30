@@ -118,12 +118,12 @@ handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false, _) ->
   Message.
 
 -spec(find_rrsigs([dns:rr()], [dns:rr()]) -> [dns:rr()]).
-find_rrsigs(ZoneRecords, MessageRecords) ->
+find_rrsigs(_ZoneRecords, MessageRecords) ->
   NamesAndTypes = lists:usort(lists:map(fun(RR) -> {RR#dns_rr.name, RR#dns_rr.type} end, MessageRecords)),
   lists:flatten(
     lists:map(
       fun({Name, Type}) ->
-          NamedRRSigs = lists:filter(erldns_records:match_name_and_type(Name, ?DNS_TYPE_RRSIG), ZoneRecords),
+          NamedRRSigs = erldns_zone_cache:get_records_by_name_and_type(Name, ?DNS_TYPE_RRSIG),
           lists:filter(erldns_records:match_type_covered(Type), NamedRRSigs)
       end, NamesAndTypes)).
 
@@ -140,8 +140,8 @@ find_unsigned_records(Records) ->
         (RR#dns_rr.type =/= ?DNS_TYPE_RRSIG) and (lists:filter(erldns_records:match_name_and_type(RR#dns_rr.name, ?DNS_TYPE_RRSIG), Records) =:= [])
     end, Records).
 
-record_types_for_name(Name, Records) ->
-  RecordsAtName = lists:filter(erldns_records:match_name(Name), Records),
+record_types_for_name(Name, _Records) ->
+  RecordsAtName = erldns_zone_cache:get_records_by_name(Name),
   TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
   lists:usort(TypesCovered ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]).
 
