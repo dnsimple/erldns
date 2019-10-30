@@ -203,7 +203,7 @@ put_zone({Name, Sha, Records, Keys}) ->
   end.
 
 %% @doc Put a zone into the cache and wait for a response.
--spec put_zone(dns:name(), _) -> ok | {error, Reason :: term()}.
+-spec put_zone(dns:name(), erldns:zone()) -> ok | {error, Reason :: term()}.
 put_zone(Name, Zone) ->
   erldns_storage:insert(zones, {erldns:normalize_name(Name), Zone}).
 
