@@ -195,8 +195,7 @@ zone_names_and_versions() ->
 put_zone({Name, Sha, Records}) ->
     put_zone({Name, Sha, Records, []});
 put_zone({Name, Sha, Records, Keys}) ->
-  {Zone, _} = build_zone(Name, Sha, Records, Keys),
-  SignedZone = sign_zone(Zone),
+  SignedZone = sign_zone(build_zone(Name, Sha, Records, Keys)),
   NamedRecords = build_named_index(SignedZone#zone.records),
   case put_zone(erldns:normalize_name(Name), SignedZone#zone{records = trimmed}) of
     ok -> put_zone_records(erldns:normalize_name(Name), NamedRecords);
@@ -300,7 +299,7 @@ find_zone_in_cache(Name, [_|Labels]) ->
 
 build_zone(Qname, Version, Records, Keys) ->
   Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
-  {#zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = trimmed, keysets = Keys}, []}. 
+  #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = trimmed, keysets = Keys}.
 
 -spec(build_named_index([#dns_rr{}]) -> #{binary() => [#dns_rr{}]}).
 build_named_index(Records) ->
