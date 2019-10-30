@@ -110,15 +110,16 @@ handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
 
       erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true, rc = ?DNS_RCODE_NOERROR, authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords}, Zone));
     _ ->
-      AnswerSignatures = find_rrsigs(ZoneWithRecords#zone.records, Message#dns_message.answers),
-      AuthoritySignatures = find_rrsigs(ZoneWithRecords#zone.records, Message#dns_message.authority),
+      AnswerSignatures = find_rrsigs(Message#dns_message.answers),
+      AuthoritySignatures = find_rrsigs(Message#dns_message.authority),
       erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true, answers = Message#dns_message.answers ++ AnswerSignatures, authority = Message#dns_message.authority ++ AuthoritySignatures}, Zone))
   end;
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false, _) ->
   Message.
 
--spec(find_rrsigs([dns:rr()], [dns:rr()]) -> [dns:rr()]).
-find_rrsigs(_ZoneRecords, MessageRecords) ->
+% @doc Find all RRSIG records that cover the records in the provided record list.
+-spec(find_rrsigs([dns:rr()]) -> [dns:rr()]).
+find_rrsigs(MessageRecords) ->
   NamesAndTypes = lists:usort(lists:map(fun(RR) -> {RR#dns_rr.name, RR#dns_rr.type} end, MessageRecords)),
   lists:flatten(
     lists:map(
