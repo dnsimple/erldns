@@ -24,11 +24,6 @@
 -include_lib("dns_erlang/include/dns.hrl").
 -include("erldns.hrl").
 
--ifdef(TEST).
--include_lib("proper/include/proper.hrl").
--include_lib("eunit/include/eunit.hrl").
--endif.
-
 -export([start_link/0]).
 
 % Read APIs
@@ -132,7 +127,6 @@ get_authority(Message) when is_record(Message, dns_message) ->
       get_authority(Question#dns_query.name)
   end;
 get_authority(Name) ->
-  %lager:info("get_authority(Name) calls find_zone_in_cache(Name)"),
   case find_zone_in_cache(erldns:normalize_name(Name)) of
     {ok, Zone} -> {ok, Zone#zone.authority};
     _ -> {error, authority_not_found}
@@ -142,7 +136,6 @@ get_authority(Name) ->
 %% will always return a list, even if it is empty.
 -spec get_delegations(dns:dname()) -> [dns:rr()] | [].
 get_delegations(Name) ->
-  %lager:info("get_delegations(Name) calls find_zone_in_cache(Name)"),
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
       Records = lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), '_', ?DNS_TYPE_NS}, '$1'},[],['$$']}], infinite)),
@@ -164,11 +157,8 @@ get_records_by_name_and_type(Name, Type) ->
 %% @doc Return the record set for the given dname.
 -spec get_records_by_name(dns:dname()) -> [dns:rr()].
 get_records_by_name(Name) ->
-  % lager:info("get_records_by_name(Name) calls find_zone_in_cache(Name)"),
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      %lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), '_'}, '$1'},[],['$$']}], infinite));
-
       case erldns_storage:select(zone_records, {erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name)}) of
         [] -> [];
         [{_, Records}] -> Records
@@ -180,7 +170,6 @@ get_records_by_name(Name) ->
 %% @doc Check if the name is in a zone.
 -spec in_zone(binary()) -> boolean().
 in_zone(Name) ->
-  %lager:info("in_zone(Name) calls find_zone_in_cache(Name)"),
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
       is_name_in_zone(Name, Zone);
@@ -300,9 +289,7 @@ find_zone_in_cache(Qname) ->
 find_zone_in_cache(_Name, []) ->
   {error, zone_not_found};
 find_zone_in_cache(Name, [_|Labels]) ->
-  %lager:info("find_zone_in_cache(~p, ~p)", [Name, L]),
   case erldns_storage:select(zones, Name) of
-  % case t:t(<<"storage select">>, fun() -> erldns_storage:select(zones, Name) end) of
     [{Name, Zone}] -> {ok, Zone};
     _ ->
       case Labels of
