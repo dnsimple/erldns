@@ -34,6 +34,7 @@
          get_zone_with_records/1,
          get_authority/1,
          get_delegations/1,
+         get_zone_records/1,
          get_records_by_name/1,
          get_records_by_name_and_type/2,
          in_zone/1,
@@ -140,6 +141,16 @@ get_delegations(Name) ->
     {ok, Zone} ->
       Records = lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), '_', ?DNS_TYPE_NS}, '$1'},[],['$$']}], infinite)),
       lists:filter(erldns_records:match_delegation(Name), Records);
+    _ ->
+      []
+  end.
+
+%% @doc Get all records for the given zone.
+-spec get_zone_records(dns:dname()) -> [dns:rr()].
+get_zone_records(Name) ->
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      lists:flatten(erldns_storage:select(zone_records, [{{{erldns:normalize_name(Zone#zone.name), '_'}, '$1'},[],['$$']}], infinite));
     _ ->
       []
   end.
