@@ -24,6 +24,7 @@
          insert/2,
          delete_table/1,
          delete/2,
+         select_delete/2,
          backup_table/1,
          backup_tables/0,
          select/2,
@@ -107,6 +108,11 @@ delete_table(Table)->
 delete(Table, Key) ->
   Module = mod(Table),
   Module:delete(Table, Key).
+
+-spec select_delete(atom(), list()) -> {ok, Count :: integer()} | {error, Reason :: term()}.
+select_delete(Table, MatchSpec) ->
+  Module = mod(Table),
+  Module:select_delete(Table, MatchSpec).
 
 %% @doc Backup the table to the JSON file.
 %% @see https://github.com/SiftLogic/erl-dns/issues/3

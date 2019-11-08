@@ -200,7 +200,7 @@ zone_names_and_versions() ->
 %% @doc Put a name and its records into the cache, along with a SHA which can be
 %% used to determine if the zone requires updating.
 %%
-%% This function will build the necessary Zone record before interting.
+%% This function will build the necessary Zone record before inserting.
 -spec put_zone({Name, Sha, Records, Keys} | {Name, Sha, Records}) -> ok | {error, Reason :: term()}
   when Name :: binary(), Sha :: binary(), Records :: [dns:rr()], Keys :: [erldns:keyset()].
 put_zone({Name, Sha, Records}) ->
@@ -208,6 +208,7 @@ put_zone({Name, Sha, Records}) ->
 put_zone({Name, Sha, Records, Keys}) ->
   SignedZone = sign_zone(build_zone(Name, Sha, Records, Keys)),
   NamedRecords = build_named_index(SignedZone#zone.records),
+  delete_zone_records(erldns:normalize_name(Name)),
   case put_zone(erldns:normalize_name(Name), SignedZone#zone{records = trimmed}) of
     ok -> put_zone_records(erldns:normalize_name(Name), NamedRecords);
     {error, Reason} -> {error, Reason}
@@ -240,6 +241,11 @@ put_zone_records_typed_entry(ZoneName, Fqdn, {K, V, I}) ->
 delete_zone(Name) ->
   gen_server:cast(?SERVER, {delete, Name}).
 
+-spec delete_zone_records(binary()) -> any().
+delete_zone_records(Name) ->
+  erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(Name), '_'}, '_'},[],['$$']}]),
+  erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), '_', '_'}, '_'},[],['$$']}]).
+
 
 
 % ----------------------------------------------------------------------------------------------------
@@ -264,6 +270,7 @@ handle_call(Message, _From, State) ->
 
 handle_cast({delete, Name}, State) ->
   erldns_storage:delete(zones, erldns:normalize_name(Name)),
+  delete_zone_records(Name),
   {noreply, State};
 
 handle_cast(Message, State) ->

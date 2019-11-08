@@ -24,6 +24,7 @@
          insert/2,
          delete_table/1,
          delete/2,
+         select_delete/2,
          backup_table/1,
          backup_tables/0,
          select/2,
@@ -145,7 +146,11 @@ delete(Table, Key)->
       mnesia:dirty_delete({Table, Key})
   end.
 
+-spec select_delete(atom(), list()) -> {ok, Count :: integer()} | {error, Reason :: term()}.
+select_delete(_Table, _MatchSpec)->
+  {error, not_implemented}.
 
+%%
 %% @doc Should backup the tables in the schema.
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_table(atom()) -> ok | {error, Reason :: term()}.

@@ -19,6 +19,7 @@
          insert/2,
          delete_table/1,
          delete/2,
+         select_delete/2,
          backup_table/1,
          backup_tables/0,
          select/2,
@@ -67,6 +68,12 @@ delete_table(Table)->
 delete(Table, Key) ->
   ets:delete(Table, Key),
   ok.
+
+%% @doc Delete entries in the ets table that match the provided spec.
+-spec select_delete(atom(), list()) -> {ok, Count :: integer()} | {error, Reason :: term()}.
+select_delete(Table, MatchSpec) ->
+  Count = ets:select_delete(Table, MatchSpec),
+  {ok, Count}.
 
 %% @doc Backup a specific ets table.
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
