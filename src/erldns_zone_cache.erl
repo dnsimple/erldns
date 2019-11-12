@@ -243,11 +243,8 @@ delete_zone(Name) ->
 
 -spec delete_zone_records(binary()) -> any().
 delete_zone_records(Name) ->
-  lager:info("Delete zone records for ~p", [Name]),
-  ZoneRecordsDeleted = erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(Name), '_'}, '_'},[],[true]}]),
-  lager:info("zone_records deleted: ~p", [ZoneRecordsDeleted]),
-  ZoneRecordsTypedDeleted = erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), '_', '_'}, '_'},[],[true]}]),
-  lager:info("zone_records_typed deleted: ~p", [ZoneRecordsTypedDeleted]).
+  erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(Name), '_'}, '_'},[],[true]}]),
+  erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), '_', '_'}, '_'},[],[true]}]).
 
 
 
