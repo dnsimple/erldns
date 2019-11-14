@@ -192,25 +192,17 @@ delete(Table, Key)->
 -spec select_delete(atom(), list()) -> {ok, Count :: integer()} | {error, Reason :: term()}.
 select_delete(Table, [{{{ZoneName, Fqdn}, _}, _, _}])->
   SelectDelete = fun() ->
-               case mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, write) of
-                 Records when is_list(Records)->
-                  lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
-                  {ok, length(Records)};
-                 _ ->
-                   {error, transaction_abort}
-               end
-           end,
+                     Records =  mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, write),
+                     lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
+                     {ok, length(Records)}
+                 end,
   mnesia:activity(transaction, SelectDelete);
 select_delete(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}])->
   SelectDelete = fun() ->
-               case mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, write) of
-                 Records when is_list(Records)->
-                  lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
-                  {ok, length(Records)};
-                 _ ->
-                   {error, transaction_abort}
-               end
-           end,
+                     Records = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, write),
+                     lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
+                     {ok, length(Records)}
+                 end,
   mnesia:activity(transaction, SelectDelete).
 
 %%
