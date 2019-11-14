@@ -186,9 +186,32 @@ delete(Table, Key)->
       mnesia:dirty_delete({Table, Key})
   end.
 
+%% @doc Delete all zone records or zone records typed based on the match spec. The match spec
+%% is given as an ETS match spec, thus it needs to be converted to a record match spec for
+%% Mnesia.
 -spec select_delete(atom(), list()) -> {ok, Count :: integer()} | {error, Reason :: term()}.
-select_delete(_Table, _MatchSpec)->
-  {error, not_implemented}.
+select_delete(Table, [{{{ZoneName, Fqdn}, _}, _, _}])->
+  SelectDelete = fun() ->
+               case mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, write) of
+                 Records when is_list(Records)->
+                  lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
+                  {ok, length(Records)};
+                 _ ->
+                   {error, transaction_abort}
+               end
+           end,
+  mnesia:activity(transaction, SelectDelete);
+select_delete(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}])->
+  SelectDelete = fun() ->
+               case mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, write) of
+                 Records when is_list(Records)->
+                  lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
+                  {ok, length(Records)};
+                 _ ->
+                   {error, transaction_abort}
+               end
+           end,
+  mnesia:activity(transaction, SelectDelete).
 
 %%
 %% @doc Should backup the tables in the schema.
