@@ -37,5 +37,18 @@
     nxdomain
 }).
 
+-record(zone_records, {
+    zone_name,
+    fqdn,
+    records
+}).
+
+-record(zone_records_typed, {
+    zone_name,
+    fqdn,
+    type,
+    records
+}).
+
 -define(DNSKEY_ZSK_TYPE, 256).
 -define(DNSKEY_KSK_TYPE, 257).

@@ -81,6 +81,30 @@ create(zones) ->
     Error ->
       {error, Error}
   end;
+create(zone_records) ->
+  case mnesia:create_table(zone_records,
+                           [{attributes, record_info(fields, zone_records)},
+                            {disc_copies, [node()]}]) of
+    {aborted, {already_exists, zone_records}} ->
+      lager:warning("The zone records table already exists (node: ~p)", [node()]),
+      ok;
+    {atomic, ok} ->
+      ok;
+    Error ->
+      {error, Error}
+  end;
+create(zone_records_typed) ->
+  case mnesia:create_table(zone_records_typed,
+                           [{attributes, record_info(fields, zone_records_typed)},
+                            {disc_copies, [node()]}]) of
+    {aborted, {already_exists, zone_records_typed}} ->
+      lager:warning("The zone records table already exists (node: ~p)", [node()]),
+      ok;
+    {atomic, ok} ->
+      ok;
+    Error ->
+      {error, Error}
+  end;
 create(authorities) ->
   ok = ensure_mnesia_started(),
   case mnesia:create_table(authorities,
@@ -107,6 +131,22 @@ insert(zones, #zone{} = Zone)->
   end;
 insert(zones, {_N, #zone{} = Zone})->
   Write = fun() -> mnesia:write(zones, Zone, write) end,
+  case mnesia:activity(transaction, Write) of
+    ok ->
+      ok;
+    Error ->
+      {error, Error}
+  end;
+insert(zone_records, {{ZoneName, Fqdn}, Records}) ->
+  Write = fun() -> mnesia:write(zone_records, #zone_records{zone_name = ZoneName, fqdn = Fqdn, records = Records}, write) end,
+  case mnesia:activity(transaction, Write) of
+    ok ->
+      ok;
+    Error ->
+      {error, Error}
+  end;
+insert(zone_records_typed, {{ZoneName, Fqdn, Type}, Records}) ->
+  Write = fun() -> mnesia:write(zone_records_typed, #zone_records_typed{zone_name = ZoneName, fqdn = Fqdn, records = Records, type = Type}, write) end,
   case mnesia:activity(transaction, Write) of
     ok ->
       ok;
