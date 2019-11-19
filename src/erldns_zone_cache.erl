@@ -34,7 +34,9 @@
          get_zone_with_records/1,
          get_authority/1,
          get_delegations/1,
+         get_zone_records/1,
          get_records_by_name/1,
+         get_records_by_name_and_type/2,
          in_zone/1,
          zone_names_and_versions/0
         ]).
@@ -137,7 +139,28 @@ get_authority(Name) ->
 get_delegations(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      lists:filter(fun(R) -> apply(erldns_records:match_type(?DNS_TYPE_NS), [R]) and apply(erldns_records:match_delegation(Name), [R]) end, Zone#zone.records);
+      Records = lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), '_', ?DNS_TYPE_NS}, '$1'},[],['$$']}], infinite)),
+      lists:filter(erldns_records:match_delegation(Name), Records);
+    _ ->
+      []
+  end.
+
+%% @doc Get all records for the given zone.
+-spec get_zone_records(dns:dname()) -> [dns:rr()].
+get_zone_records(Name) ->
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      lists:flatten(erldns_storage:select(zone_records, [{{{erldns:normalize_name(Zone#zone.name), '_'}, '$1'},[],['$$']}], infinite));
+    _ ->
+      []
+  end.
+
+%% @doc Get all records for the given type and given name.
+-spec get_records_by_name_and_type(dns:dname(), dns:type()) -> [dns:rr()].
+get_records_by_name_and_type(Name, Type) ->
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), Type}, '$1'},[],['$$']}], infinite));
     _ ->
       []
   end.
@@ -147,7 +170,10 @@ get_delegations(Name) ->
 get_records_by_name(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      maps:get(erldns:normalize_name(Name), Zone#zone.records_by_name, []);
+      case erldns_storage:select(zone_records, {erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name)}) of
+        [] -> [];
+        [{_, Records}] -> Records
+      end; 
     _ ->
       []
   end.
@@ -174,23 +200,51 @@ zone_names_and_versions() ->
 %% @doc Put a name and its records into the cache, along with a SHA which can be
 %% used to determine if the zone requires updating.
 %%
-%% This function will build the necessary Zone record before interting.
+%% This function will build the necessary Zone record before inserting.
 -spec put_zone({Name, Sha, Records, Keys} | {Name, Sha, Records}) -> ok | {error, Reason :: term()}
   when Name :: binary(), Sha :: binary(), Records :: [dns:rr()], Keys :: [erldns:keyset()].
 put_zone({Name, Sha, Records}) ->
     put_zone({Name, Sha, Records, []});
 put_zone({Name, Sha, Records, Keys}) ->
-  put_zone(erldns:normalize_name(Name), build_zone(Name, Sha, Records, Keys)).
+  SignedZone = sign_zone(build_zone(Name, Sha, Records, Keys)),
+  NamedRecords = build_named_index(SignedZone#zone.records),
+  delete_zone_records(erldns:normalize_name(Name)),
+  case put_zone(erldns:normalize_name(Name), SignedZone#zone{records = trimmed}) of
+    ok -> put_zone_records(erldns:normalize_name(Name), NamedRecords);
+    {error, Reason} -> {error, Reason}
+  end.
 
 %% @doc Put a zone into the cache and wait for a response.
--spec put_zone(binary(), erldns:zone()) -> ok | {error, Reason :: term()}.
+-spec put_zone(dns:name(), erldns:zone()) -> ok | {error, Reason :: term()}.
 put_zone(Name, Zone) ->
-  erldns_storage:insert(zones, {erldns:normalize_name(Name), sign_zone(Zone)}).
+  erldns_storage:insert(zones, {erldns:normalize_name(Name), Zone}).
+
+-spec put_zone_records(dns:name(), map()) -> ok.
+put_zone_records(Name, RecordsByName) ->
+  put_zone_records_entry(Name, maps:next(maps:iterator(RecordsByName))).
+
+put_zone_records_entry(_, none) ->
+  ok;
+put_zone_records_entry(Name, {K, V, I}) ->
+  erldns_storage:insert(zone_records, {{erldns:normalize_name(Name), erldns:normalize_name(K)}, V}),
+  put_zone_records_typed_entry(Name, K, maps:next(maps:iterator(build_typed_index(V)))),
+  put_zone_records_entry(Name, maps:next(I)).
+
+put_zone_records_typed_entry(_, _, none) ->
+  ok;
+put_zone_records_typed_entry(ZoneName, Fqdn, {K, V, I}) ->
+  erldns_storage:insert(zone_records_typed, {{erldns:normalize_name(ZoneName), erldns:normalize_name(Fqdn), K}, V}),
+  put_zone_records_typed_entry(ZoneName, Fqdn, maps:next(I)).
 
 %% @doc Remove a zone from the cache without waiting for a response.
 -spec delete_zone(binary()) -> any().
 delete_zone(Name) ->
   gen_server:cast(?SERVER, {delete, Name}).
+
+-spec delete_zone_records(binary()) -> any().
+delete_zone_records(Name) ->
+  erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(Name), '_'}, '_'},[],[true]}]),
+  erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), '_', '_'}, '_'},[],[true]}]).
 
 
 
@@ -202,6 +256,8 @@ delete_zone(Name) ->
 init([]) ->
   erldns_storage:create(schema),
   erldns_storage:create(zones),
+  erldns_storage:create(zone_records),
+  erldns_storage:create(zone_records_typed),
   erldns_storage:create(authorities),
   {ok, #state{parsers = []}}.
 
@@ -214,6 +270,7 @@ handle_call(Message, _From, State) ->
 
 handle_cast({delete, Name}, State) ->
   erldns_storage:delete(zones, erldns:normalize_name(Name)),
+  delete_zone_records(Name),
   {noreply, State};
 
 handle_cast(Message, State) ->
@@ -232,14 +289,14 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 % Internal API
 is_name_in_zone(Name, Zone) ->
-  case maps:is_key(erldns:normalize_name(Name), Zone#zone.records_by_name) of
-    true -> true;
-    false ->
+  case erldns_storage:select(zone_records, {erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name)}) of
+    [] -> 
       case dns:dname_to_labels(Name) of
         [] -> false;
         [_] -> false;
         [_|Labels] -> is_name_in_zone(dns:labels_to_dname(Labels), Zone)
-      end
+      end;
+    _ -> true 
   end.
 
 find_zone_in_cache(Qname) ->
@@ -259,17 +316,23 @@ find_zone_in_cache(Name, [_|Labels]) ->
   end.
 
 build_zone(Qname, Version, Records, Keys) ->
-  RecordsByName = build_named_index(Records),
   Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
-  #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = RecordsByName, keysets = Keys}.
+  #zone{name = Qname, version = Version, record_count = length(Records), authority = Authorities, records = Records, records_by_name = trimmed, keysets = Keys}.
 
 -spec(build_named_index([#dns_rr{}]) -> #{binary() => [#dns_rr{}]}).
 build_named_index(Records) ->
-  Idx0 = lists:foldl(fun (R, Idx) ->
+  NamedIndex = lists:foldl(fun (R, Idx) ->
     Name = erldns:normalize_name(R#dns_rr.name),
     maps:update_with(Name, fun (RR) -> [R | RR] end, [R], Idx)
   end, #{}, Records),
-  maps:map(fun (_K, V) -> lists:reverse(V) end, Idx0).
+  maps:map(fun (_K, V) -> lists:reverse(V) end, NamedIndex).
+
+-spec(build_typed_index([#dns_rr{}]) -> #{dns:type() => [#dns_rr{}]}).
+build_typed_index(Records) ->
+  TypedIndex = lists:foldl(fun (R, Idx) ->
+    maps:update_with(R#dns_rr.type, fun (RR) -> [R | RR] end, [R], Idx)
+  end, #{}, Records),
+  maps:map(fun (_K, V) -> lists:reverse(V) end, TypedIndex).
 
 -spec(sign_zone(erldns:zone()) -> erldns:zone()).
 sign_zone(Zone = #zone{keysets = []}) ->
@@ -278,12 +341,11 @@ sign_zone(Zone) ->
   lager:debug("Signing zone (name: ~p)", [Zone#zone.name]),
   DnskeyRRs = lists:filter(erldns_records:match_type(?DNS_TYPE_DNSKEY), Zone#zone.records),
   KeyRRSigRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets)),
-
   verify_zone(Zone, DnskeyRRs, KeyRRSigRecords),
-
   % TODO: remove wildcard signatures as they will not be used but are taking up space
   ZoneRRSigRecords = lists:flatten(lists:map(erldns_dnssec:zone_rrset_signer(Zone#zone.name, lists:filter(fun(RR) -> (RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY) end, Zone#zone.records)), Zone#zone.keysets)),
-  build_zone(Zone#zone.name, Zone#zone.version, Zone#zone.records ++ KeyRRSigRecords ++ rewrite_soa_rrsig_ttl(Zone#zone.records, ZoneRRSigRecords -- lists:filter(erldns_records:match_wildcard(), ZoneRRSigRecords)), Zone#zone.keysets).
+  Records = Zone#zone.records ++ KeyRRSigRecords ++ rewrite_soa_rrsig_ttl(Zone#zone.records, ZoneRRSigRecords -- lists:filter(erldns_records:match_wildcard(), ZoneRRSigRecords)),
+  #zone{name = Zone#zone.name, version = Zone#zone.version, record_count = length(Records), authority = Zone#zone.authority, records = Records, records_by_name = build_named_index(Records), keysets = Zone#zone.keysets}.
 
 -spec(verify_zone(erldns:zone(), [dns:rr()], [dns:rr()]) -> boolean()).
 verify_zone(Zone, DnskeyRRs, KeyRRSigRecords) ->

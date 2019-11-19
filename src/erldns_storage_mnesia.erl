@@ -24,6 +24,7 @@
          insert/2,
          delete_table/1,
          delete/2,
+         select_delete/2,
          backup_table/1,
          backup_tables/0,
          select/2,
@@ -80,6 +81,30 @@ create(zones) ->
     Error ->
       {error, Error}
   end;
+create(zone_records) ->
+  case mnesia:create_table(zone_records,
+                           [{attributes, record_info(fields, zone_records)},
+                            {disc_copies, [node()]}]) of
+    {aborted, {already_exists, zone_records}} ->
+      lager:warning("The zone records table already exists (node: ~p)", [node()]),
+      ok;
+    {atomic, ok} ->
+      ok;
+    Error ->
+      {error, Error}
+  end;
+create(zone_records_typed) ->
+  case mnesia:create_table(zone_records_typed,
+                           [{attributes, record_info(fields, zone_records_typed)},
+                            {disc_copies, [node()]}]) of
+    {aborted, {already_exists, zone_records_typed}} ->
+      lager:warning("The zone records table already exists (node: ~p)", [node()]),
+      ok;
+    {atomic, ok} ->
+      ok;
+    Error ->
+      {error, Error}
+  end;
 create(authorities) ->
   ok = ensure_mnesia_started(),
   case mnesia:create_table(authorities,
@@ -106,6 +131,22 @@ insert(zones, #zone{} = Zone)->
   end;
 insert(zones, {_N, #zone{} = Zone})->
   Write = fun() -> mnesia:write(zones, Zone, write) end,
+  case mnesia:activity(transaction, Write) of
+    ok ->
+      ok;
+    Error ->
+      {error, Error}
+  end;
+insert(zone_records, {{ZoneName, Fqdn}, Records}) ->
+  Write = fun() -> mnesia:write(zone_records, #zone_records{zone_name = ZoneName, fqdn = Fqdn, records = Records}, write) end,
+  case mnesia:activity(transaction, Write) of
+    ok ->
+      ok;
+    Error ->
+      {error, Error}
+  end;
+insert(zone_records_typed, {{ZoneName, Fqdn, Type}, Records}) ->
+  Write = fun() -> mnesia:write(zone_records_typed, #zone_records_typed{zone_name = ZoneName, fqdn = Fqdn, records = Records, type = Type}, write) end,
   case mnesia:activity(transaction, Write) of
     ok ->
       ok;
@@ -145,7 +186,26 @@ delete(Table, Key)->
       mnesia:dirty_delete({Table, Key})
   end.
 
+%% @doc Delete all zone records or zone records typed based on the match spec. The match spec
+%% is given as an ETS match spec, thus it needs to be converted to a record match spec for
+%% Mnesia.
+-spec select_delete(atom(), list()) -> {ok, Count :: integer()} | {error, Reason :: term()}.
+select_delete(Table, [{{{ZoneName, Fqdn}, _}, _, _}])->
+  SelectDelete = fun() ->
+                     Records =  mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, write),
+                     lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
+                     {ok, length(Records)}
+                 end,
+  mnesia:activity(transaction, SelectDelete);
+select_delete(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}])->
+  SelectDelete = fun() ->
+                     Records = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, write),
+                     lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
+                     {ok, length(Records)}
+                 end,
+  mnesia:activity(transaction, SelectDelete).
 
+%%
 %% @doc Should backup the tables in the schema.
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_table(atom()) -> ok | {error, Reason :: term()}.

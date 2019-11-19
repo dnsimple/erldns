@@ -8,7 +8,8 @@ log/
 ebin/
 deps/*
 rel/erl-dns
-zones.json
+priv/_*.json
 .eunit/
 db/
 _build/
+Mnesia.nonode@nohost/

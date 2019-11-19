@@ -115,7 +115,7 @@ record_filter() ->
   end.
 
 records_to_json(Zone, Encoders) ->
-  lists:map(encode(Encoders), Zone#zone.records).
+  lists:map(encode(Encoders), erldns_zone_cache:get_zone_records(Zone#zone.name)).
 
 encode(Encoders) ->
   fun(Record) ->

@@ -96,7 +96,6 @@ handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
   % lager:debug("DNSSEC requested (name: ~p)", [Zone#zone.name]),
   Authority = lists:last(Zone#zone.authority),
   Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
-  {ok, ZoneWithRecords} = erldns_zone_cache:get_zone_with_records(Zone#zone.name),
   case Message#dns_message.answers of
     [] ->
       ApexRecords = erldns_zone_cache:get_records_by_name(Zone#zone.name),
@@ -104,26 +103,26 @@ handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
       SoaRRSigRecords = lists:filter(erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords),
 
       NextDname = erldns:normalize_name(dns:labels_to_dname([?NEXT_DNAME_PART] ++ dns:dname_to_labels(Qname))),
-      Types = record_types_for_name(Qname, ZoneWithRecords#zone.records),
-      NsecRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NSEC, ttl = Ttl, data = #dns_rrdata_nsec{next_dname = NextDname, types = Types}}],
+      NsecRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NSEC, ttl = Ttl, data = #dns_rrdata_nsec{next_dname = NextDname, types = record_types_for_name(Qname)}}],
       NsecRRSigRecords = rrsig_for_zone_rrset(Zone, NsecRecords),
 
       erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true, rc = ?DNS_RCODE_NOERROR, authority = Message#dns_message.authority ++ NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords}, Zone));
     _ ->
-      AnswerSignatures = find_rrsigs(ZoneWithRecords#zone.records, Message#dns_message.answers),
-      AuthoritySignatures = find_rrsigs(ZoneWithRecords#zone.records, Message#dns_message.authority),
+      AnswerSignatures = find_rrsigs(Message#dns_message.answers),
+      AuthoritySignatures = find_rrsigs(Message#dns_message.authority),
       erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true, answers = Message#dns_message.answers ++ AnswerSignatures, authority = Message#dns_message.authority ++ AuthoritySignatures}, Zone))
   end;
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false, _) ->
   Message.
 
--spec(find_rrsigs([dns:rr()], [dns:rr()]) -> [dns:rr()]).
-find_rrsigs(ZoneRecords, MessageRecords) ->
+% @doc Find all RRSIG records that cover the records in the provided record list.
+-spec(find_rrsigs([dns:rr()]) -> [dns:rr()]).
+find_rrsigs(MessageRecords) ->
   NamesAndTypes = lists:usort(lists:map(fun(RR) -> {RR#dns_rr.name, RR#dns_rr.type} end, MessageRecords)),
   lists:flatten(
     lists:map(
       fun({Name, Type}) ->
-          NamedRRSigs = lists:filter(erldns_records:match_name_and_type(Name, ?DNS_TYPE_RRSIG), ZoneRecords),
+          NamedRRSigs = erldns_zone_cache:get_records_by_name_and_type(Name, ?DNS_TYPE_RRSIG),
           lists:filter(erldns_records:match_type_covered(Type), NamedRRSigs)
       end, NamesAndTypes)).
 
@@ -140,8 +139,8 @@ find_unsigned_records(Records) ->
         (RR#dns_rr.type =/= ?DNS_TYPE_RRSIG) and (lists:filter(erldns_records:match_name_and_type(RR#dns_rr.name, ?DNS_TYPE_RRSIG), Records) =:= [])
     end, Records).
 
-record_types_for_name(Name, Records) ->
-  RecordsAtName = lists:filter(erldns_records:match_name(Name), Records),
+record_types_for_name(Name) ->
+  RecordsAtName = erldns_zone_cache:get_records_by_name(Name),
   TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
   lists:usort(TypesCovered ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]).
 
