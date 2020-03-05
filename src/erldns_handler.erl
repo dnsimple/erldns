@@ -62,7 +62,7 @@ init([]) ->
   {ok, #state{handlers=[]}}.
 
 handle_call({register_handler, RecordTypes, Module}, _, State) ->
-  %lager:info("Registered handler (module: ~p, types: ~p)", [Module, RecordTypes]),
+  lager:info("Registered handler (module: ~p, types: ~p)", [Module, RecordTypes]),
   {reply, ok, State#state{handlers = State#state.handlers ++ [{Module, RecordTypes}]}};
 handle_call({get_handlers}, _, State) ->
   {reply, State#state.handlers, State}.
@@ -83,6 +83,7 @@ handle({trailing_garbage, Message, _}, Context) ->
   handle(Message, Context);
 %% Handle the message, checking to see if it is throttled.
 handle(Message, Context = {_, Host}) when is_record(Message, dns_message) ->
+  lager:debug("handle message = ~p | ~p", [Message, Context]),
   handle(Message, Host, erldns_query_throttle:throttle(Message, Context));
 %% The message was bad so just return it.
 %% TODO: consider just throwing away the message
@@ -104,9 +105,11 @@ handle(Message, Host, {throttled, Host, _ReqCount}) ->
 %% append the SOA record if it is a zone transfer and complete the response
 %% by filling out count-related header fields.
 handle(Message, Host, _) ->
-  %lager:debug("Questions: ~p", [Message#dns_message.questions]),
+  lager:debug("Questions: ~p", [Message#dns_message.questions]),
   erldns_events:notify({start_handle, [{host, Host}, {message, Message}]}),
+  lager:debug("Message: ~p", [Message]),
   Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, Host]),
+  lager:debug("Response on do_handle: ~p", [Response]),
   erldns_events:notify({end_handle, [{host, Host}, {message, Message}, {response, Response}]}),
   Response.
 
@@ -149,6 +152,7 @@ handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
 
 -spec(safe_handle_packet_cache_miss(Message :: dns:message(), AuthorityRecords :: dns:authority(), Host :: dns:ip()) -> dns:message()).
 safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
+  lager:debug("safe_handle_packet_cache_miss = ~p", [Message]),
   case application:get_env(erldns, catch_exceptions) of
     {ok, false} ->
       Response = erldns_resolver:resolve(Message, AuthorityRecords, Host),
@@ -158,7 +162,7 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
         Exception:Reason ->
-          lager:error("Error answering request (exception: ~p, reason: ~p)", [Exception, Reason]),
+          lager:error("Error answering request (exception: ~p, reason: ~p)", [Exception, erlang:error(Reason)]),
           Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
       end
   end.

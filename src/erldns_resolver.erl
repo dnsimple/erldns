@@ -135,16 +135,19 @@ exact_match_resolution(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords,
 %% records and find any type matches on QTYPE and continue on.
 resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
   AuthorityRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), MatchedRecords), % Query matched records for SOA type
+  lager:debug("L138: ~p", [Qtype]),
   TypeMatches = case Qtype of
                   ?DNS_TYPE_ANY ->
                     filter_records(MatchedRecords, erldns_handler:get_handlers());
                   _ ->
                     lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
                 end,
+  lager:debug("L145: ~p", [TypeMatches]),
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
-      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers())), Zone),
+      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords, Message), erldns_handler:get_handlers())), Zone),
+	  lager:debug("New Records = ~p", [NewRecords]),
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, NewRecords, AuthorityRecords);
     _ ->
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, TypeMatches, AuthorityRecords)
@@ -169,6 +172,7 @@ resolve_exact_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zo
 
 %% There were exact matches of name and type.
 resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, _MatchedRecords, Zone, ExactTypeMatches, AuthorityRecords) ->
+  lager:debug("Line 173: ~p", [Message]),
   resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, ExactTypeMatches, Zone, AuthorityRecords).
 
 
@@ -187,7 +191,9 @@ resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, _Host, _CnameChain, Matc
 %% There was an exact type match for something other than an NS record and we are authoritative because there is an SOA record.
 resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords) ->
   % NOTE: this is a potential bug because it assumes the last record is the one to examine.
+  lager:debug("L192: ~p", [Message]),
   Answer = lists:last(MatchedRecords),
+  lager:debug("L194: ~p", [Answer]),
   case erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
     NSRecords = [] ->
       resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords);
@@ -199,16 +205,19 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
             true ->
               Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
             false ->
-              resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords)
+              resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords),
+			  lager:debug("L207")
           end;
         {error, authority_not_found} ->
-          resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords)
+          resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords),
+		  lager:debug("L211")
       end
   end.
 
 %% We are authoritative and there were no NS records here.
 resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, _NSRecords = []) ->
-  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
+  lager:debug("L215: ~p", [Message]),
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords, additional = Message#dns_message.additional};
 
 %% We are authoritative and there are NS records here.
 resolve_exact_type_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
@@ -226,7 +235,7 @@ resolve_exact_type_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecord
         true ->
           restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name));
         false ->
-          Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords}
+          Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords, additional = Message#dns_message.additional}
       end
   end.
 
@@ -369,7 +378,10 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, Matche
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
-      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, lists:map(erldns_records:replace_name(Qname), lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers()))), Zone),
+      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, 
+												  lists:map(erldns_records:replace_name(Qname), 
+												  lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers()))), 
+												  Zone),
       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], NewRecords);
     _ ->
       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], TypeMatches)
@@ -469,6 +481,20 @@ custom_lookup(Qname, Qtype, Records) ->
         false ->
           case Qtype =:= ?DNS_TYPE_ANY of
             true -> Module:handle(Qname, Qtype, Records);
+            false -> []
+          end
+      end
+  end.
+
+-spec custom_lookup(dns:dname(), dns:type(), [dns:rr()], dns:dns_message()) -> fun(({module(), [dns:type()]}) -> [dns:rr()]).
+custom_lookup(Qname, Qtype, Records, Message) ->
+  lager:debug("L486: ~p", [Message]),
+  fun({Module, Types}) ->
+      case lists:member(Qtype, Types) of
+        true -> [Module], Module:handle(Qname, Qtype, Records, Message);
+        false ->
+          case Qtype =:= ?DNS_TYPE_ANY of
+            true -> Module:handle(Qname, Qtype, Records, Message);
             false -> []
           end
       end

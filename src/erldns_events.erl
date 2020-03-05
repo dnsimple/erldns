@@ -25,6 +25,7 @@ start_link() ->
 %% @doc Fire an event.
 -spec notify(any()) -> any().
 notify(Event) ->
+  lager:debug("notify = ~p | ~p", [?MODULE, Event]),
   gen_event:notify(?MODULE, Event).
 
 %% @doc Add an event handler.
