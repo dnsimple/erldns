@@ -20,7 +20,7 @@
 
 -behavior(gen_server).
 
--export([start_link/0, handle/3, handle/4, filter/1]).
+-export([start_link/0, handle/3, filter/1]).
 
 % Gen server hooks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -37,8 +37,9 @@ start_link() ->
 handle(Qname, Qtype, Records) ->
   gen_server:call(?MODULE, {handle, Qname, Qtype, Records}).
 
-handle(Qname, Qtype, Records, Message) ->
-  gen_server:call(?MODULE, {handle, Qname, Qtype, Records, Message}).
+%handle(Qname, Qtype, Records, Message) ->
+%  lager:debug("sample_custom_handler#41: ~p", [Message]),
+%  gen_server:call(?MODULE, {handle, Qname, Qtype, Records, Message}).
 
 filter(Records) ->
   gen_server:call(?MODULE, {filter, Records}).
@@ -53,10 +54,11 @@ handle_call({handle, _Qname, _Qtype, Records}, _From, State) ->
   NewRecords = lists:flatten(lists:map(convert(), SampleRecords)),
   {reply, NewRecords, State};
 
-handle_call({handle, _Qname, _Qtype, Records, Message}, _From, State) ->
-  SampleRecords = lists:filter(type_match(), Records),
-  NewRecords = lists:flatten(lists:map(convert(), SampleRecords)),
-  {reply, NewRecords, State};
+%
+%handle_call({handle, _Qname, _Qtype, Records, Message}, _From, State) ->
+%  SampleRecords = lists:filter(type_match(), Records),
+%  NewRecords = lists:flatten(lists:map(convert(), SampleRecords)),
+%  {reply, NewRecords, State};
 
 handle_call({filter, Records}, _From, State) ->
   TypeMatchFunction = type_match(),

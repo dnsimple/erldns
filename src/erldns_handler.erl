@@ -22,7 +22,9 @@
 -include_lib("dns_erlang/include/dns.hrl").
 -include("erldns.hrl").
 
--export([start_link/0, register_handler/2, get_handlers/0, handle/2]).
+-define(DEFAULT_HANDLER_VERSION, 1).
+
+-export([start_link/0, register_handler/2, register_handler/3, get_handlers/0, get_handlers/1, handle/2]).
 
 -export([do_handle/2]).
 
@@ -48,13 +50,24 @@ start_link() ->
 %% @doc Register a record handler.
 -spec register_handler([dns:type()], module()) -> ok.
 register_handler(RecordTypes, Module) ->
-  gen_server:call(?MODULE, {register_handler, RecordTypes, Module}).
+  %gen_server:call(?MODULE, {register_handler, RecordTypes, Module}).
+  register_handler(RecordTypes, Module, ?DEFAULT_HANDLER_VERSION).
+
+%% @doc Register a record handler with version.
+-spec register_handler([dns:type()], module(), integer()) -> ok.
+register_handler(RecordTypes, Module, Version) ->
+  gen_server:call(?MODULE, {register_handler, RecordTypes, Module, Version}).
 
 %% @doc Get all registered handlers along with the DNS types they handle.
 -spec get_handlers() -> [{module(), [dns:type()]}].
 get_handlers() ->
-  gen_server:call(?MODULE, {get_handlers}).
+  %gen_server:call(?MODULE, {get_handlers}).
+  get_handlers(?DEFAULT_HANDLER_VERSION).
 
+%% @doc Get all registered handlers along with the DNS types they handle + version
+-spec get_handlers(integer()) -> [{module(), [dns:type()]}].
+get_handlers(Version) ->
+  gen_server:call(?MODULE, {get_handlers, Version}).
 
 % gen_server callbacks
 
@@ -63,8 +76,15 @@ init([]) ->
 
 handle_call({register_handler, RecordTypes, Module}, _, State) ->
   lager:info("Registered handler (module: ~p, types: ~p)", [Module, RecordTypes]),
-  {reply, ok, State#state{handlers = State#state.handlers ++ [{Module, RecordTypes}]}};
-handle_call({get_handlers}, _, State) ->
+  {reply, ok, State#state{handlers = State#state.handlers ++ [{Module, RecordTypes, 1}]}};
+handle_call({register_handler, RecordTypes, Module, Version}, _, State) ->
+  lager:info("Registered handler (module: ~p, types: ~p, version: ~p)", [Module, RecordTypes, Version]),
+  {reply, ok, State#state{handlers = State#state.handlers ++ [{Module, RecordTypes, Version}]}};
+handle_call({get_handlers, Version}, _, State) ->
+  VersionHandlers = [lists:keyfind(Version, 3, State#state.handlers)],
+  lager:debug("Version (~p) handlers: ~p", [Version, VersionHandlers]),
+  lager:debug("All handlers: ~p", [State#state.handlers]),
+  %{reply, VersionHandlers, State}.
   {reply, State#state.handlers, State}.
 
 handle_cast(_, State) ->
@@ -83,7 +103,7 @@ handle({trailing_garbage, Message, _}, Context) ->
   handle(Message, Context);
 %% Handle the message, checking to see if it is throttled.
 handle(Message, Context = {_, Host}) when is_record(Message, dns_message) ->
-  lager:debug("handle message = ~p | ~p", [Message, Context]),
+  %lager:debug("handle message = ~p | ~p", [Message, Context]),
   handle(Message, Host, erldns_query_throttle:throttle(Message, Context));
 %% The message was bad so just return it.
 %% TODO: consider just throwing away the message
@@ -114,7 +134,9 @@ handle(Message, Host, _) ->
   Response.
 
 do_handle(Message, Host) ->
+  lager:debug("do_handle [message/host]: ~p/~p", [Message, Host]),
   NewMessage = handle_message(Message, Host),
+  lager:debug("do_handle(): NewMessage = ~p", [NewMessage]),
   complete_response(erldns_axfr:optionally_append_soa(NewMessage)).
 
 %% Handle the message by hitting the packet cache and either
@@ -152,7 +174,6 @@ handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
 
 -spec(safe_handle_packet_cache_miss(Message :: dns:message(), AuthorityRecords :: dns:authority(), Host :: dns:ip()) -> dns:message()).
 safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
-  lager:debug("safe_handle_packet_cache_miss = ~p", [Message]),
   case application:get_env(erldns, catch_exceptions) of
     {ok, false} ->
       Response = erldns_resolver:resolve(Message, AuthorityRecords, Host),
@@ -162,13 +183,15 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
         Exception:Reason ->
-          lager:error("Error answering request (exception: ~p, reason: ~p)", [Exception, erlang:error(Reason)]),
+		  lager:debug("Exception: ~p", [erlang:error(Reason)]),
+          lager:error("Error answering request (exception: ~p, reason: ~p)", [Exception, Reason]),
           Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
       end
   end.
 
 %% We are authoritative so cache the packet and return the message.
 maybe_cache_packet(Message, true) ->
+  lager:debug("maybe_cache_packet - true"),
   erldns_packet_cache:put({Message#dns_message.questions, Message#dns_message.additional}, Message),
   Message;
 

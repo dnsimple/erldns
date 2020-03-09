@@ -65,14 +65,13 @@ handle_call({process, DecodedMessage, Socket, Port, {udp, Host}}, _From, State) 
   % querying www.example.com with the test zones
   % simulate_timeout(DecodedMessage),
 
-  lager:debug("udp erldns_handle:handle"),
   Response = erldns_handler:handle(DecodedMessage, {udp, Host}),
   lager:debug("udp handle_call = ~p", [Response]),
   DestHost = ?DEST_HOST(Host),
 
   case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
     {false, EncodedMessage} ->
-      %lager:debug("Sending encoded response to ~p", [DestHost]),
+      lager:debug("Sending encoded response to ~p", [DestHost]),
       gen_udp:send(Socket, DestHost, Port, EncodedMessage);
     {true, EncodedMessage, Message} when is_record(Message, dns_message)->
       gen_udp:send(Socket, DestHost, Port, EncodedMessage);
