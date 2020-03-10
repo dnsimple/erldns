@@ -50,7 +50,6 @@ start_link() ->
 %% @doc Register a record handler.
 -spec register_handler([dns:type()], module()) -> ok.
 register_handler(RecordTypes, Module) ->
-  %gen_server:call(?MODULE, {register_handler, RecordTypes, Module}).
   register_handler(RecordTypes, Module, ?DEFAULT_HANDLER_VERSION).
 
 %% @doc Register a record handler with version.
@@ -61,7 +60,6 @@ register_handler(RecordTypes, Module, Version) ->
 %% @doc Get all registered handlers along with the DNS types they handle.
 -spec get_handlers() -> [{module(), [dns:type()]}].
 get_handlers() ->
-  %gen_server:call(?MODULE, {get_handlers}).
   get_handlers(?DEFAULT_HANDLER_VERSION).
 
 %% @doc Get all registered handlers along with the DNS types they handle + version
@@ -82,8 +80,6 @@ handle_call({register_handler, RecordTypes, Module, Version}, _, State) ->
   {reply, ok, State#state{handlers = State#state.handlers ++ [{Module, RecordTypes, Version}]}};
 handle_call({get_handlers, Version}, _, State) ->
   VersionHandlers = [erlang:delete_element(3, X) || X <- State#state.handlers, element(3, X) =:= Version],
-  lager:debug("Version (~p) handlers: ~p", [Version, VersionHandlers]),
-  %{reply, VersionHandlers, State}.
   {reply, VersionHandlers, State}.
 
 handle_cast(_, State) ->
@@ -102,7 +98,6 @@ handle({trailing_garbage, Message, _}, Context) ->
   handle(Message, Context);
 %% Handle the message, checking to see if it is throttled.
 handle(Message, Context = {_, Host}) when is_record(Message, dns_message) ->
-  %lager:debug("handle message = ~p | ~p", [Message, Context]),
   handle(Message, Host, erldns_query_throttle:throttle(Message, Context));
 %% The message was bad so just return it.
 %% TODO: consider just throwing away the message
@@ -124,18 +119,13 @@ handle(Message, Host, {throttled, Host, _ReqCount}) ->
 %% append the SOA record if it is a zone transfer and complete the response
 %% by filling out count-related header fields.
 handle(Message, Host, _) ->
-  lager:debug("Questions: ~p", [Message#dns_message.questions]),
   erldns_events:notify({start_handle, [{host, Host}, {message, Message}]}),
-  lager:debug("Message: ~p", [Message]),
   Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, Host]),
-  lager:debug("Response on do_handle: ~p", [Response]),
   erldns_events:notify({end_handle, [{host, Host}, {message, Message}, {response, Response}]}),
   Response.
 
 do_handle(Message, Host) ->
-  lager:debug("do_handle [message/host]: ~p/~p", [Message, Host]),
   NewMessage = handle_message(Message, Host),
-  lager:debug("do_handle(): NewMessage = ~p", [NewMessage]),
   complete_response(erldns_axfr:optionally_append_soa(NewMessage)).
 
 %% Handle the message by hitting the packet cache and either
@@ -178,7 +168,6 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
       Response = erldns_resolver:resolve(Message, AuthorityRecords, Host),
       maybe_cache_packet(Response, Response#dns_message.aa);
     _ ->
-	  lager:debug("Msg/AuthRec/Host = ~p/~p/~p", [Message, AuthorityRecords, Host]),
       try erldns_resolver:resolve(Message, AuthorityRecords, Host) of
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch

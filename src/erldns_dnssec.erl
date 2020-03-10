@@ -67,7 +67,6 @@ zone_rrset_signer(ZoneName, RRs) ->
 %% - The zone is signed
 -spec(maybe_sign_rrset(dns:message(), [dns:rr()], erldns:zone()) -> [dns:rr()]).
 maybe_sign_rrset(Message, Records, Zone) ->
-  lager:debug("sign_rrset = ~p/~p", [Records, Zone]),
   case {proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets}  of
     {true, []} ->
       % DNSSEC requested, zone not signed

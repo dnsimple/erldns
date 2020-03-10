@@ -27,7 +27,6 @@
 %% @doc Resolve the questions in the message.
 -spec resolve(Message :: dns:message(), AuthorityRecords :: [dns:rr()], Host :: dns:ip()) -> dns:message().
 resolve(Message, AuthorityRecords, Host) ->
-  lager:debug("resolve() - authrecs: ~p", AuthorityRecords),
   resolve(Message, AuthorityRecords, Host, Message#dns_message.questions).
 
 %% There were no questions in the message so just return it.
@@ -145,14 +144,10 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
-	  lager:debug("Qname/Qtype/MatchedRecords/Message = ~p/~p/~p/~p", [Qname, Qtype, MatchedRecords, Message]),
-	  lager:debug("Zone = ~p", [Zone]),
-	  lager:debug("custom handlers = ~p", [erldns_handler:get_handlers(2)]),
       NewRecords = erldns_dnssec:maybe_sign_rrset(Message, 
 												  lists:flatten(
 													lists:map(custom_lookup(Qname, Qtype, MatchedRecords, Message), erldns_handler:get_handlers(2))), 
 												  Zone),
-	  lager:debug("NewRecords = ~p", [NewRecords]),
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, NewRecords, AuthorityRecords);
     _ ->
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, TypeMatches, AuthorityRecords)
@@ -487,7 +482,6 @@ custom_lookup(Qname, Qtype, Records) ->
 
 -spec custom_lookup(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> fun(({module(), [dns:type()]}) -> [dns:rr()]).
 custom_lookup(Qname, Qtype, Records, Message) -> 
-  lager:debug("custom_lookup(): ~p/~p", [Qname, Qtype]), 
   fun({Module, Types}) ->
       case lists:member(Qtype, Types) of
         true -> Module:handle(Qname, Qtype, Records, Message);

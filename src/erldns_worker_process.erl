@@ -66,7 +66,6 @@ handle_call({process, DecodedMessage, Socket, Port, {udp, Host}}, _From, State) 
   % simulate_timeout(DecodedMessage),
 
   Response = erldns_handler:handle(DecodedMessage, {udp, Host}),
-  lager:debug("udp handle_call = ~p", [Response]),
   DestHost = ?DEST_HOST(Host),
 
   case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
