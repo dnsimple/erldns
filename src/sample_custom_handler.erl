@@ -38,7 +38,6 @@ handle(Qname, Qtype, Records) ->
   gen_server:call(?MODULE, {handle, Qname, Qtype, Records}).
 
 %handle(Qname, Qtype, Records, Message) ->
-%  lager:debug("sample_custom_handler#41: ~p", [Message]),
 %  gen_server:call(?MODULE, {handle, Qname, Qtype, Records, Message}).
 
 filter(Records) ->
@@ -54,7 +53,6 @@ handle_call({handle, _Qname, _Qtype, Records}, _From, State) ->
   NewRecords = lists:flatten(lists:map(convert(), SampleRecords)),
   {reply, NewRecords, State};
 
-%
 %handle_call({handle, _Qname, _Qtype, Records, Message}, _From, State) ->
 %  SampleRecords = lists:filter(type_match(), Records),
 %  NewRecords = lists:flatten(lists:map(convert(), SampleRecords)),

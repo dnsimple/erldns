@@ -81,11 +81,10 @@ handle_call({register_handler, RecordTypes, Module, Version}, _, State) ->
   lager:info("Registered handler (module: ~p, types: ~p, version: ~p)", [Module, RecordTypes, Version]),
   {reply, ok, State#state{handlers = State#state.handlers ++ [{Module, RecordTypes, Version}]}};
 handle_call({get_handlers, Version}, _, State) ->
-  VersionHandlers = [lists:keyfind(Version, 3, State#state.handlers)],
+  VersionHandlers = [erlang:delete_element(3, X) || X <- State#state.handlers, element(3, X) =:= Version],
   lager:debug("Version (~p) handlers: ~p", [Version, VersionHandlers]),
-  lager:debug("All handlers: ~p", [State#state.handlers]),
   %{reply, VersionHandlers, State}.
-  {reply, State#state.handlers, State}.
+  {reply, VersionHandlers, State}.
 
 handle_cast(_, State) ->
   {noreply, State}.
@@ -179,11 +178,11 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
       Response = erldns_resolver:resolve(Message, AuthorityRecords, Host),
       maybe_cache_packet(Response, Response#dns_message.aa);
     _ ->
+	  lager:debug("Msg/AuthRec/Host = ~p/~p/~p", [Message, AuthorityRecords, Host]),
       try erldns_resolver:resolve(Message, AuthorityRecords, Host) of
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
         Exception:Reason ->
-		  lager:debug("Exception: ~p", [erlang:error(Reason)]),
           lager:error("Error answering request (exception: ~p, reason: ~p)", [Exception, Reason]),
           Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
       end
@@ -191,7 +190,6 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
 
 %% We are authoritative so cache the packet and return the message.
 maybe_cache_packet(Message, true) ->
-  lager:debug("maybe_cache_packet - true"),
   erldns_packet_cache:put({Message#dns_message.questions, Message#dns_message.additional}, Message),
   Message;
 
