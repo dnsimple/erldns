@@ -41,6 +41,12 @@ ln -s ../<projectX dependency dir> _checkouts/
 ln -s ../<projectY dependency dir> _checkouts/
 ```
 
+## Handlers' versioning
+
+As of 1.1.0 release, the custom handlers' implementation has been extended to
+support versioning. register_handler/3 and get_versioned_handlers/0 functions 
+have been added. Using versioning in new handlers is encouraged.
+
 ## Testing
 
 erldns includes several test mechanisms.
