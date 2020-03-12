@@ -66,7 +66,7 @@ get_handlers() ->
   [erlang:delete_element(3, X) || X <- Handlers, element(3, X) =:= ?DEFAULT_HANDLER_VERSION].
 
 %% @doc Get all registered handlers along with the DNS types they handle and associated versions
--spec get_versioned_handlers() -> [{module(), [dns:type()]}].
+-spec get_versioned_handlers() -> [{module(), [dns:type()], integer()}].
 get_versioned_handlers() ->
   gen_server:call(?MODULE, {get_handlers}).
 

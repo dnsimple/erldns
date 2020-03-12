@@ -494,7 +494,7 @@ custom_lookup(Qname, Qtype, Records, Message) ->
 % Function for filtering out custom records and replacing them with
 % records which content from the custom handler.
 filter_records(Records, []) -> Records;
-filter_records(Records, [{Handler, _, Version}|Rest]) ->
+filter_records(Records, [{Handler, _Types, Version}|Rest]) ->
   case Version of
 	  1 -> filter_records(Handler:filter(Records), Rest);
 	  2 -> filter_records(Handler:filter(Records), Rest);
