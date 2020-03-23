@@ -1,6 +1,6 @@
 # Erlang DNS Server
 
-Serve DNS authoritative responses...with Erlang.
+Serve DNS authoritative responses... with Erlang.
 
 [![Build Status](https://travis-ci.org/dnsimple/erldns.png?branch=master)](https://travis-ci.org/dnsimple/erldns)
 
@@ -8,12 +8,16 @@ Serve DNS authoritative responses...with Erlang.
 
 To build:
 
-   make 
+```
+make
+```
 
 To start fresh:
 
-  make fresh
-  make
+```
+make fresh
+make
+```
 
 ## Zones
 
