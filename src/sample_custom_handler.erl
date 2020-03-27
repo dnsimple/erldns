@@ -37,9 +37,6 @@ start_link() ->
 handle(Qname, Qtype, Records, _Message) ->
   gen_server:call(?MODULE, {handle, Qname, Qtype, Records}).
 
-%handle(Qname, Qtype, Records, Message) ->
-%  gen_server:call(?MODULE, {handle, Qname, Qtype, Records, Message}).
-
 filter(Records) ->
   gen_server:call(?MODULE, {filter, Records}).
 
@@ -52,11 +49,6 @@ handle_call({handle, _Qname, _Qtype, Records}, _From, State) ->
   SampleRecords = lists:filter(type_match(), Records),
   NewRecords = lists:flatten(lists:map(convert(), SampleRecords)),
   {reply, NewRecords, State};
-
-%handle_call({handle, _Qname, _Qtype, Records, Message}, _From, State) ->
-%  SampleRecords = lists:filter(type_match(), Records),
-%  NewRecords = lists:flatten(lists:map(convert(), SampleRecords)),
-%  {reply, NewRecords, State};
 
 handle_call({filter, Records}, _From, State) ->
   TypeMatchFunction = type_match(),
