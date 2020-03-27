@@ -70,7 +70,7 @@ handle_call({process, DecodedMessage, Socket, Port, {udp, Host}}, _From, State) 
 
   case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
     {false, EncodedMessage} ->
-      %lager:debug("Sending encoded response to ~p", [DestHost]),
+      lager:debug("Sending encoded response to ~p", [DestHost]),
       gen_udp:send(Socket, DestHost, Port, EncodedMessage);
     {true, EncodedMessage, Message} when is_record(Message, dns_message)->
       gen_udp:send(Socket, DestHost, Port, EncodedMessage);

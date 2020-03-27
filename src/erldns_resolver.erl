@@ -137,14 +137,17 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
   AuthorityRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), MatchedRecords), % Query matched records for SOA type
   TypeMatches = case Qtype of
                   ?DNS_TYPE_ANY ->
-                    filter_records(MatchedRecords, erldns_handler:get_handlers());
+                    filter_records(MatchedRecords, erldns_handler:get_versioned_handlers());
                   _ ->
                     lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
                 end,
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
-      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers())), Zone),
+      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, 
+												  lists:flatten(
+													lists:map(custom_lookup(Qname, Qtype, MatchedRecords, Message), erldns_handler:get_versioned_handlers())), 
+												  Zone),
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, NewRecords, AuthorityRecords);
     _ ->
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, TypeMatches, AuthorityRecords)
@@ -208,7 +211,7 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
 
 %% We are authoritative and there were no NS records here.
 resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, _NSRecords = []) ->
-  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
+  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords, additional = Message#dns_message.additional};
 
 %% We are authoritative and there are NS records here.
 resolve_exact_type_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
@@ -226,7 +229,7 @@ resolve_exact_type_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecord
         true ->
           restart_delegated_query(Message, Name, Qtype, Host, CnameChain, Zone, erldns_zone_cache:in_zone(Name));
         false ->
-          Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords}
+          Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords, additional = Message#dns_message.additional}
       end
   end.
 
@@ -361,7 +364,7 @@ resolve_best_match(Message, Qname, _Qtype, _Host, _CnameChain, _BestMatchRecords
 resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, []) ->
   TypeMatchedRecords = case Qtype of
                          ?DNS_TYPE_ANY ->
-                           filter_records(MatchedRecords, erldns_handler:get_handlers());
+                           filter_records(MatchedRecords, erldns_handler:get_versioned_handlers());
                          _ ->
                            lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
                        end,
@@ -369,7 +372,10 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, Matche
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
-      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, lists:map(erldns_records:replace_name(Qname), lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords), erldns_handler:get_handlers()))), Zone),
+      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, 
+												  lists:map(erldns_records:replace_name(Qname), 
+												  lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords, Message), erldns_handler:get_versioned_handlers()))), 
+												  Zone),
       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], NewRecords);
     _ ->
       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], TypeMatches)
@@ -458,28 +464,41 @@ best_match(Qname, Labels, Zone, []) ->
   end;
 best_match(_Qname, _Labels, _Zone, WildcardMatches) -> WildcardMatches.
 
-
-
 %% Function for executing custom lookups by registered handlers.
--spec custom_lookup(dns:dname(), dns:type(), [dns:rr()]) -> fun(({module(), [dns:type()]}) -> [dns:rr()]).
-custom_lookup(Qname, Qtype, Records) ->
-  fun({Module, Types}) ->
-      case lists:member(Qtype, Types) of
-        true -> Module:handle(Qname, Qtype, Records);
-        false ->
-          case Qtype =:= ?DNS_TYPE_ANY of
-            true -> Module:handle(Qname, Qtype, Records);
-            false -> []
-          end
-      end
+-spec custom_lookup(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> fun(({module(), [dns:type()], integer()}) -> [dns:rr()]).
+custom_lookup(Qname, Qtype, Records, Message) -> 
+  fun({Module, Types, Version}) ->
+	  case Version of
+		  1 ->
+			  case lists:member(Qtype, Types) of
+				true -> Module:handle(Qname, Qtype, Records);
+				false ->
+				  case Qtype =:= ?DNS_TYPE_ANY of
+					true -> Module:handle(Qname, Qtype, Records);
+					false -> []
+				  end
+			  end;
+		  2 -> 
+			  case lists:member(Qtype, Types) of
+				true -> Module:handle(Qname, Qtype, Records, Message);
+				false ->
+				  case Qtype =:= ?DNS_TYPE_ANY of
+					true -> Module:handle(Qname, Qtype, Records, Message);
+					false -> []
+				  end
+			  end
+	  end
   end.
 
 % Function for filtering out custom records and replacing them with
 % records which content from the custom handler.
 filter_records(Records, []) -> Records;
-filter_records(Records, [{Handler,_}|Rest]) ->
-  filter_records(Handler:filter(Records), Rest).
-
+filter_records(Records, [{Handler, _Types, Version}|Rest]) ->
+  case Version of
+	  1 -> filter_records(Handler:filter(Records), Rest);
+	  2 -> filter_records(Handler:filter(Records), Rest);
+	  _ -> []
+  end.
 
 %% See if additional processing is necessary.
 additional_processing(Message, _Host, {error, _}) ->
