@@ -486,8 +486,7 @@ custom_lookup(Qname, Qtype, Records, Message) ->
 					true -> Module:handle(Qname, Qtype, Records, Message);
 					false -> []
 				  end
-			  end;
-		  _ -> []
+			  end
 	  end
   end.
 
