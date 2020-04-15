@@ -227,5 +227,5 @@ encode_data({dns_rrdata_cdnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
 encode_data({dns_rrdata_rrsig, TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature}) ->
   erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~w ~w ~w ~w ~w ~s", [TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature]));
 encode_data(Data) ->
-  lager:debug("Unable to encode rrdata (data: ~p)", [Data]),
+  lager:info("Unable to encode rrdata (data: ~p)", [Data]),
   {}.

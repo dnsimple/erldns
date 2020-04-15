@@ -129,8 +129,8 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
                         {} ->
                           case try_custom_parsers(Data, Parsers) of
                             {} ->
-                                lager:warning("Unsupported record (data: ~p)", [Data]),
-                                {};
+                              erldns_events:notify({erldns_zone, unsupported_record, Data}),
+                              {};
                             ParsedRecord -> ParsedRecord
                           end;
                         ParsedRecord -> ParsedRecord
@@ -225,8 +225,8 @@ try_custom_parsers(Data, [Parser|Rest]) ->
   end.
 
 % Internal converters
-json_record_to_erlang([Name, Type, _Ttl, null, _]) ->
-  lager:error("Record has null data (name: ~p, type: ~p)", [Name, Type]),
+json_record_to_erlang([Name, Type, _Ttl, Data = null, _]) ->
+  erldns_events:notify({erldns_zone, parser_error, {Name, Type, Data, null_data}}),
   {};
 
 json_record_to_erlang([Name, <<"SOA">>, Ttl, Data, _Context]) ->
@@ -253,23 +253,21 @@ json_record_to_erlang([Name, <<"NS">>, Ttl, Data, _Context]) ->
               },
      ttl = Ttl};
 
-json_record_to_erlang([Name, <<"A">>, Ttl, Data, _Context]) ->
-  Ip = erldns_config:keyget(<<"ip">>, Data),
-  case inet_parse:address(binary_to_list(Ip)) of
+json_record_to_erlang([Name, Type = <<"A">>, Ttl, Data, _Context]) ->
+  case inet_parse:address(binary_to_list(erldns_config:keyget(<<"ip">>, Data))) of
     {ok, Address} ->
       #dns_rr{name = Name, type = ?DNS_TYPE_A, data = #dns_rrdata_a{ip = Address}, ttl = Ttl};
     {error, Reason} ->
-      lager:error("Failed to parse A record address (ip: ~p, reason: ~p)", [Ip, Reason]),
+      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Reason}}),
       {}
   end;
 
-json_record_to_erlang([Name, <<"AAAA">>, Ttl, Data, _Context]) ->
-  Ip = erldns_config:keyget(<<"ip">>, Data),
-  case inet_parse:address(binary_to_list(Ip)) of
+json_record_to_erlang([Name, Type = <<"AAAA">>, Ttl, Data, _Context]) ->
+  case inet_parse:address(binary_to_list(erldns_config:keyget(<<"ip">>, Data))) of
     {ok, Address} ->
       #dns_rr{name = Name, type = ?DNS_TYPE_AAAA, data = #dns_rrdata_aaaa{ip = Address}, ttl = Ttl};
     {error, Reason} ->
-      lager:error("Failed to parse AAAA record address (ip: ~p, reason: ~p)", [Ip, Reason]),
+      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Reason}}),
       {}
   end;
 
@@ -321,7 +319,7 @@ json_record_to_erlang([Name, <<"RP">>, Ttl, Data, _Context]) ->
               },
      ttl = Ttl};
 
-json_record_to_erlang([Name, <<"TXT">>, Ttl, Data, _Context]) ->
+json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) ->
   %% This function call may crash. Handle it as a bad record.
   try erldns_txt:parse(erldns_config:keyget(<<"txt">>, Data)) of
     ParsedText ->
@@ -332,7 +330,8 @@ json_record_to_erlang([Name, <<"TXT">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      lager:error("Error parsing TXT (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason])
+      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Exception, Reason}}),
+      {}
   end;
 
 
@@ -350,7 +349,7 @@ json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) ->
      data = #dns_rrdata_ptr{dname = erldns_config:keyget(<<"dname">>, Data)},
      ttl = Ttl};
 
-json_record_to_erlang([Name, <<"SSHFP">>, Ttl, Data, _Context]) ->
+json_record_to_erlang([Name, Type = <<"SSHFP">>, Ttl, Data, _Context]) ->
   %% This function call may crash. Handle it as a bad record.
   try hex_to_bin(erldns_config:keyget(<<"fp">>, Data)) of
     Fp ->
@@ -365,7 +364,7 @@ json_record_to_erlang([Name, <<"SSHFP">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      lager:error("Error parsing SSHFP (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
+      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Exception, Reason}}),
       {}
   end;
 
@@ -395,7 +394,7 @@ json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data, _Context]) ->
               },
      ttl = Ttl};
 
-json_record_to_erlang([Name, <<"DS">>, Ttl, Data, _Context]) ->
+json_record_to_erlang([Name, Type = <<"DS">>, Ttl, Data, _Context]) ->
   try hex_to_bin(erldns_config:keyget(<<"digest">>, Data)) of
     Digest ->
       #dns_rr{
@@ -410,11 +409,11 @@ json_record_to_erlang([Name, <<"DS">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      lager:error("Error parsing DS (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
+      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Exception, Reason}}),
       {}
   end;
 
-json_record_to_erlang([Name, <<"CDS">>, Ttl, Data, _Context]) ->
+json_record_to_erlang([Name, Type = <<"CDS">>, Ttl, Data, _Context]) ->
   try hex_to_bin(erldns_config:keyget(<<"digest">>, Data)) of
     Digest ->
       #dns_rr{
@@ -429,11 +428,11 @@ json_record_to_erlang([Name, <<"CDS">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      lager:error("Error parsing CDS (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
+      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Exception, Reason}}),
       {}
   end;
 
-json_record_to_erlang([Name, <<"DNSKEY">>, Ttl, Data, _Context]) ->
+json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) ->
   try base64_to_bin(erldns_config:keyget(<<"public_key">>, Data)) of
     PublicKey ->
       dnssec:add_keytag_to_dnskey(
@@ -449,11 +448,11 @@ json_record_to_erlang([Name, <<"DNSKEY">>, Ttl, Data, _Context]) ->
            ttl = Ttl})
   catch
     Exception:Reason ->
-      lager:error("Error parsing DNSKEY (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
+      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Exception, Reason}}),
       {}
   end;
 
-json_record_to_erlang([Name, <<"CDNSKEY">>, Ttl, Data, _Context]) ->
+json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) ->
   try base64_to_bin(erldns_config:keyget(<<"public_key">>, Data)) of
     PublicKey ->
       dnssec:add_keytag_to_cdnskey(
@@ -469,7 +468,7 @@ json_record_to_erlang([Name, <<"CDNSKEY">>, Ttl, Data, _Context]) ->
            ttl = Ttl})
   catch
     Exception:Reason ->
-      lager:error("Error parsing CDNSKEY (name: ~p, data: ~p, exception: ~p, reason: ~p)", [Name, Data, Exception, Reason]),
+      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Exception, Reason}}),
       {}
   end;
 

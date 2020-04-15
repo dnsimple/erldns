@@ -174,7 +174,7 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
         Exception:Reason ->
-          erldns_events:notify({erldns_handler_error, {Exception, Reason, Message}}),
+          erldns_events:notify({erldns_handler, error, {Exception, Reason, Message}}),
           Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
       end
   end.
@@ -207,10 +207,10 @@ complete_response(Message) ->
 notify_empty_response(Message) ->
   case {Message#dns_message.rc, Message#dns_message.anc + Message#dns_message.auc + Message#dns_message.adc} of
     {?DNS_RCODE_REFUSED, _} ->
-      erldns_events:notify({refused_response, Message#dns_message.questions}),
+      erldns_events:notify({erldns_handler, refused_response, Message#dns_message.questions}),
       Message;
     {_, 0} ->
-      erldns_events:notify({empty_response, Message}),
+      erldns_events:notify({erldns_handler, empty_response, Message}),
       Message;
     _ ->
       Message

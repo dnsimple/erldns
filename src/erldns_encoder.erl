@@ -34,7 +34,7 @@ encode_message(Response) ->
         M -> M
       catch
         Exception:Reason ->
-          lager:error("Error encoding (response: ~p, exception: ~p, reason: ~p)", [Response, Exception, Reason]),
+          erldns_events:notify({erldns_encoder, encode_message_error, {Exception, Reason, Response}}),
           encode_message(build_error_response(Response))
       end
   end.
@@ -58,7 +58,7 @@ encode_message(Response, Opts) ->
         M -> M
       catch
         Exception:Reason ->
-          lager:error("Error encoding with truncation (response: ~p, exception: ~p, reason: ~p)", [Response, Exception, Reason]),
+          erldns_events:notify({erldns_encoder, encode_message_error, {Exception, Reason, Response, Opts}}),
           {false, encode_message(build_error_response(Response))}
       end
   end.
