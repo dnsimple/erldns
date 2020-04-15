@@ -87,4 +87,7 @@ setup_metrics() ->
   folsom_metrics:new_meter(cache_miss_meter),
 
   folsom_metrics:new_counter(dnssec_request_counter),
-  folsom_metrics:new_meter(dnssec_request_meter).
+  folsom_metrics:new_meter(dnssec_request_meter),
+
+  folsom_metrics:new_counter(erldns_handler_error_counter),
+  folsom_metrics:new_meter(erldns_handler_error_meter).

@@ -81,6 +81,13 @@ handle_event({dnssec_request, _Host, _Qname}, State) ->
   folsom_metrics:notify(dnssec_request_meter, 1),
   {ok, State};
 
+handle_event({erldns_handler_error, {Exception, Reason, Message}}, State) ->
+  folsom_metrics:notify({erldns_handler_error_counter, {inc, 1}}),
+  folsom_metrics:notify({erldns_handler_error_meter, 1}),
+  lager:error("Error answering request (exception: ~p, reason: ~p, message: ~p)", [Exception, Reason, Message]),
+  {ok, State};
+
+
 handle_event(_Event, State) ->
   {ok, State}.
 

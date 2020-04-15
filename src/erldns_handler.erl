@@ -174,7 +174,7 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
         Exception:Reason ->
-          lager:error("Error answering request (exception: ~p, reason: ~p)", [Exception, Reason]),
+          erldns_events:notify({erldns_handler_error, {Exception, Reason, Message}}),
           Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
       end
   end.
