@@ -226,7 +226,7 @@ try_custom_parsers(Data, [Parser|Rest]) ->
 
 % Internal converters
 json_record_to_erlang([Name, Type, _Ttl, Data = null, _]) ->
-  erldns_events:notify({?MODULE, parser_error, {Name, Type, Data, null_data}}),
+  erldns_events:notify({?MODULE, error, {Name, Type, Data, null_data}}),
   {};
 
 json_record_to_erlang([Name, <<"SOA">>, Ttl, Data, _Context]) ->
@@ -489,8 +489,9 @@ base64_to_bin(Bin) when is_binary(Bin) ->
 
 -ifdef(TEST).
 json_record_to_erlang_test() ->
-  Name = <<"example.com">>,
+  erldns_events:start_link(),
   ?assertEqual({}, json_record_to_erlang([])),
+  Name = <<"example.com">>,
   ?assertEqual({}, json_record_to_erlang([Name, <<"SOA">>, 3600, null, null])).
 
 json_record_soa_to_erlang_test() ->
