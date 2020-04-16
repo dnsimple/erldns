@@ -37,10 +37,10 @@ handle_event({_M, start_servers}, State) ->
       % Start up the UDP and TCP servers
       lager:info("Starting the UDP and TCP supervisor"),
       erldns_server_sup:start_link(),
-      erldns_events:notify(servers_started),
+      erldns_events:notify({?MODULE, servers_started}),
       {ok, State#state{servers_running = true}};
     _ ->
-      erldns_events:notify(servers_already_started),
+      erldns_events:notify({?MODULE, servers_already_started}),
       {ok, State}
   end;
 
@@ -64,7 +64,7 @@ handle_event({_M, tcp_error, Reason}, State) ->
   folsom_metrics:notify({tcp_error_history, Reason}),
   {ok, State};
 
-handle_event({dnssec_request, _Host, _Qname}, State) ->
+handle_event({_M, dnssec_request, _Host, _Qname}, State) ->
   folsom_metrics:notify(dnssec_request_counter, {inc, 1}),
   folsom_metrics:notify(dnssec_request_meter, 1),
   {ok, State};
@@ -117,6 +117,10 @@ handle_event({M = eldns_encoder, E = encode_message_error, {Exception, Reason, R
 
 handle_event({M = erldns_encoder, E = encode_message_error, {Exception, Reason, Response, Opts}}, State) ->
   lager:error("Error encoding with opts (module: ~p, event: ~p, response: ~p, opts: ~p, exception: ~p, reason: ~p)", [M, E, Response, Opts,Exception, Reason]),
+  {ok, State};
+
+handle_event({M = erldns_worker, E = handle_tcp_query_error, {Error}}, State) ->
+  lager:error("Error handling TCP query (module: ~p, event: ~p, error: ~p)", [M, E, Error]),
   {ok, State};
 
 handle_event({M = erldns_worker, E = handle_udp_query_error, {Error}}, State) ->

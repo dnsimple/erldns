@@ -52,9 +52,7 @@ handle_call({process, DecodedMessage, Socket, {tcp, Address}}, _From, State) ->
   % querying www.example.com with the test zones
   % simulate_timeout(DecodedMessage),  
   
-  erldns_events:notify({start_handle, tcp, [{host, Address}]}),
   Response = erldns_handler:handle(DecodedMessage, {tcp, Address}),
-  erldns_events:notify({end_handle, tcp, [{host, Address}]}),
   EncodedMessage = erldns_encoder:encode_message(Response),
   send_tcp_message(Socket, EncodedMessage),
   {reply, ok, State}; 

@@ -8,6 +8,9 @@ q = DNS(rd=1,qd=DNSQR(qname="example.com",qtype="SOA"))
 
 sr1(ip/q)
 
+q = DNS(rd=1,qd=DNSQR(qname="example.com",qtype="SOA"))
+sr1(ip/q)
+
 # Null byte
 sr1(ip/Raw(b'\x00'))
 

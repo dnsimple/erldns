@@ -121,9 +121,9 @@ handle(Message, Host, {throttled, Host, _ReqCount}) ->
 %% append the SOA record if it is a zone transfer and complete the response
 %% by filling out count-related header fields.
 handle(Message, Host, _) ->
-  erldns_events:notify({start_handle, [{host, Host}, {message, Message}]}),
+  erldns_events:notify({?MODULE, start_handle, [{host, Host}, {message, Message}]}),
   Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, Host]),
-  erldns_events:notify({end_handle, [{host, Host}, {message, Message}, {response, Response}]}),
+  erldns_events:notify({?MODULE, end_handle, [{host, Host}, {message, Message}, {response, Response}]}),
   Response.
 
 do_handle(Message, Host) ->
@@ -137,10 +137,10 @@ do_handle(Message, Host) ->
 handle_message(Message, Host) ->
   case erldns_packet_cache:get({Message#dns_message.questions, Message#dns_message.additional}, Host) of
     {ok, CachedResponse} ->
-      erldns_events:notify({packet_cache_hit, [{host, Host}, {message, Message}]}),
+      erldns_events:notify({?MODULE, packet_cache_hit, [{host, Host}, {message, Message}]}),
       CachedResponse#dns_message{id=Message#dns_message.id};
     {error, Reason} ->
-      erldns_events:notify({packet_cache_miss, [{reason, Reason}, {host, Host}, {message, Message}]}),
+      erldns_events:notify({?MODULE, packet_cache_miss, [{reason, Reason}, {host, Host}, {message, Message}]}),
       handle_packet_cache_miss(Message, get_authority(Message), Host) % SOA lookup
   end.
 
@@ -174,7 +174,7 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
         Exception:Reason ->
-          erldns_events:notify({erldns_handler, error, {Exception, Reason, Message}}),
+          erldns_events:notify({?MODULE, error, {Exception, Reason, Message}}),
           Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
       end
   end.
@@ -207,10 +207,10 @@ complete_response(Message) ->
 notify_empty_response(Message) ->
   case {Message#dns_message.rc, Message#dns_message.anc + Message#dns_message.auc + Message#dns_message.adc} of
     {?DNS_RCODE_REFUSED, _} ->
-      erldns_events:notify({erldns_handler, refused_response, Message#dns_message.questions}),
+      erldns_events:notify({?MODULE, refused_response, Message#dns_message.questions}),
       Message;
     {_, 0} ->
-      erldns_events:notify({erldns_handler, empty_response, Message}),
+      erldns_events:notify({?MODULE, empty_response, Message}),
       Message;
     _ ->
       Message

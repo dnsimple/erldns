@@ -54,7 +54,7 @@ handle_cast({tcp_query, Socket, Bin}, State) ->
       {Id, _, Type, Modules} = State#state.worker_process,
       {noreply, State#state{worker_process = {Id, NewWorkerPid, Type, Modules}}};
     Error ->
-      lager:error("Error handling TCP query (error: ~p)", [Error]),
+      erldns_events:notify({?MODULE, handle_tcp_query_Error, {Error}}),
       {noreply, State}
   end;
 handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
@@ -65,7 +65,7 @@ handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
       {Id, _, Type, Modules} = State#state.worker_process,
       {noreply, State#state{worker_process = {Id, NewWorkerPid, Type, Modules}}};
     Error ->
-      erldns_events:notify({erldns_worker_handle_udp_query_error, {Error}}),
+      erldns_events:notify({?MODULE, handle_udp_query_error, {Error}}),
       {noreply, State}
   end;
 handle_cast(_Msg, State) ->
@@ -129,7 +129,7 @@ handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {
 %% @doc Handle DNS query that comes in over UDP
 -spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary(), {pid(), term()}) -> ok | {error, not_owner | timeout | inet:posix() | atom()} | {error, timeout, pid()}.
 handle_udp_dns_query(Socket, Host, Port, Bin, {WorkerProcessSup, WorkerProcess}) ->
-  erldns_events:notify({start_udp, [{host, Host}]}),
+  erldns_events:notify({?MODULE, start_udp, [{host, Host}]}),
   Result = case erldns_decoder:decode_message(Bin) of
              {trailing_garbage, DecodedMessage, TrailingGarbage} ->
                erldns_events:notify({?MODULE, decode_message_trailing_garbage, {DecodedMessage, TrailingGarbage}}),

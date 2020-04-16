@@ -34,7 +34,7 @@ encode_message(Response) ->
         M -> M
       catch
         Exception:Reason ->
-          erldns_events:notify({erldns_encoder, encode_message_error, {Exception, Reason, Response}}),
+          erldns_events:notify({?MODULE, encode_message_error, {Exception, Reason, Response}}),
           encode_message(build_error_response(Response))
       end
   end.
@@ -58,7 +58,7 @@ encode_message(Response, Opts) ->
         M -> M
       catch
         Exception:Reason ->
-          erldns_events:notify({erldns_encoder, encode_message_error, {Exception, Reason, Response, Opts}}),
+          erldns_events:notify({?MODULE, encode_message_error, {Exception, Reason, Response, Opts}}),
           {false, encode_message(build_error_response(Response))}
       end
   end.

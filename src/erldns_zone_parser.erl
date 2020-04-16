@@ -129,7 +129,7 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
                         {} ->
                           case try_custom_parsers(Data, Parsers) of
                             {} ->
-                              erldns_events:notify({erldns_zone, unsupported_record, Data}),
+                              erldns_events:notify({?MODULE, unsupported_record, Data}),
                               {};
                             ParsedRecord -> ParsedRecord
                           end;
@@ -226,7 +226,7 @@ try_custom_parsers(Data, [Parser|Rest]) ->
 
 % Internal converters
 json_record_to_erlang([Name, Type, _Ttl, Data = null, _]) ->
-  erldns_events:notify({erldns_zone, parser_error, {Name, Type, Data, null_data}}),
+  erldns_events:notify({?MODULE, parser_error, {Name, Type, Data, null_data}}),
   {};
 
 json_record_to_erlang([Name, <<"SOA">>, Ttl, Data, _Context]) ->
@@ -258,7 +258,7 @@ json_record_to_erlang([Name, Type = <<"A">>, Ttl, Data, _Context]) ->
     {ok, Address} ->
       #dns_rr{name = Name, type = ?DNS_TYPE_A, data = #dns_rrdata_a{ip = Address}, ttl = Ttl};
     {error, Reason} ->
-      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Reason}}),
+      erldns_events:notify({?MODULE, error, {Name, Type, Data, Reason}}),
       {}
   end;
 
@@ -267,7 +267,7 @@ json_record_to_erlang([Name, Type = <<"AAAA">>, Ttl, Data, _Context]) ->
     {ok, Address} ->
       #dns_rr{name = Name, type = ?DNS_TYPE_AAAA, data = #dns_rrdata_aaaa{ip = Address}, ttl = Ttl};
     {error, Reason} ->
-      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Reason}}),
+      erldns_events:notify({?MODULE, error, {Name, Type, Data, Reason}}),
       {}
   end;
 
@@ -330,7 +330,7 @@ json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Exception, Reason}}),
+      erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
       {}
   end;
 
@@ -364,7 +364,7 @@ json_record_to_erlang([Name, Type = <<"SSHFP">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Exception, Reason}}),
+      erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
       {}
   end;
 
@@ -409,7 +409,7 @@ json_record_to_erlang([Name, Type = <<"DS">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Exception, Reason}}),
+      erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
       {}
   end;
 
@@ -428,7 +428,7 @@ json_record_to_erlang([Name, Type = <<"CDS">>, Ttl, Data, _Context]) ->
          ttl = Ttl}
   catch
     Exception:Reason ->
-      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Exception, Reason}}),
+      erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
       {}
   end;
 
@@ -448,7 +448,7 @@ json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) ->
            ttl = Ttl})
   catch
     Exception:Reason ->
-      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Exception, Reason}}),
+      erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
       {}
   end;
 
@@ -468,7 +468,7 @@ json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) ->
            ttl = Ttl})
   catch
     Exception:Reason ->
-      erldns_events:notify({erldns_zone_parser, error, {Name, Type, Data, Exception, Reason}}),
+      erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
       {}
   end;
 
