@@ -91,6 +91,10 @@ handle_event({M = erldns_handler, E = error, {Exception, Reason, Message}}, Stat
   lager:error("Error answering request (module: ~p, event: ~p, exception: ~p, reason: ~p, message: ~p)", [M, E, Exception, Reason, Message]),
   {ok, State};
 
+handle_event({M = erldns_zone_encoder, E = unsupported_rrdata_type, Data}, State) ->
+  lager:info("Unable to encode rrdata (module: ~p, event: ~p, data: ~p)", [M, E, Data]),
+  {ok, State};
+
 handle_event({M = erldns_zone_loader, E = read_file_error, Reason}, State) ->
   lager:error("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
   {ok, State};
