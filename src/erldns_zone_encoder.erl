@@ -58,7 +58,7 @@ register_encoders(Modules) ->
 %% @doc Register a single encoder module.
 -spec register_encoder(module()) -> ok.
 register_encoder(Module) ->
-  lager:info("Registering custome encoder (module: ~p)", [Module]),
+  lager:info("Registering custom encoder (module: ~p)", [Module]),
   gen_server:call(?SERVER, {register_encoder, Module}).
 
 
