@@ -69,6 +69,10 @@ handle_event({_M, dnssec_request, _Host, _Qname}, State) ->
   folsom_metrics:notify(dnssec_request_meter, 1),
   {ok, State};
 
+handle_event({M = erldns_handler, E = bad_message, {Message, Host}}, State) ->
+  lager:error("Received a bad message (module: ~p, event: ~p, message: ~p, host: ~p)", [M, E, Message, Host]),
+  {ok, State};
+
 handle_event({M = erldns_handler, E = refused_response, Questions}, State) ->
   folsom_metrics:notify({refused_response_meter, 1}),
   folsom_metrics:notify({refused_response_counter, {inc, 1}}),
@@ -117,6 +121,10 @@ handle_event({M = eldns_encoder, E = encode_message_error, {Exception, Reason, R
 
 handle_event({M = erldns_encoder, E = encode_message_error, {Exception, Reason, Response, Opts}}, State) ->
   lager:error("Error encoding with opts (module: ~p, event: ~p, response: ~p, opts: ~p, exception: ~p, reason: ~p)", [M, E, Response, Opts,Exception, Reason]),
+  {ok, State};
+
+handle_event({M = erldns_storage, E = failed_zones_load, Reason}, State) ->
+  lager:error("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
   {ok, State};
 
 handle_event({M = erldns_worker, E = handle_tcp_query_error, {Error}}, State) ->

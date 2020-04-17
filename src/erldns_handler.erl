@@ -103,9 +103,9 @@ handle(Message, Context = {_, Host}) when is_record(Message, dns_message) ->
   handle(Message, Host, erldns_query_throttle:throttle(Message, Context));
 %% The message was bad so just return it.
 %% TODO: consider just throwing away the message
-handle(BadMessage, {_, Host}) ->
-  lager:error("Received a bad message (message: ~p, host: ~p)", [BadMessage, Host]),
-  BadMessage.
+handle(Message, {_, Host}) ->
+  erldns_events:notify({?MODULE, bad_message, {Message, Host}}),
+  Message.
 
 %% We throttle ANY queries to discourage use of our authoritative name servers
 %% for reflection attacks.

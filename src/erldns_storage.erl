@@ -179,7 +179,7 @@ load_zones(Filename) when is_list(Filename) ->
       lager:debug("Loaded zones (count: ~p)", [length(JsonZones)]),
       {ok, length(JsonZones)};
     {error, Reason} ->
-      lager:error("Failed to load zones (reason: ~p)", [Reason]),
+      erldns_events:notify({?MODULE, failed_zones_load, Reason}),
       {err, Reason}
   end.
 
