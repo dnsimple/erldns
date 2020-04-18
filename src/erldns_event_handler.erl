@@ -85,10 +85,10 @@ handle_event({M = erldns_handler, E = empty_response, Message}, State) ->
   lager:info("Empty response (module: ~p, event: ~p, message: ~p)", [M, E, Message]),
   {ok, State};
 
-handle_event({M = erldns_handler, E = error, {Exception, Reason, Message}}, State) ->
+handle_event({M = erldns_handler, E = resolve_error, {Exception, Reason, Message, Stacktrace}}, State) ->
   folsom_metrics:notify({erldns_handler_error_counter, {inc, 1}}),
   folsom_metrics:notify({erldns_handler_error_meter, 1}),
-  lager:error("Error answering request (module: ~p, event: ~p, exception: ~p, reason: ~p, message: ~p)", [M, E, Exception, Reason, Message]),
+  lager:error("Error answering request (module: ~p, event: ~p, exception: ~p, reason: ~p, message: ~p, stacktrace: ~p)", [M, E, Exception, Reason, Message, Stacktrace]),
   {ok, State};
 
 handle_event({M = erldns_zone_encoder, E = unsupported_rrdata_type, Data}, State) ->

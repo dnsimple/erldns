@@ -173,8 +173,8 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
       try erldns_resolver:resolve(Message, AuthorityRecords, Host) of
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
-        Exception:Reason ->
-          erldns_events:notify({?MODULE, error, {Exception, Reason, Message}}),
+        Exception:Reason:Stacktrace ->
+          erldns_events:notify({?MODULE, resolve_error, {Exception, Reason, Message, Stacktrace}}),
           Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
       end
   end.
