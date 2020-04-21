@@ -338,7 +338,7 @@ build_typed_index(Records) ->
 sign_zone(Zone = #zone{keysets = []}) ->
   Zone;
 sign_zone(Zone) ->
-  lager:debug("Signing zone (name: ~p)", [Zone#zone.name]),
+  % lager:debug("Signing zone (name: ~p)", [Zone#zone.name]),
   DnskeyRRs = lists:filter(erldns_records:match_type(?DNS_TYPE_DNSKEY), Zone#zone.records),
   KeyRRSigRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets)),
   verify_zone(Zone, DnskeyRRs, KeyRRSigRecords),
@@ -348,17 +348,17 @@ sign_zone(Zone) ->
   #zone{name = Zone#zone.name, version = Zone#zone.version, record_count = length(Records), authority = Zone#zone.authority, records = Records, records_by_name = build_named_index(Records), keysets = Zone#zone.keysets}.
 
 -spec(verify_zone(erldns:zone(), [dns:rr()], [dns:rr()]) -> boolean()).
-verify_zone(Zone, DnskeyRRs, KeyRRSigRecords) ->
-  lager:debug("Verify zone (name: ~p)", [Zone#zone.name]),
+verify_zone(_Zone, DnskeyRRs, KeyRRSigRecords) ->
+  % lager:debug("Verify zone (name: ~p)", [Zone#zone.name]),
   case lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 257 end, DnskeyRRs) of
     [] -> false;
     KSKs -> 
-      lager:debug("KSKs: ~p", [KSKs]),
+      % lager:debug("KSKs: ~p", [KSKs]),
       KSKDnskey = lists:last(KSKs),
       RRSig = lists:last(KeyRRSigRecords),
-      lager:debug("Attempting to verify RRSIG (key: ~p)", [KSKDnskey]),
+      % lager:debug("Attempting to verify RRSIG (key: ~p)", [KSKDnskey]),
       VerifyResult = dnssec:verify_rrsig(RRSig, DnskeyRRs, [KSKDnskey], []),
-      lager:debug("KSK verification (verified?: ~p)", [VerifyResult]),
+      % lager:debug("KSK verification (verified?: ~p)", [VerifyResult]),
       VerifyResult
   end.
 
