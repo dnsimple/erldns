@@ -49,6 +49,8 @@ create(Name = host_throttle) ->
 create(Name = lookup_table) ->
   create_ets_table(Name, bag);
 create(Name = handler_registry) ->
+  create_ets_table(Name, set);
+create(Name = sync_counters) ->
   create_ets_table(Name, set).
 
 %% @doc Insert value in ets table.
