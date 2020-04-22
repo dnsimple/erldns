@@ -222,17 +222,16 @@ zone_names_and_versions() ->
 %% @doc Return current sync counter
 -spec get_sync_counter() -> integer().
 get_sync_counter() ->
-  case erldns_storage:select(sync_counters, {counter, '$1'}) of
-    [] -> 
-	   % return default value of 0
-	  0;
-    [{counter, Counter}] -> Counter
-  end.
+	Result = erldns_storage:select(sync_counters, counter),
+	lager:debug("Counter result: ~p", [Result]),
+	case erldns_storage:select(sync_counters, counter) of
+		[{counter, Counter}] -> Counter;
+		[] -> 0 % return default value of 0
+  	end.
 
 -spec write_sync_counter(integer()) -> ok.
 write_sync_counter(Counter) ->
-
-  erldns_storage:insert(sync_counters, {counter, {counter, Counter}}).
+  erldns_storage:insert(sync_counters, {counter, Counter}).
 	
 % ----------------------------------------------------------------------------------------------------
 % Write API
@@ -446,7 +445,7 @@ sign_zone(Zone) ->
 -spec(verify_zone(erldns:zone(), [dns:rr()], [dns:rr()]) -> boolean()).
 verify_zone(_Zone, DnskeyRRs, KeyRRSigRecords) ->
   % lager:debug("Verify zone (name: ~p)", [Zone#zone.name]),
-  case lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 257 end, DnskeyRRs) of
+  case lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= ?DNSKEY_KSK_TYPE end, DnskeyRRs) of
     [] -> false;
     KSKs -> 
       % lager:debug("KSKs: ~p", [KSKs]),
@@ -474,7 +473,7 @@ sign_rrset(Name, Records, DnsKeyRRs, KeySets) ->
 -spec(verify_rrset([dns:rr()], [dns:rr()]) -> boolean()).
 verify_rrset(DnsKeyRRs, KeyRRSigRecords) ->
   lager:debug("Verify RRSet"),
-  case lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= 257 end, DnsKeyRRs) of
+  case lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= ?DNSKEY_KSK_TYPE end, DnsKeyRRs) of
     [] -> false;
     KSKs -> 
       lager:debug("KSKs: ~p", [KSKs]),
