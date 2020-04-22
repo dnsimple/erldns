@@ -222,8 +222,6 @@ zone_names_and_versions() ->
 %% @doc Return current sync counter
 -spec get_sync_counter() -> integer().
 get_sync_counter() ->
-	Result = erldns_storage:select(sync_counters, counter),
-	lager:debug("Counter result: ~p", [Result]),
 	case erldns_storage:select(sync_counters, counter) of
 		[{counter, Counter}] -> Counter;
 		[] -> 0 % return default value of 0
