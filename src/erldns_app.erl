@@ -20,21 +20,18 @@
 -export([start/2, start_phase/3, stop/1]).
 
 start(_Type, _Args) ->
-  lager:debug("Starting erldns application"),
+  lager:info("Starting erldns application"),
   setup_metrics(),
   erldns_sup:start_link().
 
 start_phase(post_start, _StartType, _PhaseArgs) ->
-  lager:debug("Post start phase for erldns application"),
   erldns_events:add_handler(erldns_event_handler),
 
-  lager:debug("Loading custom zone parsers"),
   case application:get_env(erldns, custom_zone_parsers) of
     {ok, Parsers} -> erldns_zone_parser:register_parsers(Parsers);
     _ -> ok
   end,
 
-  lager:debug("Loading custom zone encoders"),
   case application:get_env(erldns, custom_zone_encoders) of
     {ok, Encoders} -> erldns_zone_encoder:register_encoders(Encoders);
     _ -> ok
@@ -44,7 +41,7 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
   erldns_zone_loader:load_zones(),
 
   lager:info("Notifying servers to start"),
-  erldns_events:notify(start_servers),
+  erldns_events:notify({?MODULE, start_servers}),
 
   ok.
 
@@ -87,4 +84,7 @@ setup_metrics() ->
   folsom_metrics:new_meter(cache_miss_meter),
 
   folsom_metrics:new_counter(dnssec_request_counter),
-  folsom_metrics:new_meter(dnssec_request_meter).
+  folsom_metrics:new_meter(dnssec_request_meter),
+
+  folsom_metrics:new_counter(erldns_handler_error_counter),
+  folsom_metrics:new_meter(erldns_handler_error_meter).

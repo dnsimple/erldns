@@ -1,0 +1,34 @@
+# Basic example
+sr1(IP(dst="127.0.0.1")/UDP(sport=RandShort(), dport=8053)/DNS(rd=1,qd=DNSQR(qname="example.com",qtype="SOA")))
+
+# Constructing packets
+ip = IP(dst="127.0.0.1")/UDP(sport=RandShort(), dport=8053)
+
+q = DNS(rd=1,qd=DNSQR(qname="example.com",qtype="SOA"))
+
+sr1(ip/q)
+
+q = DNS(rd=1,qd=DNSQR(qname="example.com",qtype="SOA"))
+sr1(ip/q)
+
+# Null byte
+sr1(ip/Raw(b'\x00'))
+
+# Good message
+sr1(ip/Raw(b'\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x06\x00\x01'))
+
+# Truncated message
+sr1(ip/Raw(b'\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x06\x00'), timeout=1)
+
+# Extra data message
+sr1(ip/Raw(b'\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x06\x00\x01\x00'))
+
+# Not a question error
+sr1(ip/Raw(b'\x00\x00\xff\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x06\x00\x01'), timeout=1)
+
+# Bad pointer
+sr1(ip/Raw(b'\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\xffexample\x03com\x00\x00\x06\x00\x01'), timeout=1)
+
+# Refused response with trailing garbage
+sr1(ip/Raw(b'\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00example\x03com\x00\x00\x06\x00\x01'), timeout=1)
+

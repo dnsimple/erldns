@@ -58,7 +58,7 @@ register_encoders(Modules) ->
 %% @doc Register a single encoder module.
 -spec register_encoder(module()) -> ok.
 register_encoder(Module) ->
-  lager:info("Registering customer encoder (module: ~p)", [Module]),
+  lager:info("Registering custom encoder (module: ~p)", [Module]),
   gen_server:call(?SERVER, {register_encoder, Module}).
 
 
@@ -227,5 +227,5 @@ encode_data({dns_rrdata_cdnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
 encode_data({dns_rrdata_rrsig, TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature}) ->
   erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~w ~w ~w ~w ~w ~s", [TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature]));
 encode_data(Data) ->
-  lager:debug("Unable to encode rrdata (data: ~p)", [Data]),
+  erldns_events:notify({?MODULE, unsupported_rrdata_type, Data}),
   {}.

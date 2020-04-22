@@ -26,21 +26,21 @@
 load_zones() ->
   case file:read_file(filename()) of
     {ok, Binary} ->
-      lager:debug("Parsing zones JSON"),
+      lager:info("Parsing zones JSON"),
       JsonZones = jsx:decode(Binary),
-      lager:debug("Putting zones into cache"),
+      lager:info("Putting zones into cache"),
       lists:foreach(
         fun(JsonZone) ->
             Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
             case erldns_zone_cache:put_zone(Zone) of
-              {error, Reason} -> lager:error("Failed to load zone (reason: ~p)", [JsonZone, Reason]);
+              {error, Reason} -> erldns_events:notify({?MODULE, put_zone_error, {JsonZone, Reason}});
               _ -> ok
             end
         end, JsonZones),
       lager:info("Loaded zones (count: ~p)", [length(JsonZones)]),
       {ok, length(JsonZones)};
     {error, Reason} ->
-      lager:error("Failed to load zones (reason: ~p)", [Reason]),
+      erldns_events:notify({?MODULE, read_file_error, Reason}),
       {err, Reason}
   end.
 
