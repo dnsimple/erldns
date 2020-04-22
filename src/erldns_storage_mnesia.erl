@@ -117,6 +117,19 @@ create(authorities) ->
       ok;
     Error ->
       {error, Error}
+  end;
+create(sync_counters) ->
+  ok = ensure_mnesia_started(),
+  case mnesia:create_table(sync_counters,
+                           [{attributes, record_info(fields, sync_counters)},
+                            {disc_copies, [node()]}]) of
+    {aborted, {already_exists, sync_counters}} ->
+      lager:warning("The sync_counters table already exists (node: ~p)", [node()]),
+      ok;
+    {atomic, ok} ->
+      ok;
+    Error ->
+      {error, Error}
   end.
 
 %% @doc Insert into specified table. zone_cache calls this by {name, #zone{}}
@@ -155,6 +168,14 @@ insert(zone_records_typed, {{ZoneName, Fqdn, Type}, Records}) ->
   end;
 insert(authorities, #authorities{} = Auth) ->
   Write = fun() -> mnesia:write(authorities, Auth, write) end,
+  case mnesia:activity(transaction, Write) of
+    ok ->
+      ok;
+    Error ->
+      {error, Error}
+  end;
+insert(sync_counters, {counter, Counter}) ->
+  Write = fun() -> mnesia:write(sync_counters, {counter, Counter}, write) end,
   case mnesia:activity(transaction, Write) of
     ok ->
       ok;
