@@ -268,7 +268,7 @@ put_zone_records(Name, RecordsByName) ->
 %  when Name :: binary(), Sha :: binary(), Records :: [dns:rr()], Keys :: [erldns:keyset()], RRFqdn :: binary(), Type :: binary(), Counter :: integer().
 put_zone_rrset({ZoneName, Sha, Records}, RRFqdn, RRSetType, Counter) ->
   put_zone_rrset({ZoneName, Sha, Records, []}, RRFqdn, RRSetType, Counter);
-put_zone_rrset({ZoneName, _Sha, Records, Keys}, RRFqdn, RRSetType, Counter) ->
+put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, RRSetType, Counter) ->
   % Check counter
   CurrentCounter = get_sync_counter(),
   lager:debug("Current Counter: ~p", [CurrentCounter]),
@@ -282,13 +282,7 @@ put_zone_rrset({ZoneName, _Sha, Records, Keys}, RRFqdn, RRSetType, Counter) ->
 		  case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
 			{ok, Zone} -> Zone,
 			  lager:debug("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [RRFqdn, Type, ZoneName, Records]),
-			  lager:debug("Available Keys: ~p", [Keys]),
-			  % if keys are missing from RRset payload, use existing zone keysets
-			  KeySets = case length(Keys) of
-						 0 -> Zone#zone.keysets;
-						 _ -> Keys
-					 end,
-			  lager:debug("Keys to use: ~p", [KeySets]),
+			  KeySets = Zone#zone.keysets,
 			  DnsKeyRRs = get_zone_dnskey_records(ZoneName),
 			  SignedRRSet = sign_rrset(ZoneName, Records, DnsKeyRRs, KeySets),
 			  lager:debug("SignedRRSet: ~p", [SignedRRSet]),
@@ -302,6 +296,7 @@ put_zone_rrset({ZoneName, _Sha, Records, Keys}, RRFqdn, RRSetType, Counter) ->
 			  % Remove RRSet RRSIG Records
 			  delete_zone_rrset(ZoneName, RRFqdn, ?DNS_TYPE_RRSIG),
 			  put_zone_records(erldns:normalize_name(ZoneName), NamedRecords),
+			  % TODO remove debug
 			  CurrentRRSet = get_zone_rrset(ZoneName, RRFqdn, Type),
 			  lager:debug("Updated RRSet: ~p", [CurrentRRSet]),
 			  lager:debug("Number of RRSet records after update: ~p", [length(CurrentRRSet)]),
