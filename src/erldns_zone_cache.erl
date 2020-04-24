@@ -261,11 +261,11 @@ put_zone_records(Name, RecordsByName) ->
   put_zone_records_entry(Name, maps:next(maps:iterator(RecordsByName))).
 
 %% @doc Put zone RRSet
-%-spec put_zone_rrset(({Name, Sha, Records}, RRFqdn, RRSetType, Counter) | ({Name, Sha, Records}, RRFqdn, RRSetType, Counter)) -> ok | {error, Reason :: term()}
-%  when Name :: binary(), Sha :: binary(), Records :: [dns:rr()], Keys :: [erldns:keyset()], RRFqdn :: binary(), RRSetType :: binary(), Counter :: integer().
-put_zone_rrset({ZoneName, Sha, Records}, RRFqdn, RRSetType, Counter) ->
-  put_zone_rrset({ZoneName, Sha, Records, []}, RRFqdn, RRSetType, Counter);
-put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, RRSetType, Counter) ->
+%-spec put_zone_rrset(({Name, Sha, Records}, RRFqdn, Type, Counter) | ({Name, Sha, Records}, RRFqdn, Type, Counter)) -> ok | {error, Reason :: term()}
+%  when Name :: binary(), Sha :: binary(), Records :: [dns:rr()], Keys :: [erldns:keyset()], RRFqdn :: binary(), Type :: binary(), Counter :: integer().
+put_zone_rrset({ZoneName, Sha, Records}, RRFqdn, Type, Counter) ->
+  put_zone_rrset({ZoneName, Sha, Records, []}, RRFqdn, Type, Counter);
+put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
   % Check counter
   CurrentCounter = get_sync_counter(),
   lager:debug("Current Counter: ~p", [CurrentCounter]),
@@ -275,7 +275,6 @@ put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, RRSetType, Counter) ->
 	  true -> 
 		  lager:debug("Processing RRSet (~p) for Zone (~p): counter (~p) provided is higher than system", [RRFqdn, ZoneName, Counter]),
 		  % TODO: add custom types lookup
-		  Type = erldns_records:name_type(RRSetType),
 		  case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
 			{ok, Zone} -> Zone,
 			  lager:debug("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [RRFqdn, Type, ZoneName, Records]),
