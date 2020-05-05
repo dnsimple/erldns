@@ -47,8 +47,8 @@
          put_zone/1,
          put_zone/2,
          delete_zone/1,
-		 put_zone_rrset/4,
-		 delete_zone_rrset/3
+	 put_zone_rrset/4,
+	 delete_zone_rrset/3
         ]).
 
 % Gen server hooks
@@ -328,7 +328,7 @@ delete_zone_records(Name) ->
   erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), '_', '_'}, '_'},[],[true]}]).
 
 %% @doc Remove zone RRSet
--spec delete_zone_rrset(binary(), dns:dname(), integer()) -> any().
+-spec delete_zone_rrset(binary(), binary(), integer()) -> any().
 delete_zone_rrset(Name, RRFqdn, Type) ->
   lager:debug("Removing RRSet (~p) with type ~p for Zone (~p)", [RRFqdn, Type, Name]),
   erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn)}, Type},[],[true]}]),
