@@ -39,7 +39,7 @@
          get_records_by_name_and_type/2,
          in_zone/1,
          zone_names_and_versions/0,
-		 get_sync_counter/0
+	 get_sync_counter/0
         ]).
 
 % Write APIs
@@ -48,7 +48,8 @@
          put_zone/2,
          delete_zone/1,
 	 put_zone_rrset/4,
-	 delete_zone_rrset/3
+	 delete_zone_rrset/3,
+	 delete_zone_rrset/4
         ]).
 
 % Gen server hooks
@@ -330,9 +331,24 @@ delete_zone_records(Name) ->
 %% @doc Remove zone RRSet
 -spec delete_zone_rrset(binary(), binary(), integer()) -> any().
 delete_zone_rrset(Name, RRFqdn, Type) ->
-  lager:debug("Removing RRSet (~p) with type ~p for Zone (~p)", [RRFqdn, Type, Name]),
-  erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn)}, Type},[],[true]}]),
-  erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn), Type}, '_'},[],[true]}]).
+  delete_zone_rrset(Name, RRFqdn, Type, 0).
+
+-spec delete_zone_rrset(binary(), binary(), integer(), integer()) -> any().
+delete_zone_rrset(Name, RRFqdn, Type, Counter) ->
+  CurrentCounter = get_sync_counter(),
+  lager:debug("Current Counter: ~p", [CurrentCounter]),
+  case CurrentCounter < Counter of 
+	  false -> 
+		  lager:debug("Not processing delete operation for RRSet (~p): counter (~p) provided is lower than system", [RRFqdn, Counter]);
+	  true -> 
+		  lager:debug("Removing RRSet (~p) with type ~p for Zone (~p)", [RRFqdn, Type, Name]),
+		  Result = erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn)}, Type},[],[true]}]),
+		  lager:debug("delete result on zone_records: ~p", [Result]),
+		  ResultTyped = erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn), Type}, '_'},[],[true]}]),
+		  lager:debug("delete result on zone_records_typed: ~p", [ResultTyped]),
+		  ResultTyped,
+		  if Counter > 0 -> write_sync_counter(Counter) end	
+  end.
 
 % ----------------------------------------------------------------------------------------------------
 % Gen server init
