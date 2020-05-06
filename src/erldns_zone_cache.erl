@@ -304,8 +304,7 @@ put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
 			  delete_zone_rrset(ZoneName, RRFqdn, ?DNS_TYPE_RRSIG),
 			  % put zone_records_typed records first then create the records in zone_records
   			  put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
-			  NamedRecords = build_named_index(get_typed_records_by_name(RRFqdn)),
-			  put_zone_records_named_entry(ZoneName, maps:next(maps:iterator(NamedRecords))),
+			  rebuild_zone_records_named_entry(ZoneName, RRFqdn),
 			  % TODO remove debug
 			  CurrentRRSet = get_zone_rrset(ZoneName, RRFqdn, Type),
 			  lager:debug("Updated RRSet: ~p", [CurrentRRSet]),
@@ -363,12 +362,21 @@ delete_zone_rrset(Name, RRFqdn, Type, Counter) ->
 	  % only write counter if called explicitly with Counter value i.e. different than 0.
 	  % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
 	  if 
-	    Counter > 0 -> write_sync_counter(Counter);
+	    Counter > 0 -> 
+		% DELETE RRSet command has been sent - rebuild the zone_records named entry	
+		rebuild_zone_records_named_entry(Name, RRFqdn),	
+		write_sync_counter(Counter);
             true -> {ok, Counter}
 	  end;
     true ->
 	  lager:debug("Not processing delete operation for RRSet (~p): counter (~p) provided is lower than system", [RRFqdn, Counter])
   end.
+
+%% @doc rebuild zone_records' entry using zone_records_typed
+-spec rebuild_zone_records_named_entry(binary(), binary()) -> any().
+rebuild_zone_records_named_entry(ZoneName, RRFqdn) ->
+  NamedRecords = build_named_index(get_typed_records_by_name(RRFqdn)),
+  put_zone_records_named_entry(ZoneName, maps:next(maps:iterator(NamedRecords))).
 
 % ----------------------------------------------------------------------------------------------------
 % Gen server init
