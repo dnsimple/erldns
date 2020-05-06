@@ -285,24 +285,27 @@ put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
 		  lager:debug("Not processing RRSet (~p) for Zone (~p): counter (~p) provided is lower than system", [RRFqdn, ZoneName, Counter]);
 	  true -> 
 		  lager:debug("Processing RRSet (~p) for Zone (~p): counter (~p) provided is higher than system", [RRFqdn, ZoneName, Counter]),
-		  % TODO: add custom types lookup
 		  case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
 			{ok, Zone} -> Zone,
+			  % TODO: remove debug
 			  lager:debug("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [RRFqdn, Type, ZoneName, Records]),
 			  KeySets = Zone#zone.keysets,
 			  DnsKeyRRs = get_zone_dnskey_records(ZoneName),
 			  SignedRRSet = sign_rrset(ZoneName, Records, DnsKeyRRs, KeySets),
 			  lager:debug("SignedRRSet: ~p", [SignedRRSet]),
 			  % RRSet records + RRSIG records for the type
-			  NamedRecords = build_named_index(Records ++ SignedRRSet),
-			  lager:debug("NamedRecords: ~p", [NamedRecords]),
+			  TypedRecords = build_typed_index(Records ++ SignedRRSet),
+			  lager:debug("TypedRecords: ~p", [TypedRecords]),
 			  ExistingRRSet = get_zone_rrset(ZoneName, RRFqdn, Type),
 			  lager:debug("Number of RRSet records before delete: ~p", [length(ExistingRRSet)]),
 			  % Remove RRSet Records
 			  delete_zone_rrset(ZoneName, RRFqdn, Type), 
 			  % Remove RRSet RRSIG Records
 			  delete_zone_rrset(ZoneName, RRFqdn, ?DNS_TYPE_RRSIG),
-			  put_zone_records(erldns:normalize_name(ZoneName), NamedRecords),
+			  % put zone_records_typed records first then create the records in zone_records
+  			  put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
+			  NamedRecords = build_named_index(get_typed_records_by_name(RRFqdn)),
+			  put_zone_records_named_entry(ZoneName, maps:next(maps:iterator(NamedRecords))),
 			  % TODO remove debug
 			  CurrentRRSet = get_zone_rrset(ZoneName, RRFqdn, Type),
 			  lager:debug("Updated RRSet: ~p", [CurrentRRSet]),
@@ -317,10 +320,15 @@ put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
 put_zone_records_entry(_, none) ->
   ok;
 put_zone_records_entry(Name, {K, V, I}) ->
-  %lager:debug("putting zone records: ~p -> ~p", [Name, {K, V, I}]),
   erldns_storage:insert(zone_records, {{erldns:normalize_name(Name), erldns:normalize_name(K)}, V}),
   put_zone_records_typed_entry(Name, K, maps:next(maps:iterator(build_typed_index(V)))),
   put_zone_records_entry(Name, maps:next(I)).
+
+put_zone_records_named_entry(_, none) ->
+  ok;
+put_zone_records_named_entry(Name, {K, V, I}) ->
+  erldns_storage:insert(zone_records, {{erldns:normalize_name(Name), erldns:normalize_name(K)}, V}),
+  put_zone_records_named_entry(Name, maps:next(I)).
 
 put_zone_records_typed_entry(_, _, none) ->
   ok;
@@ -350,12 +358,10 @@ delete_zone_rrset(Name, RRFqdn, Type, Counter) ->
   if 
     Counter =:= 0 orelse CurrentCounter < Counter -> 
 	  lager:debug("Removing RRSet (~p) with type ~p for Zone (~p)", [RRFqdn, Type, Name]),
-	  Result = erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn)}, '_'},[],[true]}]),
-	  lager:debug("delete result on zone_records: ~p", [Result]),
-	  ResultTyped = erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn), Type}, '_'},[],[true]}]),
-	  lager:debug("delete result on zone_records_typed: ~p", [ResultTyped]),
+	  erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn)}, '_'},[],[true]}]),
+	  erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn), Type}, '_'},[],[true]}]),
 	  % only write counter if called explicitly with Counter value i.e. different than 0.
-	  % this will not write the counter if called by put_zone_rrset/3
+	  % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
 	  if 
 	    Counter > 0 -> write_sync_counter(Counter);
             true -> {ok, Counter}
