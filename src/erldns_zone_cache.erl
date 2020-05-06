@@ -37,6 +37,7 @@
          get_zone_records/1,
          get_records_by_name/1,
          get_records_by_name_and_type/2,
+         get_typed_records_by_name/1,
          in_zone/1,
          zone_names_and_versions/0,
 	 get_sync_counter/0
@@ -48,7 +49,6 @@
          put_zone/2,
          delete_zone/1,
 	 put_zone_rrset/4,
-	 delete_zone_rrset/3,
 	 delete_zone_rrset/4
         ]).
 
@@ -165,6 +165,16 @@ get_records_by_name_and_type(Name, Type) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
       lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), Type}, '$1'},[],['$$']}], infinite));
+    _ ->
+      []
+  end.
+
+%% @doc Get all records for given FQDN from zone_records_typed.
+-spec get_typed_records_by_name(dns:dname()) -> [dns:rr()].
+get_typed_records_by_name(Name) ->
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), '_'}, '$1'},[],['$$']}], infinite));
     _ ->
       []
   end.
@@ -333,21 +343,25 @@ delete_zone_records(Name) ->
 delete_zone_rrset(Name, RRFqdn, Type) ->
   delete_zone_rrset(Name, RRFqdn, Type, 0).
 
+%% @doc Remove zone RRSet
 -spec delete_zone_rrset(binary(), binary(), integer(), integer()) -> any().
 delete_zone_rrset(Name, RRFqdn, Type, Counter) ->
   CurrentCounter = get_sync_counter(),
-  lager:debug("Current Counter: ~p", [CurrentCounter]),
-  case CurrentCounter < Counter of 
-	  false -> 
-		  lager:debug("Not processing delete operation for RRSet (~p): counter (~p) provided is lower than system", [RRFqdn, Counter]);
-	  true -> 
-		  lager:debug("Removing RRSet (~p) with type ~p for Zone (~p)", [RRFqdn, Type, Name]),
-		  Result = erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn)}, Type},[],[true]}]),
-		  lager:debug("delete result on zone_records: ~p", [Result]),
-		  ResultTyped = erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn), Type}, '_'},[],[true]}]),
-		  lager:debug("delete result on zone_records_typed: ~p", [ResultTyped]),
-		  ResultTyped,
-		  if Counter > 0 -> write_sync_counter(Counter) end	
+  if 
+    Counter =:= 0 orelse CurrentCounter < Counter -> 
+	  lager:debug("Removing RRSet (~p) with type ~p for Zone (~p)", [RRFqdn, Type, Name]),
+	  Result = erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn)}, '_'},[],[true]}]),
+	  lager:debug("delete result on zone_records: ~p", [Result]),
+	  ResultTyped = erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), erldns:normalize_name(RRFqdn), Type}, '_'},[],[true]}]),
+	  lager:debug("delete result on zone_records_typed: ~p", [ResultTyped]),
+	  % only write counter if called explicitly with Counter value i.e. different than 0.
+	  % this will not write the counter if called by put_zone_rrset/3
+	  if 
+	    Counter > 0 -> write_sync_counter(Counter);
+            true -> {ok, Counter}
+	  end;
+    true ->
+	  lager:debug("Not processing delete operation for RRSet (~p): counter (~p) provided is lower than system", [RRFqdn, Counter])
   end.
 
 % ----------------------------------------------------------------------------------------------------
