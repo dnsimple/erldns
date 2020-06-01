@@ -17,6 +17,8 @@
 
 -behavior(gen_event).
 
+-include_lib("kernel/include/logger.hrl").
+
 -export([
          init/1,
          handle_event/2,
@@ -35,7 +37,10 @@ handle_event({_M, start_servers}, State) ->
   case State#state.servers_running of
     false ->
       % Start up the UDP and TCP servers
-      lager:info("Starting the UDP and TCP supervisor"),
+      ?LOG_INFO(#{
+	 log => event, in => start_servers, 
+	 text => "Starting the UDP and TCP supervisor"
+	}),
       erldns_server_sup:start_link(),
       erldns_events:notify({?MODULE, servers_started}),
       {ok, State#state{servers_running = true}};
@@ -70,99 +75,202 @@ handle_event({_M, dnssec_request, _Host, _Qname}, State) ->
   {ok, State};
 
 handle_event({M = erldns_handler, E = bad_message, {Message, Host}}, State) ->
-  lager:error("Received a bad message (module: ~p, event: ~p, message: ~p, host: ~p)", [M, E, Message, Host]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     message => Message, host => Host,
+     text => "Received a bad message"
+    }),
   {ok, State};
 
 handle_event({M = erldns_handler, E = refused_response, Questions}, State) ->
   folsom_metrics:notify({refused_response_meter, 1}),
   folsom_metrics:notify({refused_response_counter, {inc, 1}}),
-  lager:info("Refused response (module: ~p, event: ~p, questions: ~p)", [M, E, Questions]),
+  ?LOG_INFO(#{
+     log => event, in => M, what => E, 
+     questions => Questions, text => "Refused response"
+    }),
   {ok, State};
 
 handle_event({M = erldns_handler, E = empty_response, Message}, State) ->
   folsom_metrics:notify({empty_response_meter, 1}),
   folsom_metrics:notify({empty_response_counter, {inc, 1}}),
-  lager:info("Empty response (module: ~p, event: ~p, message: ~p)", [M, E, Message]),
+  ?LOG_INFO(#{
+     log => event, in => M, what => E, 
+     message => Message, text => "Empty response"
+    }),
   {ok, State};
 
 handle_event({M = erldns_handler, E = resolve_error, {Exception, Reason, Message, Stacktrace}}, State) ->
   folsom_metrics:notify({erldns_handler_error_counter, {inc, 1}}),
   folsom_metrics:notify({erldns_handler_error_meter, 1}),
-  lager:error("Error answering request (module: ~p, event: ~p, exception: ~p, reason: ~p, message: ~p, stacktrace: ~p)", [M, E, Exception, Reason, Message, Stacktrace]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, reason => Reason, 
+     details => Exception, message => Message,
+     stacktrace => Stacktrace,
+     text => "Error answering request"
+    }),
   {ok, State};
 
 handle_event({M = erldns_zone_encoder, E = unsupported_rrdata_type, Data}, State) ->
-  lager:info("Unable to encode rrdata (module: ~p, event: ~p, data: ~p)", [M, E, Data]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     data => Data, 
+     text => "Unable to encode rrdata"
+    }),
   {ok, State};
 
 handle_event({M = erldns_zone_loader, E = read_file_error, Reason}, State) ->
-  lager:error("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, reason => Reason,
+     text => "Failed to load zones"
+    }),
   {ok, State};
 
 handle_event({M = erldns_zone_loader, E = put_zone_error, {JsonZone, Reason}}, State) ->
-  lager:error("Failed to load zones (module: ~p, event: ~p, reason: ~p, json: ~p)", [M, E, Reason, JsonZone]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, reason => Reason,
+     json => JsonZone,
+     text => "Failed to load zones"
+    }),
   {ok, State};
 
 handle_event({M = erldns_zone_parser, E = error, {Name, Type, Data, Reason}}, State) ->
-  lager:error("Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, reason: ~p)", [M, E, Name, Type, Data, Reason]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, reason => Reason,
+     name => Name, type => Type,
+     data => Data, text => "Error parsing record"
+    }),
   {ok, State};
 
 handle_event({M = erldns_zone_parser, E = error, {Name, Type, Data, Exception, Reason}}, State) ->
-  lager:error("Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)", [M, E, Name, Type, Data, Exception, Reason]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, reason => Reason,
+     details => Exception,
+     name => Name, type => Type,
+     data => Data, text => "Error parsing record"
+    }),
   {ok, State};
 
 handle_event({M = erldns_zone_parser, E = unsupported_record, Data}, State) ->
-  lager:warning("Unsupported record (module: ~p, event: ~p, data: ~p)", [M, E, Data]),
+  ?LOG_WARNING(#{
+     log => event, in => M, what => E, 
+     data => Data, text => "Unsupported record"
+    }),
   {ok, State};
 
 handle_event({M = erldns_decoder, E = decode_message_error, {Exception, Reason, Bin}}, State) ->
-  lager:error("Error decoding message (module: ~p, event: ~p, data: ~p, exception: ~p, reason: ~p)", [M, E, Bin, Exception, Reason]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, reason => Reason,
+     details => Exception,
+     data => Bin, text => "Error decoding message"
+    }),
   {ok, State};
 
 handle_event({M = eldns_encoder, E = encode_message_error, {Exception, Reason, Response}}, State) ->
-  lager:error("Error encoding message (module: ~p, event: ~p, response: ~p, exception: ~p, reason: ~p)", [M, E, Response, Exception, Reason]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, reason => Reason,
+     details => Exception,
+     response => Response,
+     text => "Error encoding message"
+    }),
   {ok, State};
 
 handle_event({M = erldns_encoder, E = encode_message_error, {Exception, Reason, Response, Opts}}, State) ->
-  lager:error("Error encoding with opts (module: ~p, event: ~p, response: ~p, opts: ~p, exception: ~p, reason: ~p)", [M, E, Response, Opts,Exception, Reason]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, reason => Reason,
+     details => Exception,
+     response => Response,
+     data => Opts,
+     text => "Error encoding message wuth opts"
+    }),
   {ok, State};
 
 handle_event({M = erldns_storage, E = failed_zones_load, Reason}, State) ->
-  lager:error("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, reason => Reason,
+     text => "Failed to load zones"
+    }),
   {ok, State};
 
 handle_event({M = erldns_worker, E = handle_tcp_query_error, {Error}}, State) ->
-  lager:error("Error handling TCP query (module: ~p, event: ~p, error: ~p)", [M, E, Error]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, details => Error,
+     text => "Error handling TCP query"
+    }),
   {ok, State};
 
 handle_event({M = erldns_worker, E = handle_udp_query_error, {Error}}, State) ->
-  lager:error("Error handling UDP query (module: ~p, event: ~p, error: ~p)", [M, E, Error]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, details => Error,
+     text => "Error handling UDP query"
+    }),
   {ok, State};
 
 handle_event({M = erldns_worker, E = decode_message_error, {Error, Message}}, State) ->
-  lager:error("Error decoding message (module: ~p, event: ~p, error: ~p, message: ~p)", [M, E, Error, Message]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, details => Error,
+     data => Message,
+     text => "Error decoding message"
+    }),
   {ok, State};
 
 handle_event({M = erldns_worker, E = decode_message_trailing_garbage, {Message, Garbage}}, State) ->
-  lager:info("Decoded message included trailing garbage (module: ~p, event: ~p, message: ~p, garbage: ~p)", [M, E, Message, Garbage]),
+  ?LOG_INFO(#{
+     log => event, in => M, what => E, 
+     message => Message, data => Garbage,
+     text => "Decoded message included trailing garbage"
+    }),
   {ok, State};
 
 handle_event({M = erldns_worker, E = process_crashed, {Protocol, Error, Reason, DecodedMessage}}, State) ->
-  lager:error("Worker process crashed (module: ~p, event: ~p, protocol: ~p, error: ~p, reason: ~p, message: ~p)", [M, E, Protocol, Error, Reason, DecodedMessage]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, details => Error,
+     reason => Reason,
+     protocol => Protocol,
+     data => DecodedMessage,
+     text => "Worker process crashed"
+    }),
   {ok, State};
 
 handle_event({M = erldns_worker, E = bad_packet, {Protocol, BadPacket}}, State) ->
-  lager:error("Received bad packet (module: ~p, event: ~p, protocol: ~p, packet: ~p)", [M, E, Protocol, BadPacket]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error,
+     protocol => Protocol,
+     data => BadPacket,
+     text => "Received bad packet"
+    }),
   {ok, State};
 
 handle_event({M = erldns_worker, E = timeout, {Protocol, Message}}, State) ->
-  lager:info("Worker timeout (module: ~p, event: ~p, protocol: ~p, message: ~p)", [M, E, Protocol, Message]),
+  ?LOG_INFO(#{
+     log => event, in => M, what => E, 
+     message => Message, protocol => Protocol,
+     text => "Worker timeout"
+    }),
   folsom_metrics:notify({worker_timeout_counter, {inc, 1}}),
   folsom_metrics:notify({worker_timeout_meter, 1}),
   {ok, State};
 
 handle_event({M = erldns_worker, E = restart_failed, Error}, State) ->
-  lager:error("Restart failed (module: ~p, event: ~p, error: ~p)", [M, E, Error]),
+  ?LOG_ERROR(#{
+     log => event, in => M, what => E, 
+     result => error, details => Error,
+     text => "Restart failed"
+    }),
   {ok, State};
 
 
