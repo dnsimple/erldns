@@ -118,12 +118,9 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
   json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}, {<<"keys">>, []}], Parsers);
 
 json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers) ->
-  lager:debug("Records: ~p", [JsonRecords]),
   Records = lists:map(
               fun(JsonRecord) ->
                   Data = json_record_to_list(JsonRecord),
-				  lager:debug("Data: ~p", [Data]),
-
                   % Filter by context
                   case apply_context_options(Data) of
                     pass ->
