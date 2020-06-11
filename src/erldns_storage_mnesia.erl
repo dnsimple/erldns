@@ -18,7 +18,6 @@
 -dialyzer({nowarn_function, list_table/1}).
 
 -include("erldns.hrl").
--include_lib("kernel/include/logger.hrl").
 
 %% API
 -export([create/1,

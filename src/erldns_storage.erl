@@ -43,7 +43,6 @@
          terminate/2,
          code_change/3]).
 
-
 -record(state, {}).
 
 -define(POLL_WAIT_HOURS, 1).
