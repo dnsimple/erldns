@@ -18,6 +18,7 @@
 -dialyzer({nowarn_function, list_table/1}).
 
 -include("erldns.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %% API
 -export([create/1,
@@ -72,6 +73,7 @@ create(zones) ->
   case mnesia:create_table(zones,
                            [{attributes, record_info(fields, zone)},
                             {record_name, zone},
+			    {type, set},
                             {disc_copies, [node()]}]) of
     {aborted, {already_exists, zones}} ->
       lager:warning("The zone table already exists (node: ~p)", [node()]),
@@ -84,7 +86,9 @@ create(zones) ->
 create(zone_records) ->
   case mnesia:create_table(zone_records,
                            [{attributes, record_info(fields, zone_records)},
-                            {disc_copies, [node()]}]) of
+                            {disc_copies, [node()]},
+			    {type, bag}
+			   ]) of
     {aborted, {already_exists, zone_records}} ->
       lager:warning("The zone records table already exists (node: ~p)", [node()]),
       ok;
@@ -96,9 +100,11 @@ create(zone_records) ->
 create(zone_records_typed) ->
   case mnesia:create_table(zone_records_typed,
                            [{attributes, record_info(fields, zone_records_typed)},
-                            {disc_copies, [node()]}]) of
+                            {disc_copies, [node()]},
+			    {type, bag}
+			   ]) of
     {aborted, {already_exists, zone_records_typed}} ->
-      lager:warning("The zone records table already exists (node: ~p)", [node()]),
+      lager:warning("The zone records typed table already exists (node: ~p)", [node()]),
       ok;
     {atomic, ok} ->
       ok;
@@ -192,7 +198,7 @@ delete(Table, Key)->
 -spec select_delete(atom(), list()) -> {ok, Count :: integer()} | {error, Reason :: term()}.
 select_delete(Table, [{{{ZoneName, Fqdn}, _}, _, _}])->
   SelectDelete = fun() ->
-                     Records =  mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, write),
+                     Records =  mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, read),
                      lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
                      {ok, length(Records)}
                  end,
@@ -229,11 +235,21 @@ select(Table, Key)->
            end,
   mnesia:activity(transaction, Select).
 
-%% @doc Select using a match spec.
+%% @doc Select using ETS match spec converted to Mnesia's match_object pattern
 -spec select(atom(), list(), infinite | integer()) -> [tuple()].
-select(_Table, MatchSpec, _Limit) ->
-  MatchObject = fun() -> mnesia:match_object(MatchSpec) end,
-  mnesia:activity(transaction, MatchObject).
+select(Table, [{{{ZoneName, Fqdn}, _}, _, _}], _Limit) ->
+  SelectFun = fun() ->
+    Records  = mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, read),
+    [Record || {_, _, _, Record} <- Records] 
+  end,
+  mnesia:activity(transaction, SelectFun);
+select(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}], _Limit) ->
+  SelectFun = fun() ->
+     %[{_, _, _, _, Records}] = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, read),
+     Records = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, read),
+     [Record || {_, _, _, _, Record} <- Records] 
+  end,
+  mnesia:activity(transaction, SelectFun).
 
 %% @doc Wrapper for foldl.
 -spec foldl(fun(), list(), atom())  -> Acc :: term() | {error, Reason :: term()}.
