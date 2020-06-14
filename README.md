@@ -31,22 +31,27 @@ You can also write new systems to load zones by writing the zones directly to th
 
 An example configuration file can be found in erldns.config.example.
 
-Copy it to erldns.config and modify as needed.
+Copy it to `erldns.config` and modify as needed.
 
 ## Running
 
 Launch directly:
 
-    rebar3 shell
+```
+overmind start
+```
 
 Or build a distribution with `rebar3 release` and run the release:
 
-    ./_build/default/rel/erldns/bin/erldns foreground
+```
+./_build/default/rel/erldns/bin/erldns foreground
+```
 
 ## Querying
 
 Here are some queries to try:
 
+```
     dig -p8053 @127.0.0.1 example.com a
     dig -p8053 @127.0.0.1 example.com cname
     dig -p8053 @127.0.0.1 example.com ns
@@ -58,6 +63,7 @@ Here are some queries to try:
     dig -p8053 @127.0.0.1 example.com naptr
 
     dig -p8053 @127.0.0.1 -x 127.0.0.1 ptr
+```
 
 ## Performance
 
