@@ -58,7 +58,7 @@ overmind start
 
 Here are some queries to try:
 
-```
+```bash
     dig -p8053 @127.0.0.1 example.com a
     dig -p8053 @127.0.0.1 example.com cname
     dig -p8053 @127.0.0.1 example.com ns
