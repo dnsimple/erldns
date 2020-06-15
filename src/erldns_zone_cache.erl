@@ -170,10 +170,7 @@ get_records_by_name_and_type(Name, Type) ->
 get_records_by_name(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      case erldns_storage:select(zone_records, {erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name)}) of
-        [] -> [];
-        [{_, Records}] -> Records
-      end; 
+      lists:flatten(erldns_storage:select(zone_records,[{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name)}, '$1'},[],['$$']}], infinite));
     _ ->
       []
   end.

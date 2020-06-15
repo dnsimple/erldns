@@ -244,7 +244,6 @@ select(Table, [{{{ZoneName, Fqdn}, _}, _, _}], _Limit) ->
   mnesia:activity(transaction, SelectFun);
 select(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}], _Limit) ->
   SelectFun = fun() ->
-     %[{_, _, _, _, Records}] = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, read),
      Records = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, read),
      [Record || {_, _, _, _, Record} <- Records] 
   end,
