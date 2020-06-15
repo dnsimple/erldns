@@ -35,15 +35,22 @@ Copy it to `erldns.config` and modify as needed.
 
 ## Running
 
-Launch directly:
+### Launch directly:
 
-```
+```bash
 overmind start
 ```
 
-Or build a distribution with `rebar3 release` and run the release:
+### To get an interactive Erlang REPL:
 
+```bash
+./rebar3 shell
 ```
+
+### Build a distribution with and run the release:
+
+```bash
+./rebar3 release
 ./_build/default/rel/erldns/bin/erldns foreground
 ```
 
