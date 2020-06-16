@@ -19,6 +19,7 @@
 -behavior(gen_server).
 
 -include_lib("dns_erlang/include/dns.hrl").
+-include_lib("kernel/include/logger.hrl").
 -include("erldns.hrl").
 
 -export([start_link/0]).
@@ -52,13 +53,13 @@ zone_to_json(Zone) ->
 %% @doc Register a list of encoder modules.
 -spec register_encoders([module()]) -> ok.
 register_encoders(Modules) ->
-  lager:info("Registering custom encoders (modules: ~p)", [Modules]),
+  ?LOG_INFO(#{log => command, text => "Registering custom encoders", details => Modules}),
   gen_server:call(?SERVER, {register_encoders, Modules}).
 
 %% @doc Register a single encoder module.
 -spec register_encoder(module()) -> ok.
 register_encoder(Module) ->
-  lager:info("Registering custom encoder (module: ~p)", [Module]),
+  ?LOG_INFO(#{log => command, text => "Registering custom encoder", details => Module}),
   gen_server:call(?SERVER, {register_encoder, Module}).
 
 
@@ -123,10 +124,10 @@ encode(Encoders) ->
   end.
 
 encode_record(Record, Encoders) ->
-  lager:debug("Encoding record (record: ~p)", [Record]),
+  ?LOG_DEBUG(#{log => event, text => "Encoding record", record => Record}),
   case encode_record(Record) of
     [] ->
-      lager:debug("Trying custom encoders (encoders: ~p)", [Encoders]),
+      ?LOG_DEBUG(#{log => event, text => "Trying custom encoders", encoders => Encoders}),
       try_custom_encoders(Record, Encoders);
     EncodedRecord -> EncodedRecord
   end.
@@ -168,7 +169,7 @@ encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_CDNSKEY, Ttl, Data}) ->
 encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_RRSIG, Ttl, Data}) ->
   encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
-  lager:warning("Unable to encode record (record: ~p)", [Record]),
+  ?LOG_WARNING(#{log => event, text => "Unable to encode record", record => Record}),
   [].
 
 encode_record(Name, Type, Ttl, Data) ->
@@ -183,7 +184,7 @@ encode_record(Name, Type, Ttl, Data) ->
 try_custom_encoders(_Record, []) ->
   {};
 try_custom_encoders(Record, [Encoder|Rest]) ->
-  lager:debug("Trying custom encoder (encoder: ~p)", [Encoder]),
+  ?LOG_DEBUG(#{log => event, text => "Trying custom encoder", encoder => Encoder}),
   case Encoder:encode_record(Record) of
     [] -> try_custom_encoders(Record, Rest);
     EncodedData -> EncodedData

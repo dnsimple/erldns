@@ -20,6 +20,7 @@
 -behavior(gen_server).
 
 -include_lib("dns_erlang/include/dns.hrl").
+-include_lib("kernel/include/logger.hrl").
 -include("erldns.hrl").
 
 -define(DEFAULT_HANDLER_VERSION, 1).
@@ -76,10 +77,11 @@ init([]) ->
   {ok, #state{handlers=[]}}.
 
 handle_call({register_handler, RecordTypes, Module}, _, State) ->
-  lager:info("Registered handler (module: ~p, types: ~p)", [Module, RecordTypes]),
+  ?LOG_INFO(#{log => event, text => "Registered handler", module => Module, record_types =>  RecordTypes}),
   {reply, ok, State#state{handlers = State#state.handlers ++ [{Module, RecordTypes, 1}]}};
 handle_call({register_handler, RecordTypes, Module, Version}, _, State) ->
-  lager:info("Registered handler (module: ~p, types: ~p, version: ~p)", [Module, RecordTypes, Version]),
+  ?LOG_INFO(#{log => event, text => "Registered handler", module => Module, 
+	      record_types =>  RecordTypes, version => Version}),
   {reply, ok, State#state{handlers = State#state.handlers ++ [{Module, RecordTypes, Version}]}};
 handle_call({get_handlers}, _, State) ->
   {reply, State#state.handlers, State}.

@@ -93,7 +93,6 @@ handle(Message, _Zone, _Qname, _Qtype, _DnssecRequested = true, []) ->
   % DNSSEC requested, zone unsigned
   Message;
 handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
-  % lager:debug("DNSSEC requested (name: ~p)", [Zone#zone.name]),
   Authority = lists:last(Zone#zone.authority),
   Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
   case Message#dns_message.answers of

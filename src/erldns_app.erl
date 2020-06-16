@@ -16,11 +16,13 @@
 -module(erldns_app).
 -behavior(application).
 
+-include_lib("kernel/include/logger.hrl").
+
 % Application hooks
 -export([start/2, start_phase/3, stop/1]).
 
 start(_Type, _Args) ->
-  lager:info("Starting erldns application"),
+  ?LOG_INFO(#{log => command, text => "Starting erldns application"}),
   setup_metrics(),
   erldns_sup:start_link().
 
@@ -37,16 +39,16 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
     _ -> ok
   end,
 
-  lager:info("Loading zones from local file"),
+  ?LOG_INFO(#{log => event, text => "Loading zones from local file"}),
   erldns_zone_loader:load_zones(),
 
-  lager:info("Notifying servers to start"),
+  ?LOG_INFO(#{log => event, text => "Notifying servers to start"}),
   erldns_events:notify({?MODULE, start_servers}),
 
   ok.
 
 stop(_State) ->
-  lager:info("Stop erldns application"),
+  ?LOG_INFO(#{log => event, text => "Stop erldns application"}),
   ok.
 
 setup_metrics() ->

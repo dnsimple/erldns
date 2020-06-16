@@ -20,6 +20,7 @@
 -behavior(gen_server).
 
 -include_lib("dns_erlang/include/dns_records.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %% API
 -export([start_link/0, throttle/2, sweep/0, stop/0]).
@@ -55,7 +56,6 @@ start_link() ->
   ok | throttle_result().
 -if(not(ENABLED)).
 throttle(_Message, {_, _Host}) ->
-    %% lager:debug("Throttle not enabled"),
     ok.
 -else.
 throttle(_Message, {tcp, _Host}) ->

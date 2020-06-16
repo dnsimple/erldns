@@ -18,6 +18,7 @@
 -dialyzer({nowarn_function, list_table/1}).
 
 -include("erldns.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %% API
 -export([create/1,
@@ -41,7 +42,7 @@ create(schema) ->
   ok = ensure_mnesia_started(),
   case erldns_config:storage_dir() of
     undefined ->
-      lager:error("You need to add a directory for mnesia in erldns.config");
+      ?LOG_ERROR(#{log => event, text => "You need to add a directory for mnesia in erldns.config"});
     Dir ->
       ok = filelib:ensure_dir(Dir),
       ok = application:set_env(mnesia, dir, Dir)
@@ -50,11 +51,11 @@ create(schema) ->
     ok ->
       ok;
     {error, Reason} ->
-      lager:warning("Could not stop mnesia (reason: ~p)", [Reason])
+      ?LOG_WARNING(#{log => event, text => "Could not stop mnesia", details => Reason})
   end,
   case mnesia:create_schema([node()]) of
     {error, {_, {already_exists, _}}} ->
-      lager:warning("The schema already exists (node: ~p)", [node()]),
+      ?LOG_WARNING(#{log => event, text => "The schema already exists", node => node()}),
       ok;
     ok ->
       ok
@@ -74,7 +75,7 @@ create(zones) ->
                             {record_name, zone},
                             {disc_copies, [node()]}]) of
     {aborted, {already_exists, zones}} ->
-      lager:warning("The zone table already exists (node: ~p)", [node()]),
+      ?LOG_WARNING(#{log => event, text => "The zone table already exists", node => node()}),
       ok;
     {atomic, ok} ->
       ok;
@@ -86,7 +87,7 @@ create(zone_records) ->
                            [{attributes, record_info(fields, zone_records)},
                             {disc_copies, [node()]}]) of
     {aborted, {already_exists, zone_records}} ->
-      lager:warning("The zone records table already exists (node: ~p)", [node()]),
+      ?LOG_WARNING(#{log => event, text => "The zone records table already exists", node => node()}),
       ok;
     {atomic, ok} ->
       ok;
@@ -98,7 +99,7 @@ create(zone_records_typed) ->
                            [{attributes, record_info(fields, zone_records_typed)},
                             {disc_copies, [node()]}]) of
     {aborted, {already_exists, zone_records_typed}} ->
-      lager:warning("The zone records table already exists (node: ~p)", [node()]),
+      ?LOG_WARNING(#{log => event, text => "The zone records table already exists", node => node()}),
       ok;
     {atomic, ok} ->
       ok;
@@ -111,7 +112,7 @@ create(authorities) ->
                            [{attributes, record_info(fields, authorities)},
                             {disc_copies, [node()]}]) of
     {aborted, {already_exists, authorities}} ->
-      lager:warning("The authority table already exists (node: ~p)", [node()]),
+      ?LOG_WARNING(#{log => event, text => "The authority table already exists", node => node()}),
       ok;
     {atomic, ok} ->
       ok;

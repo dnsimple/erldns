@@ -8,7 +8,6 @@
                   stdlib,
                   inets,
                   crypto,
-                  lager,
                   dns_erlang,
                   jsx,
                   ssl,

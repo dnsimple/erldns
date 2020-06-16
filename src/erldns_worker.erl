@@ -17,6 +17,7 @@
 -module(erldns_worker).
 
 -include_lib("dns_erlang/include/dns.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(DEFAULT_UDP_PROCESS_TIMEOUT, 500).
 -define(DEFAULT_TCP_PROCESS_TIMEOUT, 1000).
@@ -43,7 +44,7 @@ init([WorkerId]) ->
   {ok, #state{worker_process_sup = WorkerProcessSup, worker_process = WorkerProcess}}.
 
 handle_call(_Request, From, State) ->
-  lager:debug("Received unexpected call (from: ~p)", [From]),
+  ?LOG_DEBUG(#{log => event, text => "Received unexpected call", from => From}),
   {reply, ok, State}.
 
 handle_cast({tcp_query, Socket, Bin}, State) ->
@@ -165,7 +166,7 @@ handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup
 -spec handle_timeout(pid(), term()) -> {error, timeout, term()} | {error, timeout}.
 handle_timeout(WorkerProcessSup, WorkerProcessId) ->
   TerminateResult = supervisor:terminate_child(WorkerProcessSup, WorkerProcessId),
-  lager:debug("Terminate result: ~p", [TerminateResult]),
+  ?LOG_DEBUG(#{log => event, text => "Terminate result", details => TerminateResult}),
 
   case supervisor:restart_child(WorkerProcessSup, WorkerProcessId) of
     {ok, NewChild} ->
