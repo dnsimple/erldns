@@ -38,7 +38,7 @@ handle_event({_M, start_servers}, State) ->
     false ->
       % Start up the UDP and TCP servers
       ?LOG_INFO(#{
-	 log => event, in => start_servers, 
+	 log => event, function => start_servers, 
 	 text => "Starting the UDP and TCP supervisor"
 	}),
       erldns_server_sup:start_link(),
@@ -76,7 +76,7 @@ handle_event({_M, dnssec_request, _Host, _Qname}, State) ->
 
 handle_event({M = erldns_handler, E = bad_message, {Message, Host}}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      message => Message, host => Host,
      text => "Received a bad message"
     }),
@@ -86,7 +86,7 @@ handle_event({M = erldns_handler, E = refused_response, Questions}, State) ->
   folsom_metrics:notify({refused_response_meter, 1}),
   folsom_metrics:notify({refused_response_counter, {inc, 1}}),
   ?LOG_INFO(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      questions => Questions, text => "Refused response"
     }),
   {ok, State};
@@ -95,7 +95,7 @@ handle_event({M = erldns_handler, E = empty_response, Message}, State) ->
   folsom_metrics:notify({empty_response_meter, 1}),
   folsom_metrics:notify({empty_response_counter, {inc, 1}}),
   ?LOG_INFO(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      message => Message, text => "Empty response"
     }),
   {ok, State};
@@ -104,7 +104,7 @@ handle_event({M = erldns_handler, E = resolve_error, {Exception, Reason, Message
   folsom_metrics:notify({erldns_handler_error_counter, {inc, 1}}),
   folsom_metrics:notify({erldns_handler_error_meter, 1}),
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, reason => Reason, 
      details => Exception, message => Message,
      stacktrace => Stacktrace,
@@ -114,7 +114,7 @@ handle_event({M = erldns_handler, E = resolve_error, {Exception, Reason, Message
 
 handle_event({M = erldns_zone_encoder, E = unsupported_rrdata_type, Data}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      data => Data, 
      text => "Unable to encode rrdata"
     }),
@@ -122,7 +122,7 @@ handle_event({M = erldns_zone_encoder, E = unsupported_rrdata_type, Data}, State
 
 handle_event({M = erldns_zone_loader, E = read_file_error, Reason}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, reason => Reason,
      text => "Failed to load zones"
     }),
@@ -130,7 +130,7 @@ handle_event({M = erldns_zone_loader, E = read_file_error, Reason}, State) ->
 
 handle_event({M = erldns_zone_loader, E = put_zone_error, {JsonZone, Reason}}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, reason => Reason,
      json => JsonZone,
      text => "Failed to load zones"
@@ -139,7 +139,7 @@ handle_event({M = erldns_zone_loader, E = put_zone_error, {JsonZone, Reason}}, S
 
 handle_event({M = erldns_zone_parser, E = error, {Name, Type, Data, Reason}}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, reason => Reason,
      name => Name, type => Type,
      data => Data, text => "Error parsing record"
@@ -148,7 +148,7 @@ handle_event({M = erldns_zone_parser, E = error, {Name, Type, Data, Reason}}, St
 
 handle_event({M = erldns_zone_parser, E = error, {Name, Type, Data, Exception, Reason}}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, reason => Reason,
      details => Exception,
      name => Name, type => Type,
@@ -158,14 +158,14 @@ handle_event({M = erldns_zone_parser, E = error, {Name, Type, Data, Exception, R
 
 handle_event({M = erldns_zone_parser, E = unsupported_record, Data}, State) ->
   ?LOG_WARNING(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      data => Data, text => "Unsupported record"
     }),
   {ok, State};
 
 handle_event({M = erldns_decoder, E = decode_message_error, {Exception, Reason, Bin}}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, reason => Reason,
      details => Exception,
      data => Bin, text => "Error decoding message"
@@ -174,7 +174,7 @@ handle_event({M = erldns_decoder, E = decode_message_error, {Exception, Reason, 
 
 handle_event({M = eldns_encoder, E = encode_message_error, {Exception, Reason, Response}}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, reason => Reason,
      details => Exception,
      response => Response,
@@ -184,7 +184,7 @@ handle_event({M = eldns_encoder, E = encode_message_error, {Exception, Reason, R
 
 handle_event({M = erldns_encoder, E = encode_message_error, {Exception, Reason, Response, Opts}}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, reason => Reason,
      details => Exception,
      response => Response,
@@ -195,7 +195,7 @@ handle_event({M = erldns_encoder, E = encode_message_error, {Exception, Reason, 
 
 handle_event({M = erldns_storage, E = failed_zones_load, Reason}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, reason => Reason,
      text => "Failed to load zones"
     }),
@@ -203,7 +203,7 @@ handle_event({M = erldns_storage, E = failed_zones_load, Reason}, State) ->
 
 handle_event({M = erldns_worker, E = handle_tcp_query_error, {Error}}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, details => Error,
      text => "Error handling TCP query"
     }),
@@ -211,7 +211,7 @@ handle_event({M = erldns_worker, E = handle_tcp_query_error, {Error}}, State) ->
 
 handle_event({M = erldns_worker, E = handle_udp_query_error, {Error}}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, details => Error,
      text => "Error handling UDP query"
     }),
@@ -219,7 +219,7 @@ handle_event({M = erldns_worker, E = handle_udp_query_error, {Error}}, State) ->
 
 handle_event({M = erldns_worker, E = decode_message_error, {Error, Message}}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, details => Error,
      data => Message,
      text => "Error decoding message"
@@ -228,7 +228,7 @@ handle_event({M = erldns_worker, E = decode_message_error, {Error, Message}}, St
 
 handle_event({M = erldns_worker, E = decode_message_trailing_garbage, {Message, Garbage}}, State) ->
   ?LOG_INFO(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      message => Message, data => Garbage,
      text => "Decoded message included trailing garbage"
     }),
@@ -236,7 +236,7 @@ handle_event({M = erldns_worker, E = decode_message_trailing_garbage, {Message, 
 
 handle_event({M = erldns_worker, E = process_crashed, {Protocol, Error, Reason, DecodedMessage}}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, details => Error,
      reason => Reason,
      protocol => Protocol,
@@ -247,7 +247,7 @@ handle_event({M = erldns_worker, E = process_crashed, {Protocol, Error, Reason, 
 
 handle_event({M = erldns_worker, E = bad_packet, {Protocol, BadPacket}}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error,
      protocol => Protocol,
      data => BadPacket,
@@ -257,7 +257,7 @@ handle_event({M = erldns_worker, E = bad_packet, {Protocol, BadPacket}}, State) 
 
 handle_event({M = erldns_worker, E = timeout, {Protocol, Message}}, State) ->
   ?LOG_INFO(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      message => Message, protocol => Protocol,
      text => "Worker timeout"
     }),
@@ -267,7 +267,7 @@ handle_event({M = erldns_worker, E = timeout, {Protocol, Message}}, State) ->
 
 handle_event({M = erldns_worker, E = restart_failed, Error}, State) ->
   ?LOG_ERROR(#{
-     log => event, in => M, what => E, 
+     log => event, module => M, function => E, 
      result => error, details => Error,
      text => "Restart failed"
     }),
