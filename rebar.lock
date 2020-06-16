@@ -7,6 +7,7 @@
  {<<"iso8601">>,{pkg,<<"iso8601">>,<<"1.3.1">>},0},
  {<<"jsx">>,{pkg,<<"jsx">>,<<"2.10.0">>},0},
  {<<"lager">>,{pkg,<<"lager">>,<<"3.8.0">>},0},
+ {<<"nodefinder">>,{pkg,<<"nodefinder">>,<<"1.8.0">>},0},
  {<<"recon">>,{pkg,<<"recon">>,<<"2.5.0">>},0}]}.
 [
 {pkg_hash,[
@@ -18,5 +19,6 @@
  {<<"iso8601">>, <<"D1CEE73F56D71C35590C6B2DB2074873BF410BABAAB768F6EA566366D8CA4810">>},
  {<<"jsx">>, <<"77760560D6AC2B8C51FD4C980E9E19B784016AA70BE354CE746472C33BEB0B1C">>},
  {<<"lager">>, <<"3402B9A7E473680CA179FC2F1D827CAB88DD37DD1E6113090C6F45EF05228A1C">>},
+ {<<"nodefinder">>, <<"2BFDF001C7EA6662A4671283A902EDCA60EFE04D245C790A40C625CEDF2A5F9F">>},
  {<<"recon">>, <<"2F7FCBEC2C35034BADE2F9717F77059DC54EB4E929A3049CA7BA6775C0BD66CD">>}]}
 ].

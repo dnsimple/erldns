@@ -39,27 +39,56 @@
 %% @end
 create(schema) ->
   ok = ensure_mnesia_started(),
-  case erldns_config:storage_dir() of
-    undefined ->
-      lager:error("You need to add a directory for mnesia in erldns.config");
-    Dir ->
-      ok = filelib:ensure_dir(Dir),
-      ok = application:set_env(mnesia, dir, Dir)
-  end,
-  case application:stop(mnesia) of
-    ok ->
-      ok;
-    {error, Reason} ->
-      lager:warning("Could not stop mnesia (reason: ~p)", [Reason])
-  end,
-  case mnesia:create_schema([node()]) of
-    {error, {_, {already_exists, _}}} ->
-      lager:warning("The schema already exists (node: ~p)", [node()]),
-      ok;
-    ok ->
-      ok
-  end,
-  application:start(mnesia);
+    case erldns_config:storage_dir() of
+	undefined ->
+	    lager:error("You need to add a directory for mnesia in erldns.config");
+	Dir ->
+	    ok = filelib:ensure_dir(Dir),
+	    ok = application:set_env(mnesia, dir, Dir)
+    end,
+
+    Connected = nodes(),
+    lager:debug("Creating schema ~p", [Connected]),
+    case Connected of
+	[] ->
+	    application:stop(mnesia),
+	    case mnesia:create_schema([node()]) of
+		{error, {_, {already_exists, _}}} ->
+		    lager:warning("The schema already exists (node: ~p)", [node()]),
+		    ok;
+		ok ->
+		    lager:debug("Created the schema on this node ~p", [mnesia:system_info()]),
+		    ok
+	    end;
+	_ ->	    
+	    lager:debug("Adding extra db_nodes ~p", [Connected]),
+	    mnesia:change_config(extra_db_nodes, Connected),
+	    lager:debug("Waiting for tables"),
+	    WaitResult = mnesia:wait_for_tables([zones, zone_records, zone_records_typed, authorities], 5000),
+	    lager:debug("Wait result ~p", [WaitResult]),
+	    Tables = mnesia:system_info(tables),
+	    lager:debug("Current tables ~p", [Tables]),
+	    case Tables of
+		[] ->
+		    application:stop(mnesia),
+		    case mnesia:create_schema([node()]) of
+			{error, {_, {already_exists, _}}} ->
+			    lager:warning("The schema already exists (node: ~p)", [node()]),
+			    ok;
+			ok ->
+			    lager:debug("Created the schema on this node with other connected nodes ~p", [mnesia:system_info()]),
+			    ok
+		    end;
+		_ ->
+		    Schema = mnesia:change_table_copy_type(schema, node(), disc_copies),
+		    Copy = lists:foldl(fun(Table, Acc) ->
+					       Acc ++ [mnesia:add_table_copy(Table, node(), disc_copies)]
+				       end, [], Tables --[schema]),
+		    lager:debug("Copy done Schema= ~p, Others=~p", [Schema, Copy])
+	    end
+    end,
+    ok = ensure_mnesia_started();
+
 %% @doc Match the table names for every create. This enables different records to be used and
 %% attributes to be sent to the tables.
 %% @end

@@ -22,6 +22,7 @@
 start(_Type, _Args) ->
   lager:info("Starting erldns application"),
   setup_metrics(),
+  nodefinder:multicast_start(),
   erldns_sup:start_link().
 
 start_phase(post_start, _StartType, _PhaseArgs) ->

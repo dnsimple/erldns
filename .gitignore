@@ -13,3 +13,7 @@ priv/_*.json
 db/
 _build/
 Mnesia.nonode@nohost/
+*.DCD
+*.DCL
+*.DAT
+*.LOG
