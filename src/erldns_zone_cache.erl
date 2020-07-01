@@ -298,13 +298,11 @@ put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
 			  TypedRecords = build_typed_index(Records ++ 
 							   SignedRRSet ++ 
 							   RRSigRecs),
-			  ExistingRRSet = get_zone_rrset(ZoneName, RRFqdn, Type),
 			  % Remove RRSet Records
 			  delete_zone_rrset(ZoneName, RRFqdn, Type), 
 			  % put zone_records_typed records first then create the records in zone_records
   			  put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
 			  rebuild_zone_records_named_entry(ZoneName, RRFqdn),
-			  CurrentRRSet = get_zone_rrset(ZoneName, RRFqdn, Type),
 			  write_sync_counter(Counter);
   			  % TODO: review zone update of .record_count and .records_by_name and side effect
   			  %#zone{name = Zone#zone.name, version = Zone#zone.version, record_count = length(Records), authority = Zone#zone.authority, records = Records, records_by_name = build_named_index(Records), keysets = Zone#zone.keysets}.
