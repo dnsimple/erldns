@@ -180,18 +180,6 @@ get_typed_records_by_name(Name) ->
       []
   end.
 
-%% @doc Get all records for the given type in zone
--spec get_zone_rrset(dns:dname(), dns:dname(),  dns:type()) -> [dns:rr()].
-get_zone_rrset(ZoneName, RRFqdn, Type) ->
-  case find_zone_in_cache(ZoneName) of
-    {ok, Zone} ->
-	  lager:debug("Zone found ~p, Type: ~p", [Zone#zone.name, Type]),
-      lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(RRFqdn), Type}, '$1'},[],['$$']}], infinite));
-      %lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), '_', Type}, '$1'},[],['$$']}], infinite));
-    _ ->
-      []
-  end.
-
 %% @doc Get all DNSSEC records for zone
 -spec get_zone_dnskey_records(dns:dname()) -> [dns:rr()].
 get_zone_dnskey_records(Name) ->
@@ -382,7 +370,7 @@ rebuild_zone_records_named_entry(ZoneName, RRFqdn) ->
   put_zone_records_named_entry(ZoneName, maps:next(maps:iterator(NamedRecords))).
 
 %% @doc Filter RRSig records for FQDN, removing type covered.
--spec filter_rrsig_records_with_type_covered(dns:dname(), dns:type()) -> [dns:rr()].
+-spec filter_rrsig_records_with_type_covered(dns:dname(), dns:type()) -> [{{dns:dname(), dns:dname(), dns:type()}, [dns:rr()]}].
 filter_rrsig_records_with_type_covered(Fqdn, TypeCovered) ->
   % guards below do not allow fun calls to prevent side effects
   FqdnN = erldns:normalize_name(Fqdn),
