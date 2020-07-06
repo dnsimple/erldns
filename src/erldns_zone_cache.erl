@@ -281,7 +281,10 @@ put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
 			  KeySets = Zone#zone.keysets,
 			  DnsKeyRRs = get_zone_dnskey_records(ZoneName),
 			  SignedRRSet = sign_rrset(ZoneName, Records, DnsKeyRRs, KeySets),
-			  [{{_, _, _}, RRSigRecs}] = filter_rrsig_records_with_type_covered(RRFqdn, Type),
+			  RRSigRecs = case filter_rrsig_records_with_type_covered(RRFqdn, Type) of
+						[{{_, _, _}, Recs}] -> Recs;
+					      	[] -> []
+				      end,
 			  % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
 			  TypedRecords = build_typed_index(Records ++ 
 							   SignedRRSet ++ 
@@ -370,7 +373,7 @@ rebuild_zone_records_named_entry(ZoneName, RRFqdn) ->
   put_zone_records_named_entry(ZoneName, maps:next(maps:iterator(NamedRecords))).
 
 %% @doc Filter RRSig records for FQDN, removing type covered.
--spec filter_rrsig_records_with_type_covered(dns:dname(), dns:type()) -> [{{dns:dname(), dns:dname(), dns:type()}, [dns:rr()]}].
+-spec filter_rrsig_records_with_type_covered(dns:dname(), dns:type()) -> [{{dns:dname(), dns:dname(), dns:type()}, [dns:rr()]} | []].
 filter_rrsig_records_with_type_covered(Fqdn, TypeCovered) ->
   % guards below do not allow fun calls to prevent side effects
   FqdnN = erldns:normalize_name(Fqdn),
