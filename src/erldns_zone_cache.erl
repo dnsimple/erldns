@@ -41,7 +41,7 @@
          get_typed_records_by_name/1,
          in_zone/1,
          zone_names_and_versions/0,
-	 get_sync_counter/0
+	 get_rrset_sync_counter/3
         ]).
 
 % Write APIs
@@ -220,16 +220,16 @@ zone_names_and_versions() ->
   erldns_storage:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones).
 
 %% @doc Return current sync counter
--spec get_sync_counter() -> integer().
-get_sync_counter() ->
-	case erldns_storage:select(sync_counters, counter) of
-		[{counter, Counter}] -> Counter;
+-spec get_rrset_sync_counter(dns:dname(), dns:dname(), dns:type()) -> integer().
+get_rrset_sync_counter(ZoneName, RRFqdn, Type) ->
+	case erldns_storage:select(sync_counters, {ZoneName, RRFqdn, Type})  of
+		[{ZoneName, RRFqdn, Type, Counter}] -> Counter;
 		[] -> 0 % return default value of 0
   	end.
 
--spec write_sync_counter(integer()) -> ok.
-write_sync_counter(Counter) ->
-  erldns_storage:insert(sync_counters, {counter, Counter}).
+-spec write_rrset_sync_counter({dns:dname(), dns:dname(), dns:type(), integer()}) -> ok.
+write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}) ->
+  erldns_storage:insert(sync_counters, {ZoneName, RRFqdn, Type, Counter}).
 	
 % ----------------------------------------------------------------------------------------------------
 % Write API
@@ -267,7 +267,7 @@ put_zone_rrset({ZoneName, Sha, Records}, RRFqdn, Type, Counter) ->
   put_zone_rrset({ZoneName, Sha, Records, []}, RRFqdn, Type, Counter);
 put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
   % Check counter
-  CurrentCounter = get_sync_counter(),
+  CurrentCounter = get_rrset_sync_counter(ZoneName, RRFqdn, Type),
   lager:debug("Current Counter: ~p", [CurrentCounter]),
   case CurrentCounter < Counter of 
 	  false -> 
@@ -294,7 +294,7 @@ put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
 			  % put zone_records_typed records first then create the records in zone_records
   			  put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
 			  rebuild_zone_records_named_entry(ZoneName, RRFqdn),
-			  write_sync_counter(Counter);
+			  write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter});
   			  % TODO: review zone update of .record_count and .records_by_name and side effect
   			  %#zone{name = Zone#zone.name, version = Zone#zone.version, record_count = length(Records), authority = Zone#zone.authority, records = Records, records_by_name = build_named_index(Records), keysets = Zone#zone.keysets}.
 			_ -> {error, zone_not_found}
@@ -338,7 +338,7 @@ delete_zone_rrset(Name, RRFqdn, Type) ->
 %% @doc Remove zone RRSet
 -spec delete_zone_rrset(binary(), binary(), integer(), integer()) -> any().
 delete_zone_rrset(Name, RRFqdn, Type, Counter) ->
-  CurrentCounter = get_sync_counter(),
+  CurrentCounter = get_rrset_sync_counter(Name, RRFqdn, Type),
   if 
     Counter =:= 0 orelse CurrentCounter < Counter -> 
 	  lager:debug("Removing RRSet (~p) with type ~p", [RRFqdn, Type]),
@@ -359,7 +359,7 @@ delete_zone_rrset(Name, RRFqdn, Type, Counter) ->
 	    Counter > 0 -> 
 		% DELETE RRSet command has been sent - rebuild the zone_records named entry	
 		rebuild_zone_records_named_entry(Name, RRFqdn),	
-		write_sync_counter(Counter);
+		write_rrset_sync_counter({Name, RRFqdn, Type, Counter});
             true -> {ok, Counter}
 	  end;
     true ->
@@ -378,21 +378,16 @@ filter_rrsig_records_with_type_covered(Fqdn, TypeCovered) ->
   % guards below do not allow fun calls to prevent side effects
   FqdnN = erldns:normalize_name(Fqdn),
   case find_zone_in_cache(Fqdn) of
-    {ok, _Zone} ->
+    {ok, Zone} ->
       lists:flatten(
-	erldns_storage:foldl(
-	  fun(R, Records) ->
-		case R of
-			{{D, F, T}, RR} when F == FqdnN 
-					    andalso T == ?DNS_TYPE_RRSIG_NUMBER ->
-				RRSigRecs = lists:filter(
-					      fun(E) -> 
-						E#dns_rr.data#dns_rrdata_rrsig.type_covered =/= TypeCovered end, RR),
-				[{{D, F, T}, RRSigRecs} | Records];
-			_ -> [Records]
-
-		end 
- 	   end, [], zone_records_typed));
+        lists:foldl(
+	   fun(R, Records) ->
+			case R#dns_rr.data#dns_rrdata_rrsig.type_covered =/= TypeCovered of
+				true -> [{{Zone#zone.name, FqdnN, TypeCovered}, R} | Records];  
+				false -> []
+			end
+ 	   end, [], get_records_by_name_and_type(Fqdn, ?DNS_TYPE_RRSIG_NUMBER))
+	 );
     _ ->
       []
   end.
