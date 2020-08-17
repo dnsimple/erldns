@@ -222,7 +222,7 @@ zone_names_and_versions() ->
 %% @doc Return current sync counter
 -spec get_rrset_sync_counter(dns:dname(), dns:dname(), dns:type()) -> integer().
 get_rrset_sync_counter(ZoneName, RRFqdn, Type) ->
-	case erldns_storage:select(sync_counters, {ZoneName, RRFqdn, Type})  of
+	case erldns_storage:select(sync_counters, [{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), Type, '$1'}, [], ['$_']}], infinite)  of
 		[{ZoneName, RRFqdn, Type, Counter}] -> Counter;
 		[] -> 0 % return default value of 0
   	end.
@@ -377,7 +377,7 @@ rebuild_zone_records_named_entry(ZoneName, RRFqdn) ->
 filter_rrsig_records_with_type_covered(Fqdn, TypeCovered) ->
   % guards below do not allow fun calls to prevent side effects
   FqdnN = erldns:normalize_name(Fqdn),
-  case find_zone_in_cache(Fqdn) of
+  case find_zone_in_cache(FqdnN) of
     {ok, Zone} ->
       lists:flatten(
         lists:foldl(
