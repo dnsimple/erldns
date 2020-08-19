@@ -281,10 +281,7 @@ put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
 			  KeySets = Zone#zone.keysets,
 			  DnsKeyRRs = get_zone_dnskey_records(ZoneName),
 			  SignedRRSet = sign_rrset(ZoneName, Records, DnsKeyRRs, KeySets),
-			  RRSigRecs = case filter_rrsig_records_with_type_covered(RRFqdn, Type) of
-						[{{_, _, _}, Recs}] -> Recs;
-					      	[] -> []
-				      end,
+			  RRSigRecs = filter_rrsig_records_with_type_covered(RRFqdn, Type),
 			  % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
 			  TypedRecords = build_typed_index(Records ++ 
 							   SignedRRSet ++ 
@@ -294,7 +291,8 @@ put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
 			  % put zone_records_typed records first then create the records in zone_records
   			  put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
 			  rebuild_zone_records_named_entry(ZoneName, RRFqdn),
-			  write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter});
+			  write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}),
+			  lager:debug("RRSet update completed for FQDN: ~p, Type: ~p", [RRFqdn, Type]);
   			  % TODO: review zone update of .record_count and .records_by_name and side effect
   			  %#zone{name = Zone#zone.name, version = Zone#zone.version, record_count = length(Records), authority = Zone#zone.authority, records = Records, records_by_name = build_named_index(Records), keysets = Zone#zone.keysets}.
 			_ -> {error, zone_not_found}
@@ -376,15 +374,14 @@ rebuild_zone_records_named_entry(ZoneName, RRFqdn) ->
 -spec filter_rrsig_records_with_type_covered(dns:dname(), dns:type()) -> [{{dns:dname(), dns:dname(), dns:type()}, [dns:rr()]} | []].
 filter_rrsig_records_with_type_covered(Fqdn, TypeCovered) ->
   % guards below do not allow fun calls to prevent side effects
-  FqdnN = erldns:normalize_name(Fqdn),
-  case find_zone_in_cache(FqdnN) of
-    {ok, Zone} ->
+  case find_zone_in_cache(erldns:normalize_name(Fqdn)) of
+    {ok, _Zone} ->
       lists:flatten(
         lists:foldl(
 	   fun(R, Records) ->
 			case R#dns_rr.data#dns_rrdata_rrsig.type_covered =/= TypeCovered of
-				true -> [{{Zone#zone.name, FqdnN, TypeCovered}, R} | Records];  
-				false -> []
+				true -> [R | Records];  
+				false -> [Records]
 			end
  	   end, [], get_records_by_name_and_type(Fqdn, ?DNS_TYPE_RRSIG_NUMBER))
 	 );
