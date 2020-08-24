@@ -280,11 +280,8 @@ put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
 			  lager:debug("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [RRFqdn, Type, ZoneName, Records]),
 			  KeySets = Zone#zone.keysets,
 			  DnsKeyRRs = get_zone_dnskey_records(ZoneName),
-			  lager:debug("DnsKeyRRs: ~p", [DnsKeyRRs]),
 			  SignedRRSet = sign_rrset(ZoneName, Records, DnsKeyRRs, KeySets),
-			  lager:debug("SignedRRset: ~p", [SignedRRSet]),
 			  RRSigRecs = filter_rrsig_records_with_type_covered(RRFqdn, Type),
-			  lager:debug("RRSigRecs: ~p", [RRSigRecs]),
 			  % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
 			  TypedRecords = build_typed_index(Records ++ 
 							   SignedRRSet ++ 
@@ -520,14 +517,14 @@ sign_rrset(Name, Records, DnsKeyRRs, KeySets) ->
 % Verify RRSet
 -spec(verify_rrset([dns:rr()], [dns:rr()]) -> boolean()).
 verify_rrset(DnsKeyRRs, KeyRRSigRecords) ->
-  lager:debug("Verify RRSet"),
+  % lager:debug("Verify RRSet"),
   case lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= ?DNSKEY_KSK_TYPE end, DnsKeyRRs) of
     [] -> false;
     KSKs -> 
       case KeyRRSigRecords of
 	 [] -> false;
 	  _ ->
-	      lager:debug("KSKs: ~p", [KSKs]),
+	      % lager:debug("KSKs: ~p", [KSKs]),
 	      KSKDnskey = lists:last(KSKs),
 	      RRSig = lists:last(KeyRRSigRecords),
 	      VerifyResult = dnssec:verify_rrsig(RRSig, DnsKeyRRs, [KSKDnskey], []),
