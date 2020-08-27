@@ -512,7 +512,7 @@ sign_rrset(Name, Records, DnsKeyRRs, KeySets) ->
   KeyRRSigRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Name, DnsKeyRRs), KeySets)),
   RRSetRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Name, lists:filter(fun(RR) -> (RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY) end, Records)), KeySets)),
   verify_rrset(DnsKeyRRs, KeyRRSigRecords),
-  KeyRRSigRecords ++ RRSetRecords.
+  RRSetRecords.
 	
 % Verify RRSet
 -spec(verify_rrset([dns:rr()], [dns:rr()]) -> boolean()).
