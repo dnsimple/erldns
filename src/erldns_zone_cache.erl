@@ -510,7 +510,7 @@ verify_zone(_Zone, DnskeyRRs, KeyRRSigRecords) ->
 sign_rrset(Name, Records, DnsKeyRRs, KeySets) ->
   lager:debug("Signing RRSet for zone (name: ~p)", [Name]),
   KeyRRSigRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Name, DnsKeyRRs), KeySets)),
-  RRSetRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Name, lists:filter(fun(RR) -> (RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY) end, Records)), KeySets)),
+  RRSetRecords = lists:flatten(lists:map(erldns_dnssec:zone_rrset_signer(Name, lists:filter(fun(RR) -> (RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY) end, Records)), KeySets)),
   verify_rrset(DnsKeyRRs, KeyRRSigRecords),
   RRSetRecords.
 	
