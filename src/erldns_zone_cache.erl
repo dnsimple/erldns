@@ -104,6 +104,10 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
       end
   end.
 
+update_zone_digest(Zone, Digest) ->
+   UpdatedZone = Zone#zone{version = Digest},
+   put_zone(Zone#zone.name, UpdatedZone).
+
 %% @doc Get a zone for the specific name. This function will not attempt to resolve
 %% the dname in any way, it will simply look up the name in the underlying data store.
 -spec get_zone(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
@@ -261,11 +265,11 @@ put_zone_records(Name, RecordsByName) ->
   put_zone_records_entry(Name, maps:next(maps:iterator(RecordsByName))).
 
 %% @doc Put zone RRSet
-%-spec put_zone_rrset(({Name, Sha, Records}, RRFqdn, Type, Counter) | ({Name, Sha, Records}, RRFqdn, Type, Counter)) -> ok | {error, Reason :: term()}
-%  when Name :: binary(), Sha :: binary(), Records :: [dns:rr()], Keys :: [erldns:keyset()], RRFqdn :: binary(), Type :: binary(), Counter :: integer().
-put_zone_rrset({ZoneName, Sha, Records}, RRFqdn, Type, Counter) ->
-  put_zone_rrset({ZoneName, Sha, Records, []}, RRFqdn, Type, Counter);
-put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
+%-spec put_zone_rrset(({Name, Digest, Records}, RRFqdn, Type, Counter) | ({Name, Digest, Records}, RRFqdn, Type, Counter)) -> ok | {error, Reason :: term()}
+%  when Name :: binary(), Digest :: binary(), Records :: [dns:rr()], Keys :: [erldns:keyset()], RRFqdn :: binary(), Type :: binary(), Counter :: integer().
+put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter) ->
+  put_zone_rrset({ZoneName, Digest, Records, []}, RRFqdn, Type, Counter);
+put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
   % Check counter
   CurrentCounter = get_rrset_sync_counter(ZoneName, RRFqdn, Type),
   lager:debug("Current Counter: ~p", [CurrentCounter]),
@@ -291,6 +295,7 @@ put_zone_rrset({ZoneName, _Sha, Records, _Keys}, RRFqdn, Type, Counter) ->
 			  % put zone_records_typed records first then create the records in zone_records
   			  put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
 			  rebuild_zone_records_named_entry(ZoneName, RRFqdn),
+			  update_zone_digest(Zone, Digest),
 			  write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}),
 			  lager:debug("RRSet update completed for FQDN: ~p, Type: ~p", [RRFqdn, Type]);
   			  % TODO: review zone update of .record_count and .records_by_name and side effect
