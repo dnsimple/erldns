@@ -6,7 +6,7 @@
 %%
 %% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
 %% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
 %% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 %% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
@@ -41,7 +41,8 @@
          get_typed_records_by_name/1,
          in_zone/1,
          zone_names_and_versions/0,
-	 get_rrset_sync_counter/3
+	 get_rrset_sync_counter/3,
+	 update_zone_records_and_digest/3
         ]).
 
 % Write APIs
@@ -107,7 +108,9 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
 update_zone_records_and_digest(ZoneName, Records, Digest) ->
   case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
 	{ok, Zone} -> Zone,
-   		UpdatedZone = Zone#zone{version = Digest, records = Records},
+   		UpdatedZone = Zone#zone{version = Digest, 
+					record_count = length(Records),
+				        records_by_name = build_named_index(Records)}, 
    		put_zone(Zone#zone.name, UpdatedZone);
 	_ -> {error, zone_not_found}
   end.
