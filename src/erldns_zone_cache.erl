@@ -305,9 +305,11 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 			  update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
 			  write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}),
 			  lager:debug("RRSet update completed for FQDN: ~p, Type: ~p", [RRFqdn, Type]);
-  			  % TODO: review zone update of .record_count and .records_by_name and side effect
-  			  %#zone{name = Zone#zone.name, version = Zone#zone.version, record_count = length(Records), authority = Zone#zone.authority, records = Records, records_by_name = build_named_index(Records), keysets = Zone#zone.keysets}.
-			_ -> {error, zone_not_found}
+			_ -> % if zone is not in cache, do fetch zone and ignore the RRset update 
+			     lager:debug("Zone: ~p not in cache, initiating fetch_zone", [ZoneName]),
+			     erldns_zoneclient:fetch_zone(ZoneName),
+			     lager:debug("Zone fetch for ~p completed", [ZoneName])
+		             %  {error, zone_not_found}
 		end
 	end.
 
