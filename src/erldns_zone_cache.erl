@@ -109,6 +109,7 @@ update_zone_records_and_digest(ZoneName, Records, Digest) ->
   case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
 	{ok, Zone} -> Zone,
    		UpdatedZone = Zone#zone{version = Digest, 
+					authority = get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA),	
 					record_count = length(Records),
 				        records_by_name = build_named_index(Records)}, 
    		put_zone(Zone#zone.name, UpdatedZone);
