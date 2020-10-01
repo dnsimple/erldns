@@ -207,10 +207,7 @@ get_zone_dnskey_records(Name) ->
 get_records_by_name(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      case erldns_storage:select(zone_records, {erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name)}) of
-        [] -> [];
-        [{_, Records}] -> Records
-      end; 
+      lists:flatten(erldns_storage:select(zone_records,[{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name)}, '$1'},[],['$$']}], infinite));
     _ ->
       []
   end.
@@ -229,7 +226,13 @@ in_zone(Name) ->
 %% for the zone.
 -spec zone_names_and_versions() -> [{dns:dname(), binary()}].
 zone_names_and_versions() ->
-  erldns_storage:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones).
+  % ETS and Mnesia foldl/3 differ in return values -> Mnesia's version is missing key
+  case erldns_config:storage_type() of 
+    erldns_storage_json -> 
+	erldns_storage:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones);
+    erldns_storage_mnesia ->
+	erldns_storage:foldl(fun(Zone, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones)
+  end.
 
 %% @doc Return current sync counter
 -spec get_rrset_sync_counter(dns:dname(), dns:dname(), dns:type()) -> integer().

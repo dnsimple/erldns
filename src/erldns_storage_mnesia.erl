@@ -39,27 +39,56 @@
 %% @end
 create(schema) ->
   ok = ensure_mnesia_started(),
-  case erldns_config:storage_dir() of
-    undefined ->
-      lager:error("You need to add a directory for mnesia in erldns.config");
-    Dir ->
-      ok = filelib:ensure_dir(Dir),
-      ok = application:set_env(mnesia, dir, Dir)
-  end,
-  case application:stop(mnesia) of
-    ok ->
-      ok;
-    {error, Reason} ->
-      lager:warning("Could not stop mnesia (reason: ~p)", [Reason])
-  end,
-  case mnesia:create_schema([node()]) of
-    {error, {_, {already_exists, _}}} ->
-      lager:warning("The schema already exists (node: ~p)", [node()]),
-      ok;
-    ok ->
-      ok
-  end,
-  application:start(mnesia);
+    case erldns_config:storage_dir() of
+	undefined ->
+	    lager:error("You need to add a directory for mnesia in erldns.config");
+	Dir ->
+	    ok = filelib:ensure_dir(Dir),
+	    ok = application:set_env(mnesia, dir, Dir)
+    end,
+
+    Connected = nodes(),
+    lager:debug("Creating schema ~p", [Connected]),
+    case Connected of
+	[] ->
+	    application:stop(mnesia),
+	    case mnesia:create_schema([node()]) of
+		{error, {_, {already_exists, _}}} ->
+		    lager:warning("The schema already exists (node: ~p)", [node()]),
+		    ok;
+		ok ->
+		    lager:debug("Created the schema on this node ~p", [mnesia:system_info()]),
+		    ok
+	    end;
+	_ ->	    
+	    lager:debug("Adding extra db_nodes ~p", [Connected]),
+	    mnesia:change_config(extra_db_nodes, Connected),
+	    lager:debug("Waiting for tables"),
+	    WaitResult = mnesia:wait_for_tables([zones, zone_records, zone_records_typed, authorities], 5000),
+	    lager:debug("Wait result ~p", [WaitResult]),
+	    Tables = mnesia:system_info(tables),
+	    lager:debug("Current tables ~p", [Tables]),
+	    case Tables of
+		[] ->
+		    application:stop(mnesia),
+		    case mnesia:create_schema([node()]) of
+			{error, {_, {already_exists, _}}} ->
+			    lager:warning("The schema already exists (node: ~p)", [node()]),
+			    ok;
+			ok ->
+			    lager:debug("Created the schema on this node with other connected nodes ~p", [mnesia:system_info()]),
+			    ok
+		    end;
+		_ ->
+		    Schema = mnesia:change_table_copy_type(schema, node(), disc_copies),
+		    Copy = lists:foldl(fun(Table, Acc) ->
+					       Acc ++ [mnesia:add_table_copy(Table, node(), disc_copies)]
+				       end, [], Tables --[schema]),
+		    lager:debug("Copy done Schema= ~p, Others=~p", [Schema, Copy])
+	    end
+    end,
+    ok = ensure_mnesia_started();
+
 %% @doc Match the table names for every create. This enables different records to be used and
 %% attributes to be sent to the tables.
 %% @end
@@ -72,6 +101,7 @@ create(zones) ->
   case mnesia:create_table(zones,
                            [{attributes, record_info(fields, zone)},
                             {record_name, zone},
+			    {type, set},
                             {disc_copies, [node()]}]) of
     {aborted, {already_exists, zones}} ->
       lager:warning("The zone table already exists (node: ~p)", [node()]),
@@ -84,7 +114,9 @@ create(zones) ->
 create(zone_records) ->
   case mnesia:create_table(zone_records,
                            [{attributes, record_info(fields, zone_records)},
-                            {disc_copies, [node()]}]) of
+                            {disc_copies, [node()]},
+			    {type, bag}
+			   ]) of
     {aborted, {already_exists, zone_records}} ->
       lager:warning("The zone records table already exists (node: ~p)", [node()]),
       ok;
@@ -96,9 +128,11 @@ create(zone_records) ->
 create(zone_records_typed) ->
   case mnesia:create_table(zone_records_typed,
                            [{attributes, record_info(fields, zone_records_typed)},
-                            {disc_copies, [node()]}]) of
+                            {disc_copies, [node()]},
+			    {type, bag}
+			   ]) of
     {aborted, {already_exists, zone_records_typed}} ->
-      lager:warning("The zone records table already exists (node: ~p)", [node()]),
+      lager:warning("The zone records typed table already exists (node: ~p)", [node()]),
       ok;
     {atomic, ok} ->
       ok;
@@ -213,7 +247,7 @@ delete(Table, Key)->
 -spec select_delete(atom(), list()) -> {ok, Count :: integer()} | {error, Reason :: term()}.
 select_delete(Table, [{{{ZoneName, Fqdn}, _}, _, _}])->
   SelectDelete = fun() ->
-                     Records =  mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, write),
+                     Records =  mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, read),
                      lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
                      {ok, length(Records)}
                  end,
@@ -250,11 +284,20 @@ select(Table, Key)->
            end,
   mnesia:activity(transaction, Select).
 
-%% @doc Select using a match spec.
+%% @doc Select using ETS match spec converted to Mnesia's match_object pattern
 -spec select(atom(), list(), infinite | integer()) -> [tuple()].
-select(_Table, MatchSpec, _Limit) ->
-  MatchObject = fun() -> mnesia:match_object(MatchSpec) end,
-  mnesia:activity(transaction, MatchObject).
+select(Table, [{{{ZoneName, Fqdn}, _}, _, _}], _Limit) ->
+  SelectFun = fun() ->
+    Records  = mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, read),
+    [Record || {_, _, _, Record} <- Records] 
+  end,
+  mnesia:activity(transaction, SelectFun);
+select(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}], _Limit) ->
+  SelectFun = fun() ->
+     Records = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, read),
+     [Record || {_, _, _, _, Record} <- Records] 
+  end,
+  mnesia:activity(transaction, SelectFun).
 
 %% @doc Wrapper for foldl.
 -spec foldl(fun(), list(), atom())  -> Acc :: term() | {error, Reason :: term()}.

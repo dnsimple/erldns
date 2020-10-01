@@ -15,6 +15,7 @@
                   mnesia,
                   bear,
                   folsom,
-                  iso8601]},
+                  iso8601,
+		  nodefinder]},
   {start_phases, [{post_start, []}]}
   ]}.
