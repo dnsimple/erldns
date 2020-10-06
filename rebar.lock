@@ -1,24 +1,24 @@
 {"1.1.0",
 [{<<"base32">>,{pkg,<<"base32">>,<<"0.1.0">>},1},
  {<<"bear">>,{pkg,<<"bear">>,<<"0.8.7">>},1},
- {<<"dns_erlang">>,{pkg,<<"dns_erlang">>,<<"1.0.1">>},0},
+ {<<"dns_erlang">>,{pkg,<<"dns_erlang">>,<<"1.1.0">>},0},
  {<<"folsom">>,{pkg,<<"folsom">>,<<"0.8.8">>},0},
  {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},1},
  {<<"iso8601">>,{pkg,<<"iso8601">>,<<"1.3.1">>},0},
  {<<"jsx">>,{pkg,<<"jsx">>,<<"2.10.0">>},0},
- {<<"lager">>,{pkg,<<"lager">>,<<"3.8.0">>},0},
- {<<"nodefinder">>,{pkg,<<"nodefinder">>,<<"1.8.0">>},0},
- {<<"recon">>,{pkg,<<"recon">>,<<"2.5.0">>},0}]}.
+ {<<"lager">>,{pkg,<<"lager">>,<<"3.8.1">>},0},
+ {<<"nodefinder">>,{pkg,<<"nodefinder">>,<<"2.0.0">>},0},
+ {<<"recon">>,{pkg,<<"recon">>,<<"2.5.1">>},0}]}.
 [
 {pkg_hash,[
  {<<"base32">>, <<"044F6DC95709727CA2176F3E97A41DDAA76B5BC690D3536908618C0CB32616A2">>},
  {<<"bear">>, <<"16264309AE5D005D03718A5C82641FCC259C9E8F09ADEB6FD79CA4271168656F">>},
- {<<"dns_erlang">>, <<"9F557BE02006D975EE07A49C9BD5ECC9496883514CED134E86A1734D1309C092">>},
+ {<<"dns_erlang">>, <<"1E3EA9BD45977198F5F1F3B0FBCC52DB3EFE9661669A43DBA4B9F7917460040D">>},
  {<<"folsom">>, <<"9A2B02010F6727CB1948EF34E21CB66F3554B63355C3A31E8BCB10FB172C3170">>},
  {<<"goldrush">>, <<"F06E5D5F1277DA5C413E84D5A2924174182FB108DABB39D5EC548B27424CD106">>},
  {<<"iso8601">>, <<"D1CEE73F56D71C35590C6B2DB2074873BF410BABAAB768F6EA566366D8CA4810">>},
  {<<"jsx">>, <<"77760560D6AC2B8C51FD4C980E9E19B784016AA70BE354CE746472C33BEB0B1C">>},
- {<<"lager">>, <<"3402B9A7E473680CA179FC2F1D827CAB88DD37DD1E6113090C6F45EF05228A1C">>},
- {<<"nodefinder">>, <<"2BFDF001C7EA6662A4671283A902EDCA60EFE04D245C790A40C625CEDF2A5F9F">>},
- {<<"recon">>, <<"2F7FCBEC2C35034BADE2F9717F77059DC54EB4E929A3049CA7BA6775C0BD66CD">>}]}
+ {<<"lager">>, <<"652EDFFBBEFFDE78F12220E1C64F6F6BFB173A8738CE73AF6ED3B1723A71C5BD">>},
+ {<<"nodefinder">>, <<"1FA140D4C3A27FF66623E267E66876AF18817BA82AD303E4AE46ADBC941851AA">>},
+ {<<"recon">>, <<"430FFA60685AC1EFDFB1FE4C97B8767C92D0D92E6E7C3E8621559BA77598678A">>}]}
 ].

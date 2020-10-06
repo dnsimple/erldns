@@ -121,7 +121,6 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
   Records = lists:map(
               fun(JsonRecord) ->
                   Data = json_record_to_list(JsonRecord),
-
                   % Filter by context
                   case apply_context_options(Data) of
                     pass ->
