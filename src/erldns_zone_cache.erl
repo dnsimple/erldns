@@ -288,6 +288,17 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 		  lager:debug("Not processing RRSet (~p) for Zone (~p): counter (~p) provided is lower than system", [RRFqdn, ZoneName, Counter]);
 	  true -> 
 		  lager:debug("Processing RRSet (~p) for Zone (~p): counter (~p) provided is higher than system", [RRFqdn, ZoneName, Counter]),
+	          % we need to perform extra check to verify that the zone is in cache already as we might
+		  % face timing issue if the initial full zone load for subdomain has not updated the storage yet
+		  % and find_zone_in_cache() will return the parent zone instead
+		  case get_zone(erldns:normalize_name(ZoneName)) of
+			{error,zone_not_found} ->
+			     lager:debug("Zone: ~p not in cache, initiating fetch_zone", [ZoneName]),
+			     erldns_zoneclient:fetch_zone(ZoneName),
+			     lager:debug("Zone fetch for ~p completed", [ZoneName]);
+			{ok, _} ->
+			     lager:debug("Zone: ~p already in cache", [ZoneName])
+		  end,
 		  case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
 			{ok, Zone} -> Zone,
 			  % TODO: remove debug
