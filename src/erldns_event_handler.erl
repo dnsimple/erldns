@@ -76,7 +76,7 @@ handle_event({M = erldns_handler, E = bad_message, {Message, Host}}, State) ->
 handle_event({M = erldns_handler, E = refused_response, Questions}, State) ->
   folsom_metrics:notify({refused_response_meter, 1}),
   folsom_metrics:notify({refused_response_counter, {inc, 1}}),
-  lager:info("Refused response (module: ~p, event: ~p, questions: ~p)", [M, E, Questions]),
+  %lager:info("Refused response (module: ~p, event: ~p, questions: ~p)", [M, E, Questions]),
   {ok, State};
 
 handle_event({M = erldns_handler, E = empty_response, Message}, State) ->
