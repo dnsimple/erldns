@@ -532,10 +532,12 @@ verify_zone(_Zone, DnskeyRRs, KeyRRSigRecords) ->
 % Sign RRSet
 -spec(sign_rrset(binary(), [dns:rr()], [dns:rr()], [erldns:keyset()]) -> [dns:rr()]).
 sign_rrset(Name, Records, DnsKeyRRs, KeySets) ->
-  lager:debug("Signing RRSet for zone (name: ~p)", [Name]),
+  lager:debug("Signing RRSet for zone (name: ~p, records: ~p, dnskeyrrs: ~p, keysets: ~p)", [Name, Records, DnsKeyRRs, KeySets]),
   KeyRRSigRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Name, DnsKeyRRs), KeySets)),
+  lager:debug("Key RRSIG records (name: ~p, records: ~p)", [Name, KeyRRSigRecords]),
   ZoneRecords = get_zone_records(Name),
   RRSigRecords = rewrite_soa_rrsig_ttl(ZoneRecords, lists:flatten(lists:map(erldns_dnssec:zone_rrset_signer(Name, lists:filter(fun(RR) -> (RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY) end, Records)), KeySets))),
+  lager:debug("RRSIG records after TTL rewrite (name: ~p, records: ~p)", [Name, RRSigRecords]),
   verify_rrset(DnsKeyRRs, KeyRRSigRecords),
   RRSigRecords.
 	
