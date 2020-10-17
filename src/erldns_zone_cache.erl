@@ -368,7 +368,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
 		  % delete RRSet related RRSig records
 		  % get RRSIG records without type covered first
 		  RRSigRecs = filter_rrsig_records_with_type_covered(RRFqdn, Type),
-                  lager:debug("RRSIG records covering type (fqdn: ~p, type: ~p, rrsigs: ~p)", [RRFqdn, Type, RRSigRecords]),
+                  lager:debug("RRSIG records covering type (fqdn: ~p, type: ~p, rrsigs: ~p)", [RRFqdn, Type, RRSigRecs]),
 
                   RRSigToRemove = erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), ?DNS_TYPE_RRSIG_NUMBER}, '_'},[],[true]}]),
                   lager:debug("RRSIGs to remove (records: ~p)", [RRSigToRemove]),
