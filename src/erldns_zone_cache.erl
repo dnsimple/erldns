@@ -303,8 +303,9 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 							   SignedRRSet ++ 
 							   RRSigRecs),
 			  % Remove RRSet Records
-			  delete_zone_rrset(ZoneName, Digest, RRFqdn, Type), 
-			  % put zone_records_typed records first then create the records in zone_records
+			  % delete_zone_rrset(ZoneName, Digest, RRFqdn, Type), 
+			  
+                          % put zone_records_typed records first then create the records in zone_records
                           put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
                           rebuild_zone_records_named_entry(ZoneName, RRFqdn),
                           update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
@@ -351,9 +352,9 @@ delete_zone_records(Name) ->
   erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), '_', '_'}, '_'},[],[true]}]).
 
 %% @doc Remove zone RRSet
--spec delete_zone_rrset(binary(), binary(), binary(), integer()) -> any().
-delete_zone_rrset(Name, Digest, RRFqdn, Type) ->
-  delete_zone_rrset(Name, Digest, RRFqdn, Type, 0).
+%-spec delete_zone_rrset(binary(), binary(), binary(), integer()) -> any().
+%delete_zone_rrset(Name, Digest, RRFqdn, Type) ->
+  %delete_zone_rrset(Name, Digest, RRFqdn, Type, 0).
 
 %% @doc Remove zone RRSet
 -spec delete_zone_rrset(binary(), binary(), binary(), integer(), integer()) -> any().
@@ -369,15 +370,19 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
 
           erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, '_'},[],[true]}]),
           erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), Type}, '_'},[],[true]}]),
+
           % delete RRSet related RRSig records
           % get RRSIG records without type covered first
           RRSigRecs = filter_rrsig_records_with_type_covered(RRFqdn, Type),
+          lager:debug("RRSIGs that will be put back into zone_records_typed (records: ~p)", [RRSigRecs]),
+
           % delete all RRSIGs for FQDN 
           erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), ?DNS_TYPE_RRSIG_NUMBER}, '_'},[],[true]}]),
           % write back the filtered RRSIG set
           lists:map(fun(R) ->
                         erldns_storage:insert(zone_records_typed, R) end,
                     RRSigRecs),
+
           % only write counter if called explicitly with Counter value i.e. different than 0.
           % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
           case Counter of
