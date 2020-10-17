@@ -415,7 +415,7 @@ filter_rrsig_records_with_type_covered(Fqdn, TypeCovered) ->
       lists:flatten(
         lists:foldl(
 	   fun(R, Records) ->
-			case R#dns_rr.data#dns_rrdata_rrsig.type_covered =/= TypeCovered of
+               case R#dns_rr.data#dns_rrdata_rrsig.type_covered =:= TypeCovered of
 				true -> [R | Records];  
 				false -> [Records]
 			end
