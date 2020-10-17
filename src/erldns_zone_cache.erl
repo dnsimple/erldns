@@ -291,7 +291,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 		  case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
 			{ok, Zone} ->
                           DnskeyRRSigs = lists:filter(erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER)),
-                          lager:debug("DNSKEY RRSIGS at start of PUT (records: ~p)", DnskeyRRSigs),
+                          lager:debug("DNSKEY RRSIGS at start of PUT (records: ~p)", [DnskeyRRSigs]),
 
 			  % TODO: remove debug
 			  lager:debug("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [RRFqdn, Type, ZoneName, Records]),
@@ -312,7 +312,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
                           write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}),
 
                           DnskeyRRSigs = lists:filter(erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER)),
-                          lager:debug("DNSKEY RRSIGS at end of PUT (records: ~p)", DnskeyRRSigs),
+                          lager:debug("DNSKEY RRSIGS at end of PUT (records: ~p)", [DnskeyRRSigs]),
 
                           lager:debug("RRSet update completed for FQDN: ~p, Type: ~p", [RRFqdn, Type]);
                     _ -> % if zone is not in cache, do fetch zone and ignore the RRset update 
