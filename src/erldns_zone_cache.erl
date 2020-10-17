@@ -373,15 +373,15 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
 
           % delete RRSet related RRSig records
           % get RRSIG records without type covered first
-          RRSigRecs = filter_rrsig_records_with_type_covered(RRFqdn, Type),
-          lager:debug("RRSIGs that will be put back into zone_records_typed (records: ~p)", [RRSigRecs]),
+          %RRSigRecs = filter_rrsig_records_with_type_covered(RRFqdn, Type),
+          %lager:debug("RRSIGs that will be put back into zone_records_typed (records: ~p)", [RRSigRecs]),
 
           % delete all RRSIGs for FQDN 
-          erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), ?DNS_TYPE_RRSIG_NUMBER}, '_'},[],[true]}]),
+          %erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), ?DNS_TYPE_RRSIG_NUMBER}, '_'},[],[true]}]),
           % write back the filtered RRSIG set
-          lists:map(fun(R) ->
-                        erldns_storage:insert(zone_records_typed, R) end,
-                    RRSigRecs),
+          %lists:map(fun(R) ->
+          %              erldns_storage:insert(zone_records_typed, R) end,
+          %          RRSigRecs),
 
           % only write counter if called explicitly with Counter value i.e. different than 0.
           % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
