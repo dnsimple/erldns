@@ -290,7 +290,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 		  lager:debug("Processing RRSet (~p) for Zone (~p): counter (~p) provided is higher than system", [RRFqdn, ZoneName, Counter]),
 		  case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
 			{ok, Zone} ->
-                          DnskeyRRSigs = lists:select(get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER), erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER)),
+                          DnskeyRRSigs = lists:filter(erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER)),
                           lager:debug("DNSKEY RRSIGS at start of PUT (records: ~p)", DnskeyRRSigs),
 
 			  % TODO: remove debug
@@ -311,7 +311,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
                           update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
                           write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}),
 
-                          DnskeyRRSigs = lists:select(get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER), erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER)),
+                          DnskeyRRSigs = lists:filter(erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER)),
                           lager:debug("DNSKEY RRSIGS at end of PUT (records: ~p)", DnskeyRRSigs),
 
                           lager:debug("RRSet update completed for FQDN: ~p, Type: ~p", [RRFqdn, Type]);
