@@ -294,9 +294,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 			  lager:debug("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [RRFqdn, Type, ZoneName, Records]),
 			  KeySets = Zone#zone.keysets,
 			  DnsKeyRRs = get_zone_dnskey_records(ZoneName),
-                          lager:debug("DNSKEY RRs at start of RRSET PUT (records: ~p)", [DnsKeyRRs]),
 			  SignedRRSet = sign_rrset(ZoneName, Records, DnsKeyRRs, KeySets),
-                          lager:debug("Signed RRSet (rrset: ~p)", [SignedRRSet]),
 			  RRSigRecs = filter_rrsig_records_with_type_covered(RRFqdn, Type),
 			  % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
 			  TypedRecords = build_typed_index(Records ++ 
@@ -364,25 +362,15 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
 		  lager:debug("Removing RRSet (~p) with type ~p", [RRFqdn, Type]),
 		  erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, '_'},[],[true]}]),
 		  erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), Type}, '_'},[],[true]}]),
-
 		  % delete RRSet related RRSig records
 		  % get RRSIG records without type covered first
 		  RRSigRecs = filter_rrsig_records_with_type_covered(RRFqdn, Type),
-                  lager:debug("RRSIG records covering type (fqdn: ~p, type: ~p, rrsigs: ~p)", [RRFqdn, Type, RRSigRecs]),
-
-                  RRSigToRemove = erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), ?DNS_TYPE_RRSIG_NUMBER}, '_'},[],[true]}]),
-                  lager:debug("RRSIGs to remove (records: ~p)", [RRSigToRemove]),
-
-
-                  % delete all RRSIGs for FQDN
+		  % delete all RRSIGs for FQDN 
 		  erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), ?DNS_TYPE_RRSIG_NUMBER}, '_'},[],[true]}]),
-
-                  lager:debug("RRSIGs to write back (records: ~p)", [RRSigRecs]),
-                  % write back the filtered RRSIG set
+		  % write back the filtered RRSIG set
 		  lists:map(fun(R) ->
 			erldns_storage:insert(zone_records_typed, R) end,
 			RRSigRecs),
-
 		  % only write counter if called explicitly with Counter value i.e. different than 0.
 		  % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
 		  case Counter of
@@ -415,7 +403,7 @@ filter_rrsig_records_with_type_covered(Fqdn, TypeCovered) ->
       lists:flatten(
         lists:foldl(
 	   fun(R, Records) ->
-               case R#dns_rr.data#dns_rrdata_rrsig.type_covered =:= TypeCovered of
+			case R#dns_rr.data#dns_rrdata_rrsig.type_covered =/= TypeCovered of
 				true -> [R | Records];  
 				false -> [Records]
 			end
@@ -544,12 +532,10 @@ verify_zone(_Zone, DnskeyRRs, KeyRRSigRecords) ->
 % Sign RRSet
 -spec(sign_rrset(binary(), [dns:rr()], [dns:rr()], [erldns:keyset()]) -> [dns:rr()]).
 sign_rrset(Name, Records, DnsKeyRRs, KeySets) ->
-  lager:debug("Signing RRSet for zone (name: ~p, records: ~p, dnskeyrrs: ~p, keysets: ~p)", [Name, Records, DnsKeyRRs, KeySets]),
+  lager:debug("Signing RRSet for zone (name: ~p)", [Name]),
   KeyRRSigRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Name, DnsKeyRRs), KeySets)),
-  lager:debug("Key RRSIG records (name: ~p, records: ~p)", [Name, KeyRRSigRecords]),
   ZoneRecords = get_zone_records(Name),
   RRSigRecords = rewrite_soa_rrsig_ttl(ZoneRecords, lists:flatten(lists:map(erldns_dnssec:zone_rrset_signer(Name, lists:filter(fun(RR) -> (RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY) end, Records)), KeySets))),
-  lager:debug("RRSIG records after TTL rewrite (name: ~p, records: ~p)", [Name, RRSigRecords]),
   verify_rrset(DnsKeyRRs, KeyRRSigRecords),
   RRSigRecords.
 	
