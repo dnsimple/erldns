@@ -294,7 +294,9 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 			  lager:debug("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [RRFqdn, Type, ZoneName, Records]),
 			  KeySets = Zone#zone.keysets,
 			  DnsKeyRRs = get_zone_dnskey_records(ZoneName),
+                          lager:debug("DNSKEY RRs at start of RRSET PUT (records: ~p)", [DnsKeyRRs]),
 			  SignedRRSet = sign_rrset(ZoneName, Records, DnsKeyRRs, KeySets),
+                          lager:debug("Signed RRSet (rrset: ~p)", [SignedRRSet]),
 			  RRSigRecs = filter_rrsig_records_with_type_covered(RRFqdn, Type),
 			  % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
 			  TypedRecords = build_typed_index(Records ++ 
@@ -371,6 +373,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
 		  lists:map(fun(R) ->
 			erldns_storage:insert(zone_records_typed, R) end,
 			RRSigRecs),
+
 		  % only write counter if called explicitly with Counter value i.e. different than 0.
 		  % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
 		  case Counter of
