@@ -289,8 +289,10 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 	  true -> 
 		  lager:debug("Processing RRSet (~p) for Zone (~p): counter (~p) provided is higher than system", [RRFqdn, ZoneName, Counter]),
 		  case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
-			{ok, Zone} -> Zone,
-                                      
+			{ok, Zone} ->
+                          DnskeyRRSigs = lists:select(get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER), erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER)),
+                          lager:debug("DNSKEY RRSIGS at start of PUT (records: ~p)", DnskeyRRSigs),
+
 			  % TODO: remove debug
 			  lager:debug("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [RRFqdn, Type, ZoneName, Records]),
 			  KeySets = Zone#zone.keysets,
