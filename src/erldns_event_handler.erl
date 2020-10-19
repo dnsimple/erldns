@@ -73,10 +73,10 @@ handle_event({M = erldns_handler, E = bad_message, {Message, Host}}, State) ->
   lager:error("Received a bad message (module: ~p, event: ~p, message: ~p, host: ~p)", [M, E, Message, Host]),
   {ok, State};
 
-handle_event({M = erldns_handler, E = refused_response, Questions}, State) ->
+handle_event({_M = erldns_handler, _E = refused_response, _Questions}, State) ->
   folsom_metrics:notify({refused_response_meter, 1}),
   folsom_metrics:notify({refused_response_counter, {inc, 1}}),
-  %lager:info("Refused response (module: ~p, event: ~p, questions: ~p)", [M, E, Questions]),
+  % lager:info("Refused response (module: ~p, event: ~p, questions: ~p)", [M, E, Questions]),
   {ok, State};
 
 handle_event({M = erldns_handler, E = empty_response, Message}, State) ->
@@ -164,8 +164,6 @@ handle_event({M = erldns_worker, E = timeout, {Protocol, Message}}, State) ->
 handle_event({M = erldns_worker, E = restart_failed, Error}, State) ->
   lager:error("Restart failed (module: ~p, event: ~p, error: ~p)", [M, E, Error]),
   {ok, State};
-
-
 
 handle_event(_Event, State) ->
   {ok, State}.
