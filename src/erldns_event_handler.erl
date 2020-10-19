@@ -165,8 +165,6 @@ handle_event({M = erldns_worker, E = restart_failed, Error}, State) ->
   lager:error("Restart failed (module: ~p, event: ~p, error: ~p)", [M, E, Error]),
   {ok, State};
 
-
-
 handle_event(_Event, State) ->
   {ok, State}.
 
