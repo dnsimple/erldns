@@ -362,8 +362,8 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
           % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
           case Counter of
             N when N > 0 ->
-              % DELETE RRSet command has been sent - rebuild the zone_records named entry	
-              rebuild_zone_records_named_entry(ZoneName, RRFqdn),
+              % DELETE RRSet command has been sent - rebuild the zone_records named entry
+              rebuild_zone_records_named_entry(ZoneName, ZoneName),
               % we need to update the zone digest as the zone content changes
               update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
               write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter});
