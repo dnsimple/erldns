@@ -358,7 +358,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
           % lager:debug("RRSIGs after partition (covering: ~p, notcovering: ~p)", [RRSigsCovering, RRSigsNotCovering]),
           erldns_storage:insert(zone_records_typed, {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), ?DNS_TYPE_RRSIG_NUMBER}, RRSigsNotCovering}),
 
-          {DeleteRRs, RemainingRRs} = lists:partition(erldns_records:match_name_and_type(RRFqdn, Type), get_records_by_name(RRFqdn)),
+          {DeleteRRs, RemainingRRs} = lists:partition(erldns_records:match_name_and_type(RRFqdn, Type), get_zone_records(ZoneName)),
           lager:debug("Partitioned records (delete: ~p, keep: ~p)", [DeleteRRs, RemainingRRs]),
           erldns_storage:insert(zone_records, {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, RemainingRRs}),
 
