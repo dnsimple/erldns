@@ -291,6 +291,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 	  DnsKeyRRs = get_zone_dnskey_records(ZoneName),
 	  SignedRRSet = sign_rrset(ZoneName, Records, DnsKeyRRs, KeySets),
 	  RRSigRecs = filter_rrsig_records_with_type_covered(RRFqdn, Type),
+          lager:debug("Signed RRSet and RRSIG records (signed: ~p, rrsig: ~p)", [SignedRRSet, RRSigRecs]),
 
 	  % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
 	  TypedRecords = build_typed_index(Records ++ 
@@ -305,7 +306,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
         
           {_ReplaceRecords, KeepRecords} = lists:partition(erldns_records:match_name_and_type(RRFqdn, Type), get_records_by_name(RRFqdn)),
           InsertingIntoZoneRecords =  KeepRecords ++ SignedRRSet ++ RRSigRecs,
-          lager:debug("Inserting into zone records (records: ~p)", [InsertingIntoZoneRecords]),
+          lager:debug("SOA records in the insert (records: ~p)", [lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), InsertingIntoZoneRecords)]),
           erldns_storage:insert(zone_records, {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, InsertingIntoZoneRecords}),
           lager:debug("SOA in PUT after insert into zone_records (records: ~p)", [lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), get_records_by_name(ZoneName))]),
 
