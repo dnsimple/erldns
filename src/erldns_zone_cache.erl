@@ -363,7 +363,11 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
           case Counter of
             N when N > 0 ->
               % DELETE RRSet command has been sent - rebuild the zone_records named entry
-              rebuild_zone_records_named_entry(ZoneName, ZoneName),
+              % rebuild_zone_records_named_entry(ZoneName, ZoneName),
+              
+              {_DeleteRRs, RemainingRRs} = lists:partition(erldns_records:match_name_and_type(RRFqdn, Type)),
+              erldns_storage:insert(zone_records, {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, RemainingRRs}),
+
               % we need to update the zone digest as the zone content changes
               update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
               write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter});
