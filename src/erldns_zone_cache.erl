@@ -300,8 +300,8 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 	  put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
           lager:debug("SOA in PUT after put_zone_records_typed_entry (records: ~p)", [lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), get_records_by_name(ZoneName))]),
 
-	  rebuild_zone_records_named_entry(ZoneName, RRFqdn),
-          lager:debug("SOA in PUT after rebuild_zone_records_named_entry (records: ~p)", [lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), get_records_by_name(ZoneName))]),
+	  % rebuild_zone_records_named_entry(ZoneName, RRFqdn),
+          % lager:debug("SOA in PUT after rebuild_zone_records_named_entry (records: ~p)", [lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), get_records_by_name(ZoneName))]),
 
 	  update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
           lager:debug("SOA in PUT after update_zone_records_and_digest (records: ~p)", [lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), get_records_by_name(ZoneName))]),
