@@ -360,7 +360,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
 
           {DeleteRRs, RemainingRRs} = lists:partition(erldns_records:match_name_and_type(RRFqdn, Type), get_zone_records(ZoneName)),
           lager:debug("Partitioned records (delete: ~p, keep: ~p)", [DeleteRRs, RemainingRRs]),
-          erldns_storage:insert(zone_records, {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, RemainingRRs}),
+
 
           % only write counter if called explicitly with Counter value i.e. different than 0.
           % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
@@ -369,7 +369,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
               % DELETE RRSet command has been sent - rebuild the zone_records named entry
               % rebuild_zone_records_named_entry(ZoneName, ZoneName),
               % we need to update the zone digest as the zone content changes
-              update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
+              update_zone_records_and_digest(ZoneName, RemainingRRs, Digest),
               write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter});
             _ ->
               ok
