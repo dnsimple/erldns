@@ -350,7 +350,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
           lager:debug("Removing RRSet (~p) with type ~p", [RRFqdn, Type]),
           % lager:debug("DNSKEY RRSIGS at start of DELETE (records: ~p)", [lists:filter(erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER))]),
 
-          % erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, '_'},[],[true]}]),
+          erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, '_'},[],[true]}]),
           erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), Type}, '_'},[],[true]}]),
 
           % remove the RRSIG for the given record type
@@ -358,21 +358,14 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
           % lager:debug("RRSIGs after partition (covering: ~p, notcovering: ~p)", [RRSigsCovering, RRSigsNotCovering]),
           erldns_storage:insert(zone_records_typed, {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), ?DNS_TYPE_RRSIG_NUMBER}, RRSigsNotCovering}),
 
-          RecordsForFqdn = lists:flatten(erldns_storage:select(zone_records,[{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, '$1'},[],['$$']}], infinite)),
-          lager:debug("Deleting records of name and type from list (name: ~p, type: ~p, records: ~p)", [RRFqdn, Type, RecordsForFqdn]),
-          {DeleteRRs, RemainingRRs} = lists:partition(erldns_records:match_type(Type), RecordsForFqdn),
-          lager:debug("Partitioned records for name (name: ~p, delete: ~p, keep: ~p)", [RRFqdn, DeleteRRs, RemainingRRs]),
-          erldns_storage:insert(zone_records, {{erldns:normalize_name(ZoneName), erldns:normalize_name(ZoneName)}, RemainingRRs}),
-
-
           % only write counter if called explicitly with Counter value i.e. different than 0.
           % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
           case Counter of
             N when N > 0 ->
               % DELETE RRSet command has been sent - rebuild the zone_records named entry
-              % rebuild_zone_records_named_entry(ZoneName, ZoneName),
+              rebuild_zone_records_named_entry(ZoneName, ZoneName),
               % we need to update the zone digest as the zone content changes
-              update_zone_records_and_digest(ZoneName, RemainingRRs, Digest),
+              update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
               write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter});
             _ ->
               ok
