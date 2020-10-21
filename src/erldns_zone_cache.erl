@@ -297,7 +297,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 	  
 	  % put zone_records_typed records first then create the records in zone_records
 	  put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
-	  rebuild_zone_records_named_entry(ZoneName, ZoneName),
+	  rebuild_zone_records_named_entry(ZoneName, RRFqdn),
 	  update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
 	  write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}),
 
