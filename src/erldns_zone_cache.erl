@@ -365,7 +365,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
               % DELETE RRSet command has been sent - rebuild the zone_records named entry
               % rebuild_zone_records_named_entry(ZoneName, ZoneName),
               
-              {_DeleteRRs, RemainingRRs} = lists:partition(erldns_records:match_name_and_type(RRFqdn, Type)),
+              {_DeleteRRs, RemainingRRs} = lists:partition(erldns_records:match_name_and_type(RRFqdn, Type), get_records_by_name(RRFqdn)),
               erldns_storage:insert(zone_records, {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, RemainingRRs}),
 
               % we need to update the zone digest as the zone content changes
