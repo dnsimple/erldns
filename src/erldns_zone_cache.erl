@@ -297,7 +297,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 	  
 	  % put zone_records_typed records first then create the records in zone_records
 	  put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
-	  rebuild_zone_records_named_entry(ZoneName, RRFqdn),
+	  rebuild_zone_records_named_entry(ZoneName, ZoneName),
 	  update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
 	  write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}),
 
@@ -350,7 +350,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
           lager:debug("Removing RRSet (~p) with type ~p", [RRFqdn, Type]),
           % lager:debug("DNSKEY RRSIGS at start of DELETE (records: ~p)", [lists:filter(erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER))]),
 
-          % erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, '_'},[],[true]}]),
+          erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, '_'},[],[true]}]),
           erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), Type}, '_'},[],[true]}]),
 
           % remove the RRSIG for the given record type
