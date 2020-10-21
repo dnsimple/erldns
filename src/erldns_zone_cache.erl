@@ -282,7 +282,8 @@ put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter) ->
 put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
   case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
      {ok, Zone} ->
-	  % lager:debug("DNSKEY RRSIGS at start of PUT (records: ~p)", [lists:filter(erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER))]),
+          lager:debug("SOA at start of PUT (records: ~p)", [lists:filter(erldns_records:match_type(?DNS_TYPE_SOA)), get_records_by_name(ZoneName)]),
+          % lager:debug("DNSKEY RRSIGS at start of PUT (records: ~p)", [lists:filter(erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER))]),
 
 	  % TODO: remove debug
 	  lager:debug("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [RRFqdn, Type, ZoneName, Records]),
@@ -302,6 +303,8 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 	  write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}),
 
 	  % lager:debug("DNSKEY RRSIGS at end of PUT (records: ~p)", [lists:filter(erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER))]),
+          lager:debug("SOA at end of PUT (records: ~p)", [lists:filter(erldns_records:match_type(?DNS_TYPE_SOA)), get_records_by_name(ZoneName)]),
+
 
 	  lager:debug("RRSet update completed for FQDN: ~p, Type: ~p", [RRFqdn, Type]),
 	  ok;
@@ -348,6 +351,8 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
       case Counter of
         N when N =:= 0; CurrentCounter < N ->
           lager:debug("Removing RRSet (~p) with type ~p", [RRFqdn, Type]),
+          lager:debug("SOA at start of DELETE (records: ~p)", [lists:filter(erldns_records:match_type(?DNS_TYPE_SOA)), get_records_by_name(ZoneName)]),
+
           % lager:debug("DNSKEY RRSIGS at start of DELETE (records: ~p)", [lists:filter(erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER))]),
 
           erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, '_'},[],[true]}]),
@@ -369,9 +374,10 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
               write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter});
             _ ->
               ok
-          end;
+          end,
 
           % lager:debug("DNSKEY RRSIGS at end of DELETE (records: ~p)", [lists:filter(erldns_records:match_type_covered(?DNS_TYPE_DNSKEY_NUMBER), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER))]);
+          lager:debug("SOA at end of DELETE (records: ~p)", [lists:filter(erldns_records:match_type(?DNS_TYPE_SOA)), get_records_by_name(ZoneName)]);
         N when CurrentCounter > N ->
           lager:debug("Not processing delete operation for RRSet (~p): counter (~p) provided is lower than system", [RRFqdn, Counter])
       end;
