@@ -296,13 +296,6 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 	  % put zone_records_typed records first then create the records in zone_records
 	  put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
 
-          % Replace the records in zone_records
-          %{ExistingRRSIGs, ExistingRecords} = lists:partition(erldns_records:match_type(?DNS_TYPE_RRSIG), get_records_by_name(RRFqdn)),
-          %{_, KeepRecords} = lists:partition(erldns_records:match_name_and_type(RRFqdn, Type), ExistingRecords),
-          %{_, KeepRRSIGs} = lists:partition(erldns_records:match_type_covered(Type), ExistingRRSIGs),
-          %InsertingIntoZoneRecords =  KeepRecords ++ KeepRRSIGs ++ Records ++ SignedRRSet ++ RRSigRecs,
-          %erldns_storage:insert(zone_records, {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, InsertingIntoZoneRecords}),
-
 	  update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
 
 	  write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}),
@@ -316,7 +309,6 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 put_zone_records_entry(_, none) ->
   ok;
 put_zone_records_entry(Name, {K, V, I}) ->
-  % erldns_storage:insert(zone_records, {{erldns:normalize_name(Name), erldns:normalize_name(K)}, V}),
   put_zone_records_typed_entry(Name, K, maps:next(maps:iterator(build_typed_index(V)))),
   put_zone_records_entry(Name, maps:next(I)).
 
@@ -350,7 +342,6 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
 
           % remove the RRSIG for the given record type
           {_RRSigsCovering, RRSigsNotCovering} = lists:partition(erldns_records:match_type_covered(Type), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER)),
-          % lager:debug("RRSIGs after partition (covering: ~p, notcovering: ~p)", [RRSigsCovering, RRSigsNotCovering]),
           erldns_storage:insert(zone_records_typed, {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), ?DNS_TYPE_RRSIG_NUMBER}, RRSigsNotCovering}),
 
           % only write counter if called explicitly with Counter value i.e. different than 0.
