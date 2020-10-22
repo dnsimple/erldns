@@ -166,7 +166,7 @@ get_delegations(Name) ->
 get_zone_records(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      lists:flatten(erldns_storage:select(zone_records, [{{{erldns:normalize_name(Zone#zone.name), '_'}, '$1'},[],['$$']}], infinite));
+      lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), '_', '_'}, '$1'},[],['$$']}], infinite));
     _ ->
       []
   end.
@@ -206,7 +206,7 @@ get_zone_dnskey_records(Name) ->
 get_records_by_name(Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
-      lists:flatten(erldns_storage:select(zone_records,[{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name)}, '$1'},[],['$$']}], infinite));
+      lists:flatten(erldns_storage:select(zone_records_typed,[{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), '_'}, '$1'},[],['$$']}], infinite));
     _ ->
       []
   end.
@@ -297,11 +297,11 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 	  put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
 
           % Replace the records in zone_records
-          {ExistingRRSIGs, ExistingRecords} = lists:partition(erldns_records:match_type(?DNS_TYPE_RRSIG), get_records_by_name(RRFqdn)),
-          {_, KeepRecords} = lists:partition(erldns_records:match_name_and_type(RRFqdn, Type), ExistingRecords),
-          {_, KeepRRSIGs} = lists:partition(erldns_records:match_type_covered(Type), ExistingRRSIGs),
-          InsertingIntoZoneRecords =  KeepRecords ++ KeepRRSIGs ++ Records ++ SignedRRSet ++ RRSigRecs,
-          erldns_storage:insert(zone_records, {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, InsertingIntoZoneRecords}),
+          %{ExistingRRSIGs, ExistingRecords} = lists:partition(erldns_records:match_type(?DNS_TYPE_RRSIG), get_records_by_name(RRFqdn)),
+          %{_, KeepRecords} = lists:partition(erldns_records:match_name_and_type(RRFqdn, Type), ExistingRecords),
+          %{_, KeepRRSIGs} = lists:partition(erldns_records:match_type_covered(Type), ExistingRRSIGs),
+          %InsertingIntoZoneRecords =  KeepRecords ++ KeepRRSIGs ++ Records ++ SignedRRSet ++ RRSigRecs,
+          %erldns_storage:insert(zone_records, {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, InsertingIntoZoneRecords}),
 
 	  update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
 
@@ -316,15 +316,9 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 put_zone_records_entry(_, none) ->
   ok;
 put_zone_records_entry(Name, {K, V, I}) ->
-  erldns_storage:insert(zone_records, {{erldns:normalize_name(Name), erldns:normalize_name(K)}, V}),
+  % erldns_storage:insert(zone_records, {{erldns:normalize_name(Name), erldns:normalize_name(K)}, V}),
   put_zone_records_typed_entry(Name, K, maps:next(maps:iterator(build_typed_index(V)))),
   put_zone_records_entry(Name, maps:next(I)).
-
-put_zone_records_named_entry(_, none) ->
-  ok;
-put_zone_records_named_entry(Name, {K, V, I}) ->
-  erldns_storage:insert(zone_records, {{erldns:normalize_name(Name), erldns:normalize_name(K)}, V}),
-  put_zone_records_named_entry(Name, maps:next(I)).
 
 put_zone_records_typed_entry(_, _, none) ->
   ok;
@@ -339,7 +333,6 @@ delete_zone(Name) ->
 
 -spec delete_zone_records(binary()) -> any().
 delete_zone_records(Name) ->
-  erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(Name), '_'}, '_'},[],[true]}]),
   erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), '_', '_'}, '_'},[],[true]}]).
 
 %% @doc Remove zone RRSet
@@ -353,7 +346,6 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
         N when N =:= 0; CurrentCounter < N ->
           lager:debug("Removing RRSet (~p) with type ~p", [RRFqdn, Type]),
 
-          erldns_storage:select_delete(zone_records, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn)}, '_'},[],[true]}]),
           erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), Type}, '_'},[],[true]}]),
 
           % remove the RRSIG for the given record type
@@ -365,9 +357,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
           % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
           case Counter of
             N when N > 0 ->
-              % DELETE RRSet command has been sent - rebuild the zone_records named entry
-              rebuild_zone_records_named_entry(ZoneName, ZoneName),
-
+              % DELETE RRSet command has been sent
               % we need to update the zone digest as the zone content changes
               update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
 
@@ -380,12 +370,6 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
       end;
     _ -> {error, zone_not_found}
   end.
-
-%% @doc rebuild zone_records' entry using zone_records_typed
--spec rebuild_zone_records_named_entry(binary(), binary()) -> any().
-rebuild_zone_records_named_entry(ZoneName, RRFqdn) ->
-  NamedRecords = build_named_index(get_typed_records_by_name(RRFqdn)),
-  put_zone_records_named_entry(ZoneName, maps:next(maps:iterator(NamedRecords))).
 
 %% @doc Filter RRSig records for FQDN, removing type covered.
 -spec filter_rrsig_records_with_type_covered(dns:dname(), dns:type()) -> [{{dns:dname(), dns:dname(), dns:type()}, [dns:rr()]} | []].
@@ -414,7 +398,6 @@ filter_rrsig_records_with_type_covered(Fqdn, TypeCovered) ->
 init([]) ->
   erldns_storage:create(schema),
   erldns_storage:create(zones),
-  erldns_storage:create(zone_records),
   erldns_storage:create(zone_records_typed),
   erldns_storage:create(authorities),
   erldns_storage:create(sync_counters),
@@ -448,7 +431,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 % Internal API
 is_name_in_zone(Name, Zone) ->
-  case erldns_storage:select(zone_records, {erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name)}) of
+  case erldns_storage:select(zone_records_typed, {erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), '_'}) of
     [] -> 
       case dns:dname_to_labels(Name) of
         [] -> false;
