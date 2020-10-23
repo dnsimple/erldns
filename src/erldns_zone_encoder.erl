@@ -55,6 +55,7 @@ zone_meta_to_json(Zone) ->
                   {<<"zone">>, [
                                 {<<"name">>, Zone#zone.name},
                                 {<<"version">>, Zone#zone.version},
+                                % Note: Private key material is purposely omitted
                                 {<<"records_count">>, length(erldns_zone_cache:get_zone_records(Zone))}
                                ]}
                  ]
