@@ -24,6 +24,8 @@
 -export([start_link/0]).
 -export([zone_meta_to_json/1,
          zone_to_json/1,
+         zone_records_to_json/2,
+         zone_records_to_json/3,
          register_encoders/1,
          register_encoder/1]).
 
@@ -66,6 +68,16 @@ zone_meta_to_json(Zone) ->
 zone_to_json(Zone) ->
   gen_server:call(?SERVER, {encode_zone, Zone}).
 
+%% @doc Encode the records in the zone with the given RRSet name and type into JSON
+-spec zone_records_to_json(dns:dname(), dns:dname()) -> binary().
+zone_records_to_json(ZoneName, RecordSetName) ->
+  gen_server:call(?SERVER, {encode_zone_records, ZoneName, RecordSetName}).
+
+%% @doc Encode the records in the zone with the given RRSet name and type into JSON
+-spec zone_records_to_json(dns:dname(), dns:dname(), dns:rrtype()) -> binary().
+zone_records_to_json(ZoneName, RecordSetName, RecordSetType) ->
+  gen_server:call(?SERVER, {encode_zone_records, ZoneName, RecordSetName, RecordSetType}).
+
 %% @doc Register a list of encoder modules.
 -spec register_encoders([module()]) -> ok.
 register_encoders(Modules) ->
@@ -85,7 +97,13 @@ init([]) ->
   {ok, #state{encoders = []}}.
 
 handle_call({encode_zone, Zone}, _From, State) ->
-  {reply, zone_to_json(Zone, State#state.encoders), State};
+  {reply, encode_zone_to_json(Zone, State#state.encoders), State};
+
+handle_call({encode_zone_records, ZoneName, RecordName}, _From, State) ->
+  {reply, encode_zone_records_to_json(ZoneName, RecordName, State#state.encoders), State};
+
+handle_call({encode_zone_records, ZoneName, RecordName, RecordType}, _From, State) ->
+  {reply, encode_zone_records_to_json(ZoneName, RecordName, RecordType, State#state.encoders), State};
 
 handle_call({register_encoders, Modules}, _From, State) ->
   {reply, ok, State#state{encoders = State#state.encoders ++ Modules}};
@@ -108,7 +126,7 @@ code_change(_, State, _) ->
 
 % Internal API
 
-zone_to_json(Zone, Encoders) ->
+encode_zone_to_json(Zone, Encoders) ->
   Records = records_to_json(Zone, Encoders),
   FilteredRecords = lists:filter(record_filter(), Records),
   jsx:encode([{<<"erldns">>,
@@ -121,6 +139,14 @@ zone_to_json(Zone, Encoders) ->
                              ]}
                ]
               }]).
+
+encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
+  Records = erldns_zone_cache:get_typed_records_by_name(RecordName),
+  jsx:encode(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
+
+encode_zone_records_to_json(_ZoneName, RecordName, RecordType, Encoders) ->
+  Records = erldns_zone_cache:get_records_by_name_and_type(RecordName, erldns_records:name_type(RecordType)),
+  jsx:encode(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
 
 record_filter() ->
   fun(R) ->
