@@ -22,7 +22,10 @@
 -include("erldns.hrl").
 
 -export([start_link/0]).
--export([zone_to_json/1, register_encoders/1, register_encoder/1]).
+-export([zone_meta_to_json/1,
+         zone_to_json/1,
+         register_encoders/1,
+         register_encoder/1]).
 
 % Gen server hooks
 -export([init/1,
@@ -44,7 +47,19 @@
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-%% @doc Encode a Zone record into JSON.
+%% @doc Encode a Zone meta data into JSON.
+-spec zone_meta_to_json(#zone{}) -> binary().
+zone_meta_to_json(Zone) ->
+  jsx:encode([{<<"erldns">>,
+                 [
+                  {<<"zone">>, [
+                                {<<"name">>, Zone#zone.name},
+                                {<<"version">>, Zone#zone.version}
+                               ]}
+                 ]
+               }]).
+
+%% @doc Encode a Zone meta data plus all of its records into JSON.
 -spec zone_to_json(#zone{}) -> binary().
 zone_to_json(Zone) ->
   gen_server:call(?SERVER, {encode_zone, Zone}).
