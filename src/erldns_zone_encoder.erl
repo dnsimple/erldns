@@ -54,7 +54,8 @@ zone_meta_to_json(Zone) ->
                  [
                   {<<"zone">>, [
                                 {<<"name">>, Zone#zone.name},
-                                {<<"version">>, Zone#zone.version}
+                                {<<"version">>, Zone#zone.version},
+                                {<<"records_count">>, length(erldns_zone_cache:get_zone_records(Zone))}
                                ]}
                  ]
                }]).
