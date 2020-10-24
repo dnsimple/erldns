@@ -166,10 +166,10 @@ encode(Encoders) ->
   end.
 
 encode_record(Record, Encoders) ->
-  lager:debug("Encoding record (record: ~p)", [Record]),
+  % lager:debug("Encoding record (record: ~p)", [Record]),
   case encode_record(Record) of
     [] ->
-      lager:debug("Trying custom encoders (encoders: ~p)", [Encoders]),
+      % lager:debug("Trying custom encoders (encoders: ~p)", [Encoders]),
       try_custom_encoders(Record, Encoders);
     EncodedRecord -> EncodedRecord
   end.
@@ -226,7 +226,7 @@ encode_record(Name, Type, Ttl, Data) ->
 try_custom_encoders(_Record, []) ->
   {};
 try_custom_encoders(Record, [Encoder|Rest]) ->
-  lager:debug("Trying custom encoder (encoder: ~p)", [Encoder]),
+  % lager:debug("Trying custom encoder (encoder: ~p)", [Encoder]),
   case Encoder:encode_record(Record) of
     [] -> try_custom_encoders(Record, Rest);
     EncodedData -> EncodedData
