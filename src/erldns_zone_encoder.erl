@@ -140,13 +140,11 @@ encode_zone_to_json(Zone, Encoders) ->
                ]
               }]).
 
-encode_zone_records_to_json(ZoneName, RecordName, Encoders) ->
-  lager:debug("encode_zone_records_to_json (zone: ~p, record_name: ~p, Encoders)", [ZoneName, RecordName]),
+encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
   Records = erldns_zone_cache:get_typed_records_by_name(RecordName),
   jsx:encode(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
 
-encode_zone_records_to_json(ZoneName, RecordName, RecordType, Encoders) ->
-  lager:debug("encode_zone_records_to_json (zone: ~p, record_name: ~p, record_type: ~p, Encoders)", [ZoneName, RecordName, RecordType]),
+encode_zone_records_to_json(_ZoneName, RecordName, RecordType, Encoders) ->
   Records = erldns_zone_cache:get_records_by_name_and_type(RecordName, erldns_records:name_type(RecordType)),
   jsx:encode(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
 
