@@ -422,7 +422,8 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 % Internal API
 is_name_in_zone(Name, Zone) ->
-  case erldns_storage:select(zone_records_typed, {erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), '_'}) of
+  ZoneName = erldns:normalize_name(Zone#zone.name),
+  case lists:flatten(erldns_storage:select(zone_records_typed, [{{{ZoneName, erldns:normalize_name(Name), '_'}, '$1'},[],['$$']}], infinite)) of
     [] -> 
       case dns:dname_to_labels(Name) of
         [] -> false;
