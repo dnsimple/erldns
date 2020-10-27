@@ -64,7 +64,7 @@ create(schema) ->
 	    lager:debug("Adding extra db_nodes ~p", [Connected]),
 	    mnesia:change_config(extra_db_nodes, Connected),
 	    lager:debug("Waiting for tables"),
-	    WaitResult = mnesia:wait_for_tables([zones, zone_records, zone_records_typed, authorities], 5000),
+	    WaitResult = mnesia:wait_for_tables([zones, zone_records_typed, authorities], 5000),
 	    lager:debug("Wait result ~p", [WaitResult]),
 	    Tables = mnesia:system_info(tables),
 	    lager:debug("Current tables ~p", [Tables]),
@@ -105,20 +105,6 @@ create(zones) ->
                             {disc_copies, [node()]}]) of
     {aborted, {already_exists, zones}} ->
       lager:warning("The zone table already exists (node: ~p)", [node()]),
-      ok;
-    {atomic, ok} ->
-      ok;
-    Error ->
-      {error, Error}
-  end;
-create(zone_records) ->
-  case mnesia:create_table(zone_records,
-                           [{attributes, record_info(fields, zone_records)},
-                            {disc_copies, [node()]},
-			    {type, bag}
-			   ]) of
-    {aborted, {already_exists, zone_records}} ->
-      lager:warning("The zone records table already exists (node: ~p)", [node()]),
       ok;
     {atomic, ok} ->
       ok;
@@ -184,14 +170,6 @@ insert(zones, {_N, #zone{} = Zone})->
     Error ->
       {error, Error}
   end;
-insert(zone_records, {{ZoneName, Fqdn}, Records}) ->
-  Write = fun() -> mnesia:write(zone_records, #zone_records{zone_name = ZoneName, fqdn = Fqdn, records = Records}, write) end,
-  case mnesia:activity(transaction, Write) of
-    ok ->
-      ok;
-    Error ->
-      {error, Error}
-  end;
 insert(zone_records_typed, {{ZoneName, Fqdn, Type}, Records}) ->
   Write = fun() -> mnesia:write(zone_records_typed, #zone_records_typed{zone_name = ZoneName, fqdn = Fqdn, records = Records, type = Type}, write) end,
   case mnesia:activity(transaction, Write) of
@@ -245,13 +223,6 @@ delete(Table, Key)->
 %% is given as an ETS match spec, thus it needs to be converted to a record match spec for
 %% Mnesia.
 -spec select_delete(atom(), list()) -> {ok, Count :: integer()} | {error, Reason :: term()}.
-select_delete(Table, [{{{ZoneName, Fqdn}, _}, _, _}])->
-  SelectDelete = fun() ->
-                     Records =  mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, read),
-                     lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
-                     {ok, length(Records)}
-                 end,
-  mnesia:activity(transaction, SelectDelete);
 select_delete(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}])->
   SelectDelete = fun() ->
                      Records = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, write),

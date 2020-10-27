@@ -35,8 +35,6 @@ create(schema) ->
   not_implemented;
 create(Name = zones) ->
   create_ets_table(Name, set);
-create(Name = zone_records) ->
-  create_ets_table(Name, ordered_set);
 create(Name = zone_records_typed) ->
   create_ets_table(Name, ordered_set);
 create(Name = authorities) ->
