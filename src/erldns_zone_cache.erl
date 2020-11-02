@@ -439,6 +439,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 
 % Internal API
 is_name_in_zone(Name, Zone) ->
+  lager:debug("is_name_in_zone(~p, ~p)", [Name, Zone]),
   ZoneName = erldns:normalize_name(Zone#zone.name),
   case lists:flatten(erldns_storage:select(zone_records_typed, [{{{ZoneName, erldns:normalize_name(Name), '_'}, '$1'},[],['$$']}], infinite)) of
     [] -> 
@@ -447,20 +448,25 @@ is_name_in_zone(Name, Zone) ->
         [_] -> false;
         [_|Labels] -> is_name_in_zone(dns:labels_to_dname(Labels), Zone)
       end;
-    _ -> true 
+    Records ->
+      lager:debug("Found name in zone (records: ~p)", [Records]),
+      true 
   end.
 
 is_wildcard_name_in_zone(Name, Zone) ->
+  lager:debug("is_wildcard_name_in_zone(~p, ~p)", [Name, Zone]),
   ZoneName = erldns:normalize_name(Zone#zone.name),
   WildcardName = erldns_records:wildcard_qname(erldns:normalize_name(Name)),
-  case lists:flatten(erldns_storage:select(zone_records_typed, [{{{ZoneName, WildcardName, '_'}, '$1'},[],['$$']}], infinite)) of
+  case Records = lists:flatten(erldns_storage:select(zone_records_typed, [{{{ZoneName, WildcardName, '_'}, '$1'},[],['$$']}], infinite)) of
     [] ->
       case dns:dname_to_labels(WildcardName) of
         [] -> false;
         [_] -> false;
         [_|Labels] -> is_wildcard_name_in_zone(dns:labels_to_dname(Labels), Zone)
       end;
-    _ -> true
+    _ ->
+      lager:debug("Found name (potentially wildcard) in zone (records: ~p)", [Records]),
+      true
   end.
 
 find_zone_in_cache(Qname) ->
