@@ -91,19 +91,25 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain)
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
-  Result = resolve(Message, Qname, Qtype, get_records_by_name(Zone, Qname), Host, CnameChain, Zone),
-  case detect_zonecut(Zone, Qname) of
-    [] ->
-      Result;
-    Records ->
-      CnameAnswers = lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), Result#dns_message.answers),
-      FilteredCnameAnswers = lists:filter(fun(RR) ->
-                                              case detect_zonecut(Zone, RR#dns_rr.data#dns_rrdata_cname.dname) of
-                                                [] -> false;
-                                                _ -> true
-                                              end
-                                          end, CnameAnswers),
-      Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Records, answers = FilteredCnameAnswers}
+
+  case erldns_zone_cache:record_name_in_zone(Zone#zone.name, Qname) of
+    false ->
+      Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Zone#zone.authority};
+    true ->
+      Result = resolve(Message, Qname, Qtype, get_records_by_name(Zone, Qname), Host, CnameChain, Zone),
+      case detect_zonecut(Zone, Qname) of
+        [] ->
+          Result;
+        Records ->
+          CnameAnswers = lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), Result#dns_message.answers),
+          FilteredCnameAnswers = lists:filter(fun(RR) ->
+                                                  case detect_zonecut(Zone, RR#dns_rr.data#dns_rrdata_cname.dname) of
+                                                    [] -> false;
+                                                    _ -> true
+                                                  end
+                                              end, CnameAnswers),
+          Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = Records, answers = FilteredCnameAnswers}
+      end
   end.
 
 %% There were no exact matches on name, so move to the best-match resolution.
