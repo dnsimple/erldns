@@ -229,7 +229,7 @@ record_name_in_zone(ZoneName, Name) ->
       case lists:flatten(erldns_storage:select(zone_records_typed, [{{{ZoneName, erldns:normalize_name(Name), '_'}, '$1'},[],['$$']}], infinite)) of
         [] ->
           WildcardName = erldns:normalize_name(erldns_records:wildcard_qname(Name)),
-          case lists:flatten(erldns_store:select(zone_records_typed, [{{{ZoneName, WildcardName, '_'}, '$1'},[],['$$']}])) of
+          case lists:flatten(erldns_store:select(zone_records_typed, [{{{ZoneName, WildcardName, '_'}, '$1'},[],['$$']}], infinite)) of
             [] -> false;
             _ -> true
           end;
