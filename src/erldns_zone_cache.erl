@@ -39,6 +39,7 @@
          get_records_by_name_and_type/2,
          get_typed_records_by_name/1,
          in_zone/1,
+         in_zone/2,
          zone_names_and_versions/0,
 	 get_rrset_sync_counter/3,
 	 update_zone_records_and_digest/3
@@ -211,12 +212,28 @@ get_records_by_name(Name) ->
       []
   end.
 
-%% @doc Check if the name is in a zone.
+%% @doc Check if the name is in the zone. Does not include wildcards in the search.
 -spec in_zone(binary()) -> boolean().
 in_zone(Name) ->
+  in_zone(Name, false).
+
+%% @doc Check if the name is in a zone. The second argument is a boolean indicating whether
+%% wildcard searching should be performed.
+-spec in_zone(binary(), boolean()) -> boolean().
+in_zone(Name, _IncludeWildcard = false) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
       is_name_in_zone(Name, Zone);
+    _ ->
+      false
+  end;
+in_zone(Name, _IncludeWildcard = true) ->
+  case find_zone_in_cache(Name) of
+    {ok, Zone} ->
+      case is_name_in_zone(Name, Zone) of
+        true -> true;
+        false -> is_wildcard_name_in_zone(Name, Zone)
+      end;
     _ ->
       false
   end.
@@ -431,6 +448,19 @@ is_name_in_zone(Name, Zone) ->
         [_|Labels] -> is_name_in_zone(dns:labels_to_dname(Labels), Zone)
       end;
     _ -> true 
+  end.
+
+is_wildcard_name_in_zone(Name, Zone) ->
+  ZoneName = erldns:normalize_name(Zone#zone.name),
+  WildcardName = erldns_records:wildcard_qname(erldns:normalize_name(Name)),
+  case lists:flatten(erldns_storage:select(zone_records_typed, [{{{ZoneName, WildcardName, '_'}, '$1'},[],['$$']}], infinite)) of
+    [] ->
+      case dns:dname_to_labels(WildcardName) of
+        [] -> false;
+        [_] -> false;
+        [_|Labels] -> is_wildcard_name_in_zone(dns:labels_to_dname(Labels), Zone)
+      end;
+    _ -> true
   end.
 
 find_zone_in_cache(Qname) ->
