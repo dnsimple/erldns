@@ -225,14 +225,10 @@ in_zone(Name) ->
 %% @doc Check if the record name is in the zone. Will also return true if a wildcard is present at the node.
 record_name_in_zone(ZoneName, Name) ->
   case find_zone_in_cache(Name) of
-    {ok, _Zone} ->
+    {ok, Zone} ->
       case lists:flatten(erldns_storage:select(zone_records_typed, [{{{ZoneName, erldns:normalize_name(Name), '_'}, '$1'},[],['$$']}], infinite)) of
         [] ->
-          WildcardName = erldns:normalize_name(erldns_records:wildcard_qname(Name)),
-          case lists:flatten(erldns_storage:select(zone_records_typed, [{{{ZoneName, WildcardName, '_'}, '$1'},[],['$$']}], infinite)) of
-            [] -> false;
-            _ -> true
-          end;
+         is_name_in_zone_with_wildcard(Name, Zone);
         _ ->
           true
       end;
@@ -448,6 +444,19 @@ is_name_in_zone(Name, Zone) ->
         [] -> false;
         [_] -> false;
         [_|Labels] -> is_name_in_zone(dns:labels_to_dname(Labels), Zone)
+      end;
+    _ -> true
+  end.
+
+is_name_in_zone_with_wildcard(Name, Zone) ->
+  ZoneName = erldns:normalize_name(Zone#zone.name),
+  WildcardName = erldns:normalize_name(erldns_records:wildcard_qname(Name)),
+  case lists:flatten(erldns_storage:select(zone_records_typed, [{{{ZoneName, WildcardName, '_'}, '$1'},[],['$$']}], infinite)) of
+    [] ->
+      case dns:dname_to_labels(Name) of
+        [] -> false;
+        [_] -> false;
+        [_|Labels] -> is_name_in_zone_with_wildcard(dns:labels_to_dname(Labels), Zone)
       end;
     _ -> true
   end.
