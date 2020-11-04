@@ -69,26 +69,19 @@ handle_event({_M, dnssec_request, _Host, _Qname}, State) ->
   folsom_metrics:notify(dnssec_request_meter, 1),
   {ok, State};
 
-handle_event({M = erldns_handler, E = bad_message, {Message, Host}}, State) ->
-  lager:error("Received a bad message (module: ~p, event: ~p, message: ~p, host: ~p)", [M, E, Message, Host]),
-  {ok, State};
-
 handle_event({_M = erldns_handler, _E = refused_response, _Questions}, State) ->
   folsom_metrics:notify({refused_response_meter, 1}),
   folsom_metrics:notify({refused_response_counter, {inc, 1}}),
-  % lager:info("Refused response (module: ~p, event: ~p, questions: ~p)", [M, E, Questions]),
   {ok, State};
 
-handle_event({M = erldns_handler, E = empty_response, Message}, State) ->
+handle_event({_M = erldns_handler, _E = empty_response, _Message}, State) ->
   folsom_metrics:notify({empty_response_meter, 1}),
   folsom_metrics:notify({empty_response_counter, {inc, 1}}),
-  lager:info("Empty response (module: ~p, event: ~p, message: ~p)", [M, E, Message]),
   {ok, State};
 
-handle_event({M = erldns_handler, E = resolve_error, {Exception, Reason, Message, Stacktrace}}, State) ->
+handle_event({_M = erldns_handler, _E = resolve_error, {_Exception, _Reason, _Message, _Stacktrace}}, State) ->
   folsom_metrics:notify({erldns_handler_error_counter, {inc, 1}}),
   folsom_metrics:notify({erldns_handler_error_meter, 1}),
-  lager:error("Error answering request (module: ~p, event: ~p, exception: ~p, reason: ~p, message: ~p, stacktrace: ~p)", [M, E, Exception, Reason, Message, Stacktrace]),
   {ok, State};
 
 handle_event({M = erldns_zone_encoder, E = unsupported_rrdata_type, Data}, State) ->
@@ -131,32 +124,7 @@ handle_event({M = erldns_storage, E = failed_zones_load, Reason}, State) ->
   lager:error("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
   {ok, State};
 
-handle_event({M = erldns_worker, E = handle_tcp_query_error, {Error}}, State) ->
-  lager:error("Error handling TCP query (module: ~p, event: ~p, error: ~p)", [M, E, Error]),
-  {ok, State};
-
-handle_event({M = erldns_worker, E = handle_udp_query_error, {Error}}, State) ->
-  lager:error("Error handling UDP query (module: ~p, event: ~p, error: ~p)", [M, E, Error]),
-  {ok, State};
-
-handle_event({M = erldns_worker, E = decode_message_error, {Error, Message}}, State) ->
-  lager:error("Error decoding message (module: ~p, event: ~p, error: ~p, message: ~p)", [M, E, Error, Message]),
-  {ok, State};
-
-handle_event({M = erldns_worker, E = decode_message_trailing_garbage, {Message, Garbage}}, State) ->
-  lager:info("Decoded message included trailing garbage (module: ~p, event: ~p, message: ~p, garbage: ~p)", [M, E, Message, Garbage]),
-  {ok, State};
-
-handle_event({M = erldns_worker, E = process_crashed, {Protocol, Error, Reason, DecodedMessage}}, State) ->
-  lager:error("Worker process crashed (module: ~p, event: ~p, protocol: ~p, error: ~p, reason: ~p, message: ~p)", [M, E, Protocol, Error, Reason, DecodedMessage]),
-  {ok, State};
-
-handle_event({M = erldns_worker, E = bad_packet, {Protocol, BadPacket}}, State) ->
-  lager:error("Received bad packet (module: ~p, event: ~p, protocol: ~p, packet: ~p)", [M, E, Protocol, BadPacket]),
-  {ok, State};
-
-handle_event({M = erldns_worker, E = timeout, {Protocol, Message}}, State) ->
-  lager:info("Worker timeout (module: ~p, event: ~p, protocol: ~p, message: ~p)", [M, E, Protocol, Message]),
+handle_event({_M = erldns_worker, _E = timeout}, State) ->
   folsom_metrics:notify({worker_timeout_counter, {inc, 1}}),
   folsom_metrics:notify({worker_timeout_meter, 1}),
   {ok, State};

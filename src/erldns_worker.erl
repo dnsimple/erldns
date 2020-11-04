@@ -54,7 +54,7 @@ handle_cast({tcp_query, Socket, Bin}, State) ->
       {Id, _, Type, Modules} = State#state.worker_process,
       {noreply, State#state{worker_process = {Id, NewWorkerPid, Type, Modules}}};
     Error ->
-      erldns_events:notify({?MODULE, handle_tcp_query_Error, {Error}}),
+      lager:error("Error handling TCP query (module: ~p, event: ~p, error: ~p)", [?MODULE, handle_tcp_query_error, Error]),
       {noreply, State}
   end;
 handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
@@ -65,7 +65,7 @@ handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
       {Id, _, Type, Modules} = State#state.worker_process,
       {noreply, State#state{worker_process = {Id, NewWorkerPid, Type, Modules}}};
     Error ->
-      erldns_events:notify({?MODULE, handle_udp_query_error, {Error}}),
+      lager:error("Error handling UDP query (module: ~p, event: ~p, error: ~p)", [?MODULE, handle_udp_query_error, Error]),
       {noreply, State}
   end;
 handle_cast(_Msg, State) ->
@@ -88,10 +88,12 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerP
         _ ->
           case erldns_decoder:decode_message(Bin) of
             {trailing_garbage, DecodedMessage, TrailingGarbage} ->
-              erldns_events:notify({?MODULE, decode_message_trailing_garbage, {DecodedMessage, TrailingGarbage}}),
+              lager:info("Decoded message included trailing garbage (module: ~p, event: ~p, message: ~p, garbage: ~p)", [?MODULE, decode_message_trailing_garbage, DecodedMessage, TrailingGarbage]),
+              % erldns_events:notify({?MODULE, decode_message_trailing_garbage, {DecodedMessage, TrailingGarbage}}),
               handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, WorkerProcess});
             {Error, Message, _} ->
-              erldns_events:notify({?MODULE, decode_message_error, {Error, Message}}),
+              lager:error("Error decoding message (module: ~p, event: ~p, error: ~p, message: ~p)", [?MODULE, decode_message_error, Error, Message]),
+              % erldns_events:notify({?MODULE, decode_message_error, {Error, Message}}),
               ok;
             DecodedMessage ->
               handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, WorkerProcess})
@@ -105,7 +107,8 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerP
   end;
 
 handle_tcp_dns_query(Socket, BadPacket, _) ->
-  erldns_events:notify({?MODULE, bad_packet, {tcp, BadPacket}}),
+  lager:error("Received bad packet (module: ~p, event: ~p, protocol: ~p, packet: ~p)", [?MODULE, bad_packet, tcp, BadPacket]),
+  % erldns_events:notify({?MODULE, bad_packet, {tcp, BadPacket}}),
   gen_tcp:close(Socket).
 
 handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
@@ -115,10 +118,10 @@ handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {
         _ -> ok
       catch
         exit:{timeout, _} ->
-          erldns_events:notify({?MODULE, timeout, {tcp, DecodedMessage}}),
+          erldns_events:notify({?MODULE, timeout}),
           handle_timeout(WorkerProcessSup, WorkerProcessId);
         Error:Reason ->
-          erldns_events:notify({?MODULE, process_crashed, {tcp, Error, Reason, DecodedMessage}}),
+          lager:error("Worker process crashed (module: ~p, event: ~p, protocol: ~p, error: ~p, reason: ~p, message: ~p)", [?MODULE, process_crashed, tcp, Error, Reason, DecodedMessage]),
           {error, {Error, Reason}}
       end;
     true ->
@@ -132,10 +135,12 @@ handle_udp_dns_query(Socket, Host, Port, Bin, {WorkerProcessSup, WorkerProcess})
   erldns_events:notify({?MODULE, start_udp, [{host, Host}]}),
   Result = case erldns_decoder:decode_message(Bin) of
              {trailing_garbage, DecodedMessage, TrailingGarbage} ->
-               erldns_events:notify({?MODULE, decode_message_trailing_garbage, {DecodedMessage, TrailingGarbage}}),
+               lager:info("Decoded message included trailing garbage (module: ~p, event: ~p, message: ~p, garbage: ~p)", [?MODULE, decode_message_trailing_garbage, DecodedMessage, TrailingGarbage]),
+               %erldns_events:notify({?MODULE, decode_message_trailing_garbage, {DecodedMessage, TrailingGarbage}}),
                handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, WorkerProcess});
              {Error, Message, _} ->
-               erldns_events:notify({?MODULE, decode_message_error, {Error, Message}}),
+               lager:error("Error decoding message (module: ~p, event: ~p, error: ~p, message: ~p)", [?MODULE, decode_message_error, Error, Message]),
+               % erldns_events:notify({?MODULE, decode_message_error, {Error, Message}}),
                ok;
              DecodedMessage ->
                handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, WorkerProcess})
@@ -152,10 +157,12 @@ handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup
         _ -> ok
       catch
         exit:{timeout, _} ->
-          erldns_events:notify({?MODULE, timeout, {udp, DecodedMessage}}),
+          lager:info("Worker timeout (module: ~p, event: ~p, protocol: ~p, message: ~p)", [?MODULE, timeout, udp, DecodedMessage]),
+          erldns_events:notify({?MODULE, timeout}),
           handle_timeout(WorkerProcessSup, WorkerProcessId);
         Error:Reason ->
-          erldns_events:notify({?MODULE, process_crashed, {udp, Error, Reason, DecodedMessage}}),
+          lager:error("Worker process crashed (module: ~p, event: ~p, protocol: ~p, error: ~p, reason: ~p, message: ~p)", [?MODULE, process_crashed, udp, Error, Reason, DecodedMessage]),
+          % erldns_events:notify({?MODULE, process_crashed, {udp, Error, Reason, DecodedMessage}}),
           {error, {Error, Reason}}
       end;
     true ->
