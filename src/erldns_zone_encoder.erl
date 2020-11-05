@@ -22,7 +22,12 @@
 -include("erldns.hrl").
 
 -export([start_link/0]).
--export([zone_to_json/1, register_encoders/1, register_encoder/1]).
+-export([zone_meta_to_json/1,
+         zone_to_json/1,
+         zone_records_to_json/2,
+         zone_records_to_json/3,
+         register_encoders/1,
+         register_encoder/1]).
 
 % Gen server hooks
 -export([init/1,
@@ -44,10 +49,34 @@
 start_link() ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-%% @doc Encode a Zone record into JSON.
+%% @doc Encode a Zone meta data into JSON.
+-spec zone_meta_to_json(#zone{}) -> binary().
+zone_meta_to_json(Zone) ->
+  jsx:encode([{<<"erldns">>,
+                 [
+                  {<<"zone">>, [
+                                {<<"name">>, Zone#zone.name},
+                                {<<"version">>, Zone#zone.version},
+                                % Note: Private key material is purposely omitted
+                                {<<"records_count">>, length(erldns_zone_cache:get_zone_records(Zone#zone.name))}
+                               ]}
+                 ]
+               }]).
+
+%% @doc Encode a Zone meta data plus all of its records into JSON.
 -spec zone_to_json(#zone{}) -> binary().
 zone_to_json(Zone) ->
   gen_server:call(?SERVER, {encode_zone, Zone}).
+
+%% @doc Encode the records in the zone with the given RRSet name and type into JSON
+-spec zone_records_to_json(dns:dname(), dns:dname()) -> binary().
+zone_records_to_json(ZoneName, RecordSetName) ->
+  gen_server:call(?SERVER, {encode_zone_records, ZoneName, RecordSetName}).
+
+%% @doc Encode the records in the zone with the given RRSet name and type into JSON
+-spec zone_records_to_json(dns:dname(), dns:dname(), dns:rrtype()) -> binary().
+zone_records_to_json(ZoneName, RecordSetName, RecordSetType) ->
+  gen_server:call(?SERVER, {encode_zone_records, ZoneName, RecordSetName, RecordSetType}).
 
 %% @doc Register a list of encoder modules.
 -spec register_encoders([module()]) -> ok.
@@ -68,7 +97,13 @@ init([]) ->
   {ok, #state{encoders = []}}.
 
 handle_call({encode_zone, Zone}, _From, State) ->
-  {reply, zone_to_json(Zone, State#state.encoders), State};
+  {reply, encode_zone_to_json(Zone, State#state.encoders), State};
+
+handle_call({encode_zone_records, ZoneName, RecordName}, _From, State) ->
+  {reply, encode_zone_records_to_json(ZoneName, RecordName, State#state.encoders), State};
+
+handle_call({encode_zone_records, ZoneName, RecordName, RecordType}, _From, State) ->
+  {reply, encode_zone_records_to_json(ZoneName, RecordName, RecordType, State#state.encoders), State};
 
 handle_call({register_encoders, Modules}, _From, State) ->
   {reply, ok, State#state{encoders = State#state.encoders ++ Modules}};
@@ -91,7 +126,7 @@ code_change(_, State, _) ->
 
 % Internal API
 
-zone_to_json(Zone, Encoders) ->
+encode_zone_to_json(Zone, Encoders) ->
   Records = records_to_json(Zone, Encoders),
   FilteredRecords = lists:filter(record_filter(), Records),
   jsx:encode([{<<"erldns">>,
@@ -104,6 +139,14 @@ zone_to_json(Zone, Encoders) ->
                              ]}
                ]
               }]).
+
+encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
+  Records = erldns_zone_cache:get_typed_records_by_name(RecordName),
+  jsx:encode(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
+
+encode_zone_records_to_json(_ZoneName, RecordName, RecordType, Encoders) ->
+  Records = erldns_zone_cache:get_records_by_name_and_type(RecordName, erldns_records:name_type(RecordType)),
+  jsx:encode(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
 
 record_filter() ->
   fun(R) ->
@@ -123,10 +166,10 @@ encode(Encoders) ->
   end.
 
 encode_record(Record, Encoders) ->
-  lager:debug("Encoding record (record: ~p)", [Record]),
+  % lager:debug("Encoding record (record: ~p)", [Record]),
   case encode_record(Record) of
     [] ->
-      lager:debug("Trying custom encoders (encoders: ~p)", [Encoders]),
+      % lager:debug("Trying custom encoders (encoders: ~p)", [Encoders]),
       try_custom_encoders(Record, Encoders);
     EncodedRecord -> EncodedRecord
   end.
@@ -183,7 +226,7 @@ encode_record(Name, Type, Ttl, Data) ->
 try_custom_encoders(_Record, []) ->
   {};
 try_custom_encoders(Record, [Encoder|Rest]) ->
-  lager:debug("Trying custom encoder (encoder: ~p)", [Encoder]),
+  % lager:debug("Trying custom encoder (encoder: ~p)", [Encoder]),
   case Encoder:encode_record(Record) of
     [] -> try_custom_encoders(Record, Rest);
     EncodedData -> EncodedData
