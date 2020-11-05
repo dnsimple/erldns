@@ -37,7 +37,6 @@
          get_zone_records/1,
          get_records_by_name/1,
          get_records_by_name_and_type/2,
-         get_typed_records_by_name/1,
          in_zone/1,
          record_name_in_zone/2,
          zone_names_and_versions/0,
@@ -127,6 +126,7 @@ get_zone(Name) ->
   end.
 
 %% @doc Get a zone for the specific name, including the records for the zone.
+%% @deprecated Use get_zone() to get the zone and {link:get_zone_records} to get the rcords for the zone.
 -spec get_zone_with_records(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
 get_zone_with_records(Name) ->
   NormalizedName = erldns:normalize_name(Name),
@@ -178,16 +178,6 @@ get_records_by_name_and_type(Name, Type) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
       lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), Type}, '$1'},[],['$$']}], infinite));
-    _ ->
-      []
-  end.
-
-%% @doc Get all records for given FQDN from zone_records_typed.
--spec get_typed_records_by_name(dns:dname()) -> [dns:rr()].
-get_typed_records_by_name(Name) ->
-  case find_zone_in_cache(Name) of
-    {ok, Zone} ->
-      lists:flatten(erldns_storage:select(zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), '_'}, '$1'},[],['$$']}], infinite));
     _ ->
       []
   end.
