@@ -91,7 +91,14 @@ resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain)
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
 resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
-  Result = resolve(Message, Qname, Qtype, get_records_by_name(Zone, Qname), Host, CnameChain, Zone),
+  Result = case {erldns_zone_cache:record_name_in_zone(Zone#zone.name, Qname), CnameChain} of
+             {false, []} ->
+               lager:debug("Record name is not in zone (zone: ~p, qname: ~p)", [Zone#zone.name, Qname]),
+               Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Zone#zone.authority};
+             _ ->
+               resolve(Message, Qname, Qtype, get_records_by_name(Zone, Qname), Host, CnameChain, Zone)
+           end,
+
   case detect_zonecut(Zone, Qname) of
     [] ->
       Result;

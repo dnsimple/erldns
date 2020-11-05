@@ -104,7 +104,7 @@ handle(Message, Context = {_, Host}) when is_record(Message, dns_message) ->
 %% The message was bad so just return it.
 %% TODO: consider just throwing away the message
 handle(Message, {_, Host}) ->
-  erldns_events:notify({?MODULE, bad_message, {Message, Host}}),
+  lager:error("Received a bad message (module: ~p, event: ~p, message: ~p, host: ~p)", [?MODULE, bad_message, Message, Host]),
   Message.
 
 %% We throttle ANY queries to discourage use of our authoritative name servers
@@ -174,6 +174,7 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
         Response -> maybe_cache_packet(Response, Response#dns_message.aa)
       catch
         Exception:Reason:Stacktrace ->
+          lager:error("Error answering request (module: ~p, event: ~p, exception: ~p, reason: ~p, message: ~p, stacktrace: ~p)", [?MODULE, resolve_error, Exception, Reason, Message, Stacktrace]),
           erldns_events:notify({?MODULE, resolve_error, {Exception, Reason, Message, Stacktrace}}),
           Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
       end
@@ -210,6 +211,7 @@ notify_empty_response(Message) ->
       erldns_events:notify({?MODULE, refused_response, Message#dns_message.questions}),
       Message;
     {_, 0} ->
+      lager:info("Empty response (module: ~p, event: ~p, message: ~p)", [?MODULE, empty_response, Message]),
       erldns_events:notify({?MODULE, empty_response, Message}),
       Message;
     _ ->
