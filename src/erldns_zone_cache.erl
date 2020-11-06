@@ -108,17 +108,6 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
       end
   end.
 
-update_zone_records_and_digest(ZoneName, Records, Digest) ->
-  case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
-	{ok, Zone} -> Zone,
-   		UpdatedZone = Zone#zone{version = Digest, 
-					authority = get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA),	
-					record_count = length(Records),
-				        records_by_name = build_named_index(Records)}, 
-   		put_zone(Zone#zone.name, UpdatedZone);
-	_ -> {error, zone_not_found}
-  end.
-
 %% @doc Get a zone for the specific name. This function will not attempt to resolve
 %% the dname in any way, it will simply look up the name in the underlying data store.
 -spec get_zone(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
@@ -217,6 +206,7 @@ in_zone(Name) ->
   end.
 
 %% @doc Check if the record name is in the zone. Will also return true if a wildcard is present at the node.
+-spec record_name_in_zone(binary(), dns:dname()) -> boolean().
 record_name_in_zone(ZoneName, Name) ->
   case find_zone_in_cache(Name) of
     {ok, Zone} ->
@@ -368,6 +358,19 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
         N when CurrentCounter > N ->
           lager:debug("Not processing delete operation for RRSet (~p): counter (~p) provided is lower than system", [RRFqdn, Counter])
       end;
+    _ -> {error, zone_not_found}
+  end.
+
+%% @doc Given a zone name, list of records, and a digest, update the zone metadata in cache.
+-spec update_zone_records_and_digest(dns:dname(), [dns:rr()], binary()) -> ok | {error, Reason :: term()}.
+update_zone_records_and_digest(ZoneName, Records, Digest) ->
+  case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
+    {ok, Zone} -> Zone,
+                  UpdatedZone = Zone#zone{version = Digest,
+                                          authority = get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA),
+                                          record_count = length(Records),
+                                          records_by_name = build_named_index(Records)},
+                  put_zone(Zone#zone.name, UpdatedZone);
     _ -> {error, zone_not_found}
   end.
 
