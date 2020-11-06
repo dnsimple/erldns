@@ -119,7 +119,8 @@ get_zone(Name) ->
   end.
 
 %% @doc Get a zone for the specific name, including the records for the zone.
-%% @deprecated Use get_zone() to get the zone and {link:get_zone_records} to get the rcords for the zone.
+%% @deprecated Use {@link erldns_zone_cache:get_zone/1} to get the zone meta data and
+%% {@link erldns_zone_cache:get_zone_records/1} to get the records for the zone.
 -spec get_zone_with_records(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
 get_zone_with_records(Name) ->
   NormalizedName = erldns:normalize_name(Name),
