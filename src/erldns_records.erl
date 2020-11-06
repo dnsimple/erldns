@@ -21,14 +21,40 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--export([optionally_convert_wildcard/2, wildcard_qname/1]).
--export([default_ttl/1, default_priority/1, name_type/1, root_hints/0]).
--export([minimum_soa_ttl/2, rewrite_soa_ttl/1]).
--export([match_name/1, match_type/1, match_name_and_type/2, match_types/1, match_wildcard/0, match_delegation/1, match_type_covered/1]).
--export([replace_name/1]).
+% Wildcard functions
+-export([
+         optionally_convert_wildcard/2,
+         wildcard_qname/1
+        ]).
 
-%% If the name returned from the DB is a wildcard name then the
-%% Original Qname needs to be returned in its place.
+
+
+% SOA TTL functions
+-export([
+         minimum_soa_ttl/2,
+         rewrite_soa_ttl/1
+        ]).
+
+% Matcher functions
+-export([
+         match_name/1,
+         match_type/1,
+         match_name_and_type/2,
+         match_types/1,
+         match_wildcard/0,
+         match_delegation/1,
+         match_type_covered/1
+        ]).
+
+-export([
+         default_ttl/1,
+         default_priority/1,
+         name_type/1,
+         root_hints/0,
+         replace_name/1]).
+
+%% @doc If given Name is a wildcard name then the original qname needs to be returned in its place.
+-spec optionally_convert_wildcard(dns:dname(), dns:dname()) -> dns:dname().
 optionally_convert_wildcard(Name, Qname) ->
   [Head|_] = dns:dname_to_labels(Name),
   case Head of
@@ -36,14 +62,14 @@ optionally_convert_wildcard(Name, Qname) ->
     _ -> Name
   end.
 
-%% @doc Get a wildcard variation of a Qname. Replaces the leading
-%% label with an asterisk for wildcard lookup.
+%% @doc Get a wildcard variation of a Qname. Replaces the leading abel with an asterisk for wildcard lookup.
 -spec wildcard_qname(dns:dname()) -> dns:dname().
 wildcard_qname(Qname) ->
   [_|Rest] = dns:dname_to_labels(Qname),
   dns:labels_to_dname([<<"*">>] ++ Rest).
 
 %% @doc Return the TTL value or 3600 if it is undefined.
+-spec default_ttl(integer() | undefined) -> integer().
 default_ttl(TTL) ->
   case TTL of
     undefined -> 3600;
@@ -51,6 +77,7 @@ default_ttl(TTL) ->
   end.
 
 %% @doc Return the Priority value or 0 if it is undefined.
+-spec default_priority(integer() | undefined) -> integer().
 default_priority(Priority) ->
   case Priority of
     undefined -> 0;
@@ -65,44 +92,54 @@ default_priority(Priority) ->
 minimum_soa_ttl(Record, Data) when is_record(Data, dns_rrdata_soa) -> Record#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, Record#dns_rr.ttl)};
 minimum_soa_ttl(Record, _) -> Record.
 
-%% According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
+%% @doc According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
 %% must be set to the value of the minimum field in the SOA content.
+-spec rewrite_soa_ttl(dns:message()) -> dns:message().
 rewrite_soa_ttl(Message) -> rewrite_soa_ttl(Message, Message#dns_message.authority, []).
+
 rewrite_soa_ttl(Message, [], NewAuthority) -> Message#dns_message{authority = NewAuthority};
 rewrite_soa_ttl(Message, [R|Rest], NewAuthority) -> rewrite_soa_ttl(Message, Rest, NewAuthority ++ [minimum_soa_ttl(R, R#dns_rr.data)]).
 
 
 %% Various matching functions.
+
+-spec match_name(dns:name()) -> fun((dns:rr()) -> boolean()).
 match_name(Name) ->
   fun(R) when is_record(R, dns_rr) ->
       R#dns_rr.name =:= Name
   end.
 
+-spec match_type(dns:type()) -> fun((dns:rr()) -> boolean()).
 match_type(Type) ->
   fun(R) when is_record(R, dns_rr) ->
       R#dns_rr.type =:= Type
   end.
 
+-spec match_name_and_type(dns:name(), dns:type()) -> fun((dns:rr()) -> boolean()).
 match_name_and_type(Name, Type) ->
   fun(R) when is_record(R, dns_rr) ->
       (R#dns_rr.name =:= Name) and (R#dns_rr.type =:= Type)
   end.
 
+-spec match_types([dns:type()]) -> fun((dns:rr()) -> boolean()).
 match_types(Types) ->
   fun(R) when is_record(R, dns_rr) ->
       lists:any(fun(T) -> R#dns_rr.type =:= T end, Types)
   end.
 
+-spec match_wildcard() -> fun((dns:rr()) -> boolean()).
 match_wildcard() ->
   fun(R) when is_record(R, dns_rr) ->
       lists:any(match_wildcard_label(), dns:dname_to_labels(R#dns_rr.name))
   end.
 
+-spec match_wildcard_label() -> fun((binary()) -> boolean()).
 match_wildcard_label() ->
   fun(L) ->
       L =:= <<"*">>
   end.
 
+-spec match_delegation(dns:dname()) -> fun((dns:rr()) -> boolean()).
 match_delegation(Name) ->
   fun(R) when is_record(R, dns_rr) ->
       R#dns_rr.data =:= #dns_rrdata_ns{dname=Name}
@@ -116,7 +153,11 @@ match_type_covered(Qtype) ->
 
 
 %% Replacement functions.
-replace_name(Name) -> fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} end.
+
+replace_name(Name) ->
+  fun(R) when is_record(R, dns_rr) ->
+      R#dns_rr{name = Name}
+  end.
 
 %% @doc Returns the type value given a binary string.
 -spec name_type(binary()) -> dns:type() | 'undefined'.
@@ -194,6 +235,7 @@ name_type(Type) when is_binary(Type) ->
     _ -> undefined
   end.
 
+-spec(root_hints() -> {[dns:rr()], [dns:rr()]}).
 root_hints() ->
   {
    [
