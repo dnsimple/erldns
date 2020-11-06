@@ -31,7 +31,6 @@
          find_zone/1,
          find_zone/2,
          get_zone/1,
-         get_zone_with_records/1,
          get_authority/1,
          get_delegations/1,
          get_zone_records/1,
@@ -40,8 +39,12 @@
          in_zone/1,
          record_name_in_zone/2,
          zone_names_and_versions/0,
-	 get_rrset_sync_counter/3,
-	 update_zone_records_and_digest/3
+	 get_rrset_sync_counter/3
+        ]).
+
+% Deprecated APIs
+-export([
+         get_zone_with_records/1
         ]).
 
 % Write APIs
@@ -49,6 +52,7 @@
          put_zone/1,
          put_zone/2,
          delete_zone/1,
+         update_zone_records_and_digest/3,
 	 put_zone_rrset/4,
 	 delete_zone_rrset/5
         ]).
