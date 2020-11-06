@@ -148,10 +148,9 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
-      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, 
-												  lists:flatten(
-													lists:map(custom_lookup(Qname, Qtype, MatchedRecords, Message), erldns_handler:get_versioned_handlers())), 
-												  Zone),
+      Handlers = erldns_handler:get_versioned_handlers(),
+      CustomHandlerRecords = lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords, Message), Handlers)),
+      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, CustomHandlerRecords, Zone),
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, NewRecords, AuthorityRecords);
     _ ->
       resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, TypeMatches, AuthorityRecords)
@@ -376,10 +375,9 @@ resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, Matche
   case TypeMatches of
     [] ->
       %% Ask the custom handlers for their records.
-      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, 
-												  lists:map(erldns_records:replace_name(Qname), 
-												  lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords, Message), erldns_handler:get_versioned_handlers()))), 
-												  Zone),
+      CustomHandlers = erldns_handler:get_versioned_handlers(),
+      Records = lists:map(erldns_records:replace_name(Qname), lists:flatten(lists:map(custom_lookup(Qname, Qtype, MatchedRecords, Message), CustomHandlers))),
+      NewRecords = erldns_dnssec:maybe_sign_rrset(Message, Records, Zone),
       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], NewRecords);
     _ ->
       resolve_best_match_with_wildcard(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, [], TypeMatches)
@@ -472,26 +470,26 @@ best_match(_Qname, _Labels, _Zone, WildcardMatches) -> WildcardMatches.
 -spec custom_lookup(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> fun(({module(), [dns:type()], integer()}) -> [dns:rr()]).
 custom_lookup(Qname, Qtype, Records, Message) -> 
   fun({Module, Types, Version}) ->
-	  case Version of
-		  1 ->
-			  case lists:member(Qtype, Types) of
-				true -> Module:handle(Qname, Qtype, Records);
-				false ->
-				  case Qtype =:= ?DNS_TYPE_ANY of
-					true -> Module:handle(Qname, Qtype, Records);
-					false -> []
-				  end
-			  end;
-		  2 -> 
-			  case lists:member(Qtype, Types) of
-				true -> Module:handle(Qname, Qtype, Records, Message);
-				false ->
-				  case Qtype =:= ?DNS_TYPE_ANY of
-					true -> Module:handle(Qname, Qtype, Records, Message);
-					false -> []
-				  end
-			  end
-	  end
+      case Version of
+        1 ->
+          case lists:member(Qtype, Types) of
+            true -> Module:handle(Qname, Qtype, Records);
+            false ->
+              case Qtype =:= ?DNS_TYPE_ANY of
+                true -> Module:handle(Qname, Qtype, Records);
+                false -> []
+              end
+          end;
+        2 ->
+          case lists:member(Qtype, Types) of
+            true -> Module:handle(Qname, Qtype, Records, Message);
+            false ->
+              case Qtype =:= ?DNS_TYPE_ANY of
+                true -> Module:handle(Qname, Qtype, Records, Message);
+                false -> []
+              end
+          end
+      end
   end.
 
 % Function for filtering out custom records and replacing them with
@@ -499,9 +497,9 @@ custom_lookup(Qname, Qtype, Records, Message) ->
 filter_records(Records, []) -> Records;
 filter_records(Records, [{Handler, _Types, Version}|Rest]) ->
   case Version of
-	  1 -> filter_records(Handler:filter(Records), Rest);
-	  2 -> filter_records(Handler:filter(Records), Rest);
-	  _ -> []
+    1 -> filter_records(Handler:filter(Records), Rest);
+    2 -> filter_records(Handler:filter(Records), Rest);
+    _ -> []
   end.
 
 %% See if additional processing is necessary.
@@ -562,9 +560,9 @@ detect_zonecut(_Zone, [_Label]) ->
 detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
   Qname = dns:labels_to_dname(Labels),
   case dns:compare_dname(zone_authority_name(Zone#zone.authority), Qname) of
-  true ->
+    true ->
       [];
-  false ->
+    false ->
       case erldns_zone_cache:get_records_by_name_and_type(Qname, ?DNS_TYPE_NS) of
         [] ->
           detect_zonecut(Zone, ParentLabels);
