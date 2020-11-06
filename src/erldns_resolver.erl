@@ -20,9 +20,6 @@
 
 -export([resolve/3]).
 
--callback get_records_by_name(dns:dname()) -> [dns:rr()].
-
-
 
 %% @doc Resolve the questions in the message.
 -spec resolve(Message :: dns:message(), AuthorityRecords :: [dns:rr()], Host :: dns:ip()) -> dns:message().
@@ -96,7 +93,7 @@ resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
                lager:debug("Record name is not in zone (zone: ~p, qname: ~p)", [Zone#zone.name, Qname]),
                Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Zone#zone.authority};
              _ ->
-               resolve(Message, Qname, Qtype, get_records_by_name(Zone, Qname), Host, CnameChain, Zone)
+               resolve(Message, Qname, Qtype, erldns_zone_cache:get_records_by_name(Qname), Host, CnameChain, Zone)
            end,
 
   case detect_zonecut(Zone, Qname) of
@@ -460,12 +457,12 @@ best_match(Qname, Zone) -> best_match(Qname, dns:dname_to_labels(Qname), Zone).
 best_match(_Qname, [], _Zone) -> [];
 best_match(Qname, [_|Rest], Zone) ->
   WildcardName = dns:labels_to_dname([<<"*">>] ++ Rest),
-  best_match(Qname, Rest, Zone,  get_records_by_name(Zone, WildcardName)).
+  best_match(Qname, Rest, Zone, erldns_zone_cache:get_records_by_name(WildcardName)).
 
 best_match(_Qname, [], _Zone, []) -> [];
 best_match(Qname, Labels, Zone, []) ->
   Name = dns:labels_to_dname(Labels),
-  case get_records_by_name(Zone, Name) of
+  case erldns_zone_cache:get_records_by_name(Name) of
     [] -> best_match(Qname, Labels, Zone);
     Matches -> Matches
   end;
@@ -518,7 +515,7 @@ additional_processing(Message, _Host, _Zone, []) ->
   Message;
 %% There are records with names that require additional processing.
 additional_processing(Message, Host, Zone, Names) ->
-  RRs = lists:flatten(lists:map(fun(Name) -> get_records_by_name(Zone, Name) end, Names)),
+  RRs = lists:flatten(lists:map(fun(Name) -> erldns_zone_cache:get_records_by_name(Name) end, Names)),
   Records = lists:filter(erldns_records:match_types([?DNS_TYPE_A, ?DNS_TYPE_AAAA]), RRs),
   additional_processing(Message, Host, Zone, Names, Records).
 
@@ -568,35 +565,10 @@ detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
   true ->
       [];
   false ->
-      case lists:filter(erldns_records:match_type(?DNS_TYPE_NS), get_records_by_name(Zone, Qname)) of
+      case erldns_zone_cache:get_records_by_name_and_type(Qname, ?DNS_TYPE_NS) of
         [] ->
           detect_zonecut(Zone, ParentLabels);
         ZonecutNSRecords ->
           ZonecutNSRecords
       end
-  end.
-
-
-%% returns the record lookup delegation mdule for a zone.
-get_delegate(#zone{name = Name}) ->
-  case lists:keyfind(Name, 1, erldns_config:zone_delegates()) of
-    false -> none;
-    {Name, Delegate} -> {ok, Delegate}
-  end.
-
-
-get_records_by_name(Zone, Qname) ->
-  case erldns_zone_cache:get_records_by_name(Qname) of
-    [] ->
-      get_delegate_records(Zone, Qname);
-    Records ->
-      Records
-  end.
-
-get_delegate_records(Zone, Qname) ->
-  case get_delegate(Zone) of
-    {ok, Delegate} ->
-      Delegate:get_records_by_name(Qname);
-    _ ->
-      []
   end.

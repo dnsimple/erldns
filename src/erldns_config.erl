@@ -31,7 +31,6 @@
          packet_cache_ttl_overrides/0
         ]).
 -export([
-         zone_delegates/0,
          zone_server_env/0,
          zone_server_max_processes/0,
          zone_server_protocol/0,
@@ -200,10 +199,6 @@ keyget(Key, Data, Default) ->
 
 %% Zone server configuration
 %% TODO: remove as zone server client logic has been removed
-
-zone_delegates() ->
-    application:get_env(erldns, zone_delegates, []).
-
 zone_server_env() ->
   {ok, ZoneServerEnv} = application:get_env(erldns, zone_server),
   ZoneServerEnv.
