@@ -22,7 +22,8 @@
 
 
 %% @doc Resolve the questions in the message.
--spec resolve(Message :: dns:message(), AuthorityRecords :: [dns:rr()], Host :: dns:ip()) -> dns:message().
+-spec resolve(
+        Message :: dns:message(), AuthorityRecords :: [dns:rr()], Host :: dns:ip()) -> dns:message().
 resolve(Message, AuthorityRecords, Host) ->
   resolve(Message, AuthorityRecords, Host, Message#dns_message.questions).
 
@@ -33,7 +34,6 @@ resolve(Message, _AuthorityRecords, _Host, []) -> Message;
 resolve(Message, AuthorityRecords, Host, [Question]) -> resolve(Message, AuthorityRecords, Host, Question);
 %% Resolve the first question. Additional questions will be thrown away for now.
 resolve(Message, AuthorityRecords, Host, [Question|_]) -> resolve(Message, AuthorityRecords, Host, Question);
-
 %% Start the resolution process on the given question.
 %% Step 1: Set the RA bit to false as we do not handle recursive queries.
 %%
@@ -57,22 +57,7 @@ resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
   Records = resolve(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
   sort_answers(erldns_dnssec:handle(additional_processing(erldns_records:rewrite_soa_ttl(Records), Host, Zone), Zone, Qname, Qtype)).
 
-sort_answers(Message) ->
-  Message#dns_message{answers = lists:usort(fun sort_fun/2, Message#dns_message.answers)}.
 
--spec sort_fun(dns:rr(), dns:rr()) -> boolean().
-sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME, data = #dns_rrdata_cname{dname=Name}},
-         #dns_rr{type = ?DNS_TYPE_CNAME, name = Name}) ->
-  true;
-sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME, name = Name},
-         #dns_rr{type = ?DNS_TYPE_CNAME, data = #dns_rrdata_cname{dname=Name}}) ->
-  false;
-sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME}, #dns_rr{}) ->
-  true;
-sort_fun(#dns_rr{}, #dns_rr{type = ?DNS_TYPE_CNAME}) ->
-  false;
-sort_fun(A, B) ->
-  A =< B.
 
 %% No SOA was found for the Qname so we return the root hints
 %% Note: it seems odd that we are indicating we are authoritative here.
@@ -635,6 +620,24 @@ check_dnssec(Message, Host, Question) ->
     false ->
       ok
   end.
+
+-spec sort_answers(dns:message()) -> dns:message().
+sort_answers(Message) ->
+  Message#dns_message{answers = lists:usort(fun sort_fun/2, Message#dns_message.answers)}.
+
+-spec sort_fun(dns:rr(), dns:rr()) -> boolean().
+sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME, data = #dns_rrdata_cname{dname=Name}},
+         #dns_rr{type = ?DNS_TYPE_CNAME, name = Name}) ->
+  true;
+sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME, name = Name},
+         #dns_rr{type = ?DNS_TYPE_CNAME, data = #dns_rrdata_cname{dname=Name}}) ->
+  false;
+sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME}, #dns_rr{}) ->
+  true;
+sort_fun(#dns_rr{}, #dns_rr{type = ?DNS_TYPE_CNAME}) ->
+  false;
+sort_fun(A, B) ->
+  A =< B.
 
 zone_authority_name([Record | _]) ->
   Record#dns_rr.name.
