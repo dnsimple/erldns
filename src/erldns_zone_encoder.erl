@@ -141,7 +141,7 @@ encode_zone_to_json(Zone, Encoders) ->
               }]).
 
 encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
-  Records = erldns_zone_cache:get_typed_records_by_name(RecordName),
+  Records = erldns_zone_cache:get_records_by_name(RecordName),
   jsx:encode(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
 
 encode_zone_records_to_json(_ZoneName, RecordName, RecordType, Encoders) ->
