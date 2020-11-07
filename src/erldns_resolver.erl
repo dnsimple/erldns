@@ -79,6 +79,7 @@ resolve_qname_and_qtype(Message, AuthorityRecords, Qname, Qtype, Host) ->
 
 
 %% An SOA was found, thus we are authoritative and have the zone.
+%%
 %% Step 3: Match records
 -spec(resolve_authoritative(
         Message :: dns:message(),
@@ -91,6 +92,7 @@ resolve_qname_and_qtype(Message, AuthorityRecords, Qname, Qtype, Host) ->
 resolve_authoritative(Message, Qname, Qtype, Zone, Host, CnameChain) ->
   Result = case {erldns_zone_cache:record_name_in_zone(Zone#zone.name, Qname), CnameChain} of
              {false, []} ->
+               % No host name with the given record in the zone, return NXDOMAIN and include authority
                Message#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Zone#zone.authority};
              _ ->
                case erldns_zone_cache:get_records_by_name(Qname) of
