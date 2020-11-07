@@ -21,58 +21,66 @@
 -export([resolve/3]).
 
 
-%% @doc Resolve the questions in the message.
--spec resolve(
-        Message :: dns:message(), AuthorityRecords :: [dns:rr()], Host :: dns:ip()) -> dns:message().
+%% @doc Resolve the first question in the message. If no message is present, return the original
+%% message. If multiple questions are present, only resolve the first question.
+-spec(resolve(
+        Message :: dns:message(),
+        AuthorityRecords :: [dns:rr()],
+        Host :: dns:ip()) ->
+  dns:message()).
 resolve(Message, AuthorityRecords, Host) ->
-  resolve(Message, AuthorityRecords, Host, Message#dns_message.questions).
+  case Message#dns_message.questions of
+    [] -> Message;
+    [Question] -> resolve_question(Message, AuthorityRecords, Host, Question);
+    [Question|_] -> resolve_question(Message, AuthorityRecords, Host, Question)
+  end.
 
-%% There were no questions in the message so just return it.
--spec resolve(dns:message(), [dns:rr()], dns:ip(), dns:questions() | dns:query()) -> dns:message().
-resolve(Message, _AuthorityRecords, _Host, []) -> Message;
-%% There is one question in the message; resolve it.
-resolve(Message, AuthorityRecords, Host, [Question]) -> resolve(Message, AuthorityRecords, Host, Question);
-%% Resolve the first question. Additional questions will be thrown away for now.
-resolve(Message, AuthorityRecords, Host, [Question|_]) -> resolve(Message, AuthorityRecords, Host, Question);
-%% Start the resolution process on the given question.
+
+%% @doc Start the resolution process on the given question.
 %% Step 1: Set the RA bit to false as we do not handle recursive queries.
 %%
 %% Refuse all RRSIG requests.
-resolve(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
+-spec(resolve_question(
+        Message :: dns:message(),
+        AuthorityRecords :: [dns:rr()],
+        Host :: dns:ip(),
+        Questions :: dns:questions() | dns:query()) ->
+  dns:message()).
+resolve_question(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
   case Question#dns_query.type of
     ?DNS_TYPE_RRSIG ->
       Message#dns_message{ra = false, ad = false, cd = false, rc = ?DNS_RCODE_REFUSED};
     Qtype ->
       check_dnssec(Message, Host, Question),
-      resolve(Message#dns_message{ra = false, ad = false, cd = false}, AuthorityRecords, Question#dns_query.name, Qtype, Host)
+      resolve_qname_and_qtype(Message#dns_message{ra = false, ad = false, cd = false}, AuthorityRecords, Question#dns_query.name, Qtype, Host)
   end.
 
-%% With the extracted Qname and Qtype in hand, find the nearest zone
+%% @doc With the extracted Qname and Qtype in hand, find the nearest zone
 %% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
 %%
-%% If the request required DNSSEC, apply the DNSSEC records
--spec resolve(dns:message(), [dns:rr()], dns:dname(), dns:type(), dns:ip()) -> dns:message().
-resolve(Message, AuthorityRecords, Qname, Qtype, Host) ->
-  Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)), 
-  Records = resolve(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
-  sort_answers(erldns_dnssec:handle(additional_processing(erldns_records:rewrite_soa_ttl(Records), Host, Zone), Zone, Qname, Qtype)).
+%% If the request required DNSSEC, apply the DNSSEC records. Sort answers prior to returning.
+-spec resolve_qname_and_qtype(dns:message(), [dns:rr()], dns:dname(), dns:type(), dns:ip()) -> dns:message().
+resolve_qname_and_qtype(Message, AuthorityRecords, Qname, Qtype, Host) ->
+  case erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)) of
+    {error, not_authoritative} ->
+      %% No SOA was found for the Qname so we return the root hints
+      %% Note: it seems odd that we are indicating we are authoritative here.
+      case erldns_config:use_root_hints() of
+        true ->
+          {Authority, Additional} = erldns_records:root_hints(),
+          Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Message#dns_message.additional ++ Additional};
+        _ ->
+          Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR}
+      end;
+    Zone ->
+      Records = resolve_authoritative(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
+      sort_answers(erldns_dnssec:handle(additional_processing(erldns_records:rewrite_soa_ttl(Records), Host, Zone), Zone, Qname, Qtype))
+  end.
 
-
-
-%% No SOA was found for the Qname so we return the root hints
-%% Note: it seems odd that we are indicating we are authoritative here.
-resolve(Message, _Qname, _Qtype, {error, not_authoritative}, _Host, _CnameChain) ->
-  case erldns_config:use_root_hints() of
-    true ->
-      {Authority, Additional} = erldns_records:root_hints(),
-      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, authority = Authority, additional = Message#dns_message.additional ++ Additional};
-    _ ->
-      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR}
-  end;
 
 %% An SOA was found, thus we are authoritative and have the zone.
 %% Step 3: Match records
-resolve(Message, Qname, Qtype, Zone, Host, CnameChain) ->
+resolve_authoritative(Message, Qname, Qtype, Zone, Host, CnameChain) ->
   Result = case {erldns_zone_cache:record_name_in_zone(Zone#zone.name, Qname), CnameChain} of
              {false, []} ->
                lager:debug("Record name is not in zone (zone: ~p, qname: ~p)", [Zone#zone.name, Qname]),
@@ -325,7 +333,7 @@ restart_query(Message, Name, Qtype, Host, CnameChain, Zone, true) ->
   Parent = check_if_parent(Zone#zone.name, Name),
   case Parent of
     true ->
-      resolve(Message, Name, Qtype, Zone, Host, CnameChain);
+      resolve_authoritative(Message, Name, Qtype, Zone, Host, CnameChain);
     false ->
       Message
   end;
@@ -345,10 +353,10 @@ restart_query(Message, _Name, _Qtype, _Host, _CnameChain, _Zone, false) ->
   dns:message()).
 % Delegated, but in the same zone.
 restart_delegated_query(Message, Qname, Qtype, Host, CnameChain, Zone, true) ->
-  resolve(Message, Qname, Qtype, Zone, Host, CnameChain);
+  resolve_authoritative(Message, Qname, Qtype, Zone, Host, CnameChain);
 % Delegated to a different zone.
 restart_delegated_query(Message, Qname, Qtype, Host, CnameChain, Zone, false) ->
-  resolve(Message, Qname, Qtype, erldns_zone_cache:find_zone(Qname, Zone#zone.authority), Host, CnameChain).
+  resolve_authoritative(Message, Qname, Qtype, erldns_zone_cache:find_zone(Qname, Zone#zone.authority), Host, CnameChain).
 
 
 % There was no exact match for the Qname, so we use the best matches that were returned by the best_match() function.
@@ -521,6 +529,9 @@ resolve_best_match_referral(Message, _Qname, Qtype, _Host, CnameChain, BestMatch
   end.
 
 
+%% Utility functions
+
+
 % Find the best match records for the given Qname in the
 % given zone. This will attempt to walk through the
 % domain hierarchy in the Qname looking for both exact and
@@ -579,8 +590,6 @@ filter_records(Records, [{Handler, _Types, Version}|Rest]) ->
   end.
 
 %% See if additional processing is necessary.
-additional_processing(Message, _Host, {error, _}) ->
-  Message;
 additional_processing(Message, Host, Zone) ->
   RequiresAdditionalProcessing = requires_additional_processing(Message#dns_message.answers ++ Message#dns_message.authority, []),
   additional_processing(Message, Host, Zone, lists:flatten(RequiresAdditionalProcessing)).
@@ -621,6 +630,7 @@ check_dnssec(Message, Host, Question) ->
       ok
   end.
 
+%% @doc Sort the answers in the given message.
 -spec sort_answers(dns:message()) -> dns:message().
 sort_answers(Message) ->
   Message#dns_message{answers = lists:usort(fun sort_fun/2, Message#dns_message.answers)}.
@@ -639,9 +649,11 @@ sort_fun(#dns_rr{}, #dns_rr{type = ?DNS_TYPE_CNAME}) ->
 sort_fun(A, B) ->
   A =< B.
 
+% Extract the name from the first record in the list.
 zone_authority_name([Record | _]) ->
   Record#dns_rr.name.
 
+% Find NS records that represent a zone cut.
 detect_zonecut(Zone, Qname) when is_binary(Qname) ->
   detect_zonecut(Zone, dns:dname_to_labels(Qname));
 detect_zonecut(_Zone, []) ->

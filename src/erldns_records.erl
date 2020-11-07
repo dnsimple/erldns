@@ -27,8 +27,6 @@
          wildcard_qname/1
         ]).
 
-
-
 % SOA TTL functions
 -export([
          minimum_soa_ttl/2,
