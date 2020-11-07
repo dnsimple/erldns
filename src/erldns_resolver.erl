@@ -199,8 +199,9 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
   % There was an exact type match for something other than an NS record and we are authoritative because there is an SOA record.
   Answer = lists:last(MatchedRecords),
   case erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
-    NSRecords = [] ->
-      resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, AuthorityRecords, NSRecords);
+    [] ->
+      % We are authoritative and there are no NS records here.
+      Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
     NSRecords ->
       % NOTE: this is a potential bug because it assumes the last record is the one to examine.
       NSRecord = lists:last(NSRecords),
@@ -212,12 +213,12 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
         false ->
           % The SOA record and NS name do not match, so this may require restarting the search as the name may or may not be
           % delegated to another zone in the cache
-          resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, AuthorityRecords, NSRecords)
+          resolve_exact_type_match_delegated(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, AuthorityRecords, NSRecords)
       end
   end.
 
 
--spec(resolve_exact_type_match(
+-spec(resolve_exact_type_match_delegated(
         Message :: dns:message(),
         Qname :: dns:dname(),
         Qtype :: dns:type(),
@@ -228,10 +229,7 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
         AuthorityRecords :: [dns:rr()],
         NSRecords:: [dns:rr()]) ->
   dns:message()).
-resolve_exact_type_match(Message, _Qname, _Qtype, _Host, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords, _NSRecords = []) ->
-  % We are authoritative and there are no NS records here.
-  Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = Message#dns_message.answers ++ MatchedRecords};
-resolve_exact_type_match(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
+resolve_exact_type_match_delegated(Message, _Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, _AuthorityRecords, NSRecords) ->
   % We are authoritative and there are NS records here.
   % NOTE: there are potential bugs here because it assumes the last record is the one to examine
   Answer = lists:last(MatchedRecords),
