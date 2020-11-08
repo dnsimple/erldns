@@ -241,6 +241,7 @@ get_rrset_sync_counter(ZoneName, RRFqdn, Type) ->
 		[] -> 0 % return default value of 0
   	end.
 
+%% @doc Update the RRSet sync counter for the given RR set name and type in the given zone.
 -spec write_rrset_sync_counter({dns:dname(), dns:dname(), dns:type(), integer()}) -> ok.
 write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}) ->
   erldns_storage:insert(sync_counters, {ZoneName, RRFqdn, Type, Counter}).
@@ -275,8 +276,7 @@ put_zone_records(Name, RecordsByName) ->
   put_zone_records_entry(Name, maps:next(maps:iterator(RecordsByName))).
 
 %% @doc Put zone RRSet
-%-spec put_zone_rrset(({Name, Digest, Records}, RRFqdn, Type, Counter) | ({Name, Digest, Records}, RRFqdn, Type, Counter)) -> ok | {error, Reason :: term()}
-%  when Name :: binary(), Digest :: binary(), Records :: [dns:rr()], Keys :: [erldns:keyset()], RRFqdn :: binary(), Type :: binary(), Counter :: integer().
+-spec put_zone_rrset({dns:dname(), binary(), [dns:rr()]} | {dns:dname(), binary(), [dns:rr()], [any()]}, dns:dname(), dns:type(), integer()) -> ok | {error, Reason :: term()}.
 put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter) ->
   put_zone_rrset({ZoneName, Digest, Records, []}, RRFqdn, Type, Counter);
 put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
