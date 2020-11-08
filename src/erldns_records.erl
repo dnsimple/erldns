@@ -26,9 +26,11 @@
 -endif.
 
 % Wildcard functions
--export([optionally_convert_wildcard/2, wildcard_qname/1]).
+-export([optionally_convert_wildcard/2,
+         wildcard_qname/1]).
 % SOA TTL functions
--export([minimum_soa_ttl/2, rewrite_soa_ttl/1]).
+-export([minimum_soa_ttl/2,
+         rewrite_soa_ttl/1]).
 % Matcher functions
 -export([match_name/1,
          match_type/1,

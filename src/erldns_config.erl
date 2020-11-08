@@ -42,7 +42,8 @@
          storage_host/0,
          storage_port/0,
          storage_dir/0]).
--export([keyget/2, keyget/3]).
+-export([keyget/2,
+         keyget/3]).
 
 -ifdef(TEST).
 

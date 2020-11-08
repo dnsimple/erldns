@@ -35,7 +35,8 @@
          code_change/3]).
 
 %% Types
--export_type([throttle_result/0, throttle_hit_count/0]).
+-export_type([throttle_result/0,
+              throttle_hit_count/0]).
 
 -type throttle_hit_count() :: non_neg_integer().
 -type throttle_result() :: {throttled | ok, inet:ip_address() | inet:hostname(), throttle_hit_count()}.
