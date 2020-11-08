@@ -19,15 +19,14 @@
 -behavior(supervisor).
 
 -export([start_link/1]).
+
 -export([init/1]).
 
 start_link([WorkerId]) ->
-    % This supervisor is registered without a name. An alternative
-    % if a name is necessary is to create an atom() using the WorkerId
-    % value combined with the module name
-    supervisor:start_link(?MODULE, [WorkerId]).
+  % This supervisor is registered without a name. An alternative
+  % if a name is necessary is to create an atom() using the WorkerId
+  % value combined with the module name
+  supervisor:start_link(?MODULE, [WorkerId]).
 
 init(WorkerId) ->
-    {ok,
-     {{one_for_one, 20, 10},
-      [{{WorkerId, erldns_worker_process}, {erldns_worker_process, start_link, [[]]}, permanent, brutal_kill, worker, [erldns_worker_process]}]}}.
+  {ok, {{one_for_one, 20, 10}, [{{WorkerId, erldns_worker_process}, {erldns_worker_process, start_link, [[]]}, permanent, brutal_kill, worker, [erldns_worker_process]}]}}. 

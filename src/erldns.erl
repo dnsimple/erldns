@@ -18,19 +18,17 @@
 -include("erldns.hrl").
 
 -export([start/0]).
+
 -export([normalize_name/1]).
 
 -export_type([keyset/0, zone/0]).
-
 -type keyset() :: #keyset{}.
 -type zone() :: #zone{}.
 
 -spec start() -> any().
 start() ->
-    application:ensure_all_started(erldns).
+  application:ensure_all_started(erldns).
 
 %% @doc Converts a domain name to lower case.
-normalize_name(Name) when is_list(Name) ->
-    string:to_lower(Name);
-normalize_name(Name) when is_binary(Name) ->
-    list_to_binary(string:to_lower(binary_to_list(Name))).
+normalize_name(Name) when is_list(Name) -> string:to_lower(Name);
+normalize_name(Name) when is_binary(Name) -> list_to_binary(string:to_lower(binary_to_list(Name))).

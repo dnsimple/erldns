@@ -16,7 +16,6 @@
 -module(sample_custom_zone_parser).
 
 -include_lib("dns_erlang/include/dns.hrl").
-
 -include("erldns.hrl").
 
 -export([json_record_to_erlang/1]).
@@ -24,9 +23,6 @@
 -define(DNS_TYPE_SAMPLE, 40000).
 
 json_record_to_erlang([Name, <<"SAMPLE">>, Ttl, Data, _Context]) ->
-    #dns_rr{name = Name,
-            type = ?DNS_TYPE_SAMPLE,
-            data = erldns_config:keyget(<<"dname">>, Data),
-            ttl = Ttl};
-json_record_to_erlang(_) ->
-    {}.
+  #dns_rr{name = Name, type = ?DNS_TYPE_SAMPLE, data = erldns_config:keyget(<<"dname">>, Data), ttl = Ttl};
+
+json_record_to_erlang(_) -> {}.

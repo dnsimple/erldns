@@ -23,20 +23,18 @@
 %% @doc Decode the binary data into its Erlang representation.
 %%
 %% Note that if the erldns catch_exceptions property is set in the
-%% configuration, then this function should never throw an
+%% configuration, then this function should never throw an 
 %% exception.
--spec decode_message(dns:message_bin()) -> {dns:decode_error(), dns:message() | undefined, binary()} | dns:message().
+-spec decode_message(dns:message_bin()) -> {dns:decode_error(), dns:message() | 'undefined', binary()} | dns:message().
 decode_message(Bin) ->
-    case application:get_env(erldns, catch_exceptions) of
-        {ok, false} ->
-            dns:decode_message(Bin);
-        _ ->
-            try dns:decode_message(Bin) of
-                M ->
-                    M
-            catch
-                Exception:Reason ->
-                    erldns_events:notify({?MODULE, decode_message_error, {Exception, Reason, Bin}}),
-                    {formerr, Reason, Bin}
-            end
-    end.
+  case application:get_env(erldns, catch_exceptions) of
+    {ok, false} -> dns:decode_message(Bin);
+    _ ->
+      try dns:decode_message(Bin) of
+        M -> M
+      catch
+        Exception:Reason ->
+          erldns_events:notify({?MODULE, decode_message_error, {Exception, Reason, Bin}}),
+          {formerr, Reason, Bin}
+      end
+  end.

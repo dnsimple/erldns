@@ -32,105 +32,104 @@
 %% @doc Create ets table wrapper. Use match cases for adding different options to the table.
 -spec create(atom()) -> ok | not_implemented | {error, Reason :: term()}.
 create(schema) ->
-    not_implemented;
+  not_implemented;
 create(Name = zones) ->
-    create_ets_table(Name, set);
+  create_ets_table(Name, set);
 create(Name = zone_records_typed) ->
-    create_ets_table(Name, ordered_set);
+  create_ets_table(Name, ordered_set);
 create(Name = authorities) ->
-    create_ets_table(Name, set);
+  create_ets_table(Name, set);
 %% These tables should always use ets. Due to their functionality
 create(Name = packet_cache) ->
-    create_ets_table(Name, set);
+  create_ets_table(Name, set);
 create(Name = host_throttle) ->
-    create_ets_table(Name, set);
+  create_ets_table(Name, set);
 create(Name = lookup_table) ->
-    create_ets_table(Name, bag);
+  create_ets_table(Name, bag);
 create(Name = handler_registry) ->
-    create_ets_table(Name, set);
+  create_ets_table(Name, set);
 create(Name = sync_counters) ->
-    create_ets_table(Name, set).
+  create_ets_table(Name, set).
 
 %% @doc Insert value in ets table.
 -spec insert(atom(), tuple()) -> ok.
-insert(Table, Value) ->
-    true = ets:insert(Table, Value),
-    ok.
+insert(Table, Value)->
+  true = ets:insert(Table, Value),
+  ok.
 
 %% @doc Delete entire ets table.
 -spec delete_table(atom()) -> ok.
-delete_table(Table) ->
-    true = ets:delete(Table),
-    ok.
+delete_table(Table)->
+  true = ets:delete(Table),
+  ok.
 
 %% @doc Delete an entry in the ets table.Ets always returns true for this function.
 -spec delete(atom(), term()) -> ok.
 delete(Table, Key) ->
-    ets:delete(Table, Key),
-    ok.
+  ets:delete(Table, Key),
+  ok.
 
 %% @doc Delete entries in the ets table that match the provided spec.
 -spec select_delete(atom(), list()) -> {ok, Count :: integer()} | {error, Reason :: term()}.
 select_delete(Table, MatchSpec) ->
-    Count = ets:select_delete(Table, MatchSpec),
-    {ok, Count}.
+  Count = ets:select_delete(Table, MatchSpec),
+  {ok, Count}.
 
 %% @doc Backup a specific ets table.
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_table(atom()) -> ok | {error, Reason :: term()}.
-backup_table(_Table) ->
-    {error, not_implemented}.
+backup_table(_Table)->
+  {error, not_implemented}.
 
 %% @doc Should backup all ets tables.
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_tables() -> ok | {error, Reason :: term()}.
 backup_tables() ->
-    {error, not_implemented}.
+  {error, not_implemented}.
 
 %% @doc Select from ets using key, value.
 -spec select(atom(), term()) -> [tuple()].
 select(Table, Key) ->
-    ets:lookup(Table, Key).
+  ets:lookup(Table, Key).
 
 %% #doc Select from ets using match specs.
 -spec select(atom(), list(), integer() | infinite) -> tuple() | '$end_of_table'.
 select(Table, MatchSpec, infinite) ->
-    ets:select(Table, MatchSpec);
+  ets:select(Table, MatchSpec);
 select(Table, MatchSpec, Limit) ->
-    ets:select(Table, MatchSpec, Limit).
+  ets:select(Table, MatchSpec, Limit).
 
 %% @doc Wrapper for foldl in ets.
--spec foldl(fun(), list(), atom()) -> Acc :: term() | {error, Reason :: term()}.
+-spec foldl(fun(), list(), atom())  -> Acc :: term() | {error, Reason :: term()}.
 foldl(Fun, Acc, Table) ->
-    ets:foldl(Fun, Acc, Table).
+  ets:foldl(Fun, Acc, Table).
 
 %% @doc Empty ets table. Ets always returns true for this function.
 -spec empty_table(atom()) -> ok.
 empty_table(Table) ->
-    ets:delete_all_objects(Table),
-    ok.
+  ets:delete_all_objects(Table),
+  ok.
 
 %% @doc Lists the ets table
 -spec list_table(atom()) -> term() | {error, term()}.
 list_table(TableName) ->
-    try
-        ets:tab2list(TableName)
-    catch
-        error:R ->
-            {error, R}
-    end.
+  try ets:tab2list(TableName)
+  catch
+    error:R ->
+      {error, R}
+  end.
 
 %% Internal methods
 -spec create_ets_table(ets:tab(), ets:type()) -> ok | {error, Reason :: term()}.
 create_ets_table(Name, Type) ->
-    case ets:info(Name) of
-        undefined ->
-            case ets:new(Name, [Type, public, named_table]) of
-                Name ->
-                    ok;
-                Error ->
-                    {error, Error}
-            end;
-        _InfoList ->
-            ok
-    end.
+  case ets:info(Name) of
+    undefined ->
+      case ets:new(Name, [Type, public, named_table]) of
+        Name ->
+          ok;
+        Error ->
+          {error, Error}
+      end;
+    _InfoList ->
+      ok
+  end.
