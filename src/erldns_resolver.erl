@@ -130,6 +130,15 @@ exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, 
 %% records and find any type matches on QTYPE and continue on.
 %%
 %% This function will search both MatchedRecords and custom handlers.
+-spec(resolve_exact_match(
+        Message :: dns:message(),
+        Qname :: dns:dname(),
+        Qtype :: dns:type(),
+        Host :: dns:ip(),
+        CnameChain :: [dns:rr()],
+        MatchedRecords :: [dns:rr()],
+        Zone :: #zone{}) ->
+  dns:message()).
 resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
   TypeMatches = case Qtype of
                   ?DNS_TYPE_ANY ->
@@ -137,7 +146,7 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
                   _ ->
                     lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
                 end,
-  Records = case TypeMatches of
+  ExactTypeMatches = case TypeMatches of
               [] ->
                 % No records matched the qtype, call custom handler
                 Handlers = erldns_handler:get_versioned_handlers(),
@@ -148,32 +157,18 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
                 TypeMatches
             end,
   AuthorityRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), MatchedRecords),
-  resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone, Records, AuthorityRecords).
-
--spec(resolve_exact_match(
-        Message :: dns:message(),
-        Qname :: dns:dname(),
-        Qtype :: dns:type(),
-        Host :: any(),
-        CnameChain :: any(),
-        MatchedRecords :: [dns:rr()],
-        Zone :: #zone{},
-        ExactTypeMatches :: dns:answers(),
-        AuthorityRecords :: dns:authority()) ->
-  dns:message()).
-resolve_exact_match(Message, _Qname, Qtype, _Host, _CnameChain, MatchedRecords, Zone, _ExactTypeMatches = [], AuthorityRecords) ->
-  % There were no matches for exact name and type, so now we are looking for NS records  in the exact name matches.
-  case lists:filter(erldns_records:match_type(?DNS_TYPE_NS), MatchedRecords) of
-    [] ->
+  ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), MatchedRecords),
+  case {ExactTypeMatches, ReferralRecords} of
+    {[], []} ->
       % There are no exact type matches and no referrals, return NOERROR with the authority set
       Message#dns_message{aa = true, authority = Zone#zone.authority};
-    ReferralRecords ->
+    {[], _} ->
       % There were no exact type matches, but there were other name matches and there are NS records, so this is an exact match referral
-      resolve_exact_match_referral(Message, Qtype, MatchedRecords, ReferralRecords, AuthorityRecords)
-  end;
-resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, _MatchedRecords, Zone, ExactTypeMatches, AuthorityRecords) ->
-  % There were exact matches of name and type.
-  resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, ExactTypeMatches, Zone, AuthorityRecords).
+      resolve_exact_match_referral(Message, Qtype, MatchedRecords, ReferralRecords, AuthorityRecords);
+    _ ->
+      % There were exact matches of name and type.
+      resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, ExactTypeMatches, Zone, AuthorityRecords)
+  end.
 
 
 -spec(resolve_exact_type_match(
@@ -186,8 +181,9 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, _MatchedRecords, Zo
         Zone :: #zone{},
         AuthorityRecords :: [dns:rr()]) ->
   dns:message()).
-resolve_exact_type_match(Message, _Qname, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords, Zone, []) ->
+resolve_exact_type_match(Message, Qname, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords, Zone, []) ->
   % There was an exact type match for an NS query, however there is no SOA record for the zone.
+  lager:info("Exact match for NS with no SOA in the zone (qname: ~p)", [Qname]),
   Answer = lists:last(MatchedRecords),
   Name = Answer#dns_rr.name,
   % It isn't clear what the QTYPE should be on a delegated restart. I assume an A record.
@@ -218,6 +214,8 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
   end.
 
 
+%% @doc There is an exact name and type match and there NS records present. This may indicate the name is at the apex
+%% or it may indicate that the name is delegated.
 -spec(resolve_exact_type_match_delegated(
         Message :: dns:message(),
         Qname :: dns:dname(),
