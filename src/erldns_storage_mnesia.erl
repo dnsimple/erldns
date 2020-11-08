@@ -38,282 +38,291 @@
 %% if schema is created, or if it already exists.
 %% @end
 create(schema) ->
-  ok = ensure_mnesia_started(),
+    ok = ensure_mnesia_started(),
     case erldns_config:storage_dir() of
-	undefined ->
-	    lager:error("You need to add a directory for mnesia in erldns.config");
-	Dir ->
-	    ok = filelib:ensure_dir(Dir),
-	    ok = application:set_env(mnesia, dir, Dir)
+        undefined ->
+            lager:error("You need to add a directory for mnesia in erldns.config");
+        Dir ->
+            ok = filelib:ensure_dir(Dir),
+            ok = application:set_env(mnesia, dir, Dir)
     end,
-
     Connected = nodes(),
     lager:debug("Creating schema ~p", [Connected]),
     case Connected of
-	[] ->
-	    application:stop(mnesia),
-	    case mnesia:create_schema([node()]) of
-		{error, {_, {already_exists, _}}} ->
-		    lager:warning("The schema already exists (node: ~p)", [node()]),
-		    ok;
-		ok ->
-		    lager:debug("Created the schema on this node ~p", [mnesia:system_info()]),
-		    ok
-	    end;
-	_ ->	    
-	    lager:debug("Adding extra db_nodes ~p", [Connected]),
-	    mnesia:change_config(extra_db_nodes, Connected),
-	    lager:debug("Waiting for tables"),
-	    WaitResult = mnesia:wait_for_tables([zones, zone_records_typed, authorities], 5000),
-	    lager:debug("Wait result ~p", [WaitResult]),
-	    Tables = mnesia:system_info(tables),
-	    lager:debug("Current tables ~p", [Tables]),
-	    case Tables of
-		[] ->
-		    application:stop(mnesia),
-		    case mnesia:create_schema([node()]) of
-			{error, {_, {already_exists, _}}} ->
-			    lager:warning("The schema already exists (node: ~p)", [node()]),
-			    ok;
-			ok ->
-			    lager:debug("Created the schema on this node with other connected nodes ~p", [mnesia:system_info()]),
-			    ok
-		    end;
-		_ ->
-		    Schema = mnesia:change_table_copy_type(schema, node(), disc_copies),
-		    Copy = lists:foldl(fun(Table, Acc) ->
-					       Acc ++ [mnesia:add_table_copy(Table, node(), disc_copies)]
-				       end, [], Tables --[schema]),
-		    lager:debug("Copy done Schema= ~p, Others=~p", [Schema, Copy])
-	    end
+        [] ->
+            application:stop(mnesia),
+            case mnesia:create_schema([node()]) of
+                {error, {_, {already_exists, _}}} ->
+                    lager:warning("The schema already exists (node: ~p)", [node()]),
+                    ok;
+                ok ->
+                    lager:debug("Created the schema on this node ~p", [mnesia:system_info()]),
+                    ok
+            end;
+        _ ->
+            lager:debug("Adding extra db_nodes ~p", [Connected]),
+            mnesia:change_config(extra_db_nodes, Connected),
+            lager:debug("Waiting for tables"),
+            WaitResult = mnesia:wait_for_tables([zones, zone_records_typed, authorities], 5000),
+            lager:debug("Wait result ~p", [WaitResult]),
+            Tables = mnesia:system_info(tables),
+            lager:debug("Current tables ~p", [Tables]),
+            case Tables of
+                [] ->
+                    application:stop(mnesia),
+                    case mnesia:create_schema([node()]) of
+                        {error, {_, {already_exists, _}}} ->
+                            lager:warning("The schema already exists (node: ~p)", [node()]),
+                            ok;
+                        ok ->
+                            lager:debug("Created the schema on this node with other connected nodes ~p", [mnesia:system_info()]),
+                            ok
+                    end;
+                _ ->
+                    Schema = mnesia:change_table_copy_type(schema, node(), disc_copies),
+                    Copy = lists:foldl(fun(Table, Acc) -> Acc ++ [mnesia:add_table_copy(Table, node(), disc_copies)] end, [], Tables -- [schema]),
+                    lager:debug("Copy done Schema= ~p, Others=~p", [Schema, Copy])
+            end
     end,
     ok = ensure_mnesia_started();
-
 %% @doc Match the table names for every create. This enables different records to be used and
 %% attributes to be sent to the tables.
 %% @end
-
 %% @doc Zones table has a discrepancy between record name, and table name. Be sure to use necesssary
 %% functions for this difference.
 %% @end
 create(zones) ->
-  ok = ensure_mnesia_started(),
-  case mnesia:create_table(zones,
-                           [{attributes, record_info(fields, zone)},
-                            {record_name, zone},
-			    {type, set},
-                            {disc_copies, [node()]}]) of
-    {aborted, {already_exists, zones}} ->
-      lager:warning("The zone table already exists (node: ~p)", [node()]),
-      ok;
-    {atomic, ok} ->
-      ok;
-    Error ->
-      {error, Error}
-  end;
+    ok = ensure_mnesia_started(),
+    case mnesia:create_table(zones, [{attributes, record_info(fields, zone)}, {record_name, zone}, {type, set}, {disc_copies, [node()]}]) of
+        {aborted, {already_exists, zones}} ->
+            lager:warning("The zone table already exists (node: ~p)", [node()]),
+            ok;
+        {atomic, ok} ->
+            ok;
+        Error ->
+            {error, Error}
+    end;
 create(zone_records_typed) ->
-  case mnesia:create_table(zone_records_typed,
-                           [{attributes, record_info(fields, zone_records_typed)},
-                            {disc_copies, [node()]},
-			    {type, bag}
-			   ]) of
-    {aborted, {already_exists, zone_records_typed}} ->
-      lager:warning("The zone records typed table already exists (node: ~p)", [node()]),
-      ok;
-    {atomic, ok} ->
-      ok;
-    Error ->
-      {error, Error}
-  end;
+    case mnesia:create_table(zone_records_typed, [{attributes, record_info(fields, zone_records_typed)}, {disc_copies, [node()]}, {type, bag}]) of
+        {aborted, {already_exists, zone_records_typed}} ->
+            lager:warning("The zone records typed table already exists (node: ~p)", [node()]),
+            ok;
+        {atomic, ok} ->
+            ok;
+        Error ->
+            {error, Error}
+    end;
 create(authorities) ->
-  ok = ensure_mnesia_started(),
-  case mnesia:create_table(authorities,
-                           [{attributes, record_info(fields, authorities)},
-                            {disc_copies, [node()]}]) of
-    {aborted, {already_exists, authorities}} ->
-      lager:warning("The authority table already exists (node: ~p)", [node()]),
-      ok;
-    {atomic, ok} ->
-      ok;
-    Error ->
-      {error, Error}
-  end;
+    ok = ensure_mnesia_started(),
+    case mnesia:create_table(authorities, [{attributes, record_info(fields, authorities)}, {disc_copies, [node()]}]) of
+        {aborted, {already_exists, authorities}} ->
+            lager:warning("The authority table already exists (node: ~p)", [node()]),
+            ok;
+        {atomic, ok} ->
+            ok;
+        Error ->
+            {error, Error}
+    end;
 create(sync_counters) ->
-  ok = ensure_mnesia_started(),
-  case mnesia:create_table(sync_counters,
-                           [{attributes, record_info(fields, sync_counters)},
-                            {disc_copies, [node()]}]) of
-    {aborted, {already_exists, sync_counters}} ->
-      lager:warning("The sync_counters table already exists (node: ~p)", [node()]),
-      ok;
-    {atomic, ok} ->
-      ok;
-    Error ->
-      {error, Error}
-  end.
+    ok = ensure_mnesia_started(),
+    case mnesia:create_table(sync_counters, [{attributes, record_info(fields, sync_counters)}, {disc_copies, [node()]}]) of
+        {aborted, {already_exists, sync_counters}} ->
+            lager:warning("The sync_counters table already exists (node: ~p)", [node()]),
+            ok;
+        {atomic, ok} ->
+            ok;
+        Error ->
+            {error, Error}
+    end.
 
 %% @doc Insert into specified table. zone_cache calls this by {name, #zone{}}
 -spec insert(atom(), any()) -> any().
-insert(zones, #zone{} = Zone)->
-  Write = fun() -> mnesia:write(zones, Zone, write) end,
-  case mnesia:activity(transaction, Write) of
-    ok ->
-      ok;
-    Error ->
-      {error, Error}
-  end;
-insert(zones, {_N, #zone{} = Zone})->
-  Write = fun() -> mnesia:write(zones, Zone, write) end,
-  case mnesia:activity(transaction, Write) of
-    ok ->
-      ok;
-    Error ->
-      {error, Error}
-  end;
+insert(zones, #zone{} = Zone) ->
+    Write = fun() -> mnesia:write(zones, Zone, write) end,
+    case mnesia:activity(transaction, Write) of
+        ok ->
+            ok;
+        Error ->
+            {error, Error}
+    end;
+insert(zones, {_N, #zone{} = Zone}) ->
+    Write = fun() -> mnesia:write(zones, Zone, write) end,
+    case mnesia:activity(transaction, Write) of
+        ok ->
+            ok;
+        Error ->
+            {error, Error}
+    end;
 insert(zone_records_typed, {{ZoneName, Fqdn, Type}, Records}) ->
-  Write = fun() -> mnesia:write(zone_records_typed, #zone_records_typed{zone_name = ZoneName, fqdn = Fqdn, records = Records, type = Type}, write) end,
-  case mnesia:activity(transaction, Write) of
-    ok ->
-      ok;
-    Error ->
-      {error, Error}
-  end;
+    Write =
+        fun() ->
+           mnesia:write(zone_records_typed,
+                        #zone_records_typed{zone_name = ZoneName,
+                                            fqdn = Fqdn,
+                                            records = Records,
+                                            type = Type},
+                        write)
+        end,
+    case mnesia:activity(transaction, Write) of
+        ok ->
+            ok;
+        Error ->
+            {error, Error}
+    end;
 insert(authorities, #authorities{} = Auth) ->
-  Write = fun() -> mnesia:write(authorities, Auth, write) end,
-  case mnesia:activity(transaction, Write) of
-    ok ->
-      ok;
-    Error ->
-      {error, Error}
-  end;
+    Write = fun() -> mnesia:write(authorities, Auth, write) end,
+    case mnesia:activity(transaction, Write) of
+        ok ->
+            ok;
+        Error ->
+            {error, Error}
+    end;
 insert(sync_counters, {counter, Counter}) ->
-  Write = fun() -> mnesia:write(sync_counters, {counter, Counter}, write) end,
-  case mnesia:activity(transaction, Write) of
-    ok ->
-      ok;
-    Error ->
-      {error, Error}
-  end.
+    Write = fun() -> mnesia:write(sync_counters, {counter, Counter}, write) end,
+    case mnesia:activity(transaction, Write) of
+        ok ->
+            ok;
+        Error ->
+            {error, Error}
+    end.
 
 %% @doc delete the entire table.
 -spec delete_table(atom()) -> ok | {aborted, any()}.
 delete_table(Table) ->
-  case mnesia:delete_table(Table) of
-    {atomic, ok} ->
-      ok;
-    {aborted, Reason} ->
-      {error, Reason}
-  end.
+    case mnesia:delete_table(Table) of
+        {atomic, ok} ->
+            ok;
+        {aborted, Reason} ->
+            {error, Reason}
+    end.
 
 %% @doc Delete a mnesia record, have to do things different for zones since we specified {record_name, zone}
 %% in the table creation.
 -spec delete(Table :: atom(), Key :: term()) -> ok | any().
-delete(zones, Key)->
-  mnesia:dirty_delete({zones, Key});
-delete(Table, Key)->
-  case mnesia:is_transaction() of
-    true ->
-      Delete = fun() -> mnesia:delete({Table, Key}) end,
-      mnesia:activity(transaction, Delete);
-    false ->
-      mnesia:dirty_delete({Table, Key})
-  end.
+delete(zones, Key) ->
+    mnesia:dirty_delete({zones, Key});
+delete(Table, Key) ->
+    case mnesia:is_transaction() of
+        true ->
+            Delete = fun() -> mnesia:delete({Table, Key}) end,
+            mnesia:activity(transaction, Delete);
+        false ->
+            mnesia:dirty_delete({Table, Key})
+    end.
 
 %% @doc Delete all zone records or zone records typed based on the match spec. The match spec
 %% is given as an ETS match spec, thus it needs to be converted to a record match spec for
 %% Mnesia.
 -spec select_delete(atom(), list()) -> {ok, Count :: integer()} | {error, Reason :: term()}.
-select_delete(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}])->
-  SelectDelete = fun() ->
-                     Records = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, write),
-                     lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
-                     {ok, length(Records)}
-                 end,
-  mnesia:activity(transaction, SelectDelete).
+select_delete(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}]) ->
+    SelectDelete =
+        fun() ->
+           Records = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, write),
+           lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
+           {ok, length(Records)}
+        end,
+    mnesia:activity(transaction, SelectDelete).
 
 %%
 %% @doc Should backup the tables in the schema.
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_table(atom()) -> ok | {error, Reason :: term()}.
-backup_table(_Table)->
-  Backup = fun() -> mnesia:backup(mnesia:schema()) end,
-  mnesia:activity(transaction, Backup).
+backup_table(_Table) ->
+    Backup = fun() -> mnesia:backup(mnesia:schema()) end,
+    mnesia:activity(transaction, Backup).
 
 %% @see https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_tables() -> ok | {error, Reason :: term()}.
-backup_tables()->
-  {error, not_implemented}.
+backup_tables() ->
+    {error, not_implemented}.
 
 %% @doc Select based on key value.
 -spec select(Table :: atom(), Key :: term()) -> [tuple()].
-select(Table, Key)->
-  Select = fun () ->
-               case mnesia:read({Table, Key}) of
-                 [Record] -> [{Key,Record}];
-                 _ -> []
-               end
-           end,
-  mnesia:activity(transaction, Select).
+select(Table, Key) ->
+    Select =
+        fun() ->
+           case mnesia:read({Table, Key}) of
+               [Record] -> [{Key, Record}];
+               _ -> []
+           end
+        end,
+    mnesia:activity(transaction, Select).
 
 %% @doc Select using ETS match spec converted to Mnesia's match_object pattern
 -spec select(atom(), list(), infinite | integer()) -> [tuple()].
 select(Table, [{{{ZoneName, Fqdn}, _}, _, _}], _Limit) ->
-  SelectFun = fun() ->
-    Records  = mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, read),
-    [Record || {_, _, _, Record} <- Records] 
-  end,
-  mnesia:activity(transaction, SelectFun);
+    SelectFun =
+        fun() ->
+           Records = mnesia:match_object(Table, {zone_records, ZoneName, Fqdn, '_'}, read),
+           [Record || {_, _, _, Record} <- Records]
+        end,
+    mnesia:activity(transaction, SelectFun);
 select(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}], _Limit) ->
-  SelectFun = fun() ->
-     Records = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, read),
-     [Record || {_, _, _, _, Record} <- Records] 
-  end,
-  mnesia:activity(transaction, SelectFun).
+    SelectFun =
+        fun() ->
+           Records = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, read),
+           [Record || {_, _, _, _, Record} <- Records]
+        end,
+    mnesia:activity(transaction, SelectFun).
 
 %% @doc Wrapper for foldl.
--spec foldl(fun(), list(), atom())  -> Acc :: term() | {error, Reason :: term()}.
+-spec foldl(fun(), list(), atom()) -> Acc :: term() | {error, Reason :: term()}.
 foldl(Iterator, _Acc, Table) ->
-  Exec = fun() -> mnesia:foldl(Iterator, [], Table) end,
-  case mnesia:is_transaction() of
-    true ->
-      Exec();
-    false ->
-      mnesia:activity(transaction, Exec)
-  end.
+    Exec = fun() -> mnesia:foldl(Iterator, [], Table) end,
+    case mnesia:is_transaction() of
+        true ->
+            Exec();
+        false ->
+            mnesia:activity(transaction, Exec)
+    end.
 
 %% @doc Clear all objects from given table in mnesia DB.
 -spec empty_table(atom()) -> ok | {aborted, term()}.
 empty_table(Table) ->
-  case mnesia:clear_table(Table) of
-    {atomic, ok} ->
-      ok;
-    {aborted, Reason} ->
-      {error, Reason}
-  end.
+    case mnesia:clear_table(Table) of
+        {atomic, ok} ->
+            ok;
+        {aborted, Reason} ->
+            {error, Reason}
+    end.
 
 %% @doc Lists the contents of the given table.
--spec list_table(atom()) ->
-  [] | [#zone{}] | [#authorities{}] | [tuple()] | {error, doesnt_exist}.
+-spec list_table(atom()) -> [] | [#zone{}] | [#authorities{}] | [tuple()] | {error, doesnt_exist}.
 list_table(zones) ->
-  Pattern = #zone{name ='_', version = '_', authority = '_', record_count = '_',
-                  records = '_', records_by_name = '_', records_by_type = '_'},
-  mnesia:dirty_match_object(zones, Pattern);
+    Pattern =
+        #zone{name = '_',
+              version = '_',
+              authority = '_',
+              record_count = '_',
+              records = '_',
+              records_by_name = '_',
+              records_by_type = '_'},
+    mnesia:dirty_match_object(zones, Pattern);
 list_table(authorities) ->
-  Pattern = #authorities{owner_name = '_', ttl = '_', class = '_', name_server = '_', email_addr = '_',
-                         serial_num = '_', refresh = '_', retry = '_', expiry = '_', nxdomain = '_'},
-  select(authorities, Pattern, 0);
+    Pattern =
+        #authorities{owner_name = '_',
+                     ttl = '_',
+                     class = '_',
+                     name_server = '_',
+                     email_addr = '_',
+                     serial_num = '_',
+                     refresh = '_',
+                     retry = '_',
+                     expiry = '_',
+                     nxdomain = '_'},
+    select(authorities, Pattern, 0);
 list_table(_Name) ->
-  {error, doesnt_exist}.
+    {error, doesnt_exist}.
 
 %% Private
 %% @doc Checks if mnesia is started, if not if starts mnesia.
 -spec ensure_mnesia_started() -> ok | {error, any()}.
 ensure_mnesia_started() ->
-  case application:start(mnesia) of
-    ok ->
-      ok;
-    {error,{already_started, mnesia}} ->
-      ok;
-    {error, Reason} ->
-      {error, Reason}
-  end.
+    case application:start(mnesia) of
+        ok ->
+            ok;
+        {error, {already_started, mnesia}} ->
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.

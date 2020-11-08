@@ -26,40 +26,36 @@
 
 %% API
 -export([start_link/4]).
-
-
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 -define(SERVER, ?MODULE).
 
--record(state, {cb,
-                sock,
-                server_state}).
+-record(state, {cb, sock, server_state}).
 
 -type state() :: term().
 
 -callback init(term()) -> {ok, State :: state()}.
 -callback handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: state()) ->
-  {reply, Reply :: term(), NewState :: state()} |
-  {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
-  {noreply, NewState :: state()} |
-  {noreply, NewState :: state(), timeout() | hibernate} |
-  {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
-  {stop, Reason :: term(), NewState :: state()}.
+                         {reply, Reply :: term(), NewState :: state()} |
+                         {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
+                         {noreply, NewState :: state()} |
+                         {noreply, NewState :: state(), timeout() | hibernate} |
+                         {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
+                         {stop, Reason :: term(), NewState :: state()}.
 -callback handle_cast(Request :: term(), State :: state()) ->
-  {noreply, NewState :: state()} |
-  {noreply, NewState :: state(), timeout() | hibernate} |
-  {stop, Reason :: term(), NewState :: term()}.
+                         {noreply, NewState :: state()} | {noreply, NewState :: state(), timeout() | hibernate} | {stop, Reason :: term(), NewState :: term()}.
 -callback handle_info(Info :: timeout | term(), State :: state()) ->
-  {noreply, NewState :: state()} |
-  {noreply, NewState :: state(), timeout() | hibernate} |
-  {stop, Reason :: term(), NewState :: state()}.
--callback terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), State :: state()) -> term().
+                         {noreply, NewState :: state()} | {noreply, NewState :: state(), timeout() | hibernate} | {stop, Reason :: term(), NewState :: state()}.
+-callback terminate(Reason :: normal | shutdown | {shutdown, term()} | term(), State :: state()) -> term().
 -callback sock_opts() -> [gen_tcp:listen_option()].
 -callback new_connection(Socket :: gen_tcp:socket(), State :: state()) ->
-  {ok, NewServerState :: state()} | {stop, Reason :: term(), NewServerState :: state()}.
+                            {ok, NewServerState :: state()} | {stop, Reason :: term(), NewServerState :: state()}.
 
 -export_type([state/0]).
 
@@ -71,82 +67,87 @@
 %% Result = {ok, pid()} | {error, any()}
 %% @doc Start server listening on IpAddr:Port
 start_link(CallbackModule, IpAddr, Port, InitParams) ->
-  gen_server:start_link(?MODULE, [CallbackModule, IpAddr, Port, InitParams], []).
+    gen_server:start_link(?MODULE, [CallbackModule, IpAddr, Port, InitParams], []).
 
 %% @hidden
 init([CallbackModule, IpAddr, Port, InitParams]) ->
-  case CallbackModule:init(InitParams) of
-    {ok, ServerState} ->
-      case listen_on(CallbackModule, IpAddr, Port) of
-        {ok, Sock} ->
-          process_flag(trap_exit, true),
-          {ok, #state{cb=CallbackModule, sock=Sock, server_state=ServerState}};
-        Error ->
-          CallbackModule:terminate(Error, ServerState),
-          Error
-      end;
-    Err ->
-      Err
-  end.
+    case CallbackModule:init(InitParams) of
+        {ok, ServerState} ->
+            case listen_on(CallbackModule, IpAddr, Port) of
+                {ok, Sock} ->
+                    process_flag(trap_exit, true),
+                    {ok,
+                     #state{cb = CallbackModule,
+                            sock = Sock,
+                            server_state = ServerState}};
+                Error ->
+                    CallbackModule:terminate(Error, ServerState),
+                    Error
+            end;
+        Err ->
+            Err
+    end.
 
 %% @hidden
-handle_call(Request, From, #state{cb=Callback, server_state=ServerState}=State) ->
-  case Callback:handle_call(Request, From, ServerState) of
-    {reply, Reply, NewServerState} ->
-      {reply, Reply, State#state{server_state=NewServerState}};
-    {reply, Reply, NewServerState, Arg} when Arg =:= hibernate orelse is_number(Arg) ->
-      {reply, Reply, State#state{server_state=NewServerState}, Arg};
-    {noreply, NewServerState} ->
-      {noreply, State#state{server_state=NewServerState}};
-    {noreply, NewServerState, Arg} when Arg =:= hibernate orelse is_number(Arg) ->
-      {noreply, State#state{server_state=NewServerState}, Arg};
-    {stop, Reason, NewServerState} ->
-      {stop, Reason, State#state{server_state=NewServerState}};
-    {stop, Reason, Reply, NewServerState} ->
-      {stop, Reason, Reply, State#state{server_state=NewServerState}}
-  end.
+handle_call(Request, From, #state{cb = Callback, server_state = ServerState} = State) ->
+    case Callback:handle_call(Request, From, ServerState) of
+        {reply, Reply, NewServerState} ->
+            {reply, Reply, State#state{server_state = NewServerState}};
+        {reply, Reply, NewServerState, Arg} when Arg =:= hibernate orelse is_number(Arg) ->
+            {reply, Reply, State#state{server_state = NewServerState}, Arg};
+        {noreply, NewServerState} ->
+            {noreply, State#state{server_state = NewServerState}};
+        {noreply, NewServerState, Arg} when Arg =:= hibernate orelse is_number(Arg) ->
+            {noreply, State#state{server_state = NewServerState}, Arg};
+        {stop, Reason, NewServerState} ->
+            {stop, Reason, State#state{server_state = NewServerState}};
+        {stop, Reason, Reply, NewServerState} ->
+            {stop, Reason, Reply, State#state{server_state = NewServerState}}
+    end.
 
 %% @hidden
-handle_cast(Msg, #state{cb=Callback, server_state=ServerState}=State) ->
-  case Callback:handle_cast(Msg, ServerState) of
-    {noreply, NewServerState} ->
-      {noreply, State#state{server_state=NewServerState}};
-    {noreply, NewServerState, Arg} when Arg =:= hibernate orelse is_number(Arg) ->
-      {noreply, State#state{server_state=NewServerState}, Arg};
-    {stop, Reason, NewServerState} ->
-      {stop, Reason, State#state{server_state=NewServerState}}
-  end.
+handle_cast(Msg, #state{cb = Callback, server_state = ServerState} = State) ->
+    case Callback:handle_cast(Msg, ServerState) of
+        {noreply, NewServerState} ->
+            {noreply, State#state{server_state = NewServerState}};
+        {noreply, NewServerState, Arg} when Arg =:= hibernate orelse is_number(Arg) ->
+            {noreply, State#state{server_state = NewServerState}, Arg};
+        {stop, Reason, NewServerState} ->
+            {stop, Reason, State#state{server_state = NewServerState}}
+    end.
 
 %% @hidden
-handle_info({inet_async, ListSock, _Ref, {ok, CliSocket}}, #state{cb=Callback, server_state=ServerState}=State) ->
-  inet_db:register_socket(CliSocket, inet_tcp),
-  case Callback:new_connection(CliSocket, ServerState) of
-    {ok, NewServerState} ->
-      prim_inet:async_accept(ListSock, -1),
-      {noreply, State#state{server_state=NewServerState}};
-    {stop, Reason, NewServerState} ->
-      {stop, Reason, State#state{server_state=NewServerState}}
-  end;
-
-handle_info(Info, #state{cb=Callback, server_state=ServerState}=State) ->
-  case Callback:handle_info(Info, ServerState) of
-    {noreply, NewServerState} ->
-      {noreply, State#state{server_state=NewServerState}};
-    {noreply, NewServerState, Arg} when Arg =:= hibernate orelse is_number(Arg) ->
-      {noreply, State#state{server_state=NewServerState}, Arg};
-    {stop, Reason, NewServerState} ->
-      {stop, Reason, State#state{server_state=NewServerState}}
-  end.
+handle_info({inet_async, ListSock, _Ref, {ok, CliSocket}}, #state{cb = Callback, server_state = ServerState} = State) ->
+    inet_db:register_socket(CliSocket, inet_tcp),
+    case Callback:new_connection(CliSocket, ServerState) of
+        {ok, NewServerState} ->
+            prim_inet:async_accept(ListSock, -1),
+            {noreply, State#state{server_state = NewServerState}};
+        {stop, Reason, NewServerState} ->
+            {stop, Reason, State#state{server_state = NewServerState}}
+    end;
+handle_info(Info, #state{cb = Callback, server_state = ServerState} = State) ->
+    case Callback:handle_info(Info, ServerState) of
+        {noreply, NewServerState} ->
+            {noreply, State#state{server_state = NewServerState}};
+        {noreply, NewServerState, Arg} when Arg =:= hibernate orelse is_number(Arg) ->
+            {noreply, State#state{server_state = NewServerState}, Arg};
+        {stop, Reason, NewServerState} ->
+            {stop, Reason, State#state{server_state = NewServerState}}
+    end.
 
 %% @hidden
-terminate(Reason, #state{cb=Callback, sock=Sock, server_state=ServerState}) ->
-  gen_tcp:close(Sock),
-  Callback:terminate(Reason, ServerState),
-  ok.
+terminate(Reason,
+          #state{cb = Callback,
+                 sock = Sock,
+                 server_state = ServerState}) ->
+    gen_tcp:close(Sock),
+    Callback:terminate(Reason, ServerState),
+    ok.
 
 %% @hidden
 code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
+    {ok, State}.
 
 %% Internal functions
 
@@ -157,11 +158,11 @@ code_change(_OldVsn, State, _Extra) ->
 %% Port = integer()
 %% Result = {ok, port()} | {error, any()}
 listen_on(CallbackModule, IpAddr, Port) ->
-  SockOpts = [{ip, IpAddr}|CallbackModule:sock_opts()],
-  case gen_tcp:listen(Port, SockOpts) of
-    {ok, LSock} ->
-      {ok, _Ref} = prim_inet:async_accept(LSock, -1),
-      {ok, LSock};
-    Err ->
-      Err
-  end.
+    SockOpts = [{ip, IpAddr} | CallbackModule:sock_opts()],
+    case gen_tcp:listen(Port, SockOpts) of
+        {ok, LSock} ->
+            {ok, _Ref} = prim_inet:async_accept(LSock, -1),
+            {ok, LSock};
+        Err ->
+            Err
+    end.
