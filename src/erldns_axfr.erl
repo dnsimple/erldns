@@ -17,8 +17,7 @@
 
 -include_lib("dns_erlang/include/dns.hrl").
 
--export([is_enabled/2,
-         optionally_append_soa/1]).
+-export([is_enabled/2, optionally_append_soa/1]).
 
 %% Determine if AXFR is enabled for the given request host.
 is_enabled(Host, Metadata) ->

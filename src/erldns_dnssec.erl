@@ -20,8 +20,7 @@
 -include("erldns.hrl").
 
 -export([handle/4]).
--export([key_rrset_signer/2,
-         zone_rrset_signer/2]).
+-export([key_rrset_signer/2, zone_rrset_signer/2]).
 -export([rrsig_for_zone_rrset/2]).
 -export([maybe_sign_rrset/3]).
 

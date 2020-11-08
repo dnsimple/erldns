@@ -18,8 +18,7 @@
 -behavior(gen_nb_server).
 
 % API
--export([start_link/2,
-         start_link/4]).
+-export([start_link/2, start_link/4]).
 % Gen server hooks
 -export([init/1,
          handle_call/3,

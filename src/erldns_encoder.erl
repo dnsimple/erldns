@@ -18,8 +18,7 @@
 
 -include_lib("dns_erlang/include/dns_records.hrl").
 
--export([encode_message/1,
-         encode_message/2]).
+-export([encode_message/1, encode_message/2]).
 
 %% @doc Encode the DNS message into its binary representation.
 %%
