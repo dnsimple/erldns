@@ -41,8 +41,7 @@ handle_event({_M, start_servers}, State) ->
                                start => { erldns_server_sup, start_link, []},
                                restart => permanent,
                                shutdown => 5000,
-                               type => supervisor,
-                               modules => [erldns_sup]}),
+                               type => supervisor}),
       erldns_events:notify({?MODULE, servers_started}),
       {ok, State#state{servers_running = true}};
     _ ->
