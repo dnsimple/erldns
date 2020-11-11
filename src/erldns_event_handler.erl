@@ -36,7 +36,13 @@ handle_event({_M, start_servers}, State) ->
     false ->
       % Start up the UDP and TCP servers
       lager:info("Starting the UDP and TCP supervisor"),
-      erldns_server_sup:start_link(),
+      supervisor:start_child(erldns_sup, #{
+                               id => erldns_sup,
+                               start => { erldns_server_sup, start_link, []},
+                               restart => permanent,
+                               shutdown => 5000,
+                               type => supervisor,
+                               modules => [erldns_sup]}),
       erldns_events:notify({?MODULE, servers_started}),
       {ok, State#state{servers_running = true}};
     _ ->
