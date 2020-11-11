@@ -131,6 +131,7 @@ resolve_authoritative(Message, Qname, Qtype, Zone, Host, CnameChain) ->
       Result;
     ZonecutRecords ->
       CnameAnswers = lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), Result#dns_message.answers),
+      io:format(user, "cname: ~p", [CnameAnswers]),
       FilteredCnameAnswers = lists:filter(fun(RR) ->
                                               case detect_zonecut(Zone, RR#dns_rr.data#dns_rrdata_cname.dname) of
                                                 [] -> false;
@@ -155,13 +156,35 @@ resolve_authoritative_zone_cut_test() ->
   erldns_handler:start_link(),
   Z = #zone{name = ZoneName = <<"example.com">>, authority = Authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_SOA}]},
   Q = #dns_message{questions = [#dns_query{name = Qname = <<"delegated.example.com">>, type = Qtype = ?DNS_TYPE_A}]},
-  Delegation = [#dns_rr{name = Qname, type = ?DNS_TYPE_NS}],
-  erldns_zone_cache:put_zone({ZoneName, <<"">>, Authority ++ Delegation}), 
+  NsRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NS}],
+  erldns_zone_cache:put_zone({ZoneName, <<"_">>, Authority ++ NsRecords}),
+  A = resolve_authoritative(Q, Qname, Qtype, Z, {}, []),
+  ?assertEqual(false, A#dns_message.aa),
+  ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
+  ?assertEqual(NsRecords, A#dns_message.authority),
+  ?assertEqual([], A#dns_message.answers),
+  erldns_zone_cache:delete_zone(ZoneName).
+
+resolve_authoritative_zone_cut_with_cnames_test() ->
+  erldns_zone_cache:start_link(),
+  erldns_handler:start_link(),
+  Qname = <<"delegated.example.com">>,
+  CnameRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_CNAME, data = #dns_rrdata_cname{dname = <<"delegated-ns.example.com">>}}],
+  NsRecords = [#dns_rr{name = <<"delegated-ns.example.com">>, type = ?DNS_TYPE_NS}],
+  Z = #zone{
+         name = ZoneName = <<"example.com">>,
+         authority = Authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_SOA}]
+        },
+  Q = #dns_message{
+         questions = [#dns_query{name = Qname, type = Qtype = ?DNS_TYPE_A}]
+         },
+  erldns_zone_cache:put_zone({ZoneName, <<"_">>, Authority ++ NsRecords ++ CnameRecords}),
   A = resolve_authoritative(Q, Qname, Qtype, Z, {}, _CnameChain = []),
   ?assertEqual(false, A#dns_message.aa),
   ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
-  ?assertEqual(Delegation, A#dns_message.authority),
-  ?assertEqual([], A#dns_message.answers).
+  ?assertEqual(NsRecords, A#dns_message.authority),
+  ?assertEqual(CnameRecords, A#dns_message.answers),
+  erldns_zone_cache:delete_zone(ZoneName).
 -endif.
 
 %% Determine if there is a CNAME anywhere in the records with the given Qname.
