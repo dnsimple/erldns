@@ -131,7 +131,6 @@ resolve_authoritative(Message, Qname, Qtype, Zone, Host, CnameChain) ->
       Result;
     ZonecutRecords ->
       CnameAnswers = lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), Result#dns_message.answers),
-      io:format(user, "cname: ~p", [CnameAnswers]),
       FilteredCnameAnswers = lists:filter(fun(RR) ->
                                               case detect_zonecut(Zone, RR#dns_rr.data#dns_rrdata_cname.dname) of
                                                 [] -> false;
@@ -144,8 +143,9 @@ resolve_authoritative(Message, Qname, Qtype, Zone, Host, CnameChain) ->
 -ifdef(TEST).
 resolve_authoritative_host_not_found_test() ->
   erldns_zone_cache:start_link(),
+  Qname = <<"example.com">>,
   Z = #zone{name = <<"example.com">>, authority = Authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_SOA}]},
-  Q = #dns_message{questions = [#dns_query{name = Qname = <<"example.com">>, type = Qtype = ?DNS_TYPE_A}]},
+  Q = #dns_message{questions = [#dns_query{name = Qname, type = Qtype = ?DNS_TYPE_A}]},
   A = resolve_authoritative(Q, Qname, Qtype, Z, {}, _CnameChain = []),
   ?assertEqual(true, A#dns_message.aa),
   ?assertEqual(?DNS_RCODE_NXDOMAIN, A#dns_message.rc),
@@ -154,9 +154,10 @@ resolve_authoritative_host_not_found_test() ->
 resolve_authoritative_zone_cut_test() ->
   erldns_zone_cache:start_link(),
   erldns_handler:start_link(),
-  Z = #zone{name = ZoneName = <<"example.com">>, authority = Authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_SOA}]},
-  Q = #dns_message{questions = [#dns_query{name = Qname = <<"delegated.example.com">>, type = Qtype = ?DNS_TYPE_A}]},
+  Qname = <<"delegated.example.com">>,
   NsRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NS}],
+  Z = #zone{name = ZoneName = <<"example.com">>, authority = Authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_SOA}]},
+  Q = #dns_message{questions = [#dns_query{name = Qname, type = Qtype = ?DNS_TYPE_A}]},
   erldns_zone_cache:put_zone({ZoneName, <<"_">>, Authority ++ NsRecords}),
   A = resolve_authoritative(Q, Qname, Qtype, Z, {}, []),
   ?assertEqual(false, A#dns_message.aa),
