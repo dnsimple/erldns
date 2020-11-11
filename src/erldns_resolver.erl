@@ -20,6 +20,10 @@
 
 -export([resolve/3]).
 
+-ifdef(TEST).
+-include_lib("proper/include/proper.hrl").
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 
 %% @doc Resolve the first question in the message. If no message is present, return the original
 %% message. If multiple questions are present, only resolve the first question.
@@ -34,6 +38,13 @@ resolve(Message, AuthorityRecords, Host) ->
     [Question] -> resolve_question(Message, AuthorityRecords, Host, Question);
     [Question|_] -> resolve_question(Message, AuthorityRecords, Host, Question)
   end.
+
+-ifdef(TEST).
+resolve_no_question_returns_message_test() ->
+  Q = #dns_message{questions = []},
+  ?assertEqual(Q, resolve(Q, [], {1, 1, 1, 1})).
+
+-endif.
 
 
 %% @doc Start the resolution process on the given question.
@@ -55,6 +66,13 @@ resolve_question(Message, AuthorityRecords, Host, Question) when is_record(Quest
       resolve_qname_and_qtype(Message#dns_message{ra = false, ad = false, cd = false}, AuthorityRecords, Question#dns_query.name, Qtype, Host)
   end.
 
+-ifdef(TEST).
+resolve_rrsig_refused_test() ->
+  Q = #dns_message{questions = [#dns_query{type = ?DNS_TYPE_RRSIG}]},
+  A = resolve(Q, [], {1, 1, 1, 1}),
+  ?assertEqual(?DNS_RCODE_REFUSED, A#dns_message.rc).
+-endif.
+
 %% @doc With the extracted Qname and Qtype in hand, find the nearest zone
 %% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
 %%
@@ -62,15 +80,24 @@ resolve_question(Message, AuthorityRecords, Host, Question) when is_record(Quest
 -spec resolve_qname_and_qtype(
         Message :: dns:message(), [dns:rr()], dns:dname(), dns:type(), dns:ip()) -> dns:message().
 resolve_qname_and_qtype(Message, AuthorityRecords, Qname, Qtype, Host) ->
-  case erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)) of
-    {error, not_authoritative} ->
-      % No SOA was found for the Qname so we return the root hints
-      % Note: it seems odd that we are indicating we are authoritative here.
-      optionally_add_root_hints(Message#dns_message{aa = true, rc = ?DNS_RCODE_NOERROR});
-    Zone ->
+  case AuthorityRecords of
+    [] ->
+      % Authority records is empty, refuse query
+      Message#dns_message{rc = ?DNS_RCODE_REFUSED}; 
+    _ ->
+      % Authority records present, continue resolution
+      Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)),
       ResolvedMessage = resolve_authoritative(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
       sort_answers(erldns_dnssec:handle(additional_processing(erldns_records:rewrite_soa_ttl(ResolvedMessage), Host, Zone), Zone, Qname, Qtype))
   end.
+
+-ifdef(TEST).
+resolve_no_authority_refused_test() ->
+  Q = #dns_message{questions = [#dns_query{type = Qtype = ?DNS_TYPE_A, name = Qname = <<"example.com">>}]},
+  A = resolve_qname_and_qtype(Q, [], Qname, Qtype, {1, 1, 1, 1}),
+  ?assertEqual(?DNS_RCODE_REFUSED, A#dns_message.rc).
+-endif.
+
 
 %% An SOA was found, thus we are authoritative and have the zone.
 %%
@@ -113,6 +140,29 @@ resolve_authoritative(Message, Qname, Qtype, Zone, Host, CnameChain) ->
       Message#dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, authority = ZonecutRecords, answers = FilteredCnameAnswers}
   end.
 
+-ifdef(TEST).
+resolve_authoritative_host_not_found_test() ->
+  erldns_zone_cache:start_link(),
+  Z = #zone{name = <<"example.com">>, authority = Authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_SOA}]},
+  Q = #dns_message{questions = [#dns_query{name = Qname = <<"example.com">>, type = Qtype = ?DNS_TYPE_A}]},
+  A = resolve_authoritative(Q, Qname, Qtype, Z, {}, _CnameChain = []),
+  ?assertEqual(true, A#dns_message.aa),
+  ?assertEqual(?DNS_RCODE_NXDOMAIN, A#dns_message.rc),
+  ?assertEqual(Authority, A#dns_message.authority).
+
+resolve_authoritative_zone_cut_test() ->
+  erldns_zone_cache:start_link(),
+  erldns_handler:start_link(),
+  Z = #zone{name = ZoneName = <<"example.com">>, authority = Authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_SOA}]},
+  Q = #dns_message{questions = [#dns_query{name = Qname = <<"delegated.example.com">>, type = Qtype = ?DNS_TYPE_A}]},
+  Delegation = [#dns_rr{name = Qname, type = ?DNS_TYPE_NS}],
+  erldns_zone_cache:put_zone({ZoneName, <<"">>, Authority ++ Delegation}), 
+  A = resolve_authoritative(Q, Qname, Qtype, Z, {}, _CnameChain = []),
+  ?assertEqual(false, A#dns_message.aa),
+  ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
+  ?assertEqual(Delegation, A#dns_message.authority),
+  ?assertEqual([], A#dns_message.answers).
+-endif.
 
 %% Determine if there is a CNAME anywhere in the records with the given Qname.
 exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zone) ->
