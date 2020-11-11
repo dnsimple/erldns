@@ -1,4 +1,5 @@
 %% Copyright (c) 2015, SiftLogic LLC
+%% Copyright (c) 2015-2020, DNSimple Corporation
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
