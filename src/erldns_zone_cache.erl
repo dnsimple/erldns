@@ -341,7 +341,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
           erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), Type}, '_'},[],[true]}]),
 
           % remove the RRSIG for the given record type
-          {_RRSigsCovering, RRSigsNotCovering} = lists:partition(erldns_records:match_type_covered(Type), get_records_by_name_and_type(ZoneName, ?DNS_TYPE_RRSIG_NUMBER)),
+          {_RRSigsCovering, RRSigsNotCovering} = lists:partition(erldns_records:match_type_covered(Type), get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_RRSIG_NUMBER)),
           erldns_storage:insert(zone_records_typed, {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), ?DNS_TYPE_RRSIG_NUMBER}, RRSigsNotCovering}),
 
           % only write counter if called explicitly with Counter value i.e. different than 0.
