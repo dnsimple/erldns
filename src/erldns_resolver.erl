@@ -49,8 +49,6 @@ resolve_no_question_returns_message_test() ->
 
 %% @doc Start the resolution process on the given question.
 %% Step 1: Set the RA bit to false as we do not handle recursive queries.
-%%
-%% Refuse all RRSIG requests.
 -spec(resolve_question(
         Message :: dns:message(),
         AuthorityRecords :: [dns:rr()],
@@ -60,6 +58,7 @@ resolve_no_question_returns_message_test() ->
 resolve_question(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
   case Question#dns_query.type of
     ?DNS_TYPE_RRSIG ->
+      % Refuse all RRSIG requests.
       Message#dns_message{ra = false, ad = false, cd = false, rc = ?DNS_RCODE_REFUSED};
     Qtype ->
       check_dnssec(Message, Host, Question),
