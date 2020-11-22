@@ -122,6 +122,7 @@ encode_zone_to_json(Zone, Encoders) ->
                  [{<<"zone">>,
                    [{<<"name">>, Zone#zone.name},
                     {<<"version">>, Zone#zone.version},
+                    {<<"records_count">>, length(FilteredRecords)},
                     {<<"records">>, FilteredRecords}]}]}]).                              % Note: Private key material is purposely omitted
 
 encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
