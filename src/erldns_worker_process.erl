@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2018, DNSimple Corporation
+%% Copyright (c) 2012-2020, DNSimple Corporation
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
@@ -25,96 +25,104 @@
          handle_cast/2,
          handle_info/2,
          terminate/2,
-         code_change/3
-        ]).
+         code_change/3]).
 
 -define(MAX_PACKET_SIZE, 512).
 -define(REDIRECT_TO_LOOPBACK, false).
 -define(LOOPBACK_DEST, {127, 0, 0, 10}).
 
 -if(?REDIRECT_TO_LOOPBACK).
+
 -define(DEST_HOST(_Host), ?LOOPBACK_DEST).
+
 -else.
+
 -define(DEST_HOST(Host), Host).
+
 -endif.
 
 -record(state, {}).
 
 start_link(Args) ->
-  gen_server:start_link(?MODULE, Args, []).
+    gen_server:start_link(?MODULE, Args, []).
 
 init(_Args) ->
-  {ok, #state{}}.
+    {ok, #state{}}.
 
 % Process a TCP request. Does not truncate the response.
 handle_call({process, DecodedMessage, Socket, {tcp, Address}}, _From, State) ->
-  % Uncomment this and the function implementation to simulate a timeout when
-  % querying www.example.com with the test zones
-  % simulate_timeout(DecodedMessage),  
-  
-  Response = erldns_handler:handle(DecodedMessage, {tcp, Address}),
-  EncodedMessage = erldns_encoder:encode_message(Response),
-  send_tcp_message(Socket, EncodedMessage),
-  {reply, ok, State}; 
-
+    % Uncomment this and the function implementation to simulate a timeout when
+    % querying www.example.com with the test zones
+    % simulate_timeout(DecodedMessage),
+    Response = erldns_handler:handle(DecodedMessage, {tcp, Address}),
+    EncodedMessage = erldns_encoder:encode_message(Response),
+    send_tcp_message(Socket, EncodedMessage),
+    {reply, ok, State};
 % Process a UDP request. May truncate the response.
 handle_call({process, DecodedMessage, Socket, Port, {udp, Host}}, _From, State) ->
-  % Uncomment this and the function implementation to simulate a timeout when
-  % querying www.example.com with the test zones
-  % simulate_timeout(DecodedMessage),
+    % Uncomment this and the function implementation to simulate a timeout when
+    % querying www.example.com with the test zones
+    % simulate_timeout(DecodedMessage),
+    Response = erldns_handler:handle(DecodedMessage, {udp, Host}),
+    DestHost = ?DEST_HOST(Host),
 
-  Response = erldns_handler:handle(DecodedMessage, {udp, Host}),
-  DestHost = ?DEST_HOST(Host),
-
-  case erldns_encoder:encode_message(Response, [{'max_size', max_payload_size(Response)}]) of
-    {false, EncodedMessage} ->
-      % lager:debug("Sending encoded response to ~p", [DestHost]),
-      gen_udp:send(Socket, DestHost, Port, EncodedMessage);
-    {true, EncodedMessage, Message} when is_record(Message, dns_message)->
-      gen_udp:send(Socket, DestHost, Port, EncodedMessage);
-    {false, EncodedMessage, _TsigMac} ->
-      gen_udp:send(Socket, DestHost, Port, EncodedMessage);
-    {true, EncodedMessage, _TsigMac, _Message} ->
-      gen_udp:send(Socket, DestHost, Port, EncodedMessage)
-  end,
-  {reply, ok, State}.
+    case erldns_encoder:encode_message(Response, [{max_size, max_payload_size(Response)}]) of
+        {false, EncodedMessage} ->
+            % lager:debug("Sending encoded response to ~p", [DestHost]),
+            gen_udp:send(Socket, DestHost, Port, EncodedMessage);
+        {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
+            gen_udp:send(Socket, DestHost, Port, EncodedMessage);
+        {false, EncodedMessage, _TsigMac} ->
+            gen_udp:send(Socket, DestHost, Port, EncodedMessage);
+        {true, EncodedMessage, _TsigMac, _Message} ->
+            gen_udp:send(Socket, DestHost, Port, EncodedMessage)
+    end,
+    {reply, ok, State}.
 
 handle_cast(_Msg, State) ->
-  {noreply, State}.
-handle_info(_Info, State) ->
-  {noreply, State}.
-terminate(_Reason, _State) ->
-  ok.
-code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
+    {noreply, State}.
 
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
 %% Internal private functions
 
 send_tcp_message(Socket, EncodedMessage) ->
-  BinLength = byte_size(EncodedMessage),
-  TcpEncodedMessage = <<BinLength:16, EncodedMessage/binary>>,
-  gen_tcp:send(Socket, TcpEncodedMessage).
+    BinLength = byte_size(EncodedMessage),
+    TcpEncodedMessage = <<BinLength:16, EncodedMessage/binary>>,
+    gen_tcp:send(Socket, TcpEncodedMessage).
 
 %% Determine the max payload size by looking for additional
 %% options passed by the client.
 max_payload_size(Message) ->
-  case Message#dns_message.additional of
-    [Opt|_] when is_record(Opt, dns_optrr) ->
-      case Opt#dns_optrr.udp_payload_size of
-        [] -> ?MAX_PACKET_SIZE;
-        _ -> Opt#dns_optrr.udp_payload_size
-      end;
-    _ -> ?MAX_PACKET_SIZE
-  end.
+    case Message#dns_message.additional of
+        [Opt | _] when is_record(Opt, dns_optrr) ->
+            case Opt#dns_optrr.udp_payload_size of
+                [] ->
+                    ?MAX_PACKET_SIZE;
+                _ ->
+                    Opt#dns_optrr.udp_payload_size
+            end;
+        _ ->
+            ?MAX_PACKET_SIZE
+    end.
 
 %simulate_timeout(DecodedMessage) ->
   %[Question] = DecodedMessage#dns_message.questions,
   %Name = Question#dns_query.name,
   %lager:info("qname: ~p", [Name]),
   %case Name of
+
     %<<"www.example.com">> ->
       %timer:sleep(3000);
+
     %_ ->
       %ok
+
   %end.

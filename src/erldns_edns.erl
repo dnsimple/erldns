@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2018, DNSimple Corporation
+%% Copyright (c) 2012-2020, DNSimple Corporation
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
@@ -26,14 +26,14 @@
 %% * {dnssec, true}
 -spec get_opts(dns:message()) -> [proplists:property()].
 get_opts(Message) ->
-  get_opts(Message#dns_message.additional, []).
+    get_opts(Message#dns_message.additional, []).
 
--spec get_opts([dns:rr()|dns:optrr()], [proplists:property()]) -> [proplists:property()].
+-spec get_opts([dns:rr() | dns:optrr()], [proplists:property()]) -> [proplists:property()].
 get_opts([], Opts) ->
-  Opts;
-get_opts([RR|Rest], Opts) when is_record(RR, dns_rr) ->
-  get_opts(Rest, Opts);
-get_opts([RR|Rest], Opts) when is_record(RR, dns_optrr) and RR#dns_optrr.dnssec ->
-  get_opts(Rest, Opts ++ [{dnssec, true}]);
-get_opts([_RR|Rest], Opts) ->
-  get_opts(Rest, Opts).
+    Opts;
+get_opts([RR | Rest], Opts) when is_record(RR, dns_rr) ->
+    get_opts(Rest, Opts);
+get_opts([RR | Rest], Opts) when is_record(RR, dns_optrr) and RR#dns_optrr.dnssec ->
+    get_opts(Rest, Opts ++ [{dnssec, true}]);
+get_opts([_RR | Rest], Opts) ->
+    get_opts(Rest, Opts).

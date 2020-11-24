@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2018, DNSimple Corporation
+%% Copyright (c) 2012-2020, DNSimple Corporation
 %%
 %% Permission to use, copy, modify, and/or distribute this software for any
 %% purpose with or without fee is hereby granted, provided that the above
@@ -16,6 +16,7 @@
 -module(sample_custom_zone_parser).
 
 -include_lib("dns_erlang/include/dns.hrl").
+
 -include("erldns.hrl").
 
 -export([json_record_to_erlang/1]).
@@ -23,6 +24,9 @@
 -define(DNS_TYPE_SAMPLE, 40000).
 
 json_record_to_erlang([Name, <<"SAMPLE">>, Ttl, Data, _Context]) ->
-  #dns_rr{name = Name, type = ?DNS_TYPE_SAMPLE, data = erldns_config:keyget(<<"dname">>, Data), ttl = Ttl};
-
-json_record_to_erlang(_) -> {}.
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_SAMPLE,
+            data = erldns_config:keyget(<<"dname">>, Data),
+            ttl = Ttl};
+json_record_to_erlang(_) ->
+    {}.
