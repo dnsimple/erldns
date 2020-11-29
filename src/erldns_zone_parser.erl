@@ -65,7 +65,7 @@ register_parsers(Modules) ->
     lager:info("Registering custom parsers (modules: ~p)", [Modules]),
     gen_server:call(?SERVER, {register_parsers, Modules}).
 
-%% @doc Regiaer a custom parser module.
+%% @doc Register a custom parser module.
 -spec register_parser(module()) -> ok.
 register_parser(Module) ->
     lager:info("Registering custom parser (module: ~p)", [Module]),
@@ -101,13 +101,11 @@ code_change(_, State, _) ->
     {ok, State}.
 
 % Internal API
-json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
-    json_to_erlang([{<<"name">>, Name}, {<<"sha">>, ""}, {<<"records">>, JsonRecords}, {<<"keys">>, []}], Parsers);
-json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers) ->
-    json_to_erlang([{<<"name">>, Name}, {<<"sha">>, ""}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers);
-json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}], Parsers) ->
-    json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}, {<<"keys">>, []}], Parsers);
-json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers) ->
+json_to_erlang(Zone, Parsers) ->
+    Name = proplists:get_value(<<"name">>, Zone),
+    Sha = proplists:get_value(<<"sha">>, Zone, ""),
+    JsonRecords = proplists:get_value(<<"records">>, Zone),
+    JsonKeys = proplists:get_value(<<"keys">>, Zone, []),
     Records =
         lists:map(fun(JsonRecord) ->
                      Data = json_record_to_list(JsonRecord),
@@ -439,6 +437,9 @@ base64_to_bin(Bin) when is_binary(Bin) ->
     base64:decode(Bin).
 
 -ifdef(TEST).
+
+json_to_erlang_ensure_sorting_and_defaults_test() ->
+    ?assertEqual({"foo.org", [], [], []}, json_to_erlang([{<<"name">>, "foo.org"}, {<<"records">>, []}], [])).
 
 json_record_to_erlang_test() ->
     erldns_events:start_link(),
