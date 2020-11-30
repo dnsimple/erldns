@@ -65,7 +65,7 @@ register_parsers(Modules) ->
     lager:info("Registering custom parsers (modules: ~p)", [Modules]),
     gen_server:call(?SERVER, {register_parsers, Modules}).
 
-%% @doc Regiaer a custom parser module.
+%% @doc Register a custom parser module.
 -spec register_parser(module()) -> ok.
 register_parser(Module) ->
     lager:info("Registering custom parser (module: ~p)", [Module]),
@@ -101,13 +101,11 @@ code_change(_, State, _) ->
     {ok, State}.
 
 % Internal API
-json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}], Parsers) ->
-    json_to_erlang([{<<"name">>, Name}, {<<"sha">>, ""}, {<<"records">>, JsonRecords}, {<<"keys">>, []}], Parsers);
-json_to_erlang([{<<"name">>, Name}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers) ->
-    json_to_erlang([{<<"name">>, Name}, {<<"sha">>, ""}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers);
-json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}], Parsers) ->
-    json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}, {<<"keys">>, []}], Parsers);
-json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecords}, {<<"keys">>, JsonKeys}], Parsers) ->
+json_to_erlang(Zone, Parsers) ->
+    Name = proplists:get_value(<<"name">>, Zone),
+    Sha = proplists:get_value(<<"sha">>, Zone, ""),
+    JsonRecords = proplists:get_value(<<"records">>, Zone),
+    JsonKeys = proplists:get_value(<<"keys">>, Zone, []),
     Records =
         lists:map(fun(JsonRecord) ->
                      Data = json_record_to_list(JsonRecord),
@@ -132,19 +130,25 @@ json_to_erlang([{<<"name">>, Name}, {<<"sha">>, Sha}, {<<"records">>, JsonRecord
     DistinctRecords = lists:usort(FilteredRecords),
     {Name, Sha, DistinctRecords, parse_json_keys(JsonKeys)}.
 
+parse_json_keys([]) ->
+    [];
 parse_json_keys(JsonKeys) ->
     parse_json_keys(JsonKeys, []).
 
+%% as JSON key order is undefined, we need to ensure that the list of
+%% proplists only contains proplists that are already sorted by key, so
+%% that the pattern-match can succeed (or fail) in a single pass.
 parse_json_keys([], Keys) ->
     Keys;
-parse_json_keys([[{<<"ksk">>, KskBin},
-                  {<<"ksk_keytag">>, KskKeytag},
-                  {<<"ksk_alg">>, KskAlg},
-                  {<<"zsk">>, ZskBin},
-                  {<<"zsk_keytag">>, ZskKeytag},
-                  {<<"zsk_alg">>, ZskAlg},
+parse_json_keys([[%% pre-sorting the proplist allows us to pattern-match
                   {<<"inception">>, Inception},
-                  {<<"until">>, ValidUntil}]
+                  {<<"ksk">>, KskBin},
+                  {<<"ksk_alg">>, KskAlg},
+                  {<<"ksk_keytag">>, KskKeytag},
+                  {<<"until">>, ValidUntil},
+                  {<<"zsk">>, ZskBin},
+                  {<<"zsk_alg">>, ZskAlg},
+                  {<<"zsk_keytag">>, ZskKeytag}]
                  | Rest],
                 Keys) ->
     KeySet =
@@ -156,7 +160,10 @@ parse_json_keys([[{<<"ksk">>, KskBin},
                 zone_signing_alg = ZskAlg,
                 inception = iso8601:parse(Inception),
                 valid_until = iso8601:parse(ValidUntil)},
-    parse_json_keys(Rest, [KeySet | Keys]).
+    parse_json_keys(Rest, [KeySet | Keys]);
+%% pre-sort the proplist, to be consumed in previous pattern match
+parse_json_keys([Proplist], Acc) ->
+    parse_json_keys([lists:sort(Proplist)], Acc).
 
 to_crypto_key(RsaKeyBin) ->
     % Where E is the public exponent, N is public modulus and D is the private exponent
@@ -440,6 +447,9 @@ base64_to_bin(Bin) when is_binary(Bin) ->
 
 -ifdef(TEST).
 
+json_to_erlang_ensure_sorting_and_defaults_test() ->
+    ?assertEqual({"foo.org", [], [], []}, json_to_erlang([{<<"name">>, "foo.org"}, {<<"records">>, []}], [])).
+
 json_record_to_erlang_test() ->
     erldns_events:start_link(),
     ?assertEqual({}, json_record_to_erlang([])),
@@ -513,6 +523,43 @@ json_record_cds_to_erlang_test() ->
                                          {<<"alg">>, 8},
                                          {<<"digest">>, <<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>}],
                                         undefined])).
+
+parse_json_keys_unsorted_proplists_test() ->
+    ?assertEqual([{keyset,
+                   [1025,
+                    117942195211355436516708579275854541924575773884167758398377054474457061084450782563901956510831117716183526402173215071572529228555976594387632086643427143744605045813923857147839015187463121492324352653506190767692034127161982651669657643423469824721891177589201529187860925827553628207715191151413138514807,
+                    105745246243156727959858716443424706369448913365414799968886354206854672328400262610952095642393948469436742208387497220268443279066285356333886719634448317208189715942402022382731037836531762881862458283240610274107136766709456566004076449761688996028612988763775001691587086168632010166111722279727494037097],
+                   37440,
+                   8,
+                   [513,
+                    9170529505818457214552347052832728824507861128011245996056627438339703762731346681703094163316286362641501571794424157931806097889892946273849538579240359,
+                    5130491166023191463112131781994138738077497356216817935415696052248528225933414267440640871636073852185344964288812312263453467652493907737029964715172561],
+                   49016,
+                   8,
+                   {{2016, 11, 14}, {11, 36, 59}},
+                   {{2017, 2, 12}, {11, 36, 59}}}],
+                 parse_json_keys([[{<<"ksk">>,
+                                    <<"-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USCh\nEW0fLYT/Q"
+                                      "kAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+C\nfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHS"
+                                      "U8htjdwICBAEC\ngYEAlpYTHWYrcd0HQXO3F9lPqwwfHUt7VBaSEUYrk3N3ZYCWvmV1qyKbB/kb1SBs\n4GfW1vP966HXCffnX92LDXYxi7I"
+                                      "t3TJaKmo8aF/leN7w8WLNJXUayEoQKUfKLprj\nN14Jx/tgMu7I/BOoHId8b7e57pBKtDiSF6WWn3K7tNPbfmkCQQDST41m62mC4MAa\nDsU"
+                                      "dyM0Vg/tjduGqnygryCDEXDabdg95a3wMk0SQCQzZFHGNYnsXcffTqGs/y+5w\nQWxyOGSNAkEAzHFkDJla30NiiKvhu7dY+0+dGrfMA7pNU"
+                                      "h+LGdXe5QFdjwwxqPbF\n7NMGXKMdB8agSCxGZC3bxdvYNF9LULzhEwJABpDYNSoQx+UMvaEN5XTpLmCHuS1r\nsmhfKZPcDx8Z7mAYda3wZ"
+                                      "EuHQq+cf6i5XhOO9P5QKpKeslHLAMHa7NaNgQJBAI03\nGGacYLwui32fbzb8BYRg82Kga/OW6btY+O6hNs6iSR2gBlQ9j3Tgrzo+N4R/NQS"
+                                      "l\nc05wGO2RnBUwlu0XUckCQHfHsWHVrrADTpalbv+FTDyWd0ouHXBmDecVZh3e7/ue\ncdMoblzeasvgp8CjFa9U+uDozY+aL6TNIpG++nn"
+                                      "4lNw=\n-----END RSA PRIVATE KEY-----\n">>},
+                                   {<<"ksk_alg">>, 8},
+                                   {<<"ksk_keytag">>, 37440},
+                                   {<<"zsk">>,
+                                    <<"-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jT\nCaEwnpE74"
+                                      "YHCLegKAAn+efeZrT/EBBrzlacCAgIBAkBh9VGFW2SJk1I9SBQaDIA9\nchdrrx+PHibSyozwT4eAPmd6OFoLausc7ls6v9evPeb+Yj3g0JX"
+                                      "vTGp6BgNhFqLR\nAiEA1+ievAEBVM6IlOmpiTwlaWe/HV6MokBBq1G/tvJS0M8CIQDPm/DUsoTEv/Jj\n6O3U9hNcPLbvKMMGld2wbf7nrQm"
+                                      "zqQIhAJrhwTaFdjnXhmfUB9a33vRIbSaIsLxA\nDyuM+03XP+YhAiEAmJIJz7WX9uPkCIy8wO655Hh4dt4UkBFRE98OqkHIwGkCIFFv\nN8r"
+                                      "JojI+oEiJyNjEjWZD4qoUMUp3+YBl0htAJUE2\n-----END RSA PRIVATE KEY-----\n">>},
+                                   {<<"zsk_alg">>, 8},
+                                   {<<"zsk_keytag">>, 49016},
+                                   {<<"inception">>, <<"2016-11-14T11:36:58.851612Z">>},
+                                   {<<"until">>, <<"2017-02-12T11:36:58.849384Z">>}]])).
 
 hex_to_bin_test() ->
     ?assertEqual(<<"">>, hex_to_bin(<<"">>)),
