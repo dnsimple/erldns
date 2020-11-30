@@ -166,7 +166,7 @@ load_zones(Filename) when is_list(Filename) ->
     case file:read_file(Filename) of
         {ok, Binary} ->
             lager:debug("Parsing zones JSON"),
-            JsonZones = jsx:decode(Binary),
+            JsonZones = jsx:decode(Binary, [{return_maps, false}]),
             lager:debug("Putting zones into cache"),
             lists:foreach(fun(JsonZone) ->
                              Zone = erldns_zone_parser:zone_to_erlang(JsonZone),

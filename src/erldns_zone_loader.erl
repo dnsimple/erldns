@@ -19,6 +19,12 @@
 
 -define(FILENAME, "zones.json").
 
+-ifdef(TEST).
+
+-include_lib("eunit/include/eunit.hrl").
+
+-endif.
+
 % Public API
 
 %% @doc Load zones from a file. The default file name is "zones.json".
@@ -27,7 +33,7 @@ load_zones() ->
     case file:read_file(filename()) of
         {ok, Binary} ->
             lager:info("Parsing zones JSON"),
-            JsonZones = jsx:decode(Binary),
+            JsonZones = jsx:decode(Binary, [{return_maps, false}]),
             lager:info("Putting zones into cache"),
             lists:foreach(fun(JsonZone) ->
                              Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
@@ -52,3 +58,30 @@ filename() ->
         _ ->
             ?FILENAME
     end.
+
+-ifdef(TEST).
+
+json_jsx_decode_test() ->
+    Zone_RR =
+        [{<<"name">>, <<"example.net">>},
+         {<<"records">>,
+          [[{<<"name">>, <<"example.net">>},
+            {<<"type">>, <<"SOA">>},
+            {<<"ttl">>, 3600},
+            {<<"data">>,
+             [{<<"mname">>, <<"ns1.example.net">>},
+              {<<"rname">>, <<"admin.example.net">>},
+              {<<"serial">>, 1234567},
+              {<<"refresh">>, 1},
+              {<<"retry">>, 1},
+              {<<"expire">>, 1},
+              {<<"minimum">>, 1}]}],
+           [{<<"name">>, <<"ns1.example.net">>}, {<<"type">>, <<"A">>}, {<<"ttl">>, 30}, {<<"data">>, [{<<"ip">>, <<"123.45.67.89">>}]}]]}],
+    JSON_zone =
+        <<"{\"name\":\"example.net\",\"records\":[{\"name\":\"example.net\",\"type\":\"SOA\",\"ttl\":3600,\"data\":{\"m"
+          "name\":\"ns1.example.net\",\"rname\":\"admin.example.net\",\"serial\":1234567,\"refresh\":1,\"retry\":1,\"ex"
+          "pire\":1,\"minimum\":1}},{\"name\":\"ns1.example.net\",\"type\":\"A\",\"ttl\":30,\"data\":{\"ip\":\"123.45.6"
+          "7.89\"}}]}">>,
+    ?assertEqual(Zone_RR, jsx:decode(JSON_zone, [{return_maps, false}])).
+
+-endif.
