@@ -463,6 +463,11 @@ json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) ->
             type = ?DNS_TYPE_SPF,
             data = #dns_rrdata_spf{spf = [erldns_config:keyget(<<"spf">>, Data)]},
             ttl = Ttl};
+json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_PTR,
+            data = #dns_rrdata_ptr{dname = maps:get(<<"dname">>, Data)},
+            ttl = Ttl};
 json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
             type = ?DNS_TYPE_PTR,
