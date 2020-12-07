@@ -101,6 +101,34 @@ code_change(_, State, _) ->
     {ok, State}.
 
 % Internal API
+json_to_erlang(Zone, Parsers) when is_map(Zone) ->
+    Name = maps:get(<<"name">>, Zone),
+    Sha = maps:get(<<"sha">>, Zone, ""),
+    JsonRecords = maps:get(<<"records">>, Zone),
+    JsonKeys = maps:get(<<"keys">>, Zone, []),
+    Records =
+        lists:map(fun(JsonRecord) ->
+                     Data = json_record_to_list(JsonRecord),
+                     % Filter by context
+                     case apply_context_options(Data) of
+                         pass ->
+                             case json_record_to_erlang(Data) of
+                                 {} ->
+                                     case try_custom_parsers(Data, Parsers) of
+                                         {} ->
+                                             erldns_events:notify({?MODULE, unsupported_record, Data}),
+                                             {};
+                                         ParsedRecord -> ParsedRecord
+                                     end;
+                                 ParsedRecord -> ParsedRecord
+                             end;
+                         _ -> {}
+                     end
+                  end,
+                  JsonRecords),
+    FilteredRecords = lists:filter(record_filter(), Records),
+    DistinctRecords = lists:usort(FilteredRecords),
+    {Name, Sha, DistinctRecords, parse_json_keys_as_maps(JsonKeys)};
 json_to_erlang(Zone, Parsers) ->
     Name = proplists:get_value(<<"name">>, Zone),
     Sha = proplists:get_value(<<"sha">>, Zone, ""),
@@ -129,6 +157,25 @@ json_to_erlang(Zone, Parsers) ->
     FilteredRecords = lists:filter(record_filter(), Records),
     DistinctRecords = lists:usort(FilteredRecords),
     {Name, Sha, DistinctRecords, parse_json_keys(JsonKeys)}.
+
+parse_json_keys_as_maps([]) ->
+    [];
+parse_json_keys_as_maps(JsonKeys) ->
+    parse_json_keys_as_maps(JsonKeys, []).
+
+parse_json_keys_as_maps([], Keys) ->
+    Keys;
+parse_json_keys_as_maps([Key | Rest], Keys) ->
+    KeySet =
+        #keyset{key_signing_key = to_crypto_key(maps:get(<<"ksk">>, Key)),
+                key_signing_key_tag = maps:get(<<"ksk_keytag">>, Key),
+                key_signing_alg = maps:get(<<"ksk_alg">>, Key),
+                zone_signing_key = to_crypto_key(maps:get(<<"zsk">>, Key)),
+                zone_signing_key_tag = maps:get(<<"zsk_keytag">>, Key),
+                zone_signing_alg = maps:get(<<"zsk_alg">>, Key),
+                inception = iso8601:parse(maps:get(<<"inception">>, Key)),
+                valid_until = iso8601:parse(maps:get(<<"until">>, Key))},
+    parse_json_keys_as_maps(Rest, [KeySet | Keys]).
 
 parse_json_keys([]) ->
     [];
@@ -219,6 +266,12 @@ apply_context_options([_, _, _, _, Context]) ->
             pass
     end.
 
+json_record_to_list(JsonRecord) when is_map(JsonRecord) ->
+    [maps:get(<<"name">>, JsonRecord),
+     maps:get(<<"type">>, JsonRecord),
+     maps:get(<<"ttl">>, JsonRecord),
+     maps:get(<<"data">>, JsonRecord),
+     maps:get(<<"context">>, JsonRecord)];
 json_record_to_list(JsonRecord) ->
     [erldns_config:keyget(<<"name">>, JsonRecord),
      erldns_config:keyget(<<"type">>, JsonRecord),
@@ -240,6 +293,18 @@ try_custom_parsers(Data, [Parser | Rest]) ->
 json_record_to_erlang([Name, Type, _Ttl, Data = null, _]) ->
     erldns_events:notify({?MODULE, error, {Name, Type, Data, null_data}}),
     {};
+json_record_to_erlang([Name, <<"SOA">>, Ttl, Data, _]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_SOA,
+            data =
+                #dns_rrdata_soa{mname = maps:get(<<"mname">>, Data),
+                                rname = maps:get(<<"rname">>, Data),
+                                serial = maps:get(<<"serial">>, Data),
+                                refresh = maps:get(<<"refresh">>, Data),
+                                retry = maps:get(<<"retry">>, Data),
+                                expire = maps:get(<<"expire">>, Data),
+                                minimum = maps:get(<<"minimum">>, Data)},
+            ttl = Ttl};
 json_record_to_erlang([Name, <<"SOA">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
             type = ?DNS_TYPE_SOA,
@@ -252,17 +317,44 @@ json_record_to_erlang([Name, <<"SOA">>, Ttl, Data, _Context]) ->
                                 expire = erldns_config:keyget(<<"expire">>, Data),
                                 minimum = erldns_config:keyget(<<"minimum">>, Data)},
             ttl = Ttl};
+json_record_to_erlang([Name, <<"NS">>, Ttl, Data, _Context]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_NS,
+            data = #dns_rrdata_ns{dname = maps:get(<<"dname">>, Data)},
+            ttl = Ttl};
 json_record_to_erlang([Name, <<"NS">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
             type = ?DNS_TYPE_NS,
             data = #dns_rrdata_ns{dname = erldns_config:keyget(<<"dname">>, Data)},
             ttl = Ttl};
+json_record_to_erlang([Name, Type = <<"A">>, Ttl, Data, _Context]) when is_map(Data) ->
+    case inet_parse:address(binary_to_list(maps:get(<<"ip">>, Data))) of
+        {ok, Address} ->
+            #dns_rr{name = Name,
+                    type = ?DNS_TYPE_A,
+                    data = #dns_rrdata_a{ip = Address},
+                    ttl = Ttl};
+        {error, Reason} ->
+            erldns_events:notify({?MODULE, error, {Name, Type, Data, Reason}}),
+            {}
+    end;
 json_record_to_erlang([Name, Type = <<"A">>, Ttl, Data, _Context]) ->
     case inet_parse:address(binary_to_list(erldns_config:keyget(<<"ip">>, Data))) of
         {ok, Address} ->
             #dns_rr{name = Name,
                     type = ?DNS_TYPE_A,
                     data = #dns_rrdata_a{ip = Address},
+                    ttl = Ttl};
+        {error, Reason} ->
+            erldns_events:notify({?MODULE, error, {Name, Type, Data, Reason}}),
+            {}
+    end;
+json_record_to_erlang([Name, Type = <<"AAAA">>, Ttl, Data, _Context]) when is_map(Data) ->
+    case inet_parse:address(binary_to_list(maps:get(<<"ip">>, Data))) of
+        {ok, Address} ->
+            #dns_rr{name = Name,
+                    type = ?DNS_TYPE_AAAA,
+                    data = #dns_rrdata_aaaa{ip = Address},
                     ttl = Ttl};
         {error, Reason} ->
             erldns_events:notify({?MODULE, error, {Name, Type, Data, Reason}}),
@@ -279,6 +371,14 @@ json_record_to_erlang([Name, Type = <<"AAAA">>, Ttl, Data, _Context]) ->
             erldns_events:notify({?MODULE, error, {Name, Type, Data, Reason}}),
             {}
     end;
+json_record_to_erlang([Name, <<"CAA">>, Ttl, Data, _Context]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_CAA,
+            data =
+                #dns_rrdata_caa{flags = maps:get(<<"flags">>, Data),
+                                tag = maps:get(<<"tag">>, Data),
+                                value = maps:get(<<"value">>, Data)},
+            ttl = Ttl};
 json_record_to_erlang([Name, <<"CAA">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
             type = ?DNS_TYPE_CAA,
@@ -287,26 +387,59 @@ json_record_to_erlang([Name, <<"CAA">>, Ttl, Data, _Context]) ->
                                 tag = erldns_config:keyget(<<"tag">>, Data),
                                 value = erldns_config:keyget(<<"value">>, Data)},
             ttl = Ttl};
+json_record_to_erlang([Name, <<"CNAME">>, Ttl, Data, _Context]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_CNAME,
+            data = #dns_rrdata_cname{dname = maps:get(<<"dname">>, Data)},
+            ttl = Ttl};
 json_record_to_erlang([Name, <<"CNAME">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
             type = ?DNS_TYPE_CNAME,
             data = #dns_rrdata_cname{dname = erldns_config:keyget(<<"dname">>, Data)},
+            ttl = Ttl};
+json_record_to_erlang([Name, <<"MX">>, Ttl, Data, _Context]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_MX,
+            data = #dns_rrdata_mx{exchange = maps:get(<<"exchange">>, Data), preference = maps:get(<<"preference">>, Data)},
             ttl = Ttl};
 json_record_to_erlang([Name, <<"MX">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
             type = ?DNS_TYPE_MX,
             data = #dns_rrdata_mx{exchange = erldns_config:keyget(<<"exchange">>, Data), preference = erldns_config:keyget(<<"preference">>, Data)},
             ttl = Ttl};
+json_record_to_erlang([Name, <<"HINFO">>, Ttl, Data, _Context]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_HINFO,
+            data = #dns_rrdata_hinfo{cpu = maps:get(<<"cpu">>, Data), os = maps:get(<<"os">>, Data)},
+            ttl = Ttl};
 json_record_to_erlang([Name, <<"HINFO">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
             type = ?DNS_TYPE_HINFO,
             data = #dns_rrdata_hinfo{cpu = erldns_config:keyget(<<"cpu">>, Data), os = erldns_config:keyget(<<"os">>, Data)},
+            ttl = Ttl};
+json_record_to_erlang([Name, <<"RP">>, Ttl, Data, _Context]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_RP,
+            data = #dns_rrdata_rp{mbox = maps:get(<<"mbox">>, Data), txt = maps:get(<<"txt">>, Data)},
             ttl = Ttl};
 json_record_to_erlang([Name, <<"RP">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
             type = ?DNS_TYPE_RP,
             data = #dns_rrdata_rp{mbox = erldns_config:keyget(<<"mbox">>, Data), txt = erldns_config:keyget(<<"txt">>, Data)},
             ttl = Ttl};
+json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) when is_map(Data) ->
+    %% This function call may crash. Handle it as a bad record.
+    try erldns_txt:parse(maps:get(<<"txt">>, Data)) of
+        ParsedText ->
+            #dns_rr{name = Name,
+                    type = ?DNS_TYPE_TXT,
+                    data = #dns_rrdata_txt{txt = lists:flatten(ParsedText)},
+                    ttl = Ttl}
+    catch
+        Exception:Reason ->
+            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            {}
+    end;
 json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) ->
     %% This function call may crash. Handle it as a bad record.
     try erldns_txt:parse(erldns_config:keyget(<<"txt">>, Data)) of
@@ -320,16 +453,42 @@ json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) ->
             erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
             {}
     end;
+json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_SPF,
+            data = #dns_rrdata_spf{spf = [maps:get(<<"spf">>, Data)]},
+            ttl = Ttl};
 json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
             type = ?DNS_TYPE_SPF,
             data = #dns_rrdata_spf{spf = [erldns_config:keyget(<<"spf">>, Data)]},
+            ttl = Ttl};
+json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_PTR,
+            data = #dns_rrdata_ptr{dname = maps:get(<<"dname">>, Data)},
             ttl = Ttl};
 json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
             type = ?DNS_TYPE_PTR,
             data = #dns_rrdata_ptr{dname = erldns_config:keyget(<<"dname">>, Data)},
             ttl = Ttl};
+json_record_to_erlang([Name, Type = <<"SSHFP">>, Ttl, Data, _Context]) when is_map(Data) ->
+    %% This function call may crash. Handle it as a bad record.
+    try hex_to_bin(maps:get(<<"fp">>, Data)) of
+        Fp ->
+            #dns_rr{name = Name,
+                    type = ?DNS_TYPE_SSHFP,
+                    data =
+                        #dns_rrdata_sshfp{alg = maps:get(<<"alg">>, Data),
+                                          fp_type = maps:get(<<"fptype">>, Data),
+                                          fp = Fp},
+                    ttl = Ttl}
+    catch
+        Exception:Reason ->
+            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            {}
+    end;
 json_record_to_erlang([Name, Type = <<"SSHFP">>, Ttl, Data, _Context]) ->
     %% This function call may crash. Handle it as a bad record.
     try hex_to_bin(erldns_config:keyget(<<"fp">>, Data)) of
@@ -346,6 +505,15 @@ json_record_to_erlang([Name, Type = <<"SSHFP">>, Ttl, Data, _Context]) ->
             erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
             {}
     end;
+json_record_to_erlang([Name, <<"SRV">>, Ttl, Data, _Context]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_SRV,
+            data =
+                #dns_rrdata_srv{priority = maps:get(<<"priority">>, Data),
+                                weight = maps:get(<<"weight">>, Data),
+                                port = maps:get(<<"port">>, Data),
+                                target = maps:get(<<"target">>, Data)},
+            ttl = Ttl};
 json_record_to_erlang([Name, <<"SRV">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
             type = ?DNS_TYPE_SRV,
@@ -354,6 +522,17 @@ json_record_to_erlang([Name, <<"SRV">>, Ttl, Data, _Context]) ->
                                 weight = erldns_config:keyget(<<"weight">>, Data),
                                 port = erldns_config:keyget(<<"port">>, Data),
                                 target = erldns_config:keyget(<<"target">>, Data)},
+            ttl = Ttl};
+json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data, _Context]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_NAPTR,
+            data =
+                #dns_rrdata_naptr{order = maps:get(<<"order">>, Data),
+                                  preference = maps:get(<<"preference">>, Data),
+                                  flags = maps:get(<<"flags">>, Data),
+                                  services = maps:get(<<"services">>, Data),
+                                  regexp = maps:get(<<"regexp">>, Data),
+                                  replacement = maps:get(<<"replacement">>, Data)},
             ttl = Ttl};
 json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
@@ -366,6 +545,22 @@ json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data, _Context]) ->
                                   regexp = erldns_config:keyget(<<"regexp">>, Data),
                                   replacement = erldns_config:keyget(<<"replacement">>, Data)},
             ttl = Ttl};
+json_record_to_erlang([Name, Type = <<"DS">>, Ttl, Data, _Context]) when is_map(Data) ->
+    try hex_to_bin(maps:get(<<"digest">>, Data)) of
+        Digest ->
+            #dns_rr{name = Name,
+                    type = ?DNS_TYPE_DS,
+                    data =
+                        #dns_rrdata_ds{keytag = maps:get(<<"keytag">>, Data),
+                                       alg = maps:get(<<"alg">>, Data),
+                                       digest_type = maps:get(<<"digest_type">>, Data),
+                                       digest = Digest},
+                    ttl = Ttl}
+    catch
+        Exception:Reason ->
+            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            {}
+    end;
 json_record_to_erlang([Name, Type = <<"DS">>, Ttl, Data, _Context]) ->
     try hex_to_bin(erldns_config:keyget(<<"digest">>, Data)) of
         Digest ->
@@ -376,6 +571,22 @@ json_record_to_erlang([Name, Type = <<"DS">>, Ttl, Data, _Context]) ->
                                        alg = erldns_config:keyget(<<"alg">>, Data),
                                        digest_type = erldns_config:keyget(<<"digest_type">>, Data),
                                        digest = Digest},
+                    ttl = Ttl}
+    catch
+        Exception:Reason ->
+            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            {}
+    end;
+json_record_to_erlang([Name, Type = <<"CDS">>, Ttl, Data, _Context]) when is_map(Data) ->
+    try hex_to_bin(maps:get(<<"digest">>, Data)) of
+        Digest ->
+            #dns_rr{name = Name,
+                    type = ?DNS_TYPE_CDS,
+                    data =
+                        #dns_rrdata_cds{keytag = maps:get(<<"keytag">>, Data),
+                                        alg = maps:get(<<"alg">>, Data),
+                                        digest_type = maps:get(<<"digest_type">>, Data),
+                                        digest = Digest},
                     ttl = Ttl}
     catch
         Exception:Reason ->
@@ -398,6 +609,22 @@ json_record_to_erlang([Name, Type = <<"CDS">>, Ttl, Data, _Context]) ->
             erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
             {}
     end;
+json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) when is_map(Data) ->
+    try base64_to_bin(maps:get(<<"public_key">>, Data)) of
+        PublicKey ->
+            dnssec:add_keytag_to_dnskey(#dns_rr{name = Name,
+                                                type = ?DNS_TYPE_DNSKEY,
+                                                data =
+                                                    #dns_rrdata_dnskey{flags = maps:get(<<"flags">>, Data),
+                                                                       protocol = maps:get(<<"protocol">>, Data),
+                                                                       alg = maps:get(<<"alg">>, Data),
+                                                                       public_key = PublicKey},
+                                                ttl = Ttl})
+    catch
+        Exception:Reason ->
+            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            {}
+    end;
 json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) ->
     try base64_to_bin(erldns_config:keyget(<<"public_key">>, Data)) of
         PublicKey ->
@@ -409,6 +636,22 @@ json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) ->
                                                                        alg = erldns_config:keyget(<<"alg">>, Data),
                                                                        public_key = PublicKey},
                                                 ttl = Ttl})
+    catch
+        Exception:Reason ->
+            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            {}
+    end;
+json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) when is_map(Data) ->
+    try base64_to_bin(maps:get(<<"public_key">>, Data)) of
+        PublicKey ->
+            dnssec:add_keytag_to_cdnskey(#dns_rr{name = Name,
+                                                 type = ?DNS_TYPE_CDNSKEY,
+                                                 data =
+                                                     #dns_rrdata_cdnskey{flags = maps:get(<<"flags">>, Data),
+                                                                         protocol = maps:get(<<"protocol">>, Data),
+                                                                         alg = maps:get(<<"alg">>, Data),
+                                                                         public_key = PublicKey},
+                                                 ttl = Ttl})
     catch
         Exception:Reason ->
             erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
@@ -446,6 +689,94 @@ base64_to_bin(Bin) when is_binary(Bin) ->
     base64:decode(Bin).
 
 -ifdef(TEST).
+
+json_to_erlang_test() ->
+    json_to_erlang(jsx:decode(<<"{\"name\":\"example.com\",\"sha\":\"10ea56ad7be9d3e6e75be3a15ef0dfabe9facafba486d74914e7baf8fb36638e\",\"rec"
+                                "ords\":[{\"name\":\"example.com\",\"type\":\"SOA\",\"data\":{\"mname\":\"ns1.dnsimple.com\",\"rname\":\"admi"
+                                "n.dnsimple.com\",\"serial\":1597990915,\"refresh\":86400,\"retry\":7200,\"expire\":604800,\"minimum\":300},\""
+                                "ttl\":3600,\"context\":[\"anycast\"]},{\"name\":\"example.com\",\"type\":\"NS\",\"data\":{\"dname\":\"ns1.dn"
+                                "simple.com\"},\"ttl\":3600,\"context\":[\"anycast\"]},{\"name\":\"example.com\",\"type\":\"NS\",\"data\":{\""
+                                "dname\":\"ns2.dnsimple.com\"},\"ttl\":3600,\"context\":[\"anycast\"]},{\"name\":\"example.com\",\"type\":\"N"
+                                "S\",\"data\":{\"dname\":\"ns3.dnsimple.com\"},\"ttl\":3600,\"context\":[\"anycast\"]},{\"name\":\"example.co"
+                                "m\",\"type\":\"NS\",\"data\":{\"dname\":\"ns4.dnsimple.com\"},\"ttl\":3600,\"context\":[\"anycast\"]},{\"nam"
+                                "e\":\"*.qa.example.com\",\"type\":\"A\",\"data\":{\"ip\":\"5.4.3.2\"},\"ttl\":3600,\"context\":[]},{\"name\""
+                                ":\"example.com\",\"type\":\"A\",\"data\":{\"ip\":\"1.2.3.4\"},\"ttl\":3600,\"context\":[]},{\"name\":\"examp"
+                                "le.com\",\"type\":\"AAAA\",\"data\":{\"ip\":\"2001:db8:0:0:0:0:2:1\"},\"ttl\":3600,\"context\":[]},{\"name\""
+                                ":\"www.example.com\",\"type\":\"CNAME\",\"data\":{\"dname\":\"example.com\"},\"ttl\":3600,\"context\":[]},{\""
+                                "name\":\"example.com\",\"type\":\"CAA\",\"data\":{\"flags\":0,\"tag\":\"issue\",\"value\":\"comodoca.com\"},\""
+                                "ttl\":3600,\"context\":[]},{\"name\":\"example.com\",\"type\":\"MX\",\"data\":{\"preference\":10,\"exchange\""
+                                ":\"mailserver.foo.com\"},\"ttl\":3600,\"context\":[]},{\"name\":\"example.com\",\"type\":\"TXT\",\"data\":{\""
+                                "txt\":\"this is a test\"},\"ttl\":3600,\"context\":[]},{\"name\":\"example.com\",\"type\":\"SPF\",\"data\":{\""
+                                "spf\":\"v=spf1 a mx ~all\"},\"ttl\":3600,\"context\":[]},{\"name\":\"example.com\",\"type\":\"TXT\",\"data\""
+                                ":{\"txt\":\"v=spf1 a mx ~all\"},\"ttl\":3600,\"context\":[]},{\"name\":\"example.com\",\"type\":\"SSHFP\",\""
+                                "data\":{\"alg\":3,\"fptype\":2,\"fp\":\"ABC123\"},\"ttl\":3600,\"context\":[]},{\"name\":\"_foo._bar.example"
+                                ".com\",\"type\":\"SRV\",\"data\":{\"priority\":20,\"weight\":10,\"port\":3333,\"target\":\"example.net\"},\""
+                                "ttl\":3600,\"context\":[]},{\"name\":\"example.com\",\"type\":\"NAPTR\",\"data\":{\"order\":5,\"preference\""
+                                ":10,\"flags\":\"u\",\"services\":\"foo\",\"regexp\":\"https:\/\/example\\\\.net\",\"replacement\":\"example."
+                                "org\"},\"ttl\":3600,\"context\":[]},{\"name\":\"example.com\",\"type\":\"A\",\"data\":{\"ip\":\"5.5.5.5\"},\""
+                                "ttl\":3600,\"context\":[\"SV1\"]},{\"name\":\"example.com\",\"type\":\"HINFO\",\"data\":{\"cpu\":\"cpu\",\"o"
+                                "s\":\"os\"},\"ttl\":3600,\"context\":[]},{\"name\":\"example.com\",\"type\":\"DNSKEY\",\"data\":{\"flags\":2"
+                                "57,\"protocol\":3,\"alg\":8,\"public_key\":\"AwEAAcFwY\/oPw5JPGTT2qf2opNMpNAopxC6xWvGO2QAKA7ERAzKYsiXt7j1\/t"
+                                "tJjgnLS2Qj30bbnRyazj7Lg9oZcmiJ4\/cfBHLBczzaxtqwZrxX1rcQz1OpU\/hnq4W5Rsk2i1hxdpRjLnVfddVFD3GDDgIEjvaiKtaJcA61"
+                                "WtDDA08Ba90S7czkUh2Nfv7cTYEFhjnx0bdtapwRQEirHjzyAJqs=\",\"key_tag\":0},\"ttl\":3600,\"context\":[]},{\"name\""
+                                ":\"example.com\",\"type\":\"DNSKEY\",\"data\":{\"flags\":256,\"protocol\":3,\"alg\":8,\"public_key\":\"AwEAA"
+                                "ddpSYg8TvfhxHRTG1zrCPXWuG\/gN0\/q2dzQtM3um6zVl0sIFQKWfcdcowpim13K4euSqzltBB+XwDjv9fbWb6xi0mTF0c0NgOQ\/Ctf5sQ"
+                                "OBtGBkopbQgxDuXDTC1jJaUTVlzjN9m8KYoVacTbhMFBAtwn6LC1sEYfwiCsADk3cV\",\"key_tag\":0},\"ttl\":3600,\"context\""
+                                ":[]},{\"name\":\"example.com\",\"type\":\"DNSKEY\",\"data\":{\"flags\":257,\"protocol\":3,\"alg\":8,\"public"
+                                "_key\":\"AwEAAbPhmoznnzWMbx0h+RcyI+Bi2tzlOnd\/AbZK7iXgGY62lZo442+6TpZNlkeFEqk+YKxUce70RWkG\/LHuJeywfmPySSra2"
+                                "rYG3P3ntAgbcrbwMDa9cmYVEnS2+ObEFeqowcoe4kjzy5249skMn9Hl8D5pWXp0EbzOSuKSRDFEaGfNycvc8\/VfcEi8LwUffTkq8ZFE9P6Q"
+                                "EqyeDM4yO2XmoSs=\",\"key_tag\":0},\"ttl\":3600,\"context\":[]},{\"name\":\"example.com\",\"type\":\"DNSKEY\""
+                                ",\"data\":{\"flags\":256,\"protocol\":3,\"alg\":8,\"public_key\":\"AwEAAdAKvoBtIj2GzLpawDNm\/ztuuxIbU2lticK5"
+                                "lMwisLN8HY1QXjdFk+pOCHp1XsS2Odd6rQyy\/IJvBEFFeeZDoyUeoa2i93STTETMZZ\/dX1YtJPQnw8MJ0buxfeCxZGRVmbpu4p+YeZ2AFN"
+                                "1ZSziKD7HununBWFXQc7vHRK0QSBTH\",\"key_tag\":0},\"ttl\":3600,\"context\":[]},{\"name\":\"example.com\",\"typ"
+                                "e\":\"CDNSKEY\",\"data\":{\"flags\":257,\"protocol\":3,\"alg\":8,\"public_key\":\"AwEAAbPhmoznnzWMbx0h+RcyI+"
+                                "Bi2tzlOnd\/AbZK7iXgGY62lZo442+6TpZNlkeFEqk+YKxUce70RWkG\/LHuJeywfmPySSra2rYG3P3ntAgbcrbwMDa9cmYVEnS2+ObEFeqo"
+                                "wcoe4kjzy5249skMn9Hl8D5pWXp0EbzOSuKSRDFEaGfNycvc8\/VfcEi8LwUffTkq8ZFE9P6QEqyeDM4yO2XmoSs=\",\"key_tag\":0},\""
+                                "ttl\":3600,\"context\":[]},{\"name\":\"example.com\",\"type\":\"CDS\",\"data\":{\"flags\":61079,\"alg\":8,\""
+                                "digest_type\":2,\"digest\":\"933FE542B3351226B7D0460EBFCB3D48909106B052E803E04063ACC179D3664B\",\"keytag\":0"
+                                "},\"ttl\":3600,\"context\":[]}],\"keys\":[{\"ksk\":\"-----BEGIN RSA PRIVATE KEY-----\\nMIIC7AIBAAKBoQDBcGP6D"
+                                "8OSTxk09qn9qKTTKTQKKcQusVrxjtkACgOxEQMymLIl\\n7e49f7bSY4Jy0tkI99G250cms4+y4PaGXJoieP3HwRywXM82sbasGa8V9a3EM9"
+                                "Tq\\nVP4Z6uFuUbJNotYcXaUYy51X3XVRQ9xgw4CBI72oirWiXAOtVrQwwNPAWvdEu3M5\\nFIdjX7+3E2BBYY58dG3bWqcEUBIqx488gCar"
+                                "AgMBAAECgaBZk\/9oVJZ\/kYudwEB2\\nS\/uQIbuMnUzRRqZTyI\/q+bg97h\/p9VZCRE2YQyVZhmVpYQTKp2CBb9a+MFbyQkVH\\ncWibY"
+                                "CY9s8riTQhUTrXGOtqesumWkTDdacbyuMjobme4WPX8L3xlX5spttpkZQfc\\neC0hpwX8bKRUuQifHPAhjuYxcVWIOZk5OaprHxwoXtM0oS"
+                                "NPaGiPCM0fq4GmnF1n\\n3Eg5AlEA4aB6F0pG5ajnycvWETz\/WZpv\/wkcO0UlbgSFlx2OD545CKYcZlbx22bl\\nWvYHvkio1AAg03oFQf"
+                                "XNtcl6274s2WFEJw5v0UBk0VHGq2zeTDUCUQDbeqkepngF\\njyuRSzfViuA3jpO\/8zmFm6Fpr5eCNgqEf+uC7zF+dg9bnnfEA88+x8Ijui"
+                                "oRvbx7\\nkSMjiIijQUgo103vXadpPhBXFx7EadBDXwJQV0wtEQfXKJLSo\/xvJhpQvk2H2cif\\nmLsnQUsUmSSBS7+vV45V3K71QyurwCc"
+                                "DVfdtAyHNkaVblWrSneyH0a\/iUHVW1jm6\\nv97HY0ndsYQc+qUCUQC3Al24wAh+YjZq7bR97FIwIUQUH4TMYsxCKveDzPoSJ\/RC\\ndp7"
+                                "nmxwNQmMNYDvUVo8MaXQg3PwocQpC29tLfejknTtQJ+CrgePwKsgt8SmGswJQ\\nVt10NCsGdK7ACTz1Asfcb4JQUYM\/d14ofhJRHptROLE"
+                                "93gHx9He+JGq4ET74YQvd\\nD8V0L923eLixsHh5I5t\/1QEVwbpeGcDhb+j8LeVvV8w=\\n-----END RSA PRIVATE KEY-----\\n\",\""
+                                "ksk_keytag\":57949,\"ksk_alg\":8,\"zsk\":\"-----BEGIN RSA PRIVATE KEY-----\\nMIICXQIBAAKBgQDXaUmIPE734cR0Uxt"
+                                "c6wj11rhv4DdP6tnc0LTN7pus1ZdLCBUC\\nln3HXKMKYptdyuHrkqs5bQQfl8A47\/X21m+sYtJkxdHNDYDkPwrX+bEDgbRgZKKW\\n0IMQ"
+                                "7lw0wtYyWlE1Zc4zfZvCmKFWnE24TBQQLcJ+iwtbBGH8IgrAA5N3FQIDAQAB\\nAoGBAIozFGgBOTCzedSflQiSChefAIlWMmZlaAzRIY6VL"
+                                "O8\/wWbz8nbMkjmbZ0a8\\naK1OAo+ec5fOJz0VoM9mtEj+3nlvQoJBw1ubBy4o3yr6X8dOwyEqtH8Riciv9XlE\\nDg6uQH8u52CErzYd7i"
+                                "o9NVn+vQZEFdw1kwy9bHl6Zb+SwwWpAkEA69Dw7b2VC4aP\\na\/wr0\/xME2hXb7qf2YsH3GreJHTH1D7fdQozKdw4o8tUFjKvOTy827N2X"
+                                "7PSp+cW\\nXYzk7Pp7nwJBAOnZPx2KK58IqBdmRpSfdQmstbC9k9SWby1NxH7xerepdRr+Fvnr\\nSVZo4JcIyWk1FVUHd9ZNIagIJZhE2tR"
+                                "WkMsCQDPX05\/wtfu6sX1ECz6nkPITVmWx\\n2cKx1iCXPg81vVjkGaxZebYSPEGGSg43Rl6HA94pLjUMC5vuKfSXLR0MVHECQEWu\\n6ADc"
+                                "cH02bihy4KtfDNgyL\/4Xr9qUbVK5rskJGkFqbKv7dUtJ0pO+Mtau1p3UJKQu\\n0oX4fAP\/UXybX\/4QQZsCQQCcym4PAXhtW5U1FmV\/d"
+                                "GCMb8rufZt7bmHHPulrAIVv\\n5Zse+HIV\/u0c36RRHSRuW4MPICrHE7Uf5B7\/7TcWp3nZ\\n-----END RSA PRIVATE KEY-----\\n\""
+                                ",\"zsk_keytag\":15271,\"zsk_alg\":8,\"inception\":\"2020-12-02T08:38:09.631363Z\",\"until\":\"2021-03-02T08:"
+                                "38:09.630312Z\"},{\"ksk\":\"-----BEGIN RSA PRIVATE KEY-----\\nMIIC7QIBAAKBoQCz4ZqM5581jG8dIfkXMiPgYtrc5Tp3fw"
+                                "G2Su4l4BmOtpWaOONv\\nuk6WTZZHhRKpPmCsVHHu9EVpBvyx7iXssH5j8kkq2tq2Btz957QIG3K28DA2vXJm\\nFRJ0tvjmxBXqqMHKHuJI"
+                                "88uduPbJDJ\/R5fA+aVl6dBG8zkrikkQxRGhnzcnL3PP1\\nX3BIvC8FH305KvGRRPT+kBKsngzOMjtl5qErAgMBAAECgaEAmKofJfkqaSMP"
+                                "5pS\/\\nuA0I39ZmU9WEgohbJqB\/b8u7RSD25RXlCR0At5WPtpFdHiBfocJlk9ziz9lrO4OX\\n0kKUcjTeHi3yM0yt4Bv28m6BNHpFvrdo"
+                                "31jOpSkvYzcip2LdYENMTxAi4NSsDDQg\\nLjuxbKJskvHgwz73XXj9g6X0uiotTzuUnT0gWJvIDykeXnoru2U2YfYjsN4uSHJF\\nPWYlwQ"
+                                "JRAOgxqQv1pe7VSQ4sLAnwW3NsGPMHCmAbmcbsjxnPj8Wjf4L0ervHxebt\\nnZOCaUlUxZm9X8GiONZAGMG2xPz6tuKYz9wE\/6j+9jtFe2"
+                                "5alaCLAlEAxlLnapw5\\ne3oYElrw1MR1aNOwiSXJuhQ8wlM6EifuV9HA\/Aq3AApOoKmwL3n9EqfxuZbFmuRA\\nu4FB78tFckIyhqhxHNz"
+                                "9KNZR5ZkwUdWvdeECUBLk\/6GWgsM1nfVGSOsiIP76e+lC\\n2GhLtq7GTzrFdiiaDmVEqbwgHI2XJmx7fz\/VYyMIkwM5xTBCFQGmcs83Q6"
+                                "yazMdV\\nrMw+uyDFna60NlrTAlBnPVkCgnjZ8mD9jSG5YNvNygUoH+e3WjmW30RnlynXxXU0\\nv08sUjFEKZFx5Yr8XzjSZ85OJ2wbL9pn"
+                                "PeXU6OjseFsJr3CKBad0Yh5pO1evgQJR\\nAMFyXCvulXFDKMqV3ePut7pMGGTUl53qoEOYGPsokl+C2Ho7sOgR2wzNLpchYZNr\\nS4eCZD"
+                                "PgcC+1JAVOUoDK8IyPbnQaZ0K3kGWxPpzC29xj\\n-----END RSA PRIVATE KEY-----\\n\",\"ksk_keytag\":61079,\"ksk_alg\""
+                                ":8,\"zsk\":\"-----BEGIN RSA PRIVATE KEY-----\\nMIICXQIBAAKBgQDQCr6AbSI9hsy6WsAzZv87brsSG1NpbYnCuZTMIrCzfB2NU"
+                                "F43\\nRZPqTgh6dV7EtjnXeq0MsvyCbwRBRXnmQ6MlHqGtovd0k0xEzGWf3V9WLST0J8PD\\nCdG7sX3gsWRkVZm6buKfmHmdgBTdWUs4ig+"
+                                "x7p7pwVhV0HO7x0StEEgUxwIDAQAB\\nAoGANs891TPrW25SLZ6PGHvALnZDzsdoOFRlgOnHq+hPyVmfp4VO7RzllUstrKWT\\nbBveLUjio"
+                                "n\/dSrfY1SFqtiGHr1w7tzTW39kTEdca4lvUtSmt7\/\/wrEV0GLsgHwnZ\\nVVyCuH0PpRcSmYYVYrSsCEH9\/mXxs8Fq0tsn+wMls7O1WW"
+                                "ECQQDruuKG\/X\/tYmps\\nm239lLH8VyDRqQmX3mdtz+uKI8J37a+emd7lOWmkqa6b2ep+sZPDEk8xR7ktSiDb\\nAhyf85jvAkEA4e5dBt"
+                                "UG05ieO+XtzvZOdMiU4zdWSAtgIyqegXunnvulwddEFbw0\\njwRzW5MYo0eTRfgaS0obMw8uZ0hN7zPRqQJBAOH1+ZCWTNta\/FLxRqTNtT"
+                                "MCvcXb\\nuANowFIl\/U0kbBQTtcVdD6lAuICL2oEwiTQ6uj5CPcEqVFoSdZ4ZzyCQG+cCQDBv\\ni54FWXtPgszQlFUEVPmQburvWB4F4kx"
+                                "nvKeBvQPGa1jNL5mBSbtHdvuw411N4PLl\\nJ63wazhdDtOxmpOnhlECQQCfdp\/ZOAKUalTUuqZLgIGwobDAmcOzXN\/85WWlWLIx\\nDf1"
+                                "j0nabGCBLJt6VB0oVHd9a7rC7oTcl3TjO3kP9Zhts\\n-----END RSA PRIVATE KEY-----\\n\",\"zsk_keytag\":49225,\"zsk_al"
+                                "g\":8,\"inception\":\"2020-12-02T10:45:48.279746Z\",\"until\":\"2021-03-02T10:45:48.279414Z\"}]}">>),
+                   []).
 
 json_to_erlang_ensure_sorting_and_defaults_test() ->
     ?assertEqual({"foo.org", [], [], []}, json_to_erlang([{<<"name">>, "foo.org"}, {<<"records">>, []}], [])).

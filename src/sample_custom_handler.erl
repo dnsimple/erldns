@@ -32,7 +32,7 @@
          terminate/2,
          code_change/3]).
 
--define(DNS_SAMPLE_TYPE, 20001).
+-define(DNS_TYPE_SAMPLE, 20001).
 
 -record(state, {}).
 
@@ -84,7 +84,7 @@ code_change(_PreviousVersion, State, _Extra) ->
 %% Internal functions
 
 type_match() ->
-    fun(Record) -> Record#dns_rr.type =:= ?DNS_SAMPLE_TYPE end.
+    fun(Record) -> Record#dns_rr.type =:= ?DNS_TYPE_SAMPLE end.
 
 convert() ->
     fun(Record) ->

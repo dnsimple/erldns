@@ -17,12 +17,21 @@
 
 -include_lib("dns_erlang/include/dns.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -include("erldns.hrl").
 
 -export([json_record_to_erlang/1]).
 
 -define(DNS_TYPE_SAMPLE, 40000).
 
+json_record_to_erlang([Name, <<"SAMPLE">>, Ttl, Data, _Context]) when is_map(Data) ->
+    #dns_rr{name = Name,
+            type = ?DNS_TYPE_SAMPLE,
+            data = maps:get(<<"dname">>, Data),
+            ttl = Ttl};
 json_record_to_erlang([Name, <<"SAMPLE">>, Ttl, Data, _Context]) ->
     #dns_rr{name = Name,
             type = ?DNS_TYPE_SAMPLE,
@@ -30,3 +39,21 @@ json_record_to_erlang([Name, <<"SAMPLE">>, Ttl, Data, _Context]) ->
             ttl = Ttl};
 json_record_to_erlang(_) ->
     {}.
+
+-ifdef(TEST).
+
+json_record_to_erlang_with_map_test() ->
+  Record = json_record_to_erlang([<<"example.com">>, <<"SAMPLE">>, 60, #{<<"dname">> => <<"example.net">>}, undefined]),
+  ?assertEqual(<<"example.com">>, Record#dns_rr.name),
+  ?assertEqual(40000, Record#dns_rr.type),
+  ?assertEqual(60, Record#dns_rr.ttl),
+  ?assertEqual(<<"example.net">>, Record#dns_rr.data).
+
+json_record_to_erlang_with_proplist_test() ->
+  Record = json_record_to_erlang([<<"example.com">>, <<"SAMPLE">>, 60, [{<<"dname">>, <<"example.net">>}], undefined]),
+  ?assertEqual(<<"example.com">>, Record#dns_rr.name),
+  ?assertEqual(40000, Record#dns_rr.type),
+  ?assertEqual(60, Record#dns_rr.ttl),
+  ?assertEqual(<<"example.net">>, Record#dns_rr.data).
+
+-endif.
