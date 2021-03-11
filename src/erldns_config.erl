@@ -44,6 +44,8 @@
          storage_dir/0]).
 -export([keyget/2,
          keyget/3]).
+-export([ingress_udp_request_timeout/0,
+         ingress_tcp_request_timeout/0]).
 
 -ifdef(TEST).
 
@@ -59,6 +61,8 @@
 -define(DEFAULT_SWEEP_INTERVAL, 1000 * 60 * 3). % Every 3 minutes
 -define(DEFAULT_ZONE_SERVER_PORT, 443).
 -define(DEFAULT_WEBSOCKET_PATH, "/ws").
+-define(DEFAULT_UDP_PROCESS_TIMEOUT, 500).
+-define(DEFAULT_TCP_PROCESS_TIMEOUT, 1000).
 
 get_servers() ->
     case application:get_env(erldns, servers) of
@@ -242,6 +246,24 @@ storage_env() ->
 
 storage_get(Key) ->
     get_env_value(Key, storage).
+
+-spec ingress_udp_request_timeout() -> non_neg_integer().
+ingress_udp_request_timeout() ->
+    case application:get_env(erldns, ingress_udp_request_timeout) of
+        {ok, UdpTimeout} ->
+            UdpTimeout;
+        _ ->
+            ?DEFAULT_UDP_PROCESS_TIMEOUT
+    end.
+
+-spec ingress_tcp_request_timeout() -> non_neg_integer().
+ingress_tcp_request_timeout() ->
+    case application:get_env(erldns, ingress_tcp_request_timeout) of
+        {ok, TcpTimeout} ->
+            TcpTimeout;
+        _ ->
+            ?DEFAULT_TCP_PROCESS_TIMEOUT
+    end.
 
 % Private functions
 
