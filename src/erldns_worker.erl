@@ -119,7 +119,7 @@ handle_tcp_dns_query(Socket, BadPacket, _) ->
 handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
     case DecodedMessage#dns_message.qr of
         false ->
-            try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, {tcp, Address}}, _Timeout = ?DEFAULT_TCP_PROCESS_TIMEOUT) of
+            try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, {tcp, Address}}, _Timeout = ingress_tcp_request_timeout()) of
                 _ ->
                     ok
             catch
@@ -162,7 +162,7 @@ handle_udp_dns_query(Socket, Host, Port, Bin, {WorkerProcessSup, WorkerProcess})
 handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
     case DecodedMessage#dns_message.qr of
         false ->
-            try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, Port, {udp, Host}}, _Timeout = ?DEFAULT_UDP_PROCESS_TIMEOUT) of
+            try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, Port, {udp, Host}}, _Timeout = ingress_udp_request_timeout()) of
                 _ ->
                     ok
             catch
@@ -193,4 +193,16 @@ handle_timeout(WorkerProcessSup, WorkerProcessId) ->
         {error, Error} ->
             erldns_events:notify({?MODULE, restart_failed, {Error}}),
             {error, timeout}
+    end.
+
+ingress_udp_request_timeout() ->
+    proplists:get_value(ingress_udp_request_timeout, env(), ?DEFAULT_UDP_PROCESS_TIMEOUT).
+
+ingress_tcp_request_timeout() ->
+    proplists:get_value(ingress_tcp_request_timeout, env(), ?DEFAULT_TCP_PROCESS_TIMEOUT).
+
+env() ->
+    case application:get_env(erldnsimple, erldns) of
+        {ok, Env} -> Env;
+        _ -> []
     end.
