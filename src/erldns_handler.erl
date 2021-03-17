@@ -187,7 +187,13 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
                                 "~p)",
                                 [?MODULE, resolve_error, Exception, Reason, Message, Stacktrace]),
                     erldns_events:notify({?MODULE, resolve_error, {Exception, Reason, Message, Stacktrace}}),
-                    Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
+                    RCode = case Reason of
+                        {error, rcode, ?DNS_RCODE_SERVFAIL} -> ?DNS_RCODE_SERVFAIL;
+                        {error, rcode, ?DNS_RCODE_NXDOMAIN} -> ?DNS_RCODE_NXDOMAIN;
+                        {error, rcode, ?DNS_RCODE_REFUSED} -> ?DNS_RCODE_REFUSED;
+                        _ -> ?DNS_RCODE_SERVFAIL
+                    end,
+                    Message#dns_message{aa = false, rc = RCode}
             end
     end.
 
