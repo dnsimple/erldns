@@ -183,9 +183,9 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
                     maybe_cache_packet(Response, Response#dns_message.aa)
             catch
                 Exception:Reason:Stacktrace ->
-                    lager:error("Error answering request (module: ~p, event: ~p, exception: ~p, reason: ~p, message: ~p, stacktrace: "
-                                "~p)",
-                                [?MODULE, resolve_error, Exception, Reason, Message, Stacktrace]),
+                    % lager:error("Error answering request (module: ~p, event: ~p, exception: ~p, reason: ~p, message: ~p, stacktrace: "
+                    %            "~p)",
+                    %            [?MODULE, resolve_error, Exception, Reason, Message, Stacktrace]),
                     erldns_events:notify({?MODULE, resolve_error, {Exception, Reason, Message, Stacktrace}}),
                     RCode = case Reason of
                         {error, rcode, ?DNS_RCODE_SERVFAIL} -> ?DNS_RCODE_SERVFAIL;
