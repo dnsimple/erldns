@@ -166,8 +166,9 @@ handle_udp_dns_query(Socket, Host, Port, Bin, SpanCtx, {WorkerProcessSup, Worker
                         DecodedMessage ->
                             ?set_attributes([{status, <<"ok">>}]),
                             ?set_attributes([{qr, DecodedMessage#dns_message.qr}]),
-                            % ?set_attributes([{qname, DecodedMessage#dns_message.questions}]),
-                            % ?set_attributes([{qtype, DecodedMessage#dns_message.qtype}]),
+                            Query = lists:last(DecodedMessage#dns_message.questions),
+                            ?set_attributes([{qname, Query#dns_query.name }]),
+                            ?set_attributes([{qtype, dns:type_name(Query#dns_query.type) }]),
                             handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, SpanCtx, {WorkerProcessSup, WorkerProcess})
                     end
                 end
