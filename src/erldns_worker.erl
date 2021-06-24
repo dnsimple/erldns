@@ -186,7 +186,7 @@ handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, SpanCtx, {WorkerP
         fun(_SpanCtx) ->
             case DecodedMessage#dns_message.qr of
                 false ->
-                    try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, Port, {udp, Host}}, _Timeout = erldns_config:ingress_udp_request_timeout()) of
+                    try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, Port, {udp, Host}, SpanCtx}, _Timeout = erldns_config:ingress_udp_request_timeout()) of
                         _ ->
                             ok
                     catch
