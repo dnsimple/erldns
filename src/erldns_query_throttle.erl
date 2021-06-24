@@ -59,9 +59,6 @@ start_link() ->
 
 throttle(_Message, {_, _Host}) ->
     %% lager:debug("Throttle not enabled"),
-    ok;
-throttle(_Message, {_, _Host, _SpanCtx}) ->
-    %% lager:debug("Throttle not enabled"),
     ok.
 
 -else.
@@ -69,13 +66,6 @@ throttle(_Message, {_, _Host, _SpanCtx}) ->
 throttle(_Message, {tcp, _Host}) ->
     ok;
 throttle(Message, {_, Host}) ->
-    case lists:filter(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Message#dns_message.questions) of
-        [] ->
-            ok;
-        _ ->
-            record_request(maybe_throttle(Host))
-    end;
-throttle(Message, {_, Host, SpanCtx}) ->
     case lists:filter(fun(Q) -> Q#dns_query.type =:= ?DNS_TYPE_ANY end, Message#dns_message.questions) of
         [] ->
             ok;

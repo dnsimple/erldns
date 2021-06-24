@@ -44,20 +44,24 @@ handle_call(_Request, From, State) ->
     {reply, ok, State}.
 
 handle_cast({tcp_query, Socket, Bin}, State) ->
-    case handle_tcp_dns_query(Socket, Bin, {State#state.worker_process_sup, State#state.worker_process}) of
-        ok ->
-            {noreply, State};
-        {error, timeout, NewWorkerPid} ->
-            {Id, _, Type, Modules} = State#state.worker_process,
-            {noreply, State#state{worker_process = {Id, NewWorkerPid, Type, Modules}}};
-        Error ->
-            lager:error("Error handling TCP query (module: ~p, event: ~p, error: ~p)", [?MODULE, handle_tcp_query_error, Error]),
-            {noreply, State}
-    end;
+    ?with_span(<<"erldns_tcp_worker">>, #{},
+        fun(SpanCtx) ->
+            case handle_tcp_dns_query(Socket, Bin, SpanCtx, {State#state.worker_process_sup, State#state.worker_process}) of
+                ok ->
+                    {noreply, State};
+                {error, timeout, NewWorkerPid} ->
+                    {Id, _, Type, Modules} = State#state.worker_process,
+                    {noreply, State#state{worker_process = {Id, NewWorkerPid, Type, Modules}}};
+                Error ->
+                    lager:error("Error handling TCP query (module: ~p, event: ~p, error: ~p)", [?MODULE, handle_tcp_query_error, Error]),
+                    {noreply, State}
+            end
+        end
+    );
 handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
     ?with_span(<<"erldns_udp_worker">>, #{},
            fun(_SpanCtx) ->
-                %?set_attributes([{host, Host}]),
+                ?set_attributes([{host, Host}]),
                 ?set_attributes([{port, Port}]),
                 ?set_attributes([{worker_process, State#state.worker_process}]),
                 case handle_udp_dns_query(Socket, Host, Port, Bin, ?current_span_ctx, {State#state.worker_process_sup, State#state.worker_process}) of
@@ -88,60 +92,89 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% @doc Handle DNS query that comes in over TCP
--spec handle_tcp_dns_query(gen_tcp:socket(), iodata(), {pid(), term()}) -> ok | {error, timeout} | {error, timeout, pid()}.
-handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerProcess}) ->
-    case inet:peername(Socket) of
-        {ok, {Address, _Port}} ->
-            erldns_events:notify({?MODULE, start_tcp, [{host, Address}]}),
-            Result =
-                case Bin of
-                    <<>> ->
-                        ok;
-                    _ ->
-                        case erldns_decoder:decode_message(Bin) of
-                            {trailing_garbage, DecodedMessage, TrailingGarbage} ->
-                                lager:info("Decoded message included trailing garbage (module: ~p, event: ~p, message: ~p, garbage: ~p)",
-                                           [?MODULE, decode_message_trailing_garbage, DecodedMessage, TrailingGarbage]),
-                                % erldns_events:notify({?MODULE, decode_message_trailing_garbage, {DecodedMessage, TrailingGarbage}}),
-                                handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, WorkerProcess});
-                            {Error, Message, _} ->
-                                lager:error("Error decoding message (module: ~p, event: ~p, error: ~p, message: ~p)",
-                                            [?MODULE, decode_message_error, Error, Message]),
-                                % erldns_events:notify({?MODULE, decode_message_error, {Error, Message}}),
-                                ok;
-                            DecodedMessage ->
-                                handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, WorkerProcess})
-                        end
-                end,
-            erldns_events:notify({?MODULE, end_tcp, [{host, Address}]}),
-            gen_tcp:close(Socket),
-            Result;
-        {error, Reason} ->
-            erldns_events:notify({?MODULE, tcp_error, Reason})
-    end;
-handle_tcp_dns_query(Socket, BadPacket, _) ->
-    lager:error("Received bad packet (module: ~p, event: ~p, protocol: ~p, packet: ~p)", [?MODULE, bad_packet, tcp, BadPacket]),
-    % erldns_events:notify({?MODULE, bad_packet, {tcp, BadPacket}}),
-    gen_tcp:close(Socket).
+-spec handle_tcp_dns_query(gen_tcp:socket(), iodata(), map(), {pid(), term()}) -> ok | {error, timeout} | {error, timeout, pid()}.
+handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, SpanCtx, {WorkerProcessSup, WorkerProcess}) ->
+    ?set_current_span(SpanCtx),
+    ?with_span(<<"handle_tcp_dns_query">>, #{},
+                fun(_SpanCtx) ->
+                    case inet:peername(Socket) of
+                        {ok, {Address, _Port}} ->
+                            erldns_events:notify({?MODULE, start_tcp, [{host, Address}]}),
+                            Result =
+                                case Bin of
+                                    <<>> ->
+                                        ok;
+                                    _ ->
+                                        case erldns_decoder:decode_message(Bin) of
+                                            {trailing_garbage, DecodedMessage, TrailingGarbage} ->
+                                                ?set_attributes([{status, <<"trailing_garbage">>}]),
+                                                lager:info("Decoded message included trailing garbage (module: ~p, event: ~p, message: ~p, garbage: ~p)",
+                                                        [?MODULE, decode_message_trailing_garbage, DecodedMessage, TrailingGarbage]),
+                                                % erldns_events:notify({?MODULE, decode_message_trailing_garbage, {DecodedMessage, TrailingGarbage}}),
+                                                handle_decoded_tcp_message(DecodedMessage, Socket, Address, SpanCtx, {WorkerProcessSup, WorkerProcess});
+                                            {Error, Message, _} ->
+                                                ?set_attributes([{status, <<"error">>}]),
+                                                lager:error("Error decoding message (module: ~p, event: ~p, error: ~p, message: ~p)",
+                                                            [?MODULE, decode_message_error, Error, Message]),
+                                                % erldns_events:notify({?MODULE, decode_message_error, {Error, Message}}),
+                                                ok;
+                                            DecodedMessage ->
+                                                Query = lists:last(DecodedMessage#dns_message.questions),
+                                                ?set_attributes([
+                                                    {status, <<"ok">>},
+                                                    {qr, DecodedMessage#dns_message.qr},
+                                                    {rd, DecodedMessage#dns_message.rd},
+                                                    {ad, DecodedMessage#dns_message.ad},
+                                                    {qname, Query#dns_query.name},
+                                                    {qtype, dns:type_name(Query#dns_query.type)}
+                                                ]),
+                                                handle_decoded_tcp_message(DecodedMessage, Socket, Address, SpanCtx, {WorkerProcessSup, WorkerProcess})
+                                        end
+                                end,
+                            erldns_events:notify({?MODULE, end_tcp, [{host, Address}]}),
+                            gen_tcp:close(Socket),
+                            Result;
+                        {error, Reason} ->
+                            erldns_events:notify({?MODULE, tcp_error, Reason})
+                    end
+                end
+    );
+handle_tcp_dns_query(Socket, BadPacket, SpanCtx, _) ->
+    ?set_current_span(SpanCtx),
+    ?with_span(<<"handle_tcp_dns_query">>, #{},
+                fun(_SpanCtx) ->
+                    ?set_attributes([{status, <<"bad_packet">>}]),
+                    lager:error("Received bad packet (module: ~p, event: ~p, protocol: ~p, packet: ~p)", [?MODULE, bad_packet, tcp, BadPacket]),
+                    % erldns_events:notify({?MODULE, bad_packet, {tcp, BadPacket}}),
+                    gen_tcp:close(Socket)
+                end
+    ).
 
-handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
-    case DecodedMessage#dns_message.qr of
-        false ->
-            try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, {tcp, Address}}, _Timeout = erldns_config:ingress_tcp_request_timeout()) of
-                _ ->
-                    ok
-            catch
-                exit:{timeout, _} ->
-                    erldns_events:notify({?MODULE, timeout}),
-                    handle_timeout(WorkerProcessSup, WorkerProcessId);
-                Error:Reason ->
-                    lager:error("Worker process crashed (module: ~p, event: ~p, protocol: ~p, error: ~p, reason: ~p, message: ~p)",
-                                [?MODULE, process_crashed, tcp, Error, Reason, DecodedMessage]),
-                    {error, {Error, Reason}}
-            end;
-        true ->
-            {error, not_a_question}
-    end.
+handle_decoded_tcp_message(DecodedMessage, Socket, Address, SpanCtx, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
+    ?set_current_span(SpanCtx),
+    ?with_span(<<"handle_decoded_tcp_message">>, #{},
+        fun(_SpanCtx) ->
+            case DecodedMessage#dns_message.qr of
+                false ->
+                    try gen_server:call(WorkerProcessPid, {process, DecodedMessage, Socket, {tcp, Address}, SpanCtx}, _Timeout = erldns_config:ingress_tcp_request_timeout()) of
+                        _ ->
+                            ok
+                    catch
+                        exit:{timeout, _} ->
+                            ?set_attributes([{status, <<"timeout">>}]),
+                            erldns_events:notify({?MODULE, timeout}),
+                            handle_timeout(WorkerProcessSup, WorkerProcessId);
+                        Error:Reason ->
+                            ?set_attributes([{status, <<"error">>}]),
+                            lager:error("Worker process crashed (module: ~p, event: ~p, protocol: ~p, error: ~p, reason: ~p, message: ~p)",
+                                        [?MODULE, process_crashed, tcp, Error, Reason, DecodedMessage]),
+                            {error, {Error, Reason}}
+                    end;
+                true ->
+                    {error, not_a_question}
+            end
+        end
+    ).
 
 %% @doc Handle DNS query that comes in over UDP
 -spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary(), map(), {pid(), term()}) ->
@@ -153,10 +186,10 @@ handle_udp_dns_query(Socket, Host, Port, Bin, SpanCtx, {WorkerProcessSup, Worker
                 fun(_SpanCtx) ->
                     case erldns_decoder:decode_message(Bin) of
                         {trailing_garbage, DecodedMessage, TrailingGarbage} ->
+                            ?set_attributes([{status, <<"trailing_garbage">>}]),
                             lager:info("Decoded message included trailing garbage (module: ~p, event: ~p, message: ~p, garbage: ~p)",
                                     [?MODULE, decode_message_trailing_garbage, DecodedMessage, TrailingGarbage]),
                             %erldns_events:notify({?MODULE, decode_message_trailing_garbage, {DecodedMessage, TrailingGarbage}}),
-                            ?set_attributes([{status, <<"trailing_garbage">>}]),
                             handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, SpanCtx, {WorkerProcessSup, WorkerProcess});
                         {Error, Message, _} ->
                             ?set_attributes([{status, <<"error">>}]),
@@ -164,13 +197,15 @@ handle_udp_dns_query(Socket, Host, Port, Bin, SpanCtx, {WorkerProcessSup, Worker
                             % erldns_events:notify({?MODULE, decode_message_error, {Error, Message}}),
                             ok;
                         DecodedMessage ->
-                            ?set_attributes([{status, <<"ok">>}]),
-                            ?set_attributes([{qr, DecodedMessage#dns_message.qr}]),
-                            ?set_attributes([{rd, DecodedMessage#dns_message.rd}]),
-                            ?set_attributes([{ad, DecodedMessage#dns_message.ad}]),
                             Query = lists:last(DecodedMessage#dns_message.questions),
-                            ?set_attributes([{qname, Query#dns_query.name }]),
-                            ?set_attributes([{qtype, dns:type_name(Query#dns_query.type) }]),
+                            ?set_attributes([
+                                {status, <<"ok">>},
+                                {qr, DecodedMessage#dns_message.qr},
+                                {rd, DecodedMessage#dns_message.rd},
+                                {ad, DecodedMessage#dns_message.ad},
+                                {qname, Query#dns_query.name},
+                                {qtype, dns:type_name(Query#dns_query.type)}
+                            ]),
                             handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, SpanCtx, {WorkerProcessSup, WorkerProcess})
                     end
                 end
