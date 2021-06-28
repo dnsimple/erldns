@@ -30,6 +30,22 @@
          code_change/3]).
 
 -record(state, {worker_process_sup, worker_process}).
+erlang_message_queue_len() ->
+    lists:foldl(
+        fun(Pid, Acc) ->
+            case process_info(Pid, message_queue_len) of
+                undefined -> Acc;
+                {message_queue_len, Count} -> Count+Acc
+            end
+        end,
+        0,
+        processes()
+    ).
+erlang_proc_message_queue_len() ->
+    case process_info(self(), message_queue_len) of
+        undefined -> <<"undefined">>;
+        {message_queue_len, Count} -> Count
+    end.
 
 start_link(Args) ->
     gen_server:start_link(?MODULE, Args, []).
@@ -61,9 +77,14 @@ handle_cast({tcp_query, Socket, Bin}, State) ->
 handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
     ?with_span(<<"erldns_udp_worker">>, #{},
            fun(_SpanCtx) ->
-                ?set_attributes([{host, Host}]),
-                ?set_attributes([{port, Port}]),
-                ?set_attributes([{worker_process, State#state.worker_process}]),
+                ?set_attributes([{host, Host}, {port, Port}, {worker_process, State#state.worker_process}]),
+                ?set_attributes([{erlang_port_count, erlang:system_info(port_count)}, 
+                                 {erlang_proc_count, erlang:system_info(process_count)},
+                                 %{erlang_message_queue_len, erlang_message_queue_len()},
+                                 {erlang_run_queue, erlang:statistics(run_queue)},
+                                 {erlang_proc_message_queue_len, erlang_proc_message_queue_len()}     
+                            ]),
+
                 case handle_udp_dns_query(Socket, Host, Port, Bin, ?current_span_ctx, {State#state.worker_process_sup, State#state.worker_process}) of
                     ok ->
                         ?set_attributes([{status, <<"ok">>}]),
