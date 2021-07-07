@@ -37,7 +37,7 @@ create(schema) ->
 create(Name = zones) ->
     create_ets_table(Name, set);
 create(Name = zone_records_typed) ->
-    create_ets_table(Name, ordered_set, {read_concurrency, true});
+    create_ets_table(Name, ordered_set, [{read_concurrency, true}, {write_concurrency, true}]);
 create(Name = authorities) ->
     create_ets_table(Name, set);
 %% These tables should always use ets. Due to their functionality
@@ -136,10 +136,10 @@ create_ets_table(Name, Type) ->
             ok
     end.
 
-create_ets_table(Name, Type, Option) ->
+create_ets_table(Name, Type, Options) ->
     case ets:info(Name) of
         undefined ->
-            case ets:new(Name, [Type, public, named_table, Option]) of
+            case ets:new(Name, [Type, public, named_table] ++ Options) of
                 Name ->
                     ok;
                 Error ->
