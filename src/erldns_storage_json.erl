@@ -37,7 +37,7 @@ create(schema) ->
 create(Name = zones) ->
     create_ets_table(Name, set);
 create(Name = zone_records_typed) ->
-    create_ets_table(Name, set, [{read_concurrency, true}, {write_concurrency, true}]);
+    create_ets_table(Name, ordered_set, [{read_concurrency, true}, {write_concurrency, true}]);
 create(Name = authorities) ->
     create_ets_table(Name, set);
 %% These tables should always use ets. Due to their functionality
