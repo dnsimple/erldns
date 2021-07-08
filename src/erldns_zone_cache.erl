@@ -157,7 +157,7 @@ get_delegations(Name) ->
         {ok, Zone} ->
             Records =
                 lists:flatten(erldns_storage:select(zone_records_typed,
-                                                    [{{{erldns:normalize_name(Zone#zone.name), '_', ?DNS_TYPE_NS}, '$1'}, [], ['$$']}],
+                                                    [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), ?DNS_TYPE_NS}, '$1'}, [], ['$$']}],
                                                     infinite)),
             lists:filter(erldns_records:match_delegation(Name), Records);
         _ ->
