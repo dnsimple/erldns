@@ -371,7 +371,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                         N when N > 0 ->
                             % DELETE RRSet command has been sent
                             % we need to update the zone digest as the zone content changes
-                            update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
+                            % update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
 
                             write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter});
                         _ ->
