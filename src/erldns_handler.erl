@@ -131,39 +131,9 @@ handle(Message, Host, _) ->
     Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, Host]),
     erldns_events:notify({?MODULE, end_handle, [{host, Host}, {message, Message}, {response, Response}]}),
     Response.
-%% Handle with SpanCtx
-%% TODO: Extend TCP to also send traces
-% handle({trailing_garbage, Message, _}, Context, SpanCtx) ->
-%     handle(Message, Context);
-% handle(Message, Context = {_, Host}, SpanCtx) when is_record(Message, dns_message) ->
-%     handle(Message, Host, erldns_query_throttle:throttle(Message, Context), SpanCtx);
-% handle(Message, {_, Host}, _SpanCtx) ->
-%     lager:error("Received a bad message (module: ~p, event: ~p, message: ~p, host: ~p)", [?MODULE, bad_message, Message, Host]),
-%     Message.
-
-%% Handle with SpanCtx
-%% TODO: Extend TCP to also send traces
-handle(Message, Host, {throttled, Host, _ReqCount}, _SpanCtx) ->
-    folsom_metrics:notify({request_throttled_counter, {inc, 1}}),
-    folsom_metrics:notify({request_throttled_meter, 1}),
-    Message#dns_message{tc = true,
-                        aa = true,
-                        rc = ?DNS_RCODE_NOERROR};
-handle(Message, Host, _, SpanCtx) ->
-    erldns_events:notify({?MODULE, start_handle, [{host, Host}, {message, Message}]}),
-    Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, Host, SpanCtx]),
-    erldns_events:notify({?MODULE, end_handle, [{host, Host}, {message, Message}, {response, Response}]}),
-    Response.
-
 
 do_handle(Message, Host) ->
     NewMessage = handle_message(Message, Host),
-    complete_response(erldns_axfr:optionally_append_soa(NewMessage)).
-
-%% Handle with SpanCtx
-%% TODO: Extend TCP to also send traces
-do_handle(Message, Host, SpanCtx) ->
-    NewMessage = handle_message(Message, Host, SpanCtx),
     complete_response(erldns_axfr:optionally_append_soa(NewMessage)).
 
 %% Handle the message by hitting the packet cache and either
@@ -171,18 +141,6 @@ do_handle(Message, Host, SpanCtx) ->
 %%
 %% If the cache is missed, then the SOA (Start of Authority) is discovered here.
 handle_message(Message, Host) ->
-    case erldns_packet_cache:get({Message#dns_message.questions, Message#dns_message.additional}, Host) of
-        {ok, CachedResponse} ->
-            erldns_events:notify({?MODULE, packet_cache_hit, [{host, Host}, {message, Message}]}),
-            CachedResponse#dns_message{id = Message#dns_message.id};
-        {error, Reason} ->
-            erldns_events:notify({?MODULE, packet_cache_miss, [{reason, Reason}, {host, Host}, {message, Message}]}),
-            handle_packet_cache_miss(Message, get_authority(Message), Host) % SOA lookup
-    end.
-
-%% Handle with SpanCtx
-%% TODO: Extend TCP to also send traces
-handle_message(Message, Host, _SpanCtx) ->
     case erldns_packet_cache:get({Message#dns_message.questions, Message#dns_message.additional}, Host) of
         {ok, CachedResponse} ->
             erldns_events:notify({?MODULE, packet_cache_hit, [{host, Host}, {message, Message}]}),
