@@ -157,7 +157,7 @@ get_delegations(Name) ->
         {ok, Zone} ->
             Records =
                 lists:flatten(erldns_storage:select(zone_records_typed,
-                                                    [{{{erldns:normalize_name(Zone#zone.name), '_', ?DNS_TYPE_NS}, '$1'}, [], ['$$']}],
+                                                    [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), ?DNS_TYPE_NS}, '$1'}, [], ['$$']}],
                                                     infinite)),
             lists:filter(erldns_records:match_delegation(Name), Records);
         _ ->
@@ -393,8 +393,7 @@ update_zone_records_and_digest(ZoneName, Records, Digest) ->
             UpdatedZone =
                 Zone#zone{version = Digest,
                           authority = get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA),
-                          record_count = length(Records),
-                          records_by_name = build_named_index(Records)},
+                          record_count = length(Records)},
             put_zone(Zone#zone.name, UpdatedZone);
         _ ->
             {error, zone_not_found}
