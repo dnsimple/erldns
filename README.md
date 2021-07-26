@@ -108,6 +108,28 @@ Folsom is used to gather runtime metrics and statistics.
 
 There is an HTTP API for querying metric data available at https://github.com/dnsimple/erldns-metrics
 
+## Tracing
+
+This project uses [OpenTelemetry](https://opentelemetry.io/docs/erlang/) (OTEL) Tracing to provide telemetry data on request processing inside of **erldns**.
+
+To enable opentelmetry tracing, you need to:
+
+1. Add [opentelemetry](https://github.com/open-telemetry/opentelemetry-erlang#including-in-release) as depency of your application.
+2. Configure the opentelmetry client:
+
+   Add the following configuration to the [erldns.config](erldns.config.example):
+
+   ```erlang
+     {opentelemetry,[
+       {processors,
+           [{otel_batch_processor,
+               #{exporter => {opentelemetry_exporter, #{protocol => http_protobuf,
+                                                       endpoints => [{http, "127.0.0.1", 55681, []}]}}}}]}
+     ]}
+   ```
+
+  NOTE: You will need to have a running [OpenTelemetry Collector](https://github.com/open-telemetry/opentelemetry-collector-contrib).
+
 ## Admin
 
 There is a administrative API for querying the current zone cache and for basic control. You can find it in https://github.com/dnsimple/erldns-admin
