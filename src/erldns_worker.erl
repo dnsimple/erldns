@@ -118,13 +118,21 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, SpanCtx, {WorkerProcessSup
                                     _ ->
                                         case erldns_decoder:decode_message(Bin) of
                                             {trailing_garbage, DecodedMessage, TrailingGarbage} ->
-                                                ?set_attributes([{status, <<"trailing_garbage">>}]),
+                                                Query = lists:last(DecodedMessage#dns_message.questions),
+                                                ?set_attributes([
+                                                    {status, <<"trailing_garbage">>},
+                                                    {qr, DecodedMessage#dns_message.qr},
+                                                    {rd, DecodedMessage#dns_message.rd},
+                                                    {ad, DecodedMessage#dns_message.ad},
+                                                    {qname, Query#dns_query.name},
+                                                    {qtype, dns:type_name(Query#dns_query.type)}
+                                                ]),
                                                 lager:info("Decoded message included trailing garbage (module: ~p, event: ~p, message: ~p, garbage: ~p)",
                                                         [?MODULE, decode_message_trailing_garbage, DecodedMessage, TrailingGarbage]),
                                                 % erldns_events:notify({?MODULE, decode_message_trailing_garbage, {DecodedMessage, TrailingGarbage}}),
                                                 handle_decoded_tcp_message(DecodedMessage, Socket, Address, SpanCtx, {WorkerProcessSup, WorkerProcess});
                                             {Error, Message, _} ->
-                                                ?set_attributes([{status, <<"error">>}]),
+                                                otel_span:set_status(SpanCtx, #status{code = error, message = <<"Error decoding message">>}),
                                                 lager:error("Error decoding message (module: ~p, event: ~p, error: ~p, message: ~p)",
                                                             [?MODULE, decode_message_error, Error, Message]),
                                                 % erldns_events:notify({?MODULE, decode_message_error, {Error, Message}}),
