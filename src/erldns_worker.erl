@@ -18,6 +18,7 @@
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("opentelemetry_api/include/otel_tracer.hrl").
+-include_lib("opentelemetry_api/include/opentelemetry.hrl").
 
 -behaviour(gen_server).
 
@@ -109,8 +110,8 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, SpanCtx, {WorkerProcessSup
                 fun(_SpanCtx) ->
                     case inet:peername(Socket) of
                         {ok, {Address, _Port}} ->
-                            erldns_events:notify({?MODULE, start_tcp, [{host, Address}]}),
-                            Result =
+                            try
+                                erldns_events:notify({?MODULE, start_tcp, [{host, Address}]}),
                                 case Bin of
                                     <<>> ->
                                         ok;
@@ -140,11 +141,21 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, SpanCtx, {WorkerProcessSup
                                                 ]),
                                                 handle_decoded_tcp_message(DecodedMessage, Socket, Address, SpanCtx, {WorkerProcessSup, WorkerProcess})
                                         end
-                                end,
-                            erldns_events:notify({?MODULE, end_tcp, [{host, Address}]}),
-                            gen_tcp:close(Socket),
-                            Result;
+                                end
+                            of
+                                Result ->
+                                    erldns_events:notify({?MODULE, end_tcp, [{host, Address}]}),
+                                    Result
+                            catch
+                                Exception:Reason:Stacktrace ->
+                                    otel_span:set_status(SpanCtx, #status{code = error, message = <<"">>}),
+                                    otel_span:record_exception(SpanCtx, Exception, Reason, Stacktrace, []),
+                                    {error, Exception, Reason}
+                            after
+                                gen_tcp:close(Socket)
+                            end;
                         {error, Reason} ->
+                            lager:debug("Notifying error reason: ~p", [Reason]),
                             erldns_events:notify({?MODULE, tcp_error, Reason})
                     end
                 end
