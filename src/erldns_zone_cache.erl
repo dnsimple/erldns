@@ -316,13 +316,16 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
             RRSigRecs = filter_rrsig_records_with_type_covered(RRFqdn, Type),
             % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
             TypedRecords = build_typed_index(Records ++ SignedRRSet ++ RRSigRecs),
+            CurrentRRSetRecords = get_records_by_name_and_type(RRFqdn, Type),
+            ZoneRecordsCount = Zone#zone.record_count,
             % put zone_records_typed records first then create the records in zone_records
             put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
             
             ?with_span(<<"update_zone_recs">>, #{},
                 fun(_SpanCtx) ->
                     ?set_attributes([{zone, ZoneName}]),
-                    update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest)
+                    UpdatedZoneRecordsCount = ZoneRecordsCount + length(Records) - length(CurrentRRSetRecords),
+                    update_zone_records_and_digest(ZoneName, UpdatedZoneRecordsCount, Digest)
                 end),
             write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}),
 
@@ -363,7 +366,8 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
             case Counter of
                 N when N =:= 0; CurrentCounter < N ->
                     lager:debug("Removing RRSet (~p) with type ~p", [RRFqdn, Type]),
-
+                    ZoneRecordsCount = Zone#zone.record_count,
+                    CurrentRRSetRecords = get_records_by_name_and_type(RRFqdn, Type),
                     erldns_storage:select_delete(zone_records_typed,
                                                  [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), Type}, '_'}, [], [true]}]),
 
@@ -379,8 +383,8 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                         N when N > 0 ->
                             % DELETE RRSet command has been sent
                             % we need to update the zone digest as the zone content changes
-                            update_zone_records_and_digest(ZoneName, get_zone_records(ZoneName), Digest),
-
+                            UpdatedZoneRecordsCount = ZoneRecordsCount - length(CurrentRRSetRecords),
+                            update_zone_records_and_digest(ZoneName, UpdatedZoneRecordsCount, Digest),
                             write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter});
                         _ ->
                             ok
@@ -393,15 +397,15 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
     end.
 
 %% @doc Given a zone name, list of records, and a digest, update the zone metadata in cache.
--spec update_zone_records_and_digest(dns:dname(), [dns:rr()], binary()) -> ok | {error, Reason :: term()}.
-update_zone_records_and_digest(ZoneName, Records, Digest) ->
+-spec update_zone_records_and_digest(dns:dname(), integer(), binary()) -> ok | {error, Reason :: term()}.
+update_zone_records_and_digest(ZoneName, RecordsCount, Digest) ->
     case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
         {ok, Zone} ->
             Zone,
             UpdatedZone =
                 Zone#zone{version = Digest,
                           authority = get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA),
-                          record_count = length(Records)},
+                          record_count = RecordsCount},
             ?with_span(<<"put_zone">>, #{},
                 fun(_SpanCtx) ->
                     ?set_attributes([{zone, ZoneName}]),
