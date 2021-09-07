@@ -320,11 +320,11 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
             ZoneRecordsCount = Zone#zone.record_count,
             % put zone_records_typed records first then create the records in zone_records
             put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
-       
+
             ?with_span(<<"update_zone_recs">>, #{},
                 fun(_SpanCtx) ->
                     ?set_attributes([{zone, ZoneName}]),
-                    UpdatedZoneRecordsCount = ZoneRecordsCount + 
+                    UpdatedZoneRecordsCount = ZoneRecordsCount +
                                                 ((length(Records) - length(CurrentRRSetRecords))) +
                                                 (length(SignedRRSet) - length(RRSigRecsCovering)),
                     update_zone_records_and_digest(ZoneName, UpdatedZoneRecordsCount, Digest)
@@ -385,7 +385,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                         N when N > 0 ->
                             % DELETE RRSet command has been sent
                             % we need to update the zone digest as the zone content changes
-                            UpdatedZoneRecordsCount = ZoneRecordsCount - 
+                            UpdatedZoneRecordsCount = ZoneRecordsCount -
                                                         length(CurrentRRSetRecords) -
                                                         length(RRSigsCovering),
                             update_zone_records_and_digest(ZoneName, UpdatedZoneRecordsCount, Digest),
@@ -420,14 +420,14 @@ update_zone_records_and_digest(ZoneName, RecordsCount, Digest) ->
     end.
 
 %% @doc Filter RRSig records for FQDN, removing type covered.
--spec filter_rrsig_records_with_type_covered(dns:dname(), dns:type()) -> [{{dns:dname(), dns:dname(), dns:type()}, [dns:rr()]} | []].
+-spec filter_rrsig_records_with_type_covered(dns:dname(), dns:type()) -> {[dns:rr()], [dns:rr()]} | {[], []}.
 filter_rrsig_records_with_type_covered(RRFqdn, TypeCovered) ->
     % guards below do not allow fun calls to prevent side effects
     case find_zone_in_cache(erldns:normalize_name(RRFqdn)) of
         {ok, _Zone} ->
-            {RRSigsCovering, RRSigsNotCovering} =
-                        lists:partition(erldns_records:match_type_covered(TypeCovered), 
-                                        get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_RRSIG_NUMBER));
+            % {RRSigsCovering, RRSigsNotCovering} =
+            lists:partition(erldns_records:match_type_covered(TypeCovered),
+                            get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_RRSIG_NUMBER));
         _ ->
             {[], []}
     end.
