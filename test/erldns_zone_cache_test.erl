@@ -27,8 +27,8 @@ setup_cache() ->
     erldns_storage:create(authorities),
     Pid.
 
-% load_dnssec_zone() ->
-%     erldns_storage:load_zones("test/dnssec-zone.json").
+load_dnssec_zone() ->
+    erldns_storage:load_zones("test/dnssec-zone.json").
 
 load_standard_zone() ->
     erldns_storage:load_zones("test/standard-zone.json").
@@ -38,7 +38,7 @@ teardown_cache(Pid) ->
     gen_server:stop(Pid),
     meck:unload(folsom_metrics).
 
-put_zone_rrset_records_count_test() ->
+put_zone_rrset_records_count_with_existing_rrset_test() ->
     Pid = setup_cache(),
     load_standard_zone(),
     ZoneName = <<"example.com">>,
@@ -49,19 +49,49 @@ put_zone_rrset_records_count_test() ->
                                             name  = <<"cname.example.com">>, ttl = 5, type = 5}], []},
                                             <<"cname.example.com">>, 5, 1),
     ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
-    % Existing CNAME RRset with one 1 entry in the fixtures
+    % There should be no change in record count
     ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count),
     teardown_cache(Pid).
 
-delete_zone_rrset_records_count_test() ->
+put_zone_rrset_records_count_with_new_rrset_test() ->
+    Pid = setup_cache(),
+    load_standard_zone(),
+    ZoneName = <<"example.com">>,
+    ZoneBase = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    erldns_zone_cache:put_zone_rrset({ZoneName,
+                                    <<"82a24ff949c33f4c6091990ff6b6e5b697d7093c4b5c37827b90b9b75cd9151d">>,
+                                    [#dns_rr{data = #dns_rrdata_a{ip = <<"5,5,5,5">>},
+                                            name  = <<"a2.example.com">>, ttl = 5, type = 1}], []},
+                                            <<"a2.example.com">>, 5, 1),
+    ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    % There should be no change in record count
+    ?assertEqual(ZoneBase#zone.record_count + 1, ZoneModified#zone.record_count),
+    teardown_cache(Pid).
+
+put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset_test() ->
+    Pid = setup_cache(),
+    load_dnssec_zone(),
+    ZoneName = <<"example-dnssec.com">>,
+    Zone = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    erldns_zone_cache:put_zone_rrset({ZoneName,
+                                    <<"irrelevantDigest">>,
+                                    [#dns_rr{data = #dns_rrdata_cname{dname = <<"google.com">>},
+                                            name  = <<"cname.example-dnssec.com">>, ttl = 60, type = 5}], []},
+                                            <<"cname.example-dnssec.com">>, 5, 1),
+    ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    % New RRSet entry for the CNAME + 1 RRSig record
+    ?assertEqual(Zone#zone.record_count + 2, ZoneModified#zone.record_count),
+    teardown_cache(Pid).
+
+delete_zone_rrset_records_count_width_existing_rrset_test() ->
     Pid = setup_cache(),
     load_standard_zone(),
     ZoneName = <<"example.com">>,
     ZoneBase = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
     erldns_zone_cache:delete_zone_rrset(ZoneName,
-                                    <<"82a24ff949c33f4c6091990ff6b6e5b697d7093c4b5c37827b90b9b75cd9151d">>,
-                                    erldns:normalize_name(<<"cname.example.com">>), 5, 0),
+                                    <<"irrelevantDigest">>,
+                                    erldns:normalize_name(<<"cname.example.com">>), 5, 1),
     ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
     % one RRSet record in the fixtures
-    ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count),
+    ?assertEqual(ZoneBase#zone.record_count - 1, ZoneModified#zone.record_count),
     teardown_cache(Pid).
