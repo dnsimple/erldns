@@ -50,6 +50,14 @@
           "public_key": "MIGeMA0GCSqGSIb3DQEBAQUAA4GMADCBiAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USChEW0fLYT/QkAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+CfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHSU8htjdwICBAE=",
           "key_tag": 0
         }
+      },
+      {
+        "name": "cname2.example-dnssec.com",
+        "type": "CNAME",
+        "ttl": 120,
+        "data": {
+          "dname": "google.com"
+        }
       }
     ],
     "keys": [
