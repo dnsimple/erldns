@@ -1,5 +1,6 @@
 REBAR:=$(shell which rebar3 || echo ./rebar3)
 REBAR_URL:="https://s3.amazonaws.com/rebar3/rebar3"
+.PHONY: test
 
 all: clean build
 
