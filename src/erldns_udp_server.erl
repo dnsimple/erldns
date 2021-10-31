@@ -93,11 +93,12 @@ handle_cast(_Message, State) ->
 
 handle_info(timeout, State) ->
     {noreply, State};
+handle_info({udp_passive, _Socket}, State) ->
+    inet:setopts(State#state.socket, [{active, 100}]),
+    {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
     % lager:debug("Received request: ~p", [Bin]),
-    Response = folsom_metrics:histogram_timed_update(udp_handoff_histogram, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]),
-    inet:setopts(State#state.socket, [{active, 100}]),
-    Response;
+    folsom_metrics:histogram_timed_update(udp_handoff_histogram, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]);
 handle_info(_Message, State) ->
     {noreply, State}.
 
