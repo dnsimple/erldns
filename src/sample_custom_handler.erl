@@ -23,7 +23,8 @@
 
 -export([start_link/0,
          handle/4,
-         filter/1]).
+         filter/1,
+         nsec_rr_type_mapper/1]).
 % Gen server hooks
 -export([init/1,
          handle_call/3,
@@ -46,6 +47,9 @@ handle(Qname, Qtype, Records, _Message) ->
 
 filter(Records) ->
     gen_server:call(?MODULE, {filter, Records}).
+
+nsec_rr_type_mapper(RRType) ->
+    gen_server:call(?MODULE, {nsec_rr_type_mapper, RRType}).
 
 %% Gen server hooks
 init([]) ->
