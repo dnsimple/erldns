@@ -48,8 +48,8 @@ handle(Qname, Qtype, Records, _Message) ->
 filter(Records) ->
     gen_server:call(?MODULE, {filter, Records}).
 
-nsec_rr_type_mapper(RRType) ->
-    gen_server:call(?MODULE, {nsec_rr_type_mapper, RRType}).
+nsec_rr_type_mapper(_RRType) ->
+    [?DNS_TYPE_A].
 
 %% Gen server hooks
 init([]) ->
