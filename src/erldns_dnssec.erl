@@ -25,6 +25,8 @@
 -export([rrsig_for_zone_rrset/2]).
 -export([maybe_sign_rrset/3]).
 
+-export([map_nsec_rr_types/1]).
+
 -define(NEXT_DNAME_PART, <<"\000">>).
 
 %% @doc Given a zone and a set of records, return the RRSIG records.
@@ -108,7 +110,9 @@ handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
                 [#dns_rr{name = Qname,
                          type = ?DNS_TYPE_NSEC,
                          ttl = Ttl,
-                         data = #dns_rrdata_nsec{next_dname = NextDname, types = record_types_for_name(Qname)}}],
+                         data = #dns_rrdata_nsec{
+                             next_dname = NextDname, 
+                             types = map_nsec_rr_types(record_types_for_name(Qname))}}],
             NsecRRSigRecords = rrsig_for_zone_rrset(Zone, NsecRecords),
 
             erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true,
@@ -150,6 +154,24 @@ find_unsigned_records(Records) ->
                     (RR#dns_rr.type =/= ?DNS_TYPE_RRSIG) and (lists:filter(erldns_records:match_name_and_type(RR#dns_rr.name, ?DNS_TYPE_RRSIG), Records) =:= [])
                  end,
                  Records).
+
+-spec map_nsec_rr_types([dns:type()]) -> [dns:type()].
+map_nsec_rr_types(Types) ->
+    Handlers = erldns_handler:get_versioned_handlers(),
+    % sort and deduplicate
+    lists:usort(lists:flatten(
+        lists:map(fun(Type) -> 
+            case Handlers of
+                [] ->
+                    Type;
+                _ ->
+                    case lists:keyfind([Type], 2, Handlers) of 
+                        false -> Type;
+                        {M, _, _} -> M:nsec_rr_type_mapper(Type)
+                    end
+            end
+        end, Types))
+    ).
 
 record_types_for_name(Name) ->
     RecordsAtName = erldns_zone_cache:get_records_by_name(Name),
