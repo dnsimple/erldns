@@ -106,7 +106,6 @@ handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
             SoaRRSigRecords = lists:filter(erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords),
 
             NextDname = erldns:normalize_name(dns:labels_to_dname([?NEXT_DNAME_PART] ++ dns:dname_to_labels(Qname))),
-            %lager:debug("is_name_in_zone_with_wildcard: ~p", [erldns_zone_cache:is_name_in_zone_with_wildcard(Zone#zone.name, NextDname)]),
             NsecRecords =
                 [#dns_rr{name = Qname,
                          type = ?DNS_TYPE_NSEC,
