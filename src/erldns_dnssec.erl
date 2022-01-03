@@ -106,13 +106,14 @@ handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
             SoaRRSigRecords = lists:filter(erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords),
 
             NextDname = erldns:normalize_name(dns:labels_to_dname([?NEXT_DNAME_PART] ++ dns:dname_to_labels(Qname))),
+            %lager:debug("is_name_in_zone_with_wildcard: ~p", [erldns_zone_cache:is_name_in_zone_with_wildcard(Zone#zone.name, NextDname)]),
             NsecRecords =
                 [#dns_rr{name = Qname,
                          type = ?DNS_TYPE_NSEC,
                          ttl = Ttl,
                          data = #dns_rrdata_nsec{
                              next_dname = NextDname, 
-                             types = map_nsec_rr_types(record_types_for_name(Qname))}}],
+                             types = map_nsec_rr_types(record_types_for_name(Qname, Zone))}}],
             NsecRRSigRecords = rrsig_for_zone_rrset(Zone, NsecRecords),
 
             erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true,
@@ -173,7 +174,11 @@ map_nsec_rr_types(Types) ->
         end, Types))
     ).
 
-record_types_for_name(Name) ->
+record_types_for_name(Name, Zone) ->
     RecordsAtName = erldns_zone_cache:get_records_by_name(Name),
-    TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
+    MatchedRecords = case RecordsAtName of
+        [] -> erldns_resolver:best_match(Name, Zone);
+        _ -> RecordsAtName
+    end,
+    TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, MatchedRecords),
     lists:usort(TypesCovered ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]).
