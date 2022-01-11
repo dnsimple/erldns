@@ -112,7 +112,7 @@ handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
                          ttl = Ttl,
                          data = #dns_rrdata_nsec{
                              next_dname = NextDname, 
-                             types = map_nsec_rr_types(record_types_for_name(Qname))}}],
+                             types = map_nsec_rr_types(record_types_for_name(Qname, Zone))}}],
             NsecRRSigRecords = rrsig_for_zone_rrset(Zone, NsecRecords),
 
             erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true,
@@ -173,7 +173,11 @@ map_nsec_rr_types(Types) ->
         end, Types))
     ).
 
-record_types_for_name(Name) ->
+record_types_for_name(Name, Zone) ->
     RecordsAtName = erldns_zone_cache:get_records_by_name(Name),
-    TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
+    MatchedRecords = case RecordsAtName of
+        [] -> erldns_resolver:best_match(Name, Zone);
+        _ -> RecordsAtName
+    end,
+    TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, MatchedRecords),
     lists:usort(TypesCovered ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]).

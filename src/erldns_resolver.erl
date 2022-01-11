@@ -20,6 +20,7 @@
 -include("erldns.hrl").
 
 -export([resolve/3]).
+-export([best_match/2]).
 
 -ifdef(TEST).
 
