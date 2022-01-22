@@ -12,7 +12,7 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Funcions for loading zones from local or remote sources.
+%% @doc Functions for loading zones from local or remote sources.
 -module(erldns_zone_loader).
 
 -export([load_zones/0]).

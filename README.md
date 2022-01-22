@@ -74,7 +74,7 @@ Here are some queries to try:
 
 ## Performance
 
-In our environment (DNSimple) we are seeing 30 to 65 µs handoff times to retreive a packet from the UDP port and give it to a worker for processing. Your performance may vary, but given those measurements erl-dns is capable of handling between 15k and 30k questions per second. Please note: You may need to configure the number of workers available to handle traffic at higher volumes.
+In our environment (DNSimple) we are seeing 30 to 65 µs handoff times to retrieve a packet from the UDP port and give it to a worker for processing. Your performance may vary, but given those measurements erl-dns is capable of handling between 15k and 30k questions per second. Please note: You may need to configure the number of workers available to handle traffic at higher volumes.
 
 ## Design
 
@@ -114,7 +114,7 @@ This project uses [OpenTelemetry](https://opentelemetry.io/docs/erlang/) (OTEL) 
 
 To enable opentelmetry tracing, you need to:
 
-1. Add [opentelemetry](https://github.com/open-telemetry/opentelemetry-erlang#including-in-release) as depency of your application.
+1. Add [opentelemetry](https://github.com/open-telemetry/opentelemetry-erlang#including-in-release) as dependency of your application.
 2. Configure the opentelmetry client:
 
    Add the following configuration to the [erldns.config](erldns.config.example):
