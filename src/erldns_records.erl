@@ -82,7 +82,7 @@ default_priority(Priority) ->
             Value
     end.
 
-%% @doc Applies a minimum TTL based on the SOA minumum value.
+%% @doc Applies a minimum TTL based on the SOA minimum value.
 %%
 %% The first argument is the Record that is being updated.
 %% The second argument is the SOA RR Data.
