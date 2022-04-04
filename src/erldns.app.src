@@ -16,6 +16,7 @@
                   bear,
                   folsom,
                   iso8601,
+                  opentelemetry_api,
                   nodefinder]},
   {start_phases, [{post_start, []}]}
   ]}.
