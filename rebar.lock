@@ -2,7 +2,7 @@
 [{<<"base32">>,{pkg,<<"base32">>,<<"0.1.0">>},1},
  {<<"bear">>,{pkg,<<"bear">>,<<"0.8.7">>},1},
  {<<"dns_erlang">>,
-  {git,"git://github.com/dnsimple/dns_erlang.git",
+  {git,"git@github.com:dnsimple/dns_erlang.git",
        {ref,"52f7279afb4cc97b4d76babde223257ec08f3676"}},
   0},
  {<<"folsom">>,{pkg,<<"folsom">>,<<"0.8.8">>},0},
