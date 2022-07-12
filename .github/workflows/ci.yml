@@ -25,6 +25,15 @@ jobs:
         with:
           otp-version: ${{ env.OTP_VERSION }}
 
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/rebar3
+            _build
+          key: ${{ runner.os }}-erlang-${{ env.OTP_VERSION }}-${{ hashFiles('**/*rebar.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-erlang-${{ env.OTP_VERSION }}-
+
       - run: make build
 
   test:
@@ -55,6 +64,15 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ env.OTP_VERSION }}
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/rebar3
+            _build
+          key: ${{ runner.os }}-erlang-${{ env.OTP_VERSION }}-${{ hashFiles('**/*rebar.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-erlang-${{ env.OTP_VERSION }}-
 
       - run: make test
 
