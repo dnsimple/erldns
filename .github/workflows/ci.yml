@@ -29,10 +29,7 @@ jobs:
         with:
           path: |
             ~/.cache/rebar3
-            _build
           key: ${{ runner.os }}-erlang-${{ env.OTP_VERSION }}-${{ hashFiles('**/*rebar.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-erlang-${{ env.OTP_VERSION }}-
 
       - run: make build
 
@@ -53,10 +50,7 @@ jobs:
         with:
           path: |
             ~/.cache/rebar3
-            _build
           key: ${{ runner.os }}-erlang-${{ env.OTP_VERSION }}-${{ hashFiles('**/*rebar.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-erlang-${{ env.OTP_VERSION }}-
 
       - run: make test
 
