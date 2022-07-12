@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  OTP_VERSION: "24.0.5"
+  OTP_VERSION: "24.1"
 
 jobs:
   build:
