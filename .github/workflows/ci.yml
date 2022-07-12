@@ -42,22 +42,6 @@ jobs:
     needs:
       - build
 
-    # Uncomment to create a PostgreSQL database
-    #services:
-    #  postgres:
-    #    image: postgres:13.4-alpine
-    #    ports:
-    #      - 5432:5432
-    #    env:
-    #      POSTGRES_HOST_AUTH_METHOD: trust
-    #      POSTGRES_USER: postgres
-    #      POSTGRES_DB: dnsimple_test__redirector
-    #    options: >-
-    #      --health-cmd pg_isready
-    #      --health-interval 10s
-    #      --health-timeout 5s
-    #      --health-retries 5
-
     steps:
       - uses: actions/checkout@v3
 
