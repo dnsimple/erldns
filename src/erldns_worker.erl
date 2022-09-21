@@ -103,7 +103,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% @doc Handle DNS query that comes in over TCP
--spec handle_tcp_dns_query(gen_tcp:socket(), iodata(), map(), {pid(), term()}) -> ok | {error, timeout} | {error, timeout, pid()}.
+-spec handle_tcp_dns_query(gen_tcp:socket(), iodata(), otel_tracer:tracer_ctx(), {pid(), term()}) -> ok | {error, timeout} | {error, timeout, pid()}.
 handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, SpanCtx, {WorkerProcessSup, WorkerProcess}) ->
     ?set_current_span(SpanCtx),
     ?with_span(<<"handle_tcp_dns_query">>, #{},
@@ -206,7 +206,7 @@ handle_decoded_tcp_message(DecodedMessage, Socket, Address, SpanCtx, {WorkerProc
     ).
 
 %% @doc Handle DNS query that comes in over UDP
--spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary(), map(), {pid(), term()}) ->
+-spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary(), otel_tracer:tracer_ctx(), {pid(), term()}) ->
                               ok | {error, not_owner | timeout | inet:posix() | atom()} | {error, timeout, pid()}.
 handle_udp_dns_query(Socket, Host, Port, Bin, SpanCtx, {WorkerProcessSup, WorkerProcess}) ->
     erldns_events:notify({?MODULE, start_udp, [{host, Host}]}),
@@ -242,7 +242,7 @@ handle_udp_dns_query(Socket, Host, Port, Bin, SpanCtx, {WorkerProcessSup, Worker
     erldns_events:notify({?MODULE, end_udp, [{host, Host}]}),
     Result.
 
--spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number(), map(), {pid(), term()}) ->
+-spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number(), otel_tracer:tracer_ctx(), {pid(), term()}) ->
                                     ok | {error, not_owner | timeout | inet:posix() | atom()} | {error, timeout, term()}.
 handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, SpanCtx, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
     ?set_current_span(SpanCtx),
