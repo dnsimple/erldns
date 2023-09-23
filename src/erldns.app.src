@@ -18,5 +18,8 @@
                   iso8601,
                   opentelemetry_api,
                   nodefinder]},
-  {start_phases, [{post_start, []}]}
+  {start_phases, [{post_start, []}]},
+
+  {licenses, ["Apache-2.0"]},
+  {links, [{"GitHub", "https://github.com/dnsimple/erldns"}]}
   ]}.
