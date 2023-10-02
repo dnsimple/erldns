@@ -10,33 +10,38 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  OTP_VERSION: "24.1"
-
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        otp_version: ['26.1', '25.3', '24.3']
 
     steps:
       - uses: actions/checkout@v3
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ env.OTP_VERSION }}
+          otp-version: ${{ matrix.otp_version }}
+          version-type: 'strict'
 
       - uses: actions/cache@v3
         with:
           path: |
             ~/.cache/rebar3
             _build
-          key: ${{ runner.os }}-erlang-${{ env.OTP_VERSION }}-${{ hashFiles('**/*rebar.lock') }}
+          key: ${{ runner.os }}-erlang-${{ matrix.otp_version }}-${{ hashFiles('**/*rebar.lock') }}
 
       - run: make build
 
   test:
     name: Test
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        otp_version: ['26.1', '25.3', '24.3']
+
     needs:
       - build
 
@@ -45,14 +50,15 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ env.OTP_VERSION }}
+          otp-version: ${{ matrix.otp_version }}
+          version-type: 'strict'
 
       - uses: actions/cache@v3
         with:
           path: |
             ~/.cache/rebar3
             _build
-          key: ${{ runner.os }}-erlang-${{ env.OTP_VERSION }}-${{ hashFiles('**/*rebar.lock') }}
+          key: ${{ runner.os }}-erlang-${{ matrix.otp_version }}-${{ hashFiles('**/*rebar.lock') }}
 
       - run: make test
 
