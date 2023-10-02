@@ -19,7 +19,7 @@ jobs:
         otp_version: ['26.1', '25.3', '24.3']
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: erlef/setup-beam@v1
         with:
@@ -46,7 +46,7 @@ jobs:
       - build
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: erlef/setup-beam@v1
         with:
