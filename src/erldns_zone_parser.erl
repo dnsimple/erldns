@@ -439,8 +439,8 @@ json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) when is_map
 json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) ->
     Txts =
         case erldns_config:keyget(<<"txts">>, Data) of
-            undefined -> erldns_config:keyget(<<"txt">>, Data);
-            _ -> erldns_config:keyget(<<"txts">>, Data)
+            Value when is_list(Value) -> Value;
+            _ -> erldns_config:keyget(<<"txt">>, Data)
         end,
 
     json_record_to_erlang([Name, Type, Ttl, Data, _Context, Txts]);
@@ -480,8 +480,8 @@ json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) when is_map(Data) 
 json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) ->
     Txts =
         case erldns_config:keyget(<<"txts">>, Data) of
-            undefined -> [erldns_config:keyget(<<"spf">>, Data)];
-            _ -> erldns_config:keyget(<<"txts">>, Data)
+            Value when is_list(Value) -> Value;
+            _ -> [erldns_config:keyget(<<"spf">>, Data)]
         end,
 
     #dns_rr{name = Name,
