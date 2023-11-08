@@ -454,14 +454,26 @@ json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) ->
             {}
     end;
 json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) when is_map(Data) ->
+    Txts =
+      case maps:is_key(<<"txts">>, Data) of
+        true -> maps:get(<<"txts">>, Data);
+        false -> [maps:get(<<"spf">>, Data)]
+      end,
+
     #dns_rr{name = Name,
             type = ?DNS_TYPE_SPF,
-            data = #dns_rrdata_spf{spf = [maps:get(<<"spf">>, Data)]},
+            data = #dns_rrdata_spf{spf = Txts},
             ttl = Ttl};
 json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) ->
+    Txts =
+      case erldns_config:keyget(<<"txts">>, Data) of
+        undefined -> [erldns_config:keyget(<<"spf">>, Data)];
+        _ -> erldns_config:keyget(<<"txts">>, Data)
+      end,
+
     #dns_rr{name = Name,
             type = ?DNS_TYPE_SPF,
-            data = #dns_rrdata_spf{spf = [erldns_config:keyget(<<"spf">>, Data)]},
+            data = #dns_rrdata_spf{spf = Txts},
             ttl = Ttl};
 json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) when is_map(Data) ->
     #dns_rr{name = Name,

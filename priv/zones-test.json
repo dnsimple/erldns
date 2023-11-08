@@ -2774,7 +2774,7 @@
         "type": "SPF",
         "ttl": 120,
         "data": {
-          "spf": "v=spf1 include:_spf.google.com ~all"
+          "spf": "v=spf1 include:_spf.spf.example.com ~all"
         }
       },
       {
@@ -2782,9 +2782,9 @@
         "type": "SPF",
         "ttl": 120,
         "data": {
-          "spf": "v=spf1 include:_spf.google.com ~all",
+          "spf": "v=spf1 include:_spf.spf.example.com ~all",
           "txts": [
-            "v=spf1 include:_spf.google.com ~all"
+            "v=spf1 include:_spf.txts.example.com ~all"
           ]
         }
       }
