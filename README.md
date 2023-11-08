@@ -21,17 +21,13 @@ make
 
 ## Zones
 
-Zones are loaded from JSON.
-
-Example JSON files are in the priv/ directory.
+Zones are loaded from JSON. Example JSON files are in the `priv/` directory.
 
 You can also write new systems to load zones by writing the zones directly to the zone cache using `erldns_zone_cache:put_zone/1`.
 
 ## Configuration
 
-An example configuration file can be found in erldns.config.example.
-
-Copy it to `erldns.config` and modify as needed.
+An example configuration file can be found in `erldns.example.config`. Copy it to `erldns.config` and modify as needed.
 
 ## Running
 
@@ -59,17 +55,17 @@ overmind start
 Here are some queries to try:
 
 ```bash
-    dig -p8053 @127.0.0.1 example.com a
-    dig -p8053 @127.0.0.1 example.com cname
-    dig -p8053 @127.0.0.1 example.com ns
-    dig -p8053 @127.0.0.1 example.com mx
-    dig -p8053 @127.0.0.1 example.com spf
-    dig -p8053 @127.0.0.1 example.com txt
-    dig -p8053 @127.0.0.1 example.com sshfp
-    dig -p8053 @127.0.0.1 example.com soa
-    dig -p8053 @127.0.0.1 example.com naptr
+dig -p 8053 @127.0.0.1 example.com a
+dig -p 8053 @127.0.0.1 example.com cname
+dig -p 8053 @127.0.0.1 example.com ns
+dig -p 8053 @127.0.0.1 example.com mx
+dig -p 8053 @127.0.0.1 example.com spf
+dig -p 8053 @127.0.0.1 example.com txt
+dig -p 8053 @127.0.0.1 example.com sshfp
+dig -p 8053 @127.0.0.1 example.com soa
+dig -p 8053 @127.0.0.1 example.com naptr
 
-    dig -p8053 @127.0.0.1 -x 127.0.0.1 ptr
+dig -p 8053 @127.0.0.1 -x 127.0.0.1 ptr
 ```
 
 ## Performance
@@ -115,7 +111,7 @@ This project uses [OpenTelemetry](https://opentelemetry.io/docs/erlang/) (OTEL) 
 To enable opentelmetry tracing, you need to:
 
 1. Add [opentelemetry](https://github.com/open-telemetry/opentelemetry-erlang#including-in-release) as dependency of your application.
-2. Configure the opentelmetry client:
+2. Configure the opentelemetry client:
 
    Add the following configuration to the [erldns.config](erldns.config.example):
 
@@ -146,4 +142,4 @@ Application traces:
 
 ## Admin
 
-There is a administrative API for querying the current zone cache and for basic control. You can find it in https://github.com/dnsimple/erldns-admin
+There is an administrative API for querying the current zone cache and for basic control. You can find it in https://github.com/dnsimple/erldns-admin
