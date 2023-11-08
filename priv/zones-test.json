@@ -2687,6 +2687,110 @@
     ]
   },
   {
+    "name": "multipart.example",
+    "records": [
+      {
+        "name": "multipart.example",
+        "type": "SOA",
+        "data": {
+          "mname": "ns1.example.com",
+          "rname": "ahu.example.com",
+          "serial": 2000081501,
+          "refresh": 28800,
+          "retry": 7200,
+          "expire": 604800,
+          "minimum": 86400
+        },
+        "ttl": 120
+      },
+      {
+        "name": "multipart.example",
+        "type": "NS",
+        "ttl": 120,
+        "data": {
+          "dname": "ns1.example.com"
+        }
+      },
+      {
+        "name": "multipart.example",
+        "type": "NS",
+        "ttl": 120,
+        "data": {
+          "dname": "ns2.example.com"
+        }
+      },
+      {
+        "name": "txt1a.multipart.example",
+        "type": "TXT",
+        "ttl": 120,
+        "data": {
+          "txt": "string one"
+        }
+      },
+      {
+        "name": "txt1b.multipart.example",
+        "type": "TXT",
+        "ttl": 120,
+        "data": {
+          "txt": "string one",
+          "txts": [
+            "string one"
+          ]
+        }
+      },
+      {
+        "name": "txt2a.multipart.example",
+        "type": "TXT",
+        "ttl": 120,
+        "data": {
+          "txt": "\"string one\" \"string two\""
+        }
+      },
+      {
+        "name": "txt2b.multipart.example",
+        "type": "TXT",
+        "ttl": 120,
+        "data": {
+          "txt": "\"string one\" \"string two\"",
+          "txts": [
+            "string one",
+            "string two"
+          ]
+        }
+      },
+      {
+        "name": "txt2c.multipart.example",
+        "type": "TXT",
+        "ttl": 120,
+        "data": {
+          "txts": [
+            "string one",
+            "string two"
+          ]
+        }
+      },
+      {
+        "name": "spf1a.multipart.example",
+        "type": "SPF",
+        "ttl": 120,
+        "data": {
+          "spf": "v=spf1 include:_spf.google.com ~all"
+        }
+      },
+      {
+        "name": "spf1b.multipart.example",
+        "type": "SPF",
+        "ttl": 120,
+        "data": {
+          "spf": "v=spf1 include:_spf.google.com ~all",
+          "txts": [
+            "v=spf1 include:_spf.google.com ~all"
+          ]
+        }
+      }
+    ]
+  },
+  {
     "name": "test.com",
     "records": [
       {
