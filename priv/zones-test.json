@@ -2770,6 +2770,18 @@
         }
       },
       {
+        "name": "txt2d.multipart.example",
+        "type": "TXT",
+        "ttl": 120,
+        "data": {
+          "txt": "\"string a\" \"string b\"",
+          "txts": [
+            "string c",
+            "string d"
+          ]
+        }
+      },
+      {
         "name": "spf1a.multipart.example",
         "type": "SPF",
         "ttl": 120,
