@@ -428,21 +428,12 @@ json_record_to_erlang([Name, <<"RP">>, Ttl, Data, _Context]) ->
             data = #dns_rrdata_rp{mbox = erldns_config:keyget(<<"mbox">>, Data), txt = erldns_config:keyget(<<"txt">>, Data)},
             ttl = Ttl};
 json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) when is_map(Data) ->
-    %% This function call may crash. Handle it as a bad record.
-    try erldns_txt:parse(maps:get(<<"txt">>, Data)) of
-        ParsedText ->
-            #dns_rr{name = Name,
-                    type = ?DNS_TYPE_TXT,
-                    data = #dns_rrdata_txt{txt = lists:flatten(ParsedText)},
-                    ttl = Ttl}
-    catch
-        Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
-            {}
-    end;
+    json_record_to_erlang([Name, Type, Ttl, Data, _Context, maps:get(<<"txt">>, Data)]);
 json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) ->
+    json_record_to_erlang([Name, Type, Ttl, Data, _Context, erldns_config:keyget(<<"txt">>, Data)]);
+json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context, Value]) ->
     %% This function call may crash. Handle it as a bad record.
-    try erldns_txt:parse(erldns_config:keyget(<<"txt">>, Data)) of
+    try erldns_txt:parse(Value) of
         ParsedText ->
             #dns_rr{name = Name,
                     type = ?DNS_TYPE_TXT,
