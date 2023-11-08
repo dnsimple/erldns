@@ -5,7 +5,7 @@ REBAR_URL:="https://s3.amazonaws.com/rebar3/rebar3"
 all: clean build
 
 $(REBAR):
-	wget $(REBAR_URL) && chmod +x rebar3
+	curl -o rebar3 $(REBAR_URL) && chmod +x rebar3
 
 build: $(REBAR)
 	$(REBAR) compile
