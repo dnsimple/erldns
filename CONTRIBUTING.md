@@ -61,12 +61,12 @@ make test
 
 ### Functional Testing
 
-The [dnstest](https://github.com/dnsimple/dnstest) tool provides a suite of black-box functional tests for erldns (and any other DNS authoritative name server). The tests are largely based on the excellent [suite of tests](https://github.com/PowerDNS/pdns/tree/master/regression-tests/tests) in [PowerDNS](http://powerdns.com). To run the tests, you must change `erldns.config` so that zones are loaded from `priv/test.zones.json`.
+The [dnstest](https://github.com/dnsimple/dnstest) tool provides a suite of black-box functional tests for erldns (and any other DNS authoritative name server). The tests are largely based on the excellent [suite of tests](https://github.com/PowerDNS/pdns/tree/master/regression-tests/tests) in [PowerDNS](http://powerdns.com). To run the tests, you must change `erldns.config` so that zones are loaded from `priv/zones-test.json`.
 
 ```
 [
   {erldns, [
-    {zones, "priv/test.zones.json"}
+    {zones, "priv/zones-test.json"}
   ]}
 ]
 ```
