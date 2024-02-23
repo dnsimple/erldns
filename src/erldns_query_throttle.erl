@@ -22,21 +22,27 @@
 -include_lib("dns_erlang/include/dns_records.hrl").
 
 %% API
--export([start_link/0,
-         throttle/2,
-         sweep/0,
-         stop/0]).
+-export([
+    start_link/0,
+    throttle/2,
+    sweep/0,
+    stop/0
+]).
 % Gen server hooks
--export([init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3]).
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    terminate/2,
+    code_change/3
+]).
 
 %% Types
--export_type([throttle_result/0,
-              throttle_hit_count/0]).
+-export_type([
+    throttle_result/0,
+    throttle_hit_count/0
+]).
 
 -type throttle_hit_count() :: non_neg_integer().
 -type throttle_result() :: {throttled | ok, inet:ip_address() | inet:hostname(), throttle_hit_count()}.

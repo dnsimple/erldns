@@ -35,14 +35,16 @@ load_zones() ->
             lager:info("Parsing zones JSON"),
             JsonZones = jsx:decode(Binary, [{return_maps, false}]),
             lager:info("Putting zones into cache"),
-            lists:foreach(fun(JsonZone) ->
-                             Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-                             case erldns_zone_cache:put_zone(Zone) of
-                                 {error, Reason} -> erldns_events:notify({?MODULE, put_zone_error, {JsonZone, Reason}});
-                                 _ -> ok
-                             end
-                          end,
-                          JsonZones),
+            lists:foreach(
+                fun(JsonZone) ->
+                    Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
+                    case erldns_zone_cache:put_zone(Zone) of
+                        {error, Reason} -> erldns_events:notify({?MODULE, put_zone_error, {JsonZone, Reason}});
+                        _ -> ok
+                    end
+                end,
+                JsonZones
+            ),
             lager:info("Loaded zones (count: ~p)", [length(JsonZones)]),
             {ok, length(JsonZones)};
         {error, Reason} ->
@@ -63,25 +65,38 @@ filename() ->
 
 json_jsx_decode_test() ->
     Zone_RR =
-        [{<<"name">>, <<"example.net">>},
-         {<<"records">>,
-          [[{<<"name">>, <<"example.net">>},
-            {<<"type">>, <<"SOA">>},
-            {<<"ttl">>, 3600},
-            {<<"data">>,
-             [{<<"mname">>, <<"ns1.example.net">>},
-              {<<"rname">>, <<"admin.example.net">>},
-              {<<"serial">>, 1234567},
-              {<<"refresh">>, 1},
-              {<<"retry">>, 1},
-              {<<"expire">>, 1},
-              {<<"minimum">>, 1}]}],
-           [{<<"name">>, <<"ns1.example.net">>}, {<<"type">>, <<"A">>}, {<<"ttl">>, 30}, {<<"data">>, [{<<"ip">>, <<"123.45.67.89">>}]}]]}],
+        [
+            {<<"name">>, <<"example.net">>},
+            {<<"records">>, [
+                [
+                    {<<"name">>, <<"example.net">>},
+                    {<<"type">>, <<"SOA">>},
+                    {<<"ttl">>, 3600},
+                    {<<"data">>, [
+                        {<<"mname">>, <<"ns1.example.net">>},
+                        {<<"rname">>, <<"admin.example.net">>},
+                        {<<"serial">>, 1234567},
+                        {<<"refresh">>, 1},
+                        {<<"retry">>, 1},
+                        {<<"expire">>, 1},
+                        {<<"minimum">>, 1}
+                    ]}
+                ],
+                [
+                    {<<"name">>, <<"ns1.example.net">>},
+                    {<<"type">>, <<"A">>},
+                    {<<"ttl">>, 30},
+                    {<<"data">>, [{<<"ip">>, <<"123.45.67.89">>}]}
+                ]
+            ]}
+        ],
     JSON_zone =
-        <<"{\"name\":\"example.net\",\"records\":[{\"name\":\"example.net\",\"type\":\"SOA\",\"ttl\":3600,\"data\":{\"m"
-          "name\":\"ns1.example.net\",\"rname\":\"admin.example.net\",\"serial\":1234567,\"refresh\":1,\"retry\":1,\"ex"
-          "pire\":1,\"minimum\":1}},{\"name\":\"ns1.example.net\",\"type\":\"A\",\"ttl\":30,\"data\":{\"ip\":\"123.45.6"
-          "7.89\"}}]}">>,
+        <<
+            "{\"name\":\"example.net\",\"records\":[{\"name\":\"example.net\",\"type\":\"SOA\",\"ttl\":3600,\"data\":{\"m"
+            "name\":\"ns1.example.net\",\"rname\":\"admin.example.net\",\"serial\":1234567,\"refresh\":1,\"retry\":1,\"ex"
+            "pire\":1,\"minimum\":1}},{\"name\":\"ns1.example.net\",\"type\":\"A\",\"ttl\":30,\"data\":{\"ip\":\"123.45.6"
+            "7.89\"}}]}"
+        >>,
     ?assertEqual(Zone_RR, jsx:decode(JSON_zone, [{return_maps, false}])).
 
 -endif.

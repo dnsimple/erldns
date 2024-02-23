@@ -18,8 +18,10 @@
 
 -include_lib("dns_erlang/include/dns_records.hrl").
 
--export([encode_message/1,
-         encode_message/2]).
+-export([
+    encode_message/1,
+    encode_message/2
+]).
 
 %% @doc Encode the DNS message into its binary representation.
 %%
@@ -49,10 +51,10 @@ encode_message(Response) ->
 %% configuration, then this function should never throw an
 %% exception.
 -spec encode_message(dns:message(), [dns:encode_message_opt()]) ->
-                        {false, dns:message_bin()} |
-                        {true, dns:message_bin(), dns:message()} |
-                        {false, dns:message_bin(), dns:tsig_mac()} |
-                        {true, dns:message_bin(), dns:tsig_mac(), dns:message()}.
+    {false, dns:message_bin()}
+    | {true, dns:message_bin(), dns:message()}
+    | {false, dns:message_bin(), dns:tsig_mac()}
+    | {true, dns:message_bin(), dns:tsig_mac(), dns:message()}.
 encode_message(Response, Opts) ->
     case application:get_env(erldns, catch_exceptions) of
         {ok, false} ->
@@ -77,12 +79,14 @@ build_error_response({_, Response}) ->
     build_error_response(Response, ?DNS_RCODE_SERVFAIL).
 
 build_error_response(Response, Rcode) ->
-    Response#dns_message{anc = 0,
-                         auc = 0,
-                         adc = 0,
-                         qr = true,
-                         aa = true,
-                         rc = Rcode,
-                         answers = [],
-                         authority = [],
-                         additional = []}.
+    Response#dns_message{
+        anc = 0,
+        auc = 0,
+        adc = 0,
+        qr = true,
+        aa = true,
+        rc = Rcode,
+        answers = [],
+        authority = [],
+        additional = []
+    }.

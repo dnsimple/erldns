@@ -16,18 +16,20 @@
 -module(erldns_storage_json).
 
 %% API
--export([create/1,
-         insert/2,
-         delete_table/1,
-         delete/2,
-         select_delete/2,
-         backup_table/1,
-         backup_tables/0,
-         select/2,
-         select/3,
-         foldl/3,
-         empty_table/1,
-         list_table/1]).
+-export([
+    create/1,
+    insert/2,
+    delete_table/1,
+    delete/2,
+    select_delete/2,
+    backup_table/1,
+    backup_tables/0,
+    select/2,
+    select/3,
+    foldl/3,
+    empty_table/1,
+    list_table/1
+]).
 
 %% Public API
 %% @doc Create ets table wrapper. Use match cases for adding different options to the table.

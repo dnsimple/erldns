@@ -15,10 +15,12 @@
 %% @doc Public API for erldns event handler registration and notification.
 -module(erldns_events).
 
--export([start_link/0,
-         notify/1,
-         add_handler/1,
-         add_handler/2]).
+-export([
+    start_link/0,
+    notify/1,
+    add_handler/1,
+    add_handler/2
+]).
 
 %% @doc Start the event process.
 -spec start_link() -> any().

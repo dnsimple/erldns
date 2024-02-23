@@ -17,18 +17,22 @@
 
 -include_lib("dns_erlang/include/dns.hrl").
 
--export([is_enabled/2,
-         optionally_append_soa/1]).
+-export([
+    is_enabled/2,
+    optionally_append_soa/1
+]).
 
 %% Determine if AXFR is enabled for the given request host.
 is_enabled(Host, Metadata) ->
     MatchingMetadata =
-        lists:filter(fun(MetadataRow) ->
-                        [_Id, _DomainId, Kind, Content] = MetadataRow,
-                        {ok, AllowedAddress} = inet_parse:address(binary_to_list(Content)),
-                        AllowedAddress =:= Host andalso Kind =:= <<"axfr">>
-                     end,
-                     Metadata),
+        lists:filter(
+            fun(MetadataRow) ->
+                [_Id, _DomainId, Kind, Content] = MetadataRow,
+                {ok, AllowedAddress} = inet_parse:address(binary_to_list(Content)),
+                AllowedAddress =:= Host andalso Kind =:= <<"axfr">>
+            end,
+            Metadata
+        ),
     length(MatchingMetadata) > 0.
 
 %% If the message is an AXFR request then append the SOA record.
