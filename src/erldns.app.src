@@ -1,25 +1,27 @@
 % -*- mode: Erlang; -*-
-{application, erldns,
- [{description, "Erlang Authoritative DNS Server"},
-  {vsn, "3.0.0"},
-  {licenses, ["MIT"]},
-  {mod, { erldns_app, []}},
-  {applications, [kernel,
-                  stdlib,
-                  inets,
-                  crypto,
-                  lager,
-                  dns_erlang,
-                  jsx,
-                  ssl,
-                  mnesia,
-                  bear,
-                  folsom,
-                  iso8601,
-                  opentelemetry_api,
-                  nodefinder]},
-  {start_phases, [{post_start, []}]},
+{application, erldns, [
+    {description, "Erlang Authoritative DNS Server"},
+    {vsn, "3.0.0"},
+    {licenses, ["MIT"]},
+    {mod, {erldns_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        inets,
+        crypto,
+        lager,
+        dns_erlang,
+        jsx,
+        ssl,
+        mnesia,
+        bear,
+        folsom,
+        iso8601,
+        opentelemetry_api,
+        nodefinder
+    ]},
+    {start_phases, [{post_start, []}]},
 
-  {licenses, ["Apache-2.0"]},
-  {links, [{"GitHub", "https://github.com/dnsimple/erldns"}]}
-  ]}.
+    {licenses, ["Apache-2.0"]},
+    {links, [{"GitHub", "https://github.com/dnsimple/erldns"}]}
+]}.

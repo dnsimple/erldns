@@ -18,9 +18,11 @@
 -behavior(application).
 
 % Application hooks
--export([start/2,
-         start_phase/3,
-         stop/1]).
+-export([
+    start/2,
+    start_phase/3,
+    stop/1
+]).
 
 start(_Type, _Args) ->
     lager:info("Starting erldns application"),

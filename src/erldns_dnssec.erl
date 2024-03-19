@@ -20,8 +20,10 @@
 -include("erldns.hrl").
 
 -export([handle/4]).
--export([key_rrset_signer/2,
-         zone_rrset_signer/2]).
+-export([
+    key_rrset_signer/2,
+    zone_rrset_signer/2
+]).
 -export([rrsig_for_zone_rrset/2]).
 -export([maybe_sign_rrset/3]).
 
@@ -40,13 +42,13 @@ rrsig_for_zone_rrset(Zone, RRs) ->
 -spec key_rrset_signer(dns:name(), [dns:rr()]) -> fun((erldns:keyset()) -> [dns:rr()]).
 key_rrset_signer(ZoneName, RRs) ->
     fun(Keyset) ->
-       Keytag = Keyset#keyset.key_signing_key_tag,
-       Alg = Keyset#keyset.key_signing_alg,
-       PrivateKey = Keyset#keyset.key_signing_key,
-       Inception = dns:unix_time(Keyset#keyset.inception),
-       Expiration = dns:unix_time(Keyset#keyset.valid_until),
+        Keytag = Keyset#keyset.key_signing_key_tag,
+        Alg = Keyset#keyset.key_signing_alg,
+        PrivateKey = Keyset#keyset.key_signing_key,
+        Inception = dns:unix_time(Keyset#keyset.inception),
+        Expiration = dns:unix_time(Keyset#keyset.valid_until),
 
-       dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [{inception, Inception}, {expiration, Expiration}])
+        dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [{inception, Inception}, {expiration, Expiration}])
     end.
 
 %% @doc Return a function that can be used to sign the given records using the zone signing key.
@@ -55,13 +57,13 @@ key_rrset_signer(ZoneName, RRs) ->
 -spec zone_rrset_signer(dns:name(), [dns:rr()]) -> fun((erldns:keyset()) -> [dns:rr()]).
 zone_rrset_signer(ZoneName, RRs) ->
     fun(Keyset) ->
-       Keytag = Keyset#keyset.zone_signing_key_tag,
-       Alg = Keyset#keyset.zone_signing_alg,
-       PrivateKey = Keyset#keyset.zone_signing_key,
-       Inception = dns:unix_time(Keyset#keyset.inception),
-       Expiration = dns:unix_time(Keyset#keyset.valid_until),
+        Keytag = Keyset#keyset.zone_signing_key_tag,
+        Alg = Keyset#keyset.zone_signing_alg,
+        PrivateKey = Keyset#keyset.zone_signing_key,
+        Inception = dns:unix_time(Keyset#keyset.inception),
+        Expiration = dns:unix_time(Keyset#keyset.valid_until),
 
-       dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [{inception, Inception}, {expiration, Expiration}])
+        dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [{inception, Inception}, {expiration, Expiration}])
     end.
 
 %% @doc This function will potentially sign the given RR set if the following
@@ -107,27 +109,44 @@ handle(Message, Zone, Qname, _Qtype, _DnssecRequested = true, _Keysets) ->
 
             NextDname = erldns:normalize_name(dns:labels_to_dname([?NEXT_DNAME_PART] ++ dns:dname_to_labels(Qname))),
             NsecRecords =
-                [#dns_rr{name = Qname,
-                         type = ?DNS_TYPE_NSEC,
-                         ttl = Ttl,
-                         data = #dns_rrdata_nsec{
-                             next_dname = NextDname, 
-                             types = map_nsec_rr_types(record_types_for_name(Qname, Zone))}}],
+                [
+                    #dns_rr{
+                        name = Qname,
+                        type = ?DNS_TYPE_NSEC,
+                        ttl = Ttl,
+                        data = #dns_rrdata_nsec{
+                            next_dname = NextDname,
+                            types = map_nsec_rr_types(record_types_for_name(Qname, Zone))
+                        }
+                    }
+                ],
             NsecRRSigRecords = rrsig_for_zone_rrset(Zone, NsecRecords),
 
-            erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true,
-                                                                             rc = ?DNS_RCODE_NOERROR,
-                                                                             authority =
-                                                                                 Message#dns_message.authority ++
-                                                                                     NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords},
-                                                         Zone));
+            erldns_records:rewrite_soa_ttl(
+                sign_unsigned(
+                    Message#dns_message{
+                        ad = true,
+                        rc = ?DNS_RCODE_NOERROR,
+                        authority =
+                            Message#dns_message.authority ++
+                                NsecRecords ++ SoaRRSigRecords ++ NsecRRSigRecords
+                    },
+                    Zone
+                )
+            );
         _ ->
             AnswerSignatures = find_rrsigs(Message#dns_message.answers),
             AuthoritySignatures = find_rrsigs(Message#dns_message.authority),
-            erldns_records:rewrite_soa_ttl(sign_unsigned(Message#dns_message{ad = true,
-                                                                             answers = Message#dns_message.answers ++ AnswerSignatures,
-                                                                             authority = Message#dns_message.authority ++ AuthoritySignatures},
-                                                         Zone))
+            erldns_records:rewrite_soa_ttl(
+                sign_unsigned(
+                    Message#dns_message{
+                        ad = true,
+                        answers = Message#dns_message.answers ++ AnswerSignatures,
+                        authority = Message#dns_message.authority ++ AuthoritySignatures
+                    },
+                    Zone
+                )
+            )
     end;
 handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false, _) ->
     Message.
@@ -136,11 +155,15 @@ handle(Message, _Zone, _Qname, _Qtype, _DnssecRequest = false, _) ->
 -spec find_rrsigs([dns:rr()]) -> [dns:rr()].
 find_rrsigs(MessageRecords) ->
     NamesAndTypes = lists:usort(lists:map(fun(RR) -> {RR#dns_rr.name, RR#dns_rr.type} end, MessageRecords)),
-    lists:flatten(lists:map(fun({Name, Type}) ->
-                               NamedRRSigs = erldns_zone_cache:get_records_by_name_and_type(Name, ?DNS_TYPE_RRSIG),
-                               lists:filter(erldns_records:match_type_covered(Type), NamedRRSigs)
-                            end,
-                            NamesAndTypes)).
+    lists:flatten(
+        lists:map(
+            fun({Name, Type}) ->
+                NamedRRSigs = erldns_zone_cache:get_records_by_name_and_type(Name, ?DNS_TYPE_RRSIG),
+                lists:filter(erldns_records:match_type_covered(Type), NamedRRSigs)
+            end,
+            NamesAndTypes
+        )
+    ).
 
 -spec sign_unsigned(dns:message(), erldns:zone()) -> dns:message().
 sign_unsigned(Message, Zone) ->
@@ -150,34 +173,43 @@ sign_unsigned(Message, Zone) ->
 
 -spec find_unsigned_records([dns:rr()]) -> [dns:rr()].
 find_unsigned_records(Records) ->
-    lists:filter(fun(RR) ->
-                    (RR#dns_rr.type =/= ?DNS_TYPE_RRSIG) and (lists:filter(erldns_records:match_name_and_type(RR#dns_rr.name, ?DNS_TYPE_RRSIG), Records) =:= [])
-                 end,
-                 Records).
+    lists:filter(
+        fun(RR) ->
+            (RR#dns_rr.type =/= ?DNS_TYPE_RRSIG) and
+                (lists:filter(erldns_records:match_name_and_type(RR#dns_rr.name, ?DNS_TYPE_RRSIG), Records) =:= [])
+        end,
+        Records
+    ).
 
 -spec map_nsec_rr_types([dns:type()]) -> [dns:type()].
 map_nsec_rr_types(Types) ->
     Handlers = erldns_handler:get_versioned_handlers(),
     % sort and deduplicate
-    lists:usort(lists:flatten(
-        lists:map(fun(Type) -> 
-            case Handlers of
-                [] ->
-                    Type;
-                _ ->
-                    case lists:keyfind([Type], 2, Handlers) of 
-                        false -> Type;
-                        {M, _, _} -> M:nsec_rr_type_mapper(Type)
+    lists:usort(
+        lists:flatten(
+            lists:map(
+                fun(Type) ->
+                    case Handlers of
+                        [] ->
+                            Type;
+                        _ ->
+                            case lists:keyfind([Type], 2, Handlers) of
+                                false -> Type;
+                                {M, _, _} -> M:nsec_rr_type_mapper(Type)
+                            end
                     end
-            end
-        end, Types))
+                end,
+                Types
+            )
+        )
     ).
 
 record_types_for_name(Name, Zone) ->
     RecordsAtName = erldns_zone_cache:get_records_by_name(Name),
-    MatchedRecords = case RecordsAtName of
-        [] -> erldns_resolver:best_match(Name, Zone);
-        _ -> RecordsAtName
-    end,
+    MatchedRecords =
+        case RecordsAtName of
+            [] -> erldns_resolver:best_match(Name, Zone);
+            _ -> RecordsAtName
+        end,
     TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, MatchedRecords),
     lists:usort(TypesCovered ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]).

@@ -49,7 +49,8 @@ parse(String, [C | Rest], Tokens, Escaped) ->
     parse_char(String, C, Rest, Tokens, Escaped).
 
 parse(_, [], Tokens, CurrentToken, true) ->
-    Tokens ++ [CurrentToken]; % Last character is escaped
+    % Last character is escaped
+    Tokens ++ [CurrentToken];
 parse(String, [C | Rest], Tokens, CurrentToken, Escaped) ->
     parse_char(String, C, Rest, Tokens, CurrentToken, Escaped).
 
@@ -129,33 +130,37 @@ quoteless_ascii_string1() ->
     list(oneof([integer(0, 33), integer(35, 255)])).
 
 quoteless_ascii_string() ->
-    ?SUCHTHAT(String,
-              quoteless_ascii_string1(),
-              begin
-                  case lists:reverse(String) of
-                      [92 | _] ->
-                          false;
-                      _ ->
-                          true
-                  end
-              end).
+    ?SUCHTHAT(
+        String,
+        quoteless_ascii_string1(),
+        begin
+            case lists:reverse(String) of
+                [92 | _] ->
+                    false;
+                _ ->
+                    true
+            end
+        end
+    ).
 
 quoted_ascii_string1() ->
     %% " has character code 34.
     ?LET(String, quoteless_ascii_string(), [34] ++ String ++ [34]).
 
 quoted_ascii_string() ->
-    ?SUCHTHAT(String,
-              quoted_ascii_string1(),
-              begin
-                  case lists:reverse(String) of
-                      % "\
-                      [34, 92 | _] ->
-                          false;
-                      _ ->
-                          true
-                  end
-              end).
+    ?SUCHTHAT(
+        String,
+        quoted_ascii_string1(),
+        begin
+            case lists:reverse(String) of
+                % "\
+                [34, 92 | _] ->
+                    false;
+                _ ->
+                    true
+            end
+        end
+    ).
 
 quoted_and_unquoted_ascii_string_unflattened() ->
     list(oneof([quoted_ascii_string(), quoteless_ascii_string()])).
@@ -164,11 +169,13 @@ quoted_and_unquoted_ascii_string() ->
     ?LET(StringList, quoted_and_unquoted_ascii_string_unflattened(), lists:flatten(StringList)).
 
 prop_parse_holds_type() ->
-    ?FORALL(ASCIIString,
-            quoted_and_unquoted_ascii_string(),
-            begin
-                BinaryOfBinaryList = parse(ASCIIString),
-                check_bblist(BinaryOfBinaryList)
-            end).
+    ?FORALL(
+        ASCIIString,
+        quoted_and_unquoted_ascii_string(),
+        begin
+            BinaryOfBinaryList = parse(ASCIIString),
+            check_bblist(BinaryOfBinaryList)
+        end
+    ).
 
 -endif.

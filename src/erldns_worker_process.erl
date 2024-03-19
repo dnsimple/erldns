@@ -21,12 +21,14 @@
 -behaviour(gen_server).
 
 -export([start_link/1]).
--export([init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3]).
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    terminate/2,
+    code_change/3
+]).
 
 -define(MAX_PACKET_SIZE, 512).
 -define(REDIRECT_TO_LOOPBACK, false).
@@ -56,12 +58,16 @@ handle_call({process, DecodedMessage, Socket, {tcp, Address}, SpanCtx}, _From, S
     % Uncomment this and the function implementation to simulate a timeout when
     % querying www.example.com with the test zones
     % simulate_timeout(DecodedMessage),
-    Response = ?with_span(<<"synthesize_answer">>, #{},
+    Response = ?with_span(
+        <<"synthesize_answer">>,
+        #{},
         fun(_SpanCtx) ->
             erldns_handler:handle(DecodedMessage, {tcp, Address})
         end
     ),
-    EncodedMessage = ?with_span(<<"encode_message">>, #{},
+    EncodedMessage = ?with_span(
+        <<"encode_message">>,
+        #{},
         fun(_SpanCtx) ->
             ?set_attributes([
                 {<<"rcode">>, Response#dns_message.rc},
@@ -72,7 +78,9 @@ handle_call({process, DecodedMessage, Socket, {tcp, Address}, SpanCtx}, _From, S
             erldns_encoder:encode_message(Response)
         end
     ),
-    ?with_span(<<"send_tcp_message">>, #{},
+    ?with_span(
+        <<"send_tcp_message">>,
+        #{},
         fun(_SpanCtx) ->
             send_tcp_message(Socket, EncodedMessage)
         end
@@ -84,24 +92,28 @@ handle_call({process, DecodedMessage, Socket, Port, {udp, Host}, SpanCtx}, _From
     % Uncomment this and the function implementation to simulate a timeout when
     % querying www.example.com with the test zones
     % simulate_timeout(DecodedMessage),
-    Response = ?with_span(<<"synthesize_answer">>, #{},
-                    fun(_SpanCtx) ->
-                        erldns_handler:handle(DecodedMessage, {udp, Host})
-                    end
-                ),
+    Response = ?with_span(
+        <<"synthesize_answer">>,
+        #{},
+        fun(_SpanCtx) ->
+            erldns_handler:handle(DecodedMessage, {udp, Host})
+        end
+    ),
     DestHost = ?DEST_HOST(Host),
 
-    Result = ?with_span(<<"encode_message">>, #{},
-                 fun(_SpanCtx) ->
-                    ?set_attributes([
-                        {<<"rcode">>, Response#dns_message.rc},
-                        {<<"aa">>, Response#dns_message.aa},
-                        {<<"ra">>, Response#dns_message.ra},
-                        {<<"answers">>, length(Response#dns_message.answers)}
-                    ]),
-                     erldns_encoder:encode_message(Response, [{max_size, max_payload_size(Response)}])
-                 end
-             ),
+    Result = ?with_span(
+        <<"encode_message">>,
+        #{},
+        fun(_SpanCtx) ->
+            ?set_attributes([
+                {<<"rcode">>, Response#dns_message.rc},
+                {<<"aa">>, Response#dns_message.aa},
+                {<<"ra">>, Response#dns_message.ra},
+                {<<"answers">>, length(Response#dns_message.answers)}
+            ]),
+            erldns_encoder:encode_message(Response, [{max_size, max_payload_size(Response)}])
+        end
+    ),
     case Result of
         {false, EncodedMessage} ->
             % lager:debug("Sending encoded response to ~p", [DestHost]),

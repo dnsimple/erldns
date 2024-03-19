@@ -26,24 +26,32 @@
 -endif.
 
 % Wildcard functions
--export([optionally_convert_wildcard/2,
-         wildcard_qname/1]).
+-export([
+    optionally_convert_wildcard/2,
+    wildcard_qname/1
+]).
 % SOA TTL functions
--export([minimum_soa_ttl/2,
-         rewrite_soa_ttl/1]).
+-export([
+    minimum_soa_ttl/2,
+    rewrite_soa_ttl/1
+]).
 % Matcher functions
--export([match_name/1,
-         match_type/1,
-         match_name_and_type/2,
-         match_types/1,
-         match_wildcard/0,
-         match_delegation/1,
-         match_type_covered/1]).
--export([default_ttl/1,
-         default_priority/1,
-         name_type/1,
-         root_hints/0,
-         replace_name/1]).
+-export([
+    match_name/1,
+    match_type/1,
+    match_name_and_type/2,
+    match_types/1,
+    match_wildcard/0,
+    match_delegation/1,
+    match_type_covered/1
+]).
+-export([
+    default_ttl/1,
+    default_priority/1,
+    name_type/1,
+    root_hints/0,
+    replace_name/1
+]).
 
 %% @doc If given Name is a wildcard name then the original qname needs to be returned in its place.
 -spec optionally_convert_wildcard(dns:dname(), dns:dname()) -> dns:dname().
@@ -290,110 +298,168 @@ name_type(Type) when is_binary(Type) ->
 
 -spec root_hints() -> {[dns:rr()], [dns:rr()]}.
 root_hints() ->
-    {[#dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"a.root-servers.net">>}},
-      #dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"b.root-servers.net">>}},
-      #dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"c.root-servers.net">>}},
-      #dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"d.root-servers.net">>}},
-      #dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"e.root-servers.net">>}},
-      #dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"f.root-servers.net">>}},
-      #dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"g.root-servers.net">>}},
-      #dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"h.root-servers.net">>}},
-      #dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"i.root-servers.net">>}},
-      #dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"j.root-servers.net">>}},
-      #dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"k.root-servers.net">>}},
-      #dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"l.root-servers.net">>}},
-      #dns_rr{name = <<"">>,
-              type = ?DNS_TYPE_NS,
-              ttl = 518400,
-              data = #dns_rrdata_ns{dname = <<"m.root-servers.net">>}}],
-     [#dns_rr{name = <<"a.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {198, 41, 0, 4}}},
-      #dns_rr{name = <<"b.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {192, 228, 79, 201}}},
-      #dns_rr{name = <<"c.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {192, 33, 4, 12}}},
-      #dns_rr{name = <<"d.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {128, 8, 10, 90}}},
-      #dns_rr{name = <<"e.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {192, 203, 230, 10}}},
-      #dns_rr{name = <<"f.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {192, 5, 5, 241}}},
-      #dns_rr{name = <<"g.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {192, 112, 36, 4}}},
-      #dns_rr{name = <<"h.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {128, 63, 2, 53}}},
-      #dns_rr{name = <<"i.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {192, 36, 148, 17}}},
-      #dns_rr{name = <<"j.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {192, 58, 128, 30}}},
-      #dns_rr{name = <<"k.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {193, 0, 14, 129}}},
-      #dns_rr{name = <<"l.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {198, 32, 64, 12}}},
-      #dns_rr{name = <<"m.root-servers.net">>,
-              type = ?DNS_TYPE_A,
-              ttl = 3600000,
-              data = #dns_rrdata_a{ip = {202, 12, 27, 33}}}]}.
+    {
+        [
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"a.root-servers.net">>}
+            },
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"b.root-servers.net">>}
+            },
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"c.root-servers.net">>}
+            },
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"d.root-servers.net">>}
+            },
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"e.root-servers.net">>}
+            },
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"f.root-servers.net">>}
+            },
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"g.root-servers.net">>}
+            },
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"h.root-servers.net">>}
+            },
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"i.root-servers.net">>}
+            },
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"j.root-servers.net">>}
+            },
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"k.root-servers.net">>}
+            },
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"l.root-servers.net">>}
+            },
+            #dns_rr{
+                name = <<"">>,
+                type = ?DNS_TYPE_NS,
+                ttl = 518400,
+                data = #dns_rrdata_ns{dname = <<"m.root-servers.net">>}
+            }
+        ],
+        [
+            #dns_rr{
+                name = <<"a.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {198, 41, 0, 4}}
+            },
+            #dns_rr{
+                name = <<"b.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {192, 228, 79, 201}}
+            },
+            #dns_rr{
+                name = <<"c.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {192, 33, 4, 12}}
+            },
+            #dns_rr{
+                name = <<"d.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {128, 8, 10, 90}}
+            },
+            #dns_rr{
+                name = <<"e.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {192, 203, 230, 10}}
+            },
+            #dns_rr{
+                name = <<"f.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {192, 5, 5, 241}}
+            },
+            #dns_rr{
+                name = <<"g.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {192, 112, 36, 4}}
+            },
+            #dns_rr{
+                name = <<"h.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {128, 63, 2, 53}}
+            },
+            #dns_rr{
+                name = <<"i.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {192, 36, 148, 17}}
+            },
+            #dns_rr{
+                name = <<"j.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {192, 58, 128, 30}}
+            },
+            #dns_rr{
+                name = <<"k.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {193, 0, 14, 129}}
+            },
+            #dns_rr{
+                name = <<"l.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {198, 32, 64, 12}}
+            },
+            #dns_rr{
+                name = <<"m.root-servers.net">>,
+                type = ?DNS_TYPE_A,
+                ttl = 3600000,
+                data = #dns_rrdata_a{ip = {202, 12, 27, 33}}
+            }
+        ]
+    }.
 
 -ifdef(TEST).
 
@@ -401,37 +467,53 @@ wildcard_qname_test_() ->
     ?_assertEqual(<<"*.b.example.com">>, wildcard_qname(<<"a.b.example.com">>)).
 
 minimum_soa_ttl_test_() ->
-    [?_assertMatch(#dns_rr{ttl = 3600}, minimum_soa_ttl(#dns_rr{ttl = 3600}, #dns_rrdata_a{})),
-     ?_assertMatch(#dns_rr{ttl = 30}, minimum_soa_ttl(#dns_rr{ttl = 3600}, #dns_rrdata_soa{minimum = 30})),
-     ?_assertMatch(#dns_rr{ttl = 30}, minimum_soa_ttl(#dns_rr{ttl = 30}, #dns_rrdata_soa{minimum = 3600}))].
+    [
+        ?_assertMatch(#dns_rr{ttl = 3600}, minimum_soa_ttl(#dns_rr{ttl = 3600}, #dns_rrdata_a{})),
+        ?_assertMatch(#dns_rr{ttl = 30}, minimum_soa_ttl(#dns_rr{ttl = 3600}, #dns_rrdata_soa{minimum = 30})),
+        ?_assertMatch(#dns_rr{ttl = 30}, minimum_soa_ttl(#dns_rr{ttl = 30}, #dns_rrdata_soa{minimum = 3600}))
+    ].
 
 replace_name_test_() ->
-    [?_assertEqual([], lists:map(replace_name(<<"example">>), [])),
-     ?_assertMatch([#dns_rr{name = <<"example">>}], lists:map(replace_name(<<"example">>), [#dns_rr{name = <<"test.com">>}]))].
+    [
+        ?_assertEqual([], lists:map(replace_name(<<"example">>), [])),
+        ?_assertMatch([#dns_rr{name = <<"example">>}], lists:map(replace_name(<<"example">>), [#dns_rr{name = <<"test.com">>}]))
+    ].
 
 match_name_test_() ->
-    [?_assert(lists:any(match_name(<<"example.com">>), [#dns_rr{name = <<"example.com">>}])),
-     ?_assertNot(lists:any(match_name(<<"example.com">>), [#dns_rr{name = <<"example.net">>}]))].
+    [
+        ?_assert(lists:any(match_name(<<"example.com">>), [#dns_rr{name = <<"example.com">>}])),
+        ?_assertNot(lists:any(match_name(<<"example.com">>), [#dns_rr{name = <<"example.net">>}]))
+    ].
 
 match_type_test_() ->
-    [?_assert(lists:any(match_type(?DNS_TYPE_A), [#dns_rr{type = ?DNS_TYPE_A}])),
-     ?_assertNot(lists:any(match_type(?DNS_TYPE_CNAME), [#dns_rr{type = ?DNS_TYPE_A}]))].
+    [
+        ?_assert(lists:any(match_type(?DNS_TYPE_A), [#dns_rr{type = ?DNS_TYPE_A}])),
+        ?_assertNot(lists:any(match_type(?DNS_TYPE_CNAME), [#dns_rr{type = ?DNS_TYPE_A}]))
+    ].
 
 match_types_test_() ->
-    [?_assert(lists:any(match_types([?DNS_TYPE_A]), [#dns_rr{type = ?DNS_TYPE_A}])),
-     ?_assert(lists:any(match_types([?DNS_TYPE_A, ?DNS_TYPE_CNAME]), [#dns_rr{type = ?DNS_TYPE_A}])),
-     ?_assertNot(lists:any(match_types([?DNS_TYPE_CNAME]), [#dns_rr{type = ?DNS_TYPE_A}]))].
+    [
+        ?_assert(lists:any(match_types([?DNS_TYPE_A]), [#dns_rr{type = ?DNS_TYPE_A}])),
+        ?_assert(lists:any(match_types([?DNS_TYPE_A, ?DNS_TYPE_CNAME]), [#dns_rr{type = ?DNS_TYPE_A}])),
+        ?_assertNot(lists:any(match_types([?DNS_TYPE_CNAME]), [#dns_rr{type = ?DNS_TYPE_A}]))
+    ].
 
 match_wildcard_test_() ->
-    [?_assert(lists:any(match_wildcard(), [#dns_rr{name = <<"*.example.com">>}])),
-     ?_assertNot(lists:any(match_wildcard(), [#dns_rr{name = <<"www.example.com">>}]))].
+    [
+        ?_assert(lists:any(match_wildcard(), [#dns_rr{name = <<"*.example.com">>}])),
+        ?_assertNot(lists:any(match_wildcard(), [#dns_rr{name = <<"www.example.com">>}]))
+    ].
 
 match_delegation_test_() ->
-    [?_assert(lists:any(match_delegation(<<"ns1.example.com">>), [#dns_rr{data = #dns_rrdata_ns{dname = <<"ns1.example.com">>}}])),
-     ?_assertNot(lists:any(match_delegation(<<"ns1.example.com">>), [#dns_rr{data = #dns_rrdata_ns{dname = <<"ns2.example.com">>}}]))].
+    [
+        ?_assert(lists:any(match_delegation(<<"ns1.example.com">>), [#dns_rr{data = #dns_rrdata_ns{dname = <<"ns1.example.com">>}}])),
+        ?_assertNot(lists:any(match_delegation(<<"ns1.example.com">>), [#dns_rr{data = #dns_rrdata_ns{dname = <<"ns2.example.com">>}}]))
+    ].
 
 match_wildcard_label_test_() ->
-    [?_assert(lists:any(match_wildcard_label(), dns:dname_to_labels(<<"*.example.com">>))),
-     ?_assertNot(lists:any(match_wildcard_label(), dns:dname_to_labels(<<"www.example.com">>)))].
+    [
+        ?_assert(lists:any(match_wildcard_label(), dns:dname_to_labels(<<"*.example.com">>))),
+        ?_assertNot(lists:any(match_wildcard_label(), dns:dname_to_labels(<<"www.example.com">>)))
+    ].
 
 -endif.

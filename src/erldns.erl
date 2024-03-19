@@ -20,8 +20,10 @@
 -export([start/0]).
 -export([normalize_name/1]).
 
--export_type([keyset/0,
-              zone/0]).
+-export_type([
+    keyset/0,
+    zone/0
+]).
 
 -type keyset() :: #keyset{}.
 -type zone() :: #zone{}.
