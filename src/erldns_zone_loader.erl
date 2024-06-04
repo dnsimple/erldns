@@ -30,7 +30,41 @@
 %% @doc Load zones from a file. The default file name is "zones.json".
 -spec load_zones() -> {ok, integer()} | {err, atom()}.
 load_zones() ->
-    case file:read_file(filename()) of
+    lager:info("Loading zones from file: ~s", [filename()]),
+    lager:info("Loading zones from dir: ~s", [filename:dirname(filename())]),
+    lager:info("Loading zones from pattern: ~s", [filename:basename(filename())]),
+    case filelib:fold_files(
+        filename:dirname(filename()),
+        filename:basename(filename()),
+        false,
+        fun(FilePath, Acc) ->
+            case load_zone_file(FilePath) of
+                {ok, Count} -> Count + Acc;
+                {err, Reason} -> Reason
+            end
+        end,
+        0
+    ) of
+        {ok, Count} -> {ok, Count};
+        {error, Reason} -> {err, Reason};
+        _ -> {err, unknown}
+    end.
+
+
+% Internal API
+filename() ->
+    case application:get_env(erldns, zones) of
+        {ok, Filename} ->
+            Filename;
+        _ ->
+            ?FILENAME
+    end.
+
+-spec load_zone_file(filelib:filename()) -> {ok, integer()} | {err, atom()}.
+load_zone_file(FilePath) ->
+    lager:info("Reading zones file: ~s", [FilePath]),
+
+    case file:read_file(FilePath) of
         {ok, Binary} ->
             lager:info("Parsing zones JSON"),
             JsonZones = jsx:decode(Binary, [{return_maps, false}]),
@@ -50,15 +84,6 @@ load_zones() ->
         {error, Reason} ->
             erldns_events:notify({?MODULE, read_file_error, Reason}),
             {err, Reason}
-    end.
-
-% Internal API
-filename() ->
-    case application:get_env(erldns, zones) of
-        {ok, Filename} ->
-            Filename;
-        _ ->
-            ?FILENAME
     end.
 
 -ifdef(TEST).
