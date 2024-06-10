@@ -69,7 +69,8 @@ handle_cast({tcp_query, Socket, Bin}, State) ->
             end
         end
     );
-handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
+handle_cast({udp_query, Socket, Host, Port, Bin, SpanCtx}, State) ->
+    ?set_current_span(SpanCtx),
     ?with_span(
         <<"erldns_udp_worker">>,
         #{},

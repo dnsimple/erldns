@@ -15,6 +15,9 @@
 %% @doc Handles DNS questions arriving via UDP.
 -module(erldns_udp_server).
 
+-include_lib("opentelemetry_api/include/otel_tracer.hrl").
+-include_lib("opentelemetry_api/include/opentelemetry.hrl").
+
 -behavior(gen_server).
 
 % API
@@ -166,7 +169,13 @@ start(Address, Port, InetFamily, SocketOpts) ->
 handle_request(Socket, Host, Port, Bin, State) ->
     case queue:out(State#state.workers) of
         {{value, Worker}, Queue} ->
-            gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin}),
+            ?with_span(
+                <<"udp_worker_handoff">>,
+                #{},
+                fun(SpanCtx) ->
+                    gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin, SpanCtx})
+                end
+            ),
             {noreply, State#state{workers = queue:in(Worker, Queue)}};
         {empty, _Queue} ->
             folsom_metrics:notify({packet_dropped_empty_queue_counter, {inc, 1}}),
