@@ -26,6 +26,7 @@
 
 start(_Type, _Args) ->
     lager:info("Starting erldns application"),
+    application:start(gproc),
     setup_metrics(),
     nodefinder:multicast_start(),
     erldns_sup:start_link().
