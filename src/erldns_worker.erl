@@ -46,6 +46,8 @@ start_link(Args) ->
 init([WorkerId]) ->
     {ok, WorkerProcessSup} = erldns_worker_process_sup:start_link([WorkerId]),
     WorkerProcess = lists:last(supervisor:which_children(WorkerProcessSup)),
+    {Proto, N} = WorkerId,
+    gproc:reg({n, l, {erldns_worker, Proto, N, self()}}, erldns_worker),
     {ok, #state{worker_process_sup = WorkerProcessSup, worker_process = WorkerProcess}}.
 
 handle_call(_Request, From, State) ->
