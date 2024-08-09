@@ -207,16 +207,6 @@ get_records_by_name_and_type(Name, Type) ->
             []
     end.
 
-%% @doc Get all DNSSEC records for zone
--spec get_zone_dnskey_records(dns:dname()) -> [dns:rr()].
-get_zone_dnskey_records(Name) ->
-    case find_zone_in_cache(Name) of
-        {ok, _Zone} ->
-            get_records_by_name_and_type(Name, ?DNS_TYPE_DNSKEY);
-        _ ->
-            []
-    end.
-
 %% @doc Return the record set for the given dname.
 -spec get_records_by_name(dns:dname()) -> [dns:rr()].
 get_records_by_name(Name) ->
@@ -343,13 +333,12 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
             % TODO: remove debug
             lager:debug("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [RRFqdn, Type, ZoneName, Records]),
             KeySets = Zone#zone.keysets,
-            DnsKeyRRs = get_zone_dnskey_records(ZoneName),
             SignedRRSet = ?with_span(
                 <<"sign_rrset">>,
                 #{},
                 fun(_SpanCtx) ->
                     ?set_attributes([{zone, ZoneName}, {type, Type}]),
-                    sign_rrset(ZoneName, Records, DnsKeyRRs, KeySets)
+                    sign_rrset(ZoneName, Records, KeySets)
                 end
             ),
             {RRSigRecsCovering, RRSigRecsNotCovering} = filter_rrsig_records_with_type_covered(RRFqdn, Type),
@@ -620,11 +609,8 @@ build_typed_index(Records) ->
 sign_zone(Zone = #zone{keysets = []}) ->
     Zone;
 sign_zone(Zone) ->
-    % lager:debug("Signing zone (name: ~p)", [Zone#zone.name]),
     DnskeyRRs = lists:filter(erldns_records:match_type(?DNS_TYPE_DNSKEY), Zone#zone.records),
     KeyRRSigRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets)),
-    Verify = verify_zone(Zone, DnskeyRRs, KeyRRSigRecords),
-    lager:debug("Zone verified: ~p", [Verify]),
     % TODO: remove wildcard signatures as they will not be used but are taking up space
     ZoneRRSigRecords =
         lists:flatten(
@@ -650,27 +636,9 @@ sign_zone(Zone) ->
         keysets = Zone#zone.keysets
     }.
 
--spec verify_zone(erldns:zone(), [dns:rr()], [dns:rr()]) -> boolean().
-verify_zone(_Zone, DnskeyRRs, KeyRRSigRecords) ->
-    % lager:debug("Verify zone (name: ~p)", [Zone#zone.name]),
-    case lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= ?DNSKEY_KSK_TYPE end, DnskeyRRs) of
-        [] ->
-            false;
-        KSKs ->
-            % lager:debug("KSKs: ~p", [KSKs]),
-            KSKDnskey = lists:last(KSKs),
-            RRSig = lists:last(KeyRRSigRecords),
-            % lager:debug("Attempting to verify RRSIG (key: ~p)", [KSKDnskey]),
-            VerifyResult = dnssec:verify_rrsig(RRSig, DnskeyRRs, [KSKDnskey], []),
-            % lager:debug("KSK verification (verified?: ~p)", [VerifyResult]),
-            VerifyResult
-    end.
-
 % Sign RRSet
--spec sign_rrset(binary(), [dns:rr()], [dns:rr()], [erldns:keyset()]) -> [dns:rr()].
-sign_rrset(Name, Records, DnsKeyRRs, KeySets) ->
-    % lager:debug("Signing RRSet for zone (name: ~p)", [Name]),
-    KeyRRSigRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Name, DnsKeyRRs), KeySets)),
+-spec sign_rrset(binary(), [dns:rr()], [erldns:keyset()]) -> [dns:rr()].
+sign_rrset(Name, Records, KeySets) ->
     ZoneRecords = get_records_by_name_and_type(Name, ?DNS_TYPE_SOA),
     RRSigRecords =
         rewrite_soa_rrsig_ttl(
@@ -688,28 +656,7 @@ sign_rrset(Name, Records, DnsKeyRRs, KeySets) ->
                 )
             )
         ),
-    verify_rrset(DnsKeyRRs, KeyRRSigRecords),
     RRSigRecords.
-
-% Verify RRSet
--spec verify_rrset([dns:rr()], [dns:rr()]) -> boolean().
-verify_rrset(DnsKeyRRs, KeyRRSigRecords) ->
-    % lager:debug("Verify RRSet"),
-    case lists:filter(fun(RR) -> RR#dns_rr.data#dns_rrdata_dnskey.flags =:= ?DNSKEY_KSK_TYPE end, DnsKeyRRs) of
-        [] ->
-            false;
-        KSKs ->
-            case KeyRRSigRecords of
-                [] ->
-                    false;
-                _ ->
-                    % lager:debug("KSKs: ~p", [KSKs]),
-                    KSKDnskey = lists:last(KSKs),
-                    RRSig = lists:last(KeyRRSigRecords),
-                    VerifyResult = dnssec:verify_rrsig(RRSig, DnsKeyRRs, [KSKDnskey], []),
-                    VerifyResult
-            end
-    end.
 
 % Rewrite the RRSIG TTL so it follows the same rewrite rules as the SOA TTL.
 rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
