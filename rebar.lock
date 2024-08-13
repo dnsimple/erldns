@@ -3,7 +3,7 @@
  {<<"bear">>,{pkg,<<"bear">>,<<"0.8.7">>},1},
  {<<"dns_erlang">>,
   {git,"https://github.com/dnsimple/dns_erlang.git",
-       {ref,"52f7279afb4cc97b4d76babde223257ec08f3676"}},
+       {ref,"02b97f2e7e5cc701fc4f9c7b59dddc0b36d1a23f"}},
   0},
  {<<"folsom">>,{pkg,<<"folsom">>,<<"0.8.8">>},0},
  {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},1},
