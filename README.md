@@ -72,6 +72,8 @@ dig -p 8053 @127.0.0.1 -x 127.0.0.1 ptr
 
 In our environment (DNSimple) we are seeing 30 to 65 µs handoff times to retrieve a packet from the UDP port and give it to a worker for processing. Your performance may vary, but given those measurements erl-dns is capable of handling between 15k and 30k questions per second. Please note: You may need to configure the number of workers available to handle traffic at higher volumes.
 
+If you want to perform some benchmarks, see [`BENCHMARKING.md`](./BENCHMARKING.md).
+
 ## Design
 
 The `erldns_resolver` module will attempt to find zone data in the zone cache. If you're embedding erl-dns in your application the easiest thing to do is to load the zone cache once the zone cache `gen_server` starts push an updated zone into the cache each time data changes.
@@ -142,4 +144,4 @@ Application traces:
 
 ## Admin
 
-There is an administrative API for querying the current zone cache and for basic control. You can find it in https://github.com/dnsimple/erldns-admin
+There is an administrative API for querying the current zone cache and for basic control. You can find it in <https://github.com/dnsimple/erldns-admin>
