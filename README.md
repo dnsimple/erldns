@@ -1,6 +1,6 @@
 # Erlang DNS Server
 
-Serve DNS authoritative responses... with Erlang.
+Serve DNS authoritative responses… with Erlang.
 
 [![CI](https://github.com/dnsimple/erldns/actions/workflows/ci.yml/badge.svg)](https://github.com/dnsimple/erldns/actions/workflows/ci.yml)
 
@@ -8,20 +8,20 @@ Serve DNS authoritative responses... with Erlang.
 
 To build:
 
-```
+```shell
 make
 ```
 
 To start fresh:
 
-```
+```shell
 make fresh
 make
 ```
 
 ## Zones
 
-Zones are loaded from JSON. Example JSON files are in the `priv/` directory.
+Zones are loaded from JSON. Example JSON files are in the [`priv/`](./priv/) directory.
 
 You can also write new systems to load zones by writing the zones directly to the zone cache using `erldns_zone_cache:put_zone/1`.
 
@@ -31,22 +31,16 @@ An example configuration file can be found in `erldns.example.config`. Copy it t
 
 ## Running
 
-### Launch directly:
-
-```bash
-overmind start
-```
-
 ### To get an interactive Erlang REPL:
 
 ```bash
-./rebar3 shell
+rebar3 shell
 ```
 
 ### Build a distribution with and run the release:
 
 ```bash
-./rebar3 release
+rebar3 release
 ./_build/default/rel/erldns/bin/erldns foreground
 ```
 
