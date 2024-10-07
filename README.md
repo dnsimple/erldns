@@ -104,7 +104,7 @@ erldns_zone_cache:put_zone({
 
 Folsom is used to gather runtime metrics and statistics.
 
-There is an HTTP API for querying metric data available at https://github.com/dnsimple/erldns-metrics
+There is an HTTP API for querying metric data available at <https://github.com/dnsimple/erldns-metrics>
 
 ## Tracing
 
@@ -144,4 +144,14 @@ Application traces:
 
 ## Admin
 
-There is an administrative API for querying the current zone cache and for basic control. You can find it in <https://github.com/dnsimple/erldns-admin>
+There is an administrative API for querying the current zone cache and for basic control. You can find it in <https://github.com/dnsimple/erldns-admin>.
+
+## Tests
+
+To run automated tests:
+
+```bash
+make test
+```
+
+This runs both [EUnit](https://www.erlang.org/doc/apps/eunit/chapter.html) tests and [dialyzer](https://www.erlang.org/docs/23/man/dialyzer.html).
