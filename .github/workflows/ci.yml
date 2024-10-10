@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        otp_version: ['26.2', '25.3']
+        otp_version: ['27.1', '26.2', '25.3']
 
     steps:
       - uses: actions/checkout@v4
@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        otp_version: ['26.2', '25.3']
+        otp_version: ['27.1', '26.2', '25.3']
 
     needs:
       - build
