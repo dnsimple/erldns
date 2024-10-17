@@ -32,8 +32,7 @@ make all
 #### 5. Adding local (checkout) dependencies for rebar3
 
 Please follow the instructions available at
-https://www.rebar3.org/docs/configuration/dependencies/
-
+<https://www.rebar3.org/docs/configuration/dependencies/>
 
 ```shell
 mkdir _checkouts
@@ -44,7 +43,7 @@ ln -s ../<projectY dependency dir> _checkouts/
 ## Handlers' versioning
 
 As of 1.1.0 release, the custom handlers' implementation has been extended to
-support versioning. register_handler/3 and get_versioned_handlers/0 functions 
+support versioning. register_handler/3 and get_versioned_handlers/0 functions
 have been added. Using versioning in new handlers is encouraged.
 
 ## Testing
@@ -72,6 +71,14 @@ The [dnstest](https://github.com/dnsimple/dnstest) tool provides a suite of blac
 ```
 
 Then you will need to run erldns. At this point it should be ready to test with dnstest. See the dnstest README for more details on how to run dnstest.
+
+## Formatting
+
+If your editor doesn't automatically format Erlang code using [erlfmt](https://github.com/WhatsApp/erlfmt), run:
+
+```bash
+make format
+```
 
 ## Releasing
 

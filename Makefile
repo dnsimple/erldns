@@ -26,4 +26,9 @@ clean: $(REBAR)
 .PHONY: test
 test: $(REBAR)
 	$(REBAR) eunit
+	$(REBAR) fmt --check
 	$(REBAR) dialyzer
+
+.PHONY: format
+format: $(REBAR)
+	$(REBAR) fmt
