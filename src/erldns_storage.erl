@@ -170,7 +170,15 @@ load_zones(Filename) when is_list(Filename) ->
     case file:read_file(Filename) of
         {ok, Binary} ->
             lager:debug("Parsing zones JSON"),
-            JsonZones = jsx:decode(Binary, [{return_maps, false}]),
+
+            %% The "object_finish" callback override is here so that we don't return maps
+            %% and instead keep the list of decoded information as a keyword list. Maybe we
+            %% won't need this behavior in the future, but for now it's a good way to keep
+            %% compatibility with what we used before to decode JSON (jsx).
+            {JsonZones, ok, _} = json:decode(Binary, ok, #{
+                object_finish => fun(Acc, OldAcc) -> {lists:reverse(Acc), OldAcc} end
+            }),
+
             lager:debug("Putting zones into cache"),
             lists:foreach(
                 fun(JsonZone) ->
