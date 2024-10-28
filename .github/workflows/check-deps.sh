@@ -1,16 +1,18 @@
 #!/bin/bash
 
+GITHUB_PR_LABEL="dependencies"
+
 if [ -z "$BRANCH_NAME" ]; then
     echo "Branch name is required"
     exit 1
 fi
 
 function check_pr {
-    gh pr list --state open --label "update dependencies"
+    gh pr list --state open --label "$GITHUB_PR_LABEL"
 }
 
-git config user.name "${GITHUB_ACTOR}"
-git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+# git config user.name "${GITHUB_ACTOR}"
+# git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 
 _update_output="$(rebar3 update-deps --replace)"
 
@@ -26,5 +28,5 @@ git commit -m "Update dependencies" -m "Updates from \"rebar3 update-deps --repl
 git push --set-upstream origin "$BRANCH_NAME"
 
 if [[ $(check_pr) == "" ]]; then
-    gh pr create --fill --label "update dependencies"
+    gh pr create --fill --label "$GITHUB_PR_LABEL"
 fi
