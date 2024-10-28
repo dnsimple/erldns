@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-GITHUB_PR_LABEL="update dependencies"
+GITHUB_PR_LABEL="dependencies"
 
 if [ -z "$BRANCH_NAME" ]; then
     echo "Branch name is required"
@@ -14,7 +14,7 @@ function check_pr {
 git config user.name "${GITHUB_ACTOR}"
 git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 
-_update_output="$(rebar3 update-deps --replace)"
+_update_output="$(TERM=dumb rebar3 update-deps --replace)"
 
 if git diff --exit-code --quiet; then
     echo "No changes to the dependencies"
@@ -23,7 +23,14 @@ fi
 
 git checkout -b "$BRANCH_NAME"
 git add .
-git commit -m "Update dependencies" -m "Updates from \"rebar3 update-deps --replace\":\n\n$_update_output"
+
+git commit -F- <<EOF
+Update dependencies
+
+Updates from "rebar3 update-deps --replace":
+
+$_update_output
+EOF
 
 git push --set-upstream origin "$BRANCH_NAME"
 
