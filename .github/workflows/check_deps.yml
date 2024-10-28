@@ -1,0 +1,41 @@
+name: Check Dependencies
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '38 8 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-deps:
+    name: Check Dependencies
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        otp_version: ['27.1']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp_version }}
+          version-type: 'strict'
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/rebar3
+            _build
+          key: ${{ runner.os }}-erlang-${{ matrix.otp_version }}-${{ hashFiles('**/*rebar.lock') }}
+
+      - name: Build
+        run: make build
+
+      - name: Check dependencies
+        run: .github/workflows/check-deps.sh
+        env:
+          BRANCH_NAME: update-deps-${{ github.run_id }}
