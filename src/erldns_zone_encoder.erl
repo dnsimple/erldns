@@ -55,7 +55,7 @@ start_link() ->
 %% @doc Encode a Zone meta data into JSON.
 -spec zone_meta_to_json(#zone{}) -> binary().
 zone_meta_to_json(Zone) ->
-    jsx:encode([
+    json_encode_kw_list([
         {<<"erldns">>, [
             {<<"zone">>, [
                 {<<"name">>, Zone#zone.name},
@@ -126,7 +126,7 @@ code_change(_, State, _) ->
 encode_zone_to_json(Zone, Encoders) ->
     Records = records_to_json(Zone, Encoders),
     FilteredRecords = lists:filter(record_filter(), Records),
-    jsx:encode([
+    json_encode_kw_list([
         {<<"erldns">>, [
             {<<"zone">>, [
                 {<<"name">>, Zone#zone.name},
@@ -140,11 +140,11 @@ encode_zone_to_json(Zone, Encoders) ->
 
 encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
     Records = erldns_zone_cache:get_records_by_name(RecordName),
-    jsx:encode(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
+    json_encode_kw_list(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
 
 encode_zone_records_to_json(_ZoneName, RecordName, RecordType, Encoders) ->
     Records = erldns_zone_cache:get_records_by_name_and_type(RecordName, erldns_records:name_type(RecordType)),
-    jsx:encode(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
+    json_encode_kw_list(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
 
 record_filter() ->
     fun(R) ->
@@ -275,3 +275,9 @@ encode_data({dns_rrdata_rrsig, TypeCovered, Alg, Labels, OriginalTtl, Expiration
 encode_data(Data) ->
     erldns_events:notify({?MODULE, unsupported_rrdata_type, Data}),
     {}.
+
+json_encode_kw_list(KwList) when is_list(KwList) ->
+    iolist_to_binary(json:encode(KwList, fun json_encode_term/2)).
+
+json_encode_term([{_, _} | _] = Value, Encode) -> json:encode_key_value_list(Value, Encode);
+json_encode_term(Other, Encode) -> json:encode_value(Other, Encode).
