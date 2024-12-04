@@ -21,7 +21,8 @@ if git diff --exit-code --quiet; then
     echo "No changes to the dependencies"
     exit 0
 else
-    echo "Detected changes to dependencies"
+    echo "Detected changes to dependencies, also reformatting"
+    rebar3 fmt --write
 fi
 
 git checkout -b "$BRANCH_NAME"
