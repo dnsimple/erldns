@@ -24,6 +24,7 @@
 -export([
     start_link/0,
     zone_to_erlang/1,
+    zone_to_erlang/2,
     register_parsers/1,
     register_parser/1,
     list_parsers/0
@@ -62,6 +63,10 @@ start_link() ->
 -spec zone_to_erlang(map() | list()) -> {binary(), binary(), [dns:rr()], [erldns:keyset()]}.
 zone_to_erlang(Zone) ->
     gen_server:call(?SERVER, {parse_zone, Zone}, ?PARSE_TIMEOUT).
+
+-spec zone_to_erlang(binary(), integer()) -> {binary(), binary(), [dns:rr()], [erldns:keyset()]}.
+zone_to_erlang(Zone, Timeout) ->
+    gen_server:call(?SERVER, {parse_zone, Zone}, Timeout).
 
 %% @doc Register a list of custom parser modules.
 -spec register_parsers([module()]) -> ok.
