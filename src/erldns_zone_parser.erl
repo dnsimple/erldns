@@ -24,6 +24,7 @@
 -export([
     start_link/0,
     zone_to_erlang/1,
+    zone_to_erlang/2,
     register_parsers/1,
     register_parser/1,
     list_parsers/0
@@ -59,9 +60,13 @@ start_link() ->
 %% @doc Takes a JSON zone and turns it into the tuple {Name, Sha, Records}.
 %%
 %% The default timeout for parsing is currently 30 seconds.
--spec zone_to_erlang(binary()) -> {binary(), binary(), [dns:rr()], [erldns:keyset()]}.
+-spec zone_to_erlang(map() | list()) -> {binary(), binary(), [dns:rr()], [erldns:keyset()]}.
 zone_to_erlang(Zone) ->
     gen_server:call(?SERVER, {parse_zone, Zone}, ?PARSE_TIMEOUT).
+
+-spec zone_to_erlang(binary(), integer()) -> {binary(), binary(), [dns:rr()], [erldns:keyset()]}.
+zone_to_erlang(Zone, Timeout) ->
+    gen_server:call(?SERVER, {parse_zone, Zone}, Timeout).
 
 %% @doc Register a list of custom parser modules.
 -spec register_parsers([module()]) -> ok.
