@@ -33,7 +33,13 @@ load_zones() ->
     case file:read_file(filename()) of
         {ok, Binary} ->
             lager:info("Parsing zones JSON"),
-            JsonZones = jsx:decode(Binary, [{return_maps, false}]),
+            %% The "object_finish" callback override is here so that we don't return maps
+            %% and instead keep the list of decoded information as a keyword list. Maybe we
+            %% won't need this behavior in the future, but for now it's a good way to keep
+            %% compatibility with what we used before to decode JSON (jsx).
+            {JsonZones, ok, _} = json:decode(Binary, ok, #{
+                object_finish => fun(Acc, OldAcc) -> {lists:reverse(Acc), OldAcc} end
+            }),
             lager:info("Putting zones into cache"),
             lists:foreach(
                 fun(JsonZone) ->
@@ -60,43 +66,3 @@ filename() ->
         _ ->
             ?FILENAME
     end.
-
--ifdef(TEST).
-
-json_jsx_decode_test() ->
-    Zone_RR =
-        [
-            {<<"name">>, <<"example.net">>},
-            {<<"records">>, [
-                [
-                    {<<"name">>, <<"example.net">>},
-                    {<<"type">>, <<"SOA">>},
-                    {<<"ttl">>, 3600},
-                    {<<"data">>, [
-                        {<<"mname">>, <<"ns1.example.net">>},
-                        {<<"rname">>, <<"admin.example.net">>},
-                        {<<"serial">>, 1234567},
-                        {<<"refresh">>, 1},
-                        {<<"retry">>, 1},
-                        {<<"expire">>, 1},
-                        {<<"minimum">>, 1}
-                    ]}
-                ],
-                [
-                    {<<"name">>, <<"ns1.example.net">>},
-                    {<<"type">>, <<"A">>},
-                    {<<"ttl">>, 30},
-                    {<<"data">>, [{<<"ip">>, <<"123.45.67.89">>}]}
-                ]
-            ]}
-        ],
-    JSON_zone =
-        <<
-            "{\"name\":\"example.net\",\"records\":[{\"name\":\"example.net\",\"type\":\"SOA\",\"ttl\":3600,\"data\":{\"m"
-            "name\":\"ns1.example.net\",\"rname\":\"admin.example.net\",\"serial\":1234567,\"refresh\":1,\"retry\":1,\"ex"
-            "pire\":1,\"minimum\":1}},{\"name\":\"ns1.example.net\",\"type\":\"A\",\"ttl\":30,\"data\":{\"ip\":\"123.45.6"
-            "7.89\"}}]}"
-        >>,
-    ?assertEqual(Zone_RR, jsx:decode(JSON_zone, [{return_maps, false}])).
-
--endif.
