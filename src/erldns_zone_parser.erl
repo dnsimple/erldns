@@ -551,7 +551,7 @@ json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) when is_map(Data) 
     #dns_rr{
         name = Name,
         type = ?DNS_TYPE_SPF,
-        data = #dns_rrdata_spf{spf = Txts}
+        data = #dns_rrdata_spf{spf = Txts},
         ttl = Ttl
     };
 
