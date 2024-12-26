@@ -32,7 +32,7 @@ make all
 #### 5. Adding local (checkout) dependencies for rebar3
 
 Please follow the instructions available at
-https://www.rebar3.org/docs/dependencies
+https://www.rebar3.org/docs/configuration/dependencies/
 
 
 ```shell

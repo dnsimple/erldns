@@ -21,17 +21,21 @@
 
 -behavior(gen_server).
 
--export([start_link/0,
-         handle/4,
-         filter/1,
-         nsec_rr_type_mapper/1]).
+-export([
+    start_link/0,
+    handle/4,
+    filter/1,
+    nsec_rr_type_mapper/1
+]).
 % Gen server hooks
--export([init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3]).
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    terminate/2,
+    code_change/3
+]).
 
 -define(DNS_TYPE_SAMPLE, 20001).
 
@@ -64,13 +68,17 @@ handle_call({filter, Records}, _From, State) ->
     TypeMatchFunction = type_match(),
     ConvertFunction = convert(),
     NewRecords =
-        lists:flatten(lists:map(fun(R) ->
-                                   case TypeMatchFunction(R) of
-                                       true -> ConvertFunction(R);
-                                       false -> R
-                                   end
-                                end,
-                                Records)),
+        lists:flatten(
+            lists:map(
+                fun(R) ->
+                    case TypeMatchFunction(R) of
+                        true -> ConvertFunction(R);
+                        false -> R
+                    end
+                end,
+                Records
+            )
+        ),
     {reply, NewRecords, State}.
 
 handle_cast(_Message, State) ->
@@ -92,6 +100,6 @@ type_match() ->
 
 convert() ->
     fun(Record) ->
-       {ok, Address} = inet_parse:address(binary_to_list(Record#dns_rr.data)),
-       Record#dns_rr{type = ?DNS_TYPE_A, data = #dns_rrdata_a{ip = Address}}
+        {ok, Address} = inet_parse:address(binary_to_list(Record#dns_rr.data)),
+        Record#dns_rr{type = ?DNS_TYPE_A, data = #dns_rrdata_a{ip = Address}}
     end.

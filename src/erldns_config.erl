@@ -15,37 +15,51 @@
 %% @doc Provide application-wide configuration access.
 -module(erldns_config).
 
--export([get_servers/0,
-         get_address/1,
-         get_port/0,
-         get_num_workers/0]).
+-export([
+    get_servers/0,
+    get_address/1,
+    get_port/0,
+    get_num_workers/0
+]).
 -export([use_root_hints/0]).
--export([packet_cache_enabled/0,
-         packet_cache_default_ttl/0,
-         packet_cache_sweep_interval/0,
-         packet_cache_ttl_overrides/0]).
--export([zone_server_env/0,
-         zone_server_max_processes/0,
-         zone_server_protocol/0,
-         zone_server_host/0,
-         zone_server_port/0]).
--export([websocket_env/0,
-         websocket_protocol/0,
-         websocket_host/0,
-         websocket_port/0,
-         websocket_path/0,
-         websocket_url/0]).
--export([storage_env/0,
-         storage_type/0,
-         storage_user/0,
-         storage_pass/0,
-         storage_host/0,
-         storage_port/0,
-         storage_dir/0]).
--export([keyget/2,
-         keyget/3]).
--export([ingress_udp_request_timeout/0,
-         ingress_tcp_request_timeout/0]).
+-export([
+    packet_cache_enabled/0,
+    packet_cache_default_ttl/0,
+    packet_cache_sweep_interval/0,
+    packet_cache_ttl_overrides/0
+]).
+-export([
+    zone_server_env/0,
+    zone_server_max_processes/0,
+    zone_server_protocol/0,
+    zone_server_host/0,
+    zone_server_port/0
+]).
+-export([
+    websocket_env/0,
+    websocket_protocol/0,
+    websocket_host/0,
+    websocket_port/0,
+    websocket_path/0,
+    websocket_url/0
+]).
+-export([
+    storage_env/0,
+    storage_type/0,
+    storage_user/0,
+    storage_pass/0,
+    storage_host/0,
+    storage_port/0,
+    storage_dir/0
+]).
+-export([
+    keyget/2,
+    keyget/3
+]).
+-export([
+    ingress_udp_request_timeout/0,
+    ingress_tcp_request_timeout/0
+]).
 
 -ifdef(TEST).
 
@@ -58,7 +72,8 @@
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_NUM_WORKERS, 10).
 -define(DEFAULT_CACHE_TTL, 20).
--define(DEFAULT_SWEEP_INTERVAL, 1000 * 60 * 3). % Every 3 minutes
+% Every 3 minutes
+-define(DEFAULT_SWEEP_INTERVAL, 1000 * 60 * 3).
 -define(DEFAULT_ZONE_SERVER_PORT, 443).
 -define(DEFAULT_WEBSOCKET_PATH, "/ws").
 -define(DEFAULT_UDP_PROCESS_TIMEOUT, 500).
@@ -67,24 +82,34 @@
 get_servers() ->
     case application:get_env(erldns, servers) of
         {ok, Servers} ->
-            lists:map(fun(Server) ->
-                         [{name, keyget(name, Server)},
-                          {address, parse_address(keyget(address, Server))},
-                          {port, keyget(port, Server)},
-                          {family, keyget(family, Server)},
-                          {processes, keyget(processes, Server, 1)}]
-                      end,
-                      Servers);
+            lists:map(
+                fun(Server) ->
+                    [
+                        {name, keyget(name, Server)},
+                        {address, parse_address(keyget(address, Server))},
+                        {port, keyget(port, Server)},
+                        {family, keyget(family, Server)},
+                        {processes, keyget(processes, Server, 1)}
+                    ]
+                end,
+                Servers
+            );
         undefined ->
-            lists:map(fun(Family) -> [{name, Family}, {address, get_address(Family)}, {port, get_port()}, {family, Family}] end, [inet, inet6])
+            lists:map(fun(Family) -> [{name, Family}, {address, get_address(Family)}, {port, get_port()}, {family, Family}] end, [
+                inet, inet6
+            ])
     end.
 
 -ifdef(TEST).
 
 get_servers_undefined_test() ->
-    ?assertEqual([[{name, inet}, {address, ?DEFAULT_IPV4_ADDRESS}, {port, ?DEFAULT_PORT}, {family, inet}],
-                  [{name, inet6}, {address, ?DEFAULT_IPV6_ADDRESS}, {port, ?DEFAULT_PORT}, {family, inet6}]],
-                 get_servers()).
+    ?assertEqual(
+        [
+            [{name, inet}, {address, ?DEFAULT_IPV4_ADDRESS}, {port, ?DEFAULT_PORT}, {family, inet}],
+            [{name, inet6}, {address, ?DEFAULT_IPV6_ADDRESS}, {port, ?DEFAULT_PORT}, {family, inet6}]
+        ],
+        get_servers()
+    ).
 
 get_servers_empty_list_test() ->
     application:set_env(erldns, servers, []),
@@ -95,13 +120,21 @@ get_servers_single_server_test() ->
     ?assertEqual([[{name, example}, {address, {127, 0, 0, 1}}, {port, 8053}, {family, inet}, {processes, 1}]], get_servers()).
 
 get_servers_multiple_servers_test() ->
-    application:set_env(erldns,
-                        servers,
-                        [[{name, example_inet}, {address, "127.0.0.1"}, {port, 8053}, {family, inet}],
-                         [{name, example_inet6}, {address, "::1"}, {port, 8053}, {family, inet6}]]),
-    ?assertEqual([[{name, example_inet}, {address, {127, 0, 0, 1}}, {port, 8053}, {family, inet}, {processes, 1}],
-                  [{name, example_inet6}, {address, {0, 0, 0, 0, 0, 0, 0, 1}}, {port, 8053}, {family, inet6}, {processes, 1}]],
-                 get_servers()).
+    application:set_env(
+        erldns,
+        servers,
+        [
+            [{name, example_inet}, {address, "127.0.0.1"}, {port, 8053}, {family, inet}],
+            [{name, example_inet6}, {address, "::1"}, {port, 8053}, {family, inet6}]
+        ]
+    ),
+    ?assertEqual(
+        [
+            [{name, example_inet}, {address, {127, 0, 0, 1}}, {port, 8053}, {family, inet}, {processes, 1}],
+            [{name, example_inet6}, {address, {0, 0, 0, 0, 0, 0, 0, 1}}, {port, 8053}, {family, inet6}, {processes, 1}]
+        ],
+        get_servers()
+    ).
 
 -endif.
 

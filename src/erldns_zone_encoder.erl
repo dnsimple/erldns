@@ -23,19 +23,23 @@
 -include("erldns.hrl").
 
 -export([start_link/0]).
--export([zone_meta_to_json/1,
-         zone_to_json/1,
-         zone_records_to_json/2,
-         zone_records_to_json/3,
-         register_encoders/1,
-         register_encoder/1]).
+-export([
+    zone_meta_to_json/1,
+    zone_to_json/1,
+    zone_records_to_json/2,
+    zone_records_to_json/3,
+    register_encoders/1,
+    register_encoder/1
+]).
 % Gen server hooks
--export([init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3]).
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    terminate/2,
+    code_change/3
+]).
 
 -define(SERVER, ?MODULE).
 
@@ -51,12 +55,16 @@ start_link() ->
 %% @doc Encode a Zone meta data into JSON.
 -spec zone_meta_to_json(#zone{}) -> binary().
 zone_meta_to_json(Zone) ->
-    jsx:encode([{<<"erldns">>,
-                 [{<<"zone">>,
-                   [{<<"name">>, Zone#zone.name},
-                    {<<"version">>, Zone#zone.version},
-                    % Note: Private key material is purposely omitted
-                    {<<"records_count">>, length(erldns_zone_cache:get_zone_records(Zone#zone.name))}]}]}]).
+    jsx:encode([
+        {<<"erldns">>, [
+            {<<"zone">>, [
+                {<<"name">>, Zone#zone.name},
+                {<<"version">>, Zone#zone.version},
+                % Note: Private key material is purposely omitted
+                {<<"records_count">>, length(erldns_zone_cache:get_zone_records(Zone#zone.name))}
+            ]}
+        ]}
+    ]).
 
 %% @doc Encode a Zone meta data plus all of its records into JSON.
 -spec zone_to_json(#zone{}) -> binary().
@@ -118,12 +126,17 @@ code_change(_, State, _) ->
 encode_zone_to_json(Zone, Encoders) ->
     Records = records_to_json(Zone, Encoders),
     FilteredRecords = lists:filter(record_filter(), Records),
-    jsx:encode([{<<"erldns">>,
-                 [{<<"zone">>,
-                   [{<<"name">>, Zone#zone.name},
-                    {<<"version">>, Zone#zone.version},
-                    {<<"records_count">>, length(FilteredRecords)},
-                    {<<"records">>, FilteredRecords}]}]}]).                              % Note: Private key material is purposely omitted
+    jsx:encode([
+        {<<"erldns">>, [
+            {<<"zone">>, [
+                {<<"name">>, Zone#zone.name},
+                {<<"version">>, Zone#zone.version},
+                {<<"records_count">>, length(FilteredRecords)},
+                % Note: Private key material is purposely omitted
+                {<<"records">>, FilteredRecords}
+            ]}
+        ]}
+    ]).
 
 encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
     Records = erldns_zone_cache:get_records_by_name(RecordName),
@@ -135,11 +148,11 @@ encode_zone_records_to_json(_ZoneName, RecordName, RecordType, Encoders) ->
 
 record_filter() ->
     fun(R) ->
-       case R of
-           [] -> false;
-           {} -> false;
-           _ -> true
-       end
+        case R of
+            [] -> false;
+            {} -> false;
+            _ -> true
+        end
     end.
 
 records_to_json(Zone, Encoders) ->
@@ -199,10 +212,12 @@ encode_record(Record) ->
     [].
 
 encode_record(Name, Type, Ttl, Data) ->
-    [{<<"name">>, erlang:iolist_to_binary(io_lib:format("~s.", [Name]))},
-     {<<"type">>, dns:type_name(Type)},
-     {<<"ttl">>, Ttl},
-     {<<"content">>, encode_data(Data)}].
+    [
+        {<<"name">>, erlang:iolist_to_binary(io_lib:format("~s.", [Name]))},
+        {<<"type">>, dns:type_name(Type)},
+        {<<"ttl">>, Ttl},
+        {<<"content">>, encode_data(Data)}
+    ].
 
 try_custom_encoders(_Record, []) ->
     {};
@@ -251,8 +266,12 @@ encode_data({dns_rrdata_dnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
 encode_data({dns_rrdata_cdnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag]));
 encode_data({dns_rrdata_rrsig, TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature}) ->
-    erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~w ~w ~w ~w ~w ~s",
-                                          [TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature]));
+    erlang:iolist_to_binary(
+        io_lib:format(
+            "~w ~w ~w ~w ~w ~w ~w ~w ~s",
+            [TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature]
+        )
+    );
 encode_data(Data) ->
     erldns_events:notify({?MODULE, unsupported_rrdata_type, Data}),
     {}.

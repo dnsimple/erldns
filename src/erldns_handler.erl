@@ -25,20 +25,24 @@
 
 -define(DEFAULT_HANDLER_VERSION, 1).
 
--export([start_link/0,
-         register_handler/2,
-         register_handler/3,
-         get_handlers/0,
-         get_versioned_handlers/0,
-         handle/2]).
+-export([
+    start_link/0,
+    register_handler/2,
+    register_handler/3,
+    get_handlers/0,
+    get_versioned_handlers/0,
+    handle/2
+]).
 -export([do_handle/2]).
 % Gen server hooks
--export([init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3]).
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    terminate/2,
+    code_change/3
+]).
 % Internal API
 -export([handle_message/2]).
 
@@ -120,9 +124,11 @@ handle(Message, {_, Host}) ->
 handle(Message, Host, {throttled, Host, _ReqCount}) ->
     folsom_metrics:notify({request_throttled_counter, {inc, 1}}),
     folsom_metrics:notify({request_throttled_meter, 1}),
-    Message#dns_message{tc = true,
-                        aa = true,
-                        rc = ?DNS_RCODE_NOERROR};
+    Message#dns_message{
+        tc = true,
+        aa = true,
+        rc = ?DNS_RCODE_NOERROR
+    };
 %% Message was not throttled, so handle it, then do EDNS handling, optionally
 %% append the SOA record if it is a zone transfer and complete the response
 %% by filling out count-related header fields.
@@ -147,7 +153,8 @@ handle_message(Message, Host) ->
             CachedResponse#dns_message{id = Message#dns_message.id};
         {error, Reason} ->
             erldns_events:notify({?MODULE, packet_cache_miss, [{reason, Reason}, {host, Host}, {message, Message}]}),
-            handle_packet_cache_miss(Message, get_authority(Message), Host) % SOA lookup
+            % SOA lookup
+            handle_packet_cache_miss(Message, get_authority(Message), Host)
     end.
 
 %% If the packet is not in the cache and we are not authoritative (because there
@@ -158,10 +165,12 @@ handle_packet_cache_miss(Message, [], _Host) ->
     case erldns_config:use_root_hints() of
         true ->
             {Authority, Additional} = erldns_records:root_hints(),
-            Message#dns_message{aa = false,
-                                rc = ?DNS_RCODE_REFUSED,
-                                authority = Authority,
-                                additional = Additional};
+            Message#dns_message{
+                aa = false,
+                rc = ?DNS_RCODE_REFUSED,
+                authority = Authority,
+                additional = Additional
+            };
         _ ->
             Message#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED}
     end;
@@ -187,12 +196,13 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
                     %            "~p)",
                     %            [?MODULE, resolve_error, Exception, Reason, Message, Stacktrace]),
                     erldns_events:notify({?MODULE, resolve_error, {Exception, Reason, Message, Stacktrace}}),
-                    RCode = case Reason of
-                        {error, rcode, ?DNS_RCODE_SERVFAIL} -> ?DNS_RCODE_SERVFAIL;
-                        {error, rcode, ?DNS_RCODE_NXDOMAIN} -> ?DNS_RCODE_NXDOMAIN;
-                        {error, rcode, ?DNS_RCODE_REFUSED} -> ?DNS_RCODE_REFUSED;
-                        _ -> ?DNS_RCODE_SERVFAIL
-                    end,
+                    RCode =
+                        case Reason of
+                            {error, rcode, ?DNS_RCODE_SERVFAIL} -> ?DNS_RCODE_SERVFAIL;
+                            {error, rcode, ?DNS_RCODE_NXDOMAIN} -> ?DNS_RCODE_NXDOMAIN;
+                            {error, rcode, ?DNS_RCODE_REFUSED} -> ?DNS_RCODE_REFUSED;
+                            _ -> ?DNS_RCODE_SERVFAIL
+                        end,
                     Message#dns_message{aa = false, rc = RCode}
             end
     end.
@@ -216,10 +226,12 @@ get_authority(MessageOrName) ->
 
 %% Update the message counts and set the QR flag to true.
 complete_response(Message) ->
-    notify_empty_response(Message#dns_message{anc = length(Message#dns_message.answers),
-                                              auc = length(Message#dns_message.authority),
-                                              adc = length(Message#dns_message.additional),
-                                              qr = true}).
+    notify_empty_response(Message#dns_message{
+        anc = length(Message#dns_message.answers),
+        auc = length(Message#dns_message.authority),
+        adc = length(Message#dns_message.additional),
+        qr = true
+    }).
 
 notify_empty_response(Message) ->
     case {Message#dns_message.rc, Message#dns_message.anc + Message#dns_message.auc + Message#dns_message.adc} of

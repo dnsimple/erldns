@@ -13,10 +13,10 @@ concurrency:
 jobs:
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
-        otp_version: ['26.1', '25.3', '24.3']
+        otp_version: ['26.2', '25.3']
 
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +26,7 @@ jobs:
           otp-version: ${{ matrix.otp_version }}
           version-type: 'strict'
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/rebar3
@@ -37,10 +37,10 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
-        otp_version: ['26.1', '25.3', '24.3']
+        otp_version: ['26.2', '25.3']
 
     needs:
       - build
@@ -53,7 +53,7 @@ jobs:
           otp-version: ${{ matrix.otp_version }}
           version-type: 'strict'
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/rebar3
@@ -61,17 +61,3 @@ jobs:
           key: ${{ runner.os }}-erlang-${{ matrix.otp_version }}-${{ hashFiles('**/*rebar.lock') }}
 
       - run: make test
-
-  slack-workflow-status:
-    if: always()
-    name: Post Workflow Status To Slack
-    needs:
-      - build
-      - test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Slack Workflow Notification
-        uses: Gamesight/slack-workflow-status@master
-        with:
-          repo_token: ${{secrets.GITHUB_TOKEN}}
-          slack_webhook_url: ${{secrets.SLACK_WEBHOOK_URL_DEVELOPMENT}}

@@ -20,27 +20,31 @@
 %% inter-module API
 -export([start_link/0]).
 %% API
--export([create/1,
-         insert/2,
-         delete_table/1,
-         delete/2,
-         select_delete/2,
-         backup_table/1,
-         backup_tables/0,
-         select/2,
-         select/3,
-         foldl/3,
-         empty_table/1,
-         list_table/1,
-         load_zones/0,
-         load_zones/1]).
+-export([
+    create/1,
+    insert/2,
+    delete_table/1,
+    delete/2,
+    select_delete/2,
+    backup_table/1,
+    backup_tables/0,
+    select/2,
+    select/3,
+    foldl/3,
+    empty_table/1,
+    list_table/1,
+    load_zones/0,
+    load_zones/1
+]).
 %% gen_server callbacks
--export([init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3]).
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    terminate/2,
+    code_change/3
+]).
 
 -record(state, {}).
 
@@ -168,11 +172,13 @@ load_zones(Filename) when is_list(Filename) ->
             lager:debug("Parsing zones JSON"),
             JsonZones = jsx:decode(Binary, [{return_maps, false}]),
             lager:debug("Putting zones into cache"),
-            lists:foreach(fun(JsonZone) ->
-                             Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-                             ok = erldns_zone_cache:put_zone(Zone)
-                          end,
-                          JsonZones),
+            lists:foreach(
+                fun(JsonZone) ->
+                    Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
+                    ok = erldns_zone_cache:put_zone(Zone)
+                end,
+                JsonZones
+            ),
             lager:debug("Loaded zones (count: ~p)", [length(JsonZones)]),
             {ok, length(JsonZones)};
         {error, Reason} ->

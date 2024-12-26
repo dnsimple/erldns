@@ -21,20 +21,24 @@
 -behavior(gen_server).
 
 % API
--export([start_link/0,
-         get/1,
-         get/2,
-         put/2,
-         sweep/0,
-         clear/0,
-         stop/0]).
+-export([
+    start_link/0,
+    get/1,
+    get/2,
+    put/2,
+    sweep/0,
+    clear/0,
+    stop/0
+]).
 % Gen server hooks
--export([init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3]).
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    terminate/2,
+    code_change/3
+]).
 
 -define(SERVER, ?MODULE).
 
@@ -103,10 +107,11 @@ init([]) ->
 init([TTL]) ->
     erldns_storage:create(packet_cache),
     {ok, Tref} = timer:apply_interval(erldns_config:packet_cache_sweep_interval(), ?MODULE, sweep, []),
-    {ok,
-     #state{ttl = TTL,
-            ttl_overrides = erldns_config:packet_cache_ttl_overrides(),
-            tref = Tref}}.
+    {ok, #state{
+        ttl = TTL,
+        ttl_overrides = erldns_config:packet_cache_ttl_overrides(),
+        tref = Tref
+    }}.
 
 handle_call({set_packet, [Key, Response]}, _From, State) ->
     erldns_storage:insert(packet_cache, {Key, {Response, timestamp() + State#state.ttl}}),
