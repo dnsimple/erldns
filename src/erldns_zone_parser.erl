@@ -24,6 +24,7 @@
 -export([
     start_link/0,
     zone_to_erlang/1,
+    zone_to_erlang/2,
     register_parsers/1,
     register_parser/1,
     list_parsers/0
@@ -59,9 +60,13 @@ start_link() ->
 %% @doc Takes a JSON zone and turns it into the tuple {Name, Sha, Records}.
 %%
 %% The default timeout for parsing is currently 30 seconds.
--spec zone_to_erlang(binary()) -> {binary(), binary(), [dns:rr()], [erldns:keyset()]}.
+-spec zone_to_erlang(map() | list()) -> {binary(), binary(), [dns:rr()], [erldns:keyset()]}.
 zone_to_erlang(Zone) ->
     gen_server:call(?SERVER, {parse_zone, Zone}, ?PARSE_TIMEOUT).
+
+-spec zone_to_erlang(binary(), integer()) -> {binary(), binary(), [dns:rr()], [erldns:keyset()]}.
+zone_to_erlang(Zone, Timeout) ->
+    gen_server:call(?SERVER, {parse_zone, Zone}, Timeout).
 
 %% @doc Register a list of custom parser modules.
 -spec register_parsers([module()]) -> ok.
@@ -857,7 +862,7 @@ base64_to_bin(Bin) when is_binary(Bin) ->
 
 json_to_erlang_test() ->
     json_to_erlang(
-        jsx:decode(<<
+        json:decode(<<
             "{\"name\":\"example.com\",\"sha\":\"10ea56ad7be9d3e6e75be3a15ef0dfabe9facafba486d74914e7baf8fb36638e\",\"rec"
             "ords\":[{\"name\":\"example.com\",\"type\":\"SOA\",\"data\":{\"mname\":\"ns1.dnsimple.com\",\"rname\":\"admi"
             "n.dnsimple.com\",\"serial\":1597990915,\"refresh\":86400,\"retry\":7200,\"expire\":604800,\"minimum\":300},\""
