@@ -529,7 +529,7 @@ json_record_to_erlang([Name, <<"TXT">>, Ttl, _Data, _Context, Value]) when is_li
         data = #dns_rrdata_txt{txt = Value},
         ttl = Ttl
     };
-json_record_to_erlang([Name, <<"TXT">>, Ttl, Data, _Context, Value]) ->
+json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context, Value]) ->
     %% This function call may crash. Handle it as a bad record.
     try erldns_txt:parse(Value) of
         ParsedText ->
