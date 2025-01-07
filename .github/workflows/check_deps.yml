@@ -41,9 +41,9 @@ jobs:
       - name: Update dependencies
         id: update-deps
         run: |
-          echo "Output of running \`rebar3 update-deps\`:\n\n```" > pr-body.md
+          echo "Output of running \`rebar3 update-deps\`:\n\n\`\`\`" > pr-body.md
           TERM=dumb rebar3 update-deps --replace >> pr-body.md
-          echo "```" >> pr-body.md
+          echo "\`\`\`" >> pr-body.md
           rebar3 fmt --write
         env:
           BRANCH_NAME: update-deps-${{ github.run_id }}
