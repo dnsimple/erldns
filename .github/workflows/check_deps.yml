@@ -41,13 +41,17 @@ jobs:
       - name: Update dependencies
         id: update-deps
         run: |
-          echo "Output of running \`rebar3 update-deps\`:\n\n\`\`\`" > pr-body.md
-          TERM=dumb rebar3 update-deps --replace >> pr-body.md
-          echo "\`\`\`" >> pr-body.md
+          _update_output="$(TERM=dumb rebar3 update-deps --replace)"
+
+          cat <<EOF > /tmp/pr-body.md
+          Output of running \`rebar3 update-deps\`:
+
+          \```
+          $_update_output
+          \```
+          EOF
+
           rebar3 fmt --write
-        env:
-          BRANCH_NAME: update-deps-${{ github.run_id }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # We can always run this step because the action will exit silently if there are no changes.
       # See: https://github.com/marketplace/actions/create-pull-request#action-behaviour
@@ -59,7 +63,7 @@ jobs:
           branch: "automatic-dependencies-update"
           commit-message: "Update dependencies"
           title: "Update dependencies"
-          body-path: pr-body.md
+          body-path: /tmp/pr-body.md
           labels: "dependencies"
           assignees: "weppos"
           reviewers: "weppos"
