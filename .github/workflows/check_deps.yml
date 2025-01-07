@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        otp_version: ['27.1']
+        otp_version: ['27.1.3']
 
     steps:
       - uses: actions/checkout@v4
@@ -38,8 +38,29 @@ jobs:
       - name: Build
         run: make build
 
-      - name: Check dependencies
-        run: .github/workflows/check-deps.sh
+      - name: Update dependencies
+        id: update-deps
+        run: |
+          echo "Output of running \`rebar3 update-deps\`:\n\n```" > pr-body.md
+          TERM=dumb rebar3 update-deps --replace >> pr-body.md
+          echo "```" >> pr-body.md
+          rebar3 fmt --write
         env:
           BRANCH_NAME: update-deps-${{ github.run_id }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # We can always run this step because the action will exit silently if there are no changes.
+      # See: https://github.com/marketplace/actions/create-pull-request#action-behaviour
+      - name: Create PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          # By always using the same branch name, we can keep pushing to
+          # the same branch if there are new changes.
+          branch: "automatic-dependencies-update"
+          commit-message: "Update dependencies"
+          title: "Update dependencies"
+          body-path: pr-body.md
+          labels: "dependencies"
+          assignees: "weppos"
+          reviewers: "weppos"
+          delete-branch: true
