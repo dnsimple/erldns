@@ -65,6 +65,5 @@ jobs:
           title: "Update dependencies"
           body-path: /tmp/pr-body.md
           labels: "dependencies,task"
-          assignees: "weppos"
-          reviewers: "weppos"
+          team-reviewers: "dnsimple/platform"
           delete-branch: true
