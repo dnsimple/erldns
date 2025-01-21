@@ -100,6 +100,12 @@ erldns_zone_cache:put_zone({
   ]}).
 ```
 
+### AXFR Support
+
+AXFR zone transfers are not currently implemented. The current "implementation" is just a stub.
+
+In order to support it, it might be needed to use a custom record handler that will for example "match" every record when the QTYPE is AXFR (252).
+
 ## Metrics
 
 Folsom is used to gather runtime metrics and statistics.
