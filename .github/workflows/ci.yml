@@ -3,7 +3,8 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -21,6 +22,14 @@ jobs:
         with:
           files: .
           config_file: ".markdownlint.yaml"
+
+  yamllint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Run YAML Lint
+        uses: actionshub/yamllint@main
 
   build:
     name: Build
