@@ -1,0 +1,6 @@
+---
+default: true
+line-length: false
+
+# MD033/no-inline-html Inline HTML
+MD033: false
