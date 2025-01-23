@@ -105,6 +105,10 @@ erldns_zone_cache:put_zone({
   ]}).
 ```
 
+### AXFR Support
+
+AXFR zone transfers are not currently implemented. The current "implementation" is just a stub.
+
 ## Metrics
 
 Folsom is used to gather runtime metrics and statistics.
