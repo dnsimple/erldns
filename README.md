@@ -5,7 +5,7 @@ Serve DNS authoritative responses... with Erlang.
 [![CI](https://github.com/dnsimple/erldns/actions/workflows/ci.yml/badge.svg)](https://github.com/dnsimple/erldns/actions/workflows/ci.yml)
 [![GitHub version](https://badge.fury.io/gh/dnsimple%2Ferldns.svg)](https://badge.fury.io/gh/dnsimple%2Ferldns)
 
-# Requirements
+## Requirements
 
 Erlang/OTP 27+
 
@@ -13,13 +13,13 @@ Erlang/OTP 27+
 
 To build:
 
-```
+```shell
 make
 ```
 
 To start fresh:
 
-```
+```shell
 make fresh
 make
 ```
@@ -36,21 +36,21 @@ An example configuration file can be found in `erldns.example.config`. Copy it t
 
 ## Running
 
-### Launch directly:
+### Launch directly
 
-```bash
+```shell
 overmind start
 ```
 
-### To get an interactive Erlang REPL:
+### To get an interactive Erlang REPL
 
-```bash
+```shell
 ./rebar3 shell
 ```
 
-### Build a distribution with and run the release:
+### Build a distribution with and run the release
 
-```bash
+```shell
 ./rebar3 release
 ./_build/default/rel/erldns/bin/erldns foreground
 ```
@@ -155,7 +155,7 @@ There is an administrative API for querying the current zone cache and for basic
 
 To run automated tests:
 
-```bash
+```shell
 make test
 ```
 

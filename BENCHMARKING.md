@@ -6,7 +6,7 @@ This guide contains some information on how to benchmark `erldns` locally.
 
 The recommended benchmarking tool is [`dnsperf`](https://github.com/DNS-OARC/dnsperf). You can compile it from source or, if on macOS, install it with:
 
-```bash
+```shell
 brew install dnsperf
 ```
 
@@ -48,7 +48,7 @@ Then, start the release in the foreground:
 
 Now you're ready to run benchmarks. For example:
 
-```bash
+```shell
 dnsperf -p 8053 -d ./queries.txt -T 4 -c 20 -n 10000
 ```
 
@@ -77,7 +77,7 @@ www.example.com. CNAME
 <details>
 <summary>Command</summary>
 
-```bash
+```shell
 dnsperf -p 8053 -d ./queries.txt -T 4 -c 20 -n 10000
 ```
 

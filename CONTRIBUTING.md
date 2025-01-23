@@ -4,7 +4,7 @@ erldns is an open source project licensed under an MIT license. Contributions ar
 
 ## Getting started
 
-#### 1. Clone the repository
+### 1. Clone the repository
 
 Clone the repository and move into it:
 
@@ -13,15 +13,15 @@ git clone git@github.com:dnsimple/erldns.git
 cd erldns
 ```
 
-#### 2. Install Erlang
+### 2. Install Erlang
 
-#### 3. Create your own working branch
+### 3. Create your own working branch
 
 ```shell
 git checkout -b dev_new_feature_xyz
 ```
 
-#### 4. Build and test
+### 4. Build and test
 
 Compile the project and [run the test suite](#testing) to check everything works as expected.
 
@@ -29,7 +29,7 @@ Compile the project and [run the test suite](#testing) to check everything works
 make all
 ```
 
-#### 5. Adding local (checkout) dependencies for rebar3
+### 5. Adding local (checkout) dependencies for rebar3
 
 Please follow the instructions available at
 <https://www.rebar3.org/docs/configuration/dependencies/>
@@ -54,7 +54,7 @@ erldns includes several test mechanisms.
 
 To execute unit tests (and dialyzer for static analysis):
 
-```
+```shell
 make test
 ```
 
@@ -62,7 +62,7 @@ make test
 
 The [dnstest](https://github.com/dnsimple/dnstest) tool provides a suite of black-box functional tests for erldns (and any other DNS authoritative name server). The tests are largely based on the excellent [suite of tests](https://github.com/PowerDNS/pdns/tree/master/regression-tests/tests) in [PowerDNS](http://powerdns.com). To run the tests, you must change `erldns.config` so that zones are loaded from `priv/zones-test.json`.
 
-```
+```erlang
 [
   {erldns, [
     {zones, "priv/zones-test.json"}
@@ -76,7 +76,7 @@ Then you will need to run erldns. At this point it should be ready to test with 
 
 If your editor doesn't automatically format Erlang code using [erlfmt](https://github.com/WhatsApp/erlfmt), run:
 
-```bash
+```shell
 make format
 ```
 
