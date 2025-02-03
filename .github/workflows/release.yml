@@ -1,0 +1,20 @@
+---
+
+name: Release
+
+on:
+  push:
+    tags:
+      - v*.*.*
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Publish to Hex.pm
+        uses: erlangpack/github-action@v3
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
