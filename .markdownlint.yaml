@@ -1,5 +1,13 @@
 ---
 default: true
-line-length: false
 
-MD033: false
+# no-hard-tabs
+MD010:
+  code_blocks: false
+
+# no-multiple-blanks
+MD012:
+  maximum: 2
+
+# line-length
+MD013: false

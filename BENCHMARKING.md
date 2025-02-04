@@ -60,8 +60,7 @@ The latest benchmark was run on 2024/10/06 by @whatyouhide, on an 2021 Apple Mac
 
 In these conditions, `erldns` can serve around 58k queries per second. The details of the benchmark are below.
 
-<details>
-<summary>Input queries file</summary>
+#### Input queries file
 
 ```text
 thumbs2.ebaystatic.com. AAAA
@@ -72,19 +71,13 @@ example.com. A
 www.example.com. CNAME
 ```
 
-</details>
-
-<details>
-<summary>Command</summary>
+#### Command
 
 ```shell
 dnsperf -p 8053 -d ./queries.txt -T 4 -c 20 -n 10000
 ```
 
-</details>
-
-<details>
-<summary>Results</summary>
+#### Results
 
 ```text
 DNS Performance Testing Tool
@@ -110,5 +103,3 @@ Statistics:
   Average Latency (s):  0.001682 (min 0.000085, max 0.006491)
   Latency StdDev (s):   0.001155
 ```
-
-</details>
