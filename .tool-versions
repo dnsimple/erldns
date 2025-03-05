@@ -1,2 +1,3 @@
 # Also update ci.yml
-erlang 27.1.3
+erlang 27.2.3
+rebar 3.24.0
