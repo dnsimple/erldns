@@ -34,19 +34,24 @@ jobs:
         uses: actionshub/yamllint@main
 
   test:
-    name: Test
-    runs-on: ubuntu-24.04
+    name: OTP ${{matrix.otp}}
+    strategy:
+      matrix:
+        os: ['ubuntu-24.04', 'ubuntu-22.04']
+        otp: ['27']
+        rebar3: ['3.24']
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
-          version-type: strict
-          version-file: .tool-versions
+          otp-version: ${{matrix.otp}}
+          rebar3-version: ${{matrix.rebar3}}
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/rebar3
             _build
-          key: ${{ runner.os }}-erlang-${{ steps.setup-beam.outputs.otp-version }}-rebar3-${{ steps.setup-beam.outputs.rebar3-version }}-hash-${{hashFiles('rebar.lock')}}
+          key: ${{ runner.os }}-erlang-${{ matrix.otp }}-rebar3-${{ matrix.rebar3 }}-hash-${{hashFiles('rebar.lock')}}
       - run: make build
       - run: make test
