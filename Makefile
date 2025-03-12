@@ -19,6 +19,7 @@ clean:
 
 .PHONY: test
 test:
+	rebar3 xref
 	rebar3 eunit
 	rebar3 fmt --check
 	rebar3 dialyzer

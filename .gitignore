@@ -12,6 +12,7 @@ priv/_*.json
 .eunit/
 db/
 _build/
+doc/
 Mnesia.nonode@nohost/
 *.DCD
 *.DCL
