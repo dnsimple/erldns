@@ -61,7 +61,7 @@
 
 -export_type([state/0]).
 
-%% @spec start_link(CallbackModule, IpAddr, Port, InitParams) -> Result
+%% start_link(CallbackModule, IpAddr, Port, InitParams) -> Result
 %% CallbackModule = atom()
 %% IpAddr = string()
 %% Port = integer()
@@ -159,7 +159,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 
 %% @hidden
-%% @spec listen_on(CallbackModule, IpAddr, Port) -> Result
+%% listen_on(CallbackModule, IpAddr, Port) -> Result
 %% CallbackModule = atom()
 %% IpAddr = string()
 %% Port = integer()
