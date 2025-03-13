@@ -33,53 +33,25 @@ jobs:
       - name: Run YAML Lint
         uses: actionshub/yamllint@main
 
-  build:
-    name: Build
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        otp_version: ['27.1']
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: erlef/setup-beam@v1
-        with:
-          otp-version: ${{ matrix.otp_version }}
-          version-type: 'strict'
-
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/rebar3
-            _build
-          key: ${{ runner.os }}-erlang-${{ matrix.otp_version }}-${{ hashFiles('**/*rebar.lock') }}
-
-      - run: make build
-
   test:
-    name: Test
-    runs-on: ubuntu-22.04
+    name: OTP ${{matrix.otp}}
     strategy:
       matrix:
-        otp_version: ['27.1']
-
-    needs:
-      - build
-
+        os: ['ubuntu-24.04', 'ubuntu-22.04']
+        otp: ['27']
+        rebar3: ['3.24']
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ matrix.otp_version }}
-          version-type: 'strict'
-
+          otp-version: ${{matrix.otp}}
+          rebar3-version: ${{matrix.rebar3}}
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/rebar3
             _build
-          key: ${{ runner.os }}-erlang-${{ matrix.otp_version }}-${{ hashFiles('**/*rebar.lock') }}
-
+          key: ${{ runner.os }}-erlang-${{ matrix.otp }}-rebar3-${{ matrix.rebar3 }}-hash-${{hashFiles('rebar.lock')}}
+      - run: make build
       - run: make test
