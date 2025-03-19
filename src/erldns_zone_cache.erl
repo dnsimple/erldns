@@ -22,8 +22,6 @@
 -behavior(gen_server).
 
 -include_lib("dns_erlang/include/dns.hrl").
--include_lib("opentelemetry_api/include/otel_tracer.hrl").
--include_lib("opentelemetry_api/include/opentelemetry.hrl").
 
 -include("erldns.hrl").
 
@@ -333,14 +331,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
             % TODO: remove debug
             lager:debug("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [RRFqdn, Type, ZoneName, Records]),
             KeySets = Zone#zone.keysets,
-            SignedRRSet = ?with_span(
-                <<"sign_rrset">>,
-                #{},
-                fun(_SpanCtx) ->
-                    ?set_attributes([{zone, ZoneName}, {type, Type}]),
-                    sign_rrset(ZoneName, Records, KeySets)
-                end
-            ),
+            SignedRRSet = sign_rrset(ZoneName, Records, KeySets),
             {RRSigRecsCovering, RRSigRecsNotCovering} = filter_rrsig_records_with_type_covered(RRFqdn, Type),
             % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
             TypedRecords = build_typed_index(Records ++ SignedRRSet ++ RRSigRecsNotCovering),
@@ -349,18 +340,11 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
             % put zone_records_typed records first then create the records in zone_records
             put_zone_records_typed_entry(ZoneName, RRFqdn, maps:next(maps:iterator(TypedRecords))),
 
-            ?with_span(
-                <<"update_zone_recs">>,
-                #{},
-                fun(_SpanCtx) ->
-                    ?set_attributes([{zone, ZoneName}]),
-                    UpdatedZoneRecordsCount =
-                        ZoneRecordsCount +
-                            (length(Records) - length(CurrentRRSetRecords)) +
-                            (length(SignedRRSet) - length(RRSigRecsCovering)),
-                    update_zone_records_and_digest(ZoneName, UpdatedZoneRecordsCount, Digest)
-                end
-            ),
+            UpdatedZoneRecordsCount =
+                ZoneRecordsCount +
+                    (length(Records) - length(CurrentRRSetRecords)) +
+                    (length(SignedRRSet) - length(RRSigRecsCovering)),
+            update_zone_records_and_digest(ZoneName, UpdatedZoneRecordsCount, Digest),
             write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}),
 
             lager:debug("RRSet update completed for FQDN: ~p, Type: ~p", [RRFqdn, Type]),
@@ -454,14 +438,7 @@ update_zone_records_and_digest(ZoneName, RecordsCount, Digest) ->
                     authority = get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA),
                     record_count = RecordsCount
                 },
-            ?with_span(
-                <<"put_zone">>,
-                #{},
-                fun(_SpanCtx) ->
-                    ?set_attributes([{zone, ZoneName}]),
-                    put_zone(Zone#zone.name, UpdatedZone)
-                end
-            );
+            put_zone(Zone#zone.name, UpdatedZone);
         _ ->
             {error, zone_not_found}
     end.
