@@ -2,19 +2,24 @@
 
 Serve DNS authoritative responses... with Erlang.
 
-[![CI](https://github.com/dnsimple/erldns/actions/workflows/ci.yml/badge.svg)](https://github.com/dnsimple/erldns/actions/workflows/ci.yml)
+[![Build Status](https://github.com/dnsimple/erldns/actions/workflows/ci.yml/badge.svg)](https://github.com/dnsimple/erldns/actions/workflows/ci.yml)
+[![Module Version](https://img.shields.io/hexpm/v/erldns.svg)](https://hex.pm/packages/erldns)
+
+## Requirements
+
+Erlang/OTP 27+
 
 ## Building
 
 To build:
 
-```
+```shell
 make
 ```
 
 To start fresh:
 
-```
+```shell
 make fresh
 make
 ```
@@ -31,21 +36,21 @@ An example configuration file can be found in `erldns.example.config`. Copy it t
 
 ## Running
 
-### Launch directly:
+### Launch directly
 
-```bash
+```shell
 overmind start
 ```
 
-### To get an interactive Erlang REPL:
+### To get an interactive Erlang REPL
 
-```bash
+```shell
 ./rebar3 shell
 ```
 
-### Build a distribution with and run the release:
+### Build a distribution with and run the release
 
-```bash
+```shell
 ./rebar3 release
 ./_build/default/rel/erldns/bin/erldns foreground
 ```
@@ -100,6 +105,10 @@ erldns_zone_cache:put_zone({
   ]}).
 ```
 
+### AXFR Support
+
+AXFR zone transfers are not currently implemented. The current "implementation" is just a stub.
+
 ## Metrics
 
 Folsom is used to gather runtime metrics and statistics.
@@ -150,7 +159,7 @@ There is an administrative API for querying the current zone cache and for basic
 
 To run automated tests:
 
-```bash
+```shell
 make test
 ```
 

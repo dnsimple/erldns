@@ -237,15 +237,14 @@ select_delete(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}]) ->
         end,
     mnesia:activity(transaction, SelectDelete).
 
-%%
 %% @doc Should backup the tables in the schema.
-%% @see https://github.com/SiftLogic/erl-dns/issues/3
+%% https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_table(atom()) -> ok | {error, Reason :: term()}.
 backup_table(_Table) ->
     Backup = fun() -> mnesia:backup(mnesia:schema()) end,
     mnesia:activity(transaction, Backup).
 
-%% @see https://github.com/SiftLogic/erl-dns/issues/3
+%% https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_tables() -> ok | {error, Reason :: term()}.
 backup_tables() ->
     {error, not_implemented}.

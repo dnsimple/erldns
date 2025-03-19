@@ -79,13 +79,13 @@ select_delete(Table, MatchSpec) ->
     {ok, Count}.
 
 %% @doc Backup a specific ets table.
-%% @see https://github.com/SiftLogic/erl-dns/issues/3
+%% https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_table(atom()) -> ok | {error, Reason :: term()}.
 backup_table(_Table) ->
     {error, not_implemented}.
 
 %% @doc Should backup all ets tables.
-%% @see https://github.com/SiftLogic/erl-dns/issues/3
+%% https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_tables() -> ok | {error, Reason :: term()}.
 backup_tables() ->
     {error, not_implemented}.

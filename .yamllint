@@ -1,0 +1,9 @@
+---
+extends: default
+rules:
+  line-length:
+    max: 256
+    level: warning
+  truthy:
+    ignore: |
+      /.github/workflows/*.yml

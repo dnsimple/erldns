@@ -13,6 +13,10 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+%% Public API
+%% @doc API for a module's function calls. Please note that all crashes should be handled at the
+%% lowest level of the API (ex. erldns_storage_json).
+%% @end
 -module(erldns_storage).
 
 -behaviour(gen_server).
@@ -81,11 +85,6 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%% Public API
-%% @doc API for a module's function calls. Please note that all crashes should be handled at the
-%% lowest level of the API (ex. erldns_storage_json).
-%% @end
-
 %% @doc Call to a module's create. Creates a new table.
 -spec create(atom()) -> ok | {error, Reason :: term()}.
 create(Table) ->
@@ -116,14 +115,14 @@ select_delete(Table, MatchSpec) ->
     Module:select_delete(Table, MatchSpec).
 
 %% @doc Backup the table to the JSON file.
-%% @see https://github.com/SiftLogic/erl-dns/issues/3
+%% https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_table(atom()) -> ok | {error, Reason :: term()}.
 backup_table(Table) ->
     Module = mod(Table),
     Module:backup_table(Table).
 
 %% @doc Backup the tables to the JSON file.
-%% @see https://github.com/SiftLogic/erl-dns/issues/3
+%% https://github.com/SiftLogic/erl-dns/issues/3
 -spec backup_tables() -> ok | {error, Reason :: term()}.
 backup_tables() ->
     Module = mod(),
