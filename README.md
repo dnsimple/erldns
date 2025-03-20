@@ -115,42 +115,6 @@ Folsom is used to gather runtime metrics and statistics.
 
 There is an HTTP API for querying metric data available at <https://github.com/dnsimple/erldns-metrics>
 
-## Tracing
-
-This project uses [OpenTelemetry](https://opentelemetry.io/docs/erlang/) (OTEL) Tracing to provide telemetry data on request processing inside of **erldns**.
-
-To enable opentelmetry tracing, you need to:
-
-1. Add [opentelemetry](https://github.com/open-telemetry/opentelemetry-erlang#including-in-release) as dependency of your application.
-2. Configure the opentelemetry client:
-
-   Add the following configuration to the [erldns.config](erldns.config.example):
-
-   ```erlang
-     {opentelemetry,[
-       {processors,
-           [{otel_batch_processor,
-               #{exporter => {opentelemetry_exporter, #{protocol => http_protobuf,
-                                                       endpoints => [{http, "127.0.0.1", 55681, []}]}}}}]}
-     ]}
-   ```
-
-  NOTE: You will need to have a running [OpenTelemetry Collector](https://github.com/open-telemetry/opentelemetry-collector-contrib).
-
-Application traces:
-
-| Name                       | Dimensions                                                                                                |
-| -------------------------- | --------------------------------------------------------------------------------------------------------- |
-| erldns_tcp_worker          |                                                                                                           |
-| handle_tcp_dns_query       | status, qr, rd, ad, qname, qtype                                                                          |
-| handle_decoded_tcp_message | status                                                                                                    |
-| send_tcp_message           |                                                                                                           |
-| erldns_udp_worker          | host, port, erlang_port_count, erlang_proc_count, erlang_run_queue, erlang_proc_message_queue_len, status |
-| handle_udp_dns_query       | status, qr, rd, ad, qname, qtype                                                                          |
-| handle_decoded_udp_message | status                                                                                                    |
-| synthesize_answer          |                                                                                                           |
-| encode_message             | rcode, aa, ra, answers                                                                                    |
-
 ## Admin
 
 There is an administrative API for querying the current zone cache and for basic control. You can find it in <https://github.com/dnsimple/erldns-admin>.
