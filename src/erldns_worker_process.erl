@@ -106,11 +106,10 @@ send_tcp_message(Socket, EncodedMessage) ->
 max_payload_size(Message) ->
     case Message#dns_message.additional of
         [Opt | _] when is_record(Opt, dns_optrr) ->
-            case Opt#dns_optrr.udp_payload_size of
-                [] ->
-                    ?MAX_PACKET_SIZE;
-                _ ->
-                    Opt#dns_optrr.udp_payload_size
+            Size = Opt#dns_optrr.udp_payload_size,
+            case Size < ?MAX_PACKET_SIZE of
+                true -> Size;
+                false -> ?MAX_PACKET_SIZE
             end;
         _ ->
             ?MAX_PACKET_SIZE
