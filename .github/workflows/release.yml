@@ -17,8 +17,8 @@ jobs:
         with:
           otp-version: '27'
           rebar3-version: '3.24'
+      - run: rebar3 compile
       - name: Publish to hex.pm
         env:
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
-        run: rebar3 compile
         run: rebar3 hex publish -r hexpm --yes
