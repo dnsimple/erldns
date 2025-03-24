@@ -20,4 +20,5 @@ jobs:
       - name: Publish to hex.pm
         env:
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: rebar3 compile
         run: rebar3 hex publish -r hexpm --yes
