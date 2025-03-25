@@ -1,7 +1,7 @@
 % -*- mode: Erlang; -*-
 {application, erldns, [
     {description, "Erlang Authoritative DNS Server"},
-    {vsn, "3.0.0"},
+    {vsn, git},
     {licenses, ["MIT"]},
     {mod, {erldns_app, []}},
     {applications, [
@@ -19,7 +19,6 @@
         nodefinder
     ]},
     {start_phases, [{post_start, []}]},
-
     {licenses, ["Apache-2.0"]},
     {links, [{"GitHub", "https://github.com/dnsimple/erldns"}]}
 ]}.
