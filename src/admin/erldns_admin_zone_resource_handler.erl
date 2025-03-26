@@ -103,11 +103,11 @@ to_json(Req, State) ->
             Resp = io_lib:format("Error getting zone: ~p", [Reason]),
             {stop, cowboy_req:reply(400, #{}, Resp, Req), State};
         {ok, Zone} ->
-            Body = get_body(Req, State, Zone, lists:keymember(<<"metaonly">>, 1, Params)),
+            Body = get_body(Zone, lists:keymember(<<"metaonly">>, 1, Params)),
             {Body, Req, State}
     end.
 
-get_body(Req, State, Zone, false) ->
-    {erldns_zone_encoder:zone_to_json(Zone), Req, State};
-get_body(Req, State, Zone, true) ->
-    {erldns_zone_encoder:zone_meta_to_json(Zone), Req, State}.
+get_body(Zone, false) ->
+    erldns_zone_encoder:zone_to_json(Zone);
+get_body(Zone, true) ->
+    erldns_zone_encoder:zone_meta_to_json(Zone).
