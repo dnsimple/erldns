@@ -1,21 +1,20 @@
-rebar3
-.rebar3
 *.beam
 *.dump
-erldns.config
-erldns.config*
 log/
-ebin/
-deps/*
-rel/erl-dns
 priv/_*.json
-.eunit/
 db/
-_build/
-_checkouts/
-doc/
 Mnesia.nonode@nohost/
 *.DCD
 *.DCL
 *.DAT
 *.LOG
+
+# local setup
+.tool-versions
+erldns.config
+
+# rebar 3
+.rebar3
+_build/
+_checkouts/
+doc/
