@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## 4.0.0
+
+- Add ex_doc support
 - Remove support for OpenTelemetry.
 
 ## 3.0.0
