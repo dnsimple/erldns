@@ -1,0 +1,147 @@
+%% Copyright (c) 2012-2019, DNSimple Corporation
+%%
+%% Permission to use, copy, modify, and/or distribute this software for any
+%% purpose with or without fee is hereby granted, provided that the above
+%% copyright notice and this permission notice appear in all copies.
+%%
+%% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+%% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+%% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+%% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+%% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+%% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+%% @doc Process for an administrative HTTP API.
+%%
+%% Provides zone quering and command-and-control functionality.
+
+-module(erldns_admin).
+-moduledoc """
+Erldns admin API.
+
+### Configuration:
+This application will read from your `sys.config` the following example:
+```erlang
+{erldns, [
+    {admin, [
+        {credentials, {<<"username">>, <<"password">>}},
+        {port, 8083}
+    ]}
+]}
+```
+where `credentials` is a tuple of `username` and `password` as either strings or binaries,
+and `port` is a valid Unix port to listen on.
+""".
+
+-define(DEFAULT_PORT, 8083).
+
+-include_lib("kernel/include/logger.hrl").
+
+-export([maybe_start/0, is_authorized/2]).
+
+-doc """
+Configuration parameters, see the module documentation for details.
+""".
+-type config() :: #{
+    port := 0..65535,
+    username := binary(),
+    password := binary()
+}.
+
+-doc "Common state for all handlers".
+-opaque handler_state() :: #{
+    username := binary(),
+    password := binary()
+}.
+-export_type([config/0, handler_state/0]).
+
+-type env() :: [{atom(), term()}].
+
+-spec maybe_start() -> ok | {ok, pid()} | {error, any()}.
+maybe_start() ->
+    case ensure_valid_config() of
+        disabled ->
+            ok;
+        false ->
+            error(bad_configuration);
+        Config ->
+            start(Config)
+    end.
+
+-spec start(config()) -> {ok, pid()} | {error, any()}.
+start(#{port := Port, username := Username, password := Password}) ->
+    State = #{username => Username, password => Password},
+    Dispatch = cowboy_router:compile(
+        [
+            {'_', [
+                {"/", erldns_admin_root_handler, State},
+                {"/zones/:zone_name", erldns_admin_zone_resource_handler, State},
+                {"/zones/:zone_name/:action", erldns_admin_zone_control_handler, State},
+                {"/zones/:zone_name/records[/:record_name]", erldns_admin_zone_records_resource_handler, State}
+            ]}
+        ]
+    ),
+    TransportOpts = #{socket_opts => [inet, {ip, {0, 0, 0, 0}}, {port, Port}]},
+    ProtocolOpts = #{env => #{dispatch => Dispatch}},
+    cowboy:start_clear(?MODULE, TransportOpts, ProtocolOpts).
+
+-doc false.
+-spec is_authorized(cowboy_req:req(), handler_state()) ->
+    {true | {false, iodata()}, cowboy_req:req(), handler_state()}
+    | {stop, cowboy_req:req(), handler_state()}.
+is_authorized(Req, #{username := ValidUsername, password := ValidPassword} = State) ->
+    maybe
+        {basic, GivenUsername, GivenPassword} ?= cowboy_req:parse_header(<<"authorization">>, Req),
+        true ?= is_binary_of_equal_size(GivenUsername),
+        true ?= is_binary_of_equal_size(GivenPassword),
+        true ?= crypto:hash_equals(GivenUsername, ValidUsername) andalso
+            crypto:hash_equals(GivenPassword, ValidPassword),
+        {true, Req, State}
+    else
+        _ ->
+            {{false, <<"Basic realm=\"erldns admin\"">>}, Req, State}
+    end.
+
+-spec is_binary_of_equal_size(term()) -> boolean().
+is_binary_of_equal_size(Bin) ->
+    is_binary(Bin) andalso byte_size(Bin) =:= byte_size(Bin).
+
+-spec ensure_valid_config() -> false | disabled | config().
+ensure_valid_config() ->
+    maybe
+        {true, Env} ?= env(),
+        {true, Port} ?= port(Env),
+        {true, Username, Password} ?= credentials(Env),
+        #{port => Port, username => Username, password => Password}
+    end.
+
+-spec port(env()) -> {true, 1..65535} | false.
+port(Env) ->
+    case proplists:get_value(port, Env, ?DEFAULT_PORT) of
+        Port when is_integer(Port), 0 < Port, Port =< 65535 ->
+            {true, Port};
+        OtherPort ->
+            ?LOG_ERROR(#{what => erldns_admin_bad_config, port => OtherPort}),
+            false
+    end.
+
+-spec credentials(env()) -> {true, binary(), binary()} | false.
+credentials(Env) ->
+    case lists:keyfind(credentials, 1, Env) of
+        {credentials, {Username, Password}} when is_list(Username), is_list(Password) ->
+            {true, list_to_binary(Username), list_to_binary(Password)};
+        {credentials, {Username, Password}} when is_binary(Username), is_binary(Password) ->
+            {true, Username, Password};
+        OtherValue ->
+            ?LOG_ERROR(#{what => erldns_admin_bad_config, credentials => OtherValue}),
+            false
+    end.
+
+-spec env() -> {true, env()} | false | disabled.
+env() ->
+    case application:get_env(erldns, admin) of
+        {ok, Env} when is_list(Env) -> {true, Env};
+        {ok, _} -> false;
+        _ -> disabled
+    end.
