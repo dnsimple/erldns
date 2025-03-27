@@ -509,23 +509,29 @@ json_record_to_erlang([Name, <<"RP">>, Ttl, Data, _Context]) ->
         ttl = Ttl
     };
 json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) when is_map(Data) ->
-    %% This function call may crash. Handle it as a bad record.
-    try erldns_txt:parse(maps:get(<<"txt">>, Data)) of
-        ParsedText ->
-            #dns_rr{
-                name = Name,
-                type = ?DNS_TYPE_TXT,
-                data = #dns_rrdata_txt{txt = lists:flatten(ParsedText)},
-                ttl = Ttl
-            }
-    catch
-        Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
-            {}
-    end;
+    Txts =
+        case maps:is_key(<<"txts">>, Data) of
+            true -> maps:get(<<"txts">>, Data);
+            false -> maps:get(<<"txt">>, Data)
+        end,
+    json_record_to_erlang([Name, Type, Ttl, Data, _Context, Txts]);
 json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) ->
+    Txts =
+        case erldns_config:keyget(<<"txts">>, Data) of
+            Value when is_list(Value) -> Value;
+            _ -> erldns_config:keyget(<<"txt">>, Data)
+        end,
+    json_record_to_erlang([Name, Type, Ttl, Data, _Context, Txts]);
+json_record_to_erlang([Name, <<"TXT">>, Ttl, _Data, _Context, Value]) when is_list(Value) ->
+    #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_TXT,
+        data = #dns_rrdata_txt{txt = Value},
+        ttl = Ttl
+    };
+json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context, Value]) ->
     %% This function call may crash. Handle it as a bad record.
-    try erldns_txt:parse(erldns_config:keyget(<<"txt">>, Data)) of
+    try erldns_txt:parse(Value) of
         ParsedText ->
             #dns_rr{
                 name = Name,
@@ -539,17 +545,27 @@ json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) ->
             {}
     end;
 json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) when is_map(Data) ->
+    Txts =
+        case maps:is_key(<<"txts">>, Data) of
+            true -> maps:get(<<"txts">>, Data);
+            false -> [maps:get(<<"spf">>, Data)]
+        end,
     #dns_rr{
         name = Name,
         type = ?DNS_TYPE_SPF,
-        data = #dns_rrdata_spf{spf = [maps:get(<<"spf">>, Data)]},
+        data = #dns_rrdata_spf{spf = Txts},
         ttl = Ttl
     };
 json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) ->
+    Txts =
+        case erldns_config:keyget(<<"txts">>, Data) of
+            Value when is_list(Value) -> Value;
+            _ -> [erldns_config:keyget(<<"spf">>, Data)]
+        end,
     #dns_rr{
         name = Name,
         type = ?DNS_TYPE_SPF,
-        data = #dns_rrdata_spf{spf = [erldns_config:keyget(<<"spf">>, Data)]},
+        data = #dns_rrdata_spf{spf = Txts},
         ttl = Ttl
     };
 json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) when is_map(Data) ->
@@ -753,7 +769,8 @@ json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) when is_
                         flags = maps:get(<<"flags">>, Data),
                         protocol = maps:get(<<"protocol">>, Data),
                         alg = maps:get(<<"alg">>, Data),
-                        public_key = PublicKey
+                        public_key = PublicKey,
+                        key_tag = 0
                     },
                 ttl = Ttl
             })
@@ -773,7 +790,8 @@ json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) ->
                         flags = erldns_config:keyget(<<"flags">>, Data),
                         protocol = erldns_config:keyget(<<"protocol">>, Data),
                         alg = erldns_config:keyget(<<"alg">>, Data),
-                        public_key = PublicKey
+                        public_key = PublicKey,
+                        key_tag = 0
                     },
                 ttl = Ttl
             })
@@ -793,7 +811,8 @@ json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) when is
                         flags = maps:get(<<"flags">>, Data),
                         protocol = maps:get(<<"protocol">>, Data),
                         alg = maps:get(<<"alg">>, Data),
-                        public_key = PublicKey
+                        public_key = PublicKey,
+                        key_tag = 0
                     },
                 ttl = Ttl
             })
@@ -813,7 +832,8 @@ json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) ->
                         flags = erldns_config:keyget(<<"flags">>, Data),
                         protocol = erldns_config:keyget(<<"protocol">>, Data),
                         alg = erldns_config:keyget(<<"alg">>, Data),
-                        public_key = PublicKey
+                        public_key = PublicKey,
+                        key_tag = 0
                     },
                 ttl = Ttl
             })

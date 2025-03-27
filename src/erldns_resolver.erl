@@ -780,7 +780,7 @@ additional_processing(Message, _Host, _Zone, _Names, Records) ->
     Message#dns_message{additional = Message#dns_message.additional ++ Records}.
 
 %% Given a list of answers find the names that require additional processing.
--spec requires_additional_processing(Records :: [dns:rr()], RecordsRequiringAdditionalProcessing :: [dns:rr()]) -> [dns:rr()].
+-spec requires_additional_processing(Records :: [dns:rr()], RequiresAdditional :: [dns:dname()]) -> [dns:dname()].
 requires_additional_processing([], RequiresAdditional) ->
     RequiresAdditional;
 requires_additional_processing([Answer | Rest], RequiresAdditional) ->
