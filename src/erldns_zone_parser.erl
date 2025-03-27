@@ -512,10 +512,14 @@ json_record_to_erlang([Name, Type, Ttl, #{<<"txts">> := Txts} = Data, Context]) 
     is_list(Txts) andalso Type =:= <<"TXT">> orelse Type =:= <<"SPF">>
 ->
     json_record_to_erlang([Name, Type, Ttl, Data, Context, Txts]);
-json_record_to_erlang([Name, Type, Ttl, #{<<"txt">> := Txts} = Data, Context]) when
-    is_list(Txts) andalso Type =:= <<"TXT">> orelse Type =:= <<"SPF">>
+json_record_to_erlang([Name, Type, Ttl, #{<<"txt">> := Txt} = Data, Context]) when
+    is_binary(Txt) andalso Type =:= <<"TXT">> orelse Type =:= <<"SPF">>
 ->
-    json_record_to_erlang([Name, Type, Ttl, Data, Context, Txts]);
+    json_record_to_erlang([Name, Type, Ttl, Data, Context, Txt]);
+json_record_to_erlang([Name, Type, Ttl, #{<<"spf">> := Txt} = Data, Context]) when
+    is_binary(Txt) andalso Type =:= <<"TXT">> orelse Type =:= <<"SPF">>
+->
+    json_record_to_erlang([Name, Type, Ttl, Data, Context, Txt]);
 json_record_to_erlang([Name, Type, Ttl, Data, _Context]) when
     is_list(Data) andalso Type =:= <<"TXT">> orelse Type =:= <<"SPF">>
 ->
