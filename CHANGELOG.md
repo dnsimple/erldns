@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## 4.1.1
+
+- Bugfix handling null in the zone parser json payloads
+
 ## 4.1.0
 
 - Introduce SPF/TXT multipart handling (#150)
