@@ -508,28 +508,31 @@ json_record_to_erlang([Name, <<"RP">>, Ttl, Data, _Context]) ->
         data = #dns_rrdata_rp{mbox = erldns_config:keyget(<<"mbox">>, Data), txt = erldns_config:keyget(<<"txt">>, Data)},
         ttl = Ttl
     };
-json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) when is_map(Data) ->
-    Txts =
-        case maps:is_key(<<"txts">>, Data) of
-            true -> maps:get(<<"txts">>, Data);
-            false -> maps:get(<<"txt">>, Data)
-        end,
-    json_record_to_erlang([Name, Type, Ttl, Data, _Context, Txts]);
-json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context]) ->
+
+json_record_to_erlang([Name, Type, Ttl, #{<<"txts">> := Txts} = Data, Context])
+  when is_list(Txts) andalso Type =:= <<"TXT">> orelse Type =:= <<"SPF">> ->
+    json_record_to_erlang([Name, Type, Ttl, Data, Context, Txts]);
+json_record_to_erlang([Name, Type, Ttl, #{<<"txt">> := Txts} = Data, Context])
+  when is_list(Txts) andalso Type =:= <<"TXT">> orelse Type =:= <<"SPF">> ->
+    json_record_to_erlang([Name, Type, Ttl, Data, Context, Txts]);
+json_record_to_erlang([Name, Type, Ttl, Data, _Context])
+  when is_list(Data) andalso Type =:= <<"TXT">> orelse Type =:= <<"SPF">> ->
     Txts =
         case erldns_config:keyget(<<"txts">>, Data) of
             Value when is_list(Value) -> Value;
             _ -> erldns_config:keyget(<<"txt">>, Data)
         end,
     json_record_to_erlang([Name, Type, Ttl, Data, _Context, Txts]);
-json_record_to_erlang([Name, <<"TXT">>, Ttl, _Data, _Context, Value]) when is_list(Value) ->
+json_record_to_erlang([Name, Type, Ttl, _Data, _Context, Txts])
+  when is_list(Txts) andalso Type =:= <<"TXT">> orelse Type =:= <<"SPF">> ->
     #dns_rr{
         name = Name,
         type = ?DNS_TYPE_TXT,
-        data = #dns_rrdata_txt{txt = Value},
+        data = #dns_rrdata_txt{txt = Txts},
         ttl = Ttl
     };
-json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context, Value]) ->
+json_record_to_erlang([Name, Type, Ttl, Data, _Context, Value])
+  when Type =:= <<"TXT">> orelse Type =:= <<"SPF">> ->
     %% This function call may crash. Handle it as a bad record.
     try erldns_txt:parse(Value) of
         ParsedText ->
@@ -544,30 +547,7 @@ json_record_to_erlang([Name, Type = <<"TXT">>, Ttl, Data, _Context, Value]) ->
             erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
             {}
     end;
-json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) when is_map(Data) ->
-    Txts =
-        case maps:is_key(<<"txts">>, Data) of
-            true -> maps:get(<<"txts">>, Data);
-            false -> [maps:get(<<"spf">>, Data)]
-        end,
-    #dns_rr{
-        name = Name,
-        type = ?DNS_TYPE_SPF,
-        data = #dns_rrdata_spf{spf = Txts},
-        ttl = Ttl
-    };
-json_record_to_erlang([Name, <<"SPF">>, Ttl, Data, _Context]) ->
-    Txts =
-        case erldns_config:keyget(<<"txts">>, Data) of
-            Value when is_list(Value) -> Value;
-            _ -> [erldns_config:keyget(<<"spf">>, Data)]
-        end,
-    #dns_rr{
-        name = Name,
-        type = ?DNS_TYPE_SPF,
-        data = #dns_rrdata_spf{spf = Txts},
-        ttl = Ttl
-    };
+
 json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) when is_map(Data) ->
     #dns_rr{
         name = Name,
