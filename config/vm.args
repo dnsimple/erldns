@@ -1,0 +1,13 @@
+-sname erldns
+
+-setcookie erldns
+
++C multi_time_warp
++P 134217727
++Q 134217727
++S 6:6
+
+## Increase number of concurrent ports/sockets
+##-env ERL_MAX_PORTS 4096
+
+##-env ERL_FULLSWEEP_AFTER 10

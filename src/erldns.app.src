@@ -17,8 +17,10 @@
         folsom,
         iso8601,
         nodefinder,
+        prometheus,
         cowboy,
-        ranch
+        ranch,
+        observer_cli
     ]},
     {start_phases, [{post_start, []}]},
     {licenses, ["Apache-2.0"]},

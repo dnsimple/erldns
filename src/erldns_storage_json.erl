@@ -128,7 +128,7 @@ list_table(TableName) ->
 create_ets_table(Name, Type) ->
     case ets:info(Name) of
         undefined ->
-            case ets:new(Name, [Type, public, named_table]) of
+            case ets:new(Name, [Type, public, named_table, {read_concurrency, true}]) of
                 Name ->
                     ok;
                 Error ->

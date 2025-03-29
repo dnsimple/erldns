@@ -8,6 +8,7 @@ Serve DNS authoritative responses... with Erlang.
 ## Requirements
 
 Erlang/OTP 27+
+Rebar3 3.24+
 
 ## Building
 

@@ -36,6 +36,7 @@ handle_event({_M, start_servers}, State) ->
         false ->
             % Start up the UDP and TCP servers
             lager:info("Starting the UDP and TCP supervisor"),
+            erldns_listener:start(),
             supervisor:start_child(
                 erldns_sup,
                 #{
