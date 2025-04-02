@@ -43,7 +43,7 @@
 -define(PARSE_TIMEOUT, 30 * 1000).
 
 -ifdef(TEST).
--export([json_to_erlang/2, json_record_to_erlang/1, parse_json_keys/1]).
+-export([json_to_erlang/2, json_record_to_erlang/1, parse_json_keys_as_maps/1]).
 -endif.
 
 -record(state, {parsers}).
@@ -58,7 +58,7 @@ start_link() ->
 %% @doc Takes a JSON zone and turns it into the tuple {Name, Sha, Records}.
 %%
 %% The default timeout for parsing is currently 30 seconds.
--spec zone_to_erlang(map() | list()) -> {binary(), binary(), [dns:rr()], [erldns:keyset()]}.
+-spec zone_to_erlang(map()) -> {binary(), binary(), [dns:rr()], [erldns:keyset()]}.
 zone_to_erlang(Zone) ->
     gen_server:call(?SERVER, {parse_zone, Zone}, ?PARSE_TIMEOUT).
 
@@ -108,72 +108,32 @@ code_change(_, State, _) ->
     {ok, State}.
 
 % Internal API
-json_to_erlang(Zone, Parsers) when is_map(Zone) ->
-    Name = maps:get(<<"name">>, Zone),
-    Sha = maps:get(<<"sha">>, Zone, ""),
-    JsonRecords = maps:get(<<"records">>, Zone),
+json_to_erlang(#{<<"name">> := Name, <<"records">> := JsonRecords} = Zone, Parsers) when is_map(Zone) ->
+    Sha = maps:get(<<"sha">>, Zone, <<"">>),
     JsonKeys = maps:get(<<"keys">>, Zone, []),
     Records =
         lists:map(
             fun(JsonRecord) ->
-                Data = json_record_to_list(JsonRecord),
-                % Filter by context
-                case apply_context_options(Data) of
-                    pass ->
-                        case json_record_to_erlang(Data) of
-                            {} ->
-                                case try_custom_parsers(Data, Parsers) of
-                                    {} ->
-                                        erldns_events:notify({?MODULE, unsupported_record, Data}),
-                                        {};
-                                    ParsedRecord ->
-                                        ParsedRecord
-                                end;
-                            ParsedRecord ->
-                                ParsedRecord
-                        end;
-                    _ ->
-                        {}
+                maybe
+                    Data = json_record_to_list(JsonRecord),
+                    % Filter by context
+                    pass ?= apply_context_options(Data),
+                    {} ?= json_record_to_erlang(Data),
+                    {} ?= try_custom_parsers(Data, Parsers),
+                    erldns_events:notify({?MODULE, unsupported_record, Data}),
+                    {}
+                else
+                    fail ->
+                        {};
+                    Value ->
+                        Value
                 end
             end,
             JsonRecords
         ),
     FilteredRecords = lists:filter(record_filter(), Records),
     DistinctRecords = lists:usort(FilteredRecords),
-    {Name, Sha, DistinctRecords, parse_json_keys_as_maps(JsonKeys)};
-json_to_erlang(Zone, Parsers) ->
-    Name = proplists:get_value(<<"name">>, Zone),
-    Sha = proplists:get_value(<<"sha">>, Zone, ""),
-    JsonRecords = proplists:get_value(<<"records">>, Zone),
-    JsonKeys = proplists:get_value(<<"keys">>, Zone, []),
-    Records =
-        lists:map(
-            fun(JsonRecord) ->
-                Data = json_record_to_list(JsonRecord),
-                % Filter by context
-                case apply_context_options(Data) of
-                    pass ->
-                        case json_record_to_erlang(Data) of
-                            {} ->
-                                case try_custom_parsers(Data, Parsers) of
-                                    {} ->
-                                        erldns_events:notify({?MODULE, unsupported_record, Data}),
-                                        {};
-                                    ParsedRecord ->
-                                        ParsedRecord
-                                end;
-                            ParsedRecord ->
-                                ParsedRecord
-                        end;
-                    _ ->
-                        {}
-                end
-            end,
-            JsonRecords
-        ),
-    FilteredRecords = lists:filter(record_filter(), Records),
-    DistinctRecords = lists:usort(FilteredRecords),
-    {Name, Sha, DistinctRecords, parse_json_keys(JsonKeys)}.
+    {Name, Sha, DistinctRecords, parse_json_keys_as_maps(JsonKeys)}.
 
 parse_json_keys_as_maps([]) ->
     [];
@@ -195,49 +155,6 @@ parse_json_keys_as_maps([Key | Rest], Keys) ->
             valid_until = iso8601:parse(maps:get(<<"until">>, Key))
         },
     parse_json_keys_as_maps(Rest, [KeySet | Keys]).
-
-parse_json_keys([]) ->
-    [];
-parse_json_keys(JsonKeys) ->
-    parse_json_keys(JsonKeys, []).
-
-%% as JSON key order is undefined, we need to ensure that the list of
-%% proplists only contains proplists that are already sorted by key, so
-%% that the pattern-match can succeed (or fail) in a single pass.
-parse_json_keys([], Keys) ->
-    Keys;
-%% pre-sorting the proplist allows us to pattern-match
-parse_json_keys(
-    [
-        [
-            {<<"inception">>, Inception},
-            {<<"ksk">>, KskBin},
-            {<<"ksk_alg">>, KskAlg},
-            {<<"ksk_keytag">>, KskKeytag},
-            {<<"until">>, ValidUntil},
-            {<<"zsk">>, ZskBin},
-            {<<"zsk_alg">>, ZskAlg},
-            {<<"zsk_keytag">>, ZskKeytag}
-        ]
-        | Rest
-    ],
-    Keys
-) ->
-    KeySet =
-        #keyset{
-            key_signing_key = to_crypto_key(KskBin),
-            key_signing_key_tag = KskKeytag,
-            key_signing_alg = KskAlg,
-            zone_signing_key = to_crypto_key(ZskBin),
-            zone_signing_key_tag = ZskKeytag,
-            zone_signing_alg = ZskAlg,
-            inception = iso8601:parse(Inception),
-            valid_until = iso8601:parse(ValidUntil)
-        },
-    parse_json_keys(Rest, [KeySet | Keys]);
-%% pre-sort the proplist, to be consumed in previous pattern match
-parse_json_keys([Proplist], Acc) ->
-    parse_json_keys([lists:sort(Proplist)], Acc).
 
 to_crypto_key(RsaKeyBin) ->
     % Where E is the public exponent, N is public modulus and D is the private exponent
@@ -295,21 +212,15 @@ apply_context_options([_, _, _, _, Context]) ->
             pass
     end.
 
+%% TODO: We should just be passing the map and matching on its entries instead of constructing
+%% this list, but this might break how custom parsers work. Investigate existing custom parsers.
 json_record_to_list(JsonRecord) when is_map(JsonRecord) ->
     [
         maps:get(<<"name">>, JsonRecord),
         maps:get(<<"type">>, JsonRecord),
         maps:get(<<"ttl">>, JsonRecord),
         maps:get(<<"data">>, JsonRecord),
-        maps:get(<<"context">>, JsonRecord)
-    ];
-json_record_to_list(JsonRecord) ->
-    [
-        erldns_config:keyget(<<"name">>, JsonRecord),
-        erldns_config:keyget(<<"type">>, JsonRecord),
-        erldns_config:keyget(<<"ttl">>, JsonRecord),
-        erldns_config:keyget(<<"data">>, JsonRecord),
-        erldns_config:keyget(<<"context">>, JsonRecord)
+        maps:get(<<"context">>, JsonRecord, [])
     ].
 
 try_custom_parsers([_Name, _Type, _Ttl, _Rdata, _Context], []) ->
