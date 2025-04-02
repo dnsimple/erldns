@@ -8,6 +8,55 @@ json_to_erlang_test() ->
     R = erldns_zone_parser:json_to_erlang(json:decode(input()), []),
     ?assertMatch({_, _, _, _}, R).
 
+json_to_erlang_txt_spf_records_test() ->
+    I = """
+    {
+      "name": "example.com",
+      "records": [
+        {
+          "context": [],
+          "data": {
+            "txt": "this is a test",
+            "txts": null
+          },
+          "name": "example.com",
+          "ttl": 3600,
+          "type": "TXT"
+        },
+        {
+          "context": [],
+          "data": {
+            "spf": "v=spf1 a mx ~all",
+            "txts": null
+          },
+          "name": "example.com",
+          "ttl": 3600,
+          "type": "SPF"
+        }
+      ],
+      "sha": "10ea56ad7be9d3e6e75be3a15ef0dfabe9facafba486d74914e7baf8fb36638e"
+    }
+    """,
+    Json = json:decode(iolist_to_binary(I)),
+    R = erldns_zone_parser:json_to_erlang(Json, []),
+    Expected = [
+        #dns_rr{
+            name = <<"example.com">>,
+            type = 16,
+            class = 1,
+            ttl = 3600,
+            data = #dns_rrdata_txt{txt = [<<"this is a test">>]}
+        },
+        #dns_rr{
+            name = <<"example.com">>,
+            type = 99,
+            class = 1,
+            ttl = 3600,
+            data = #dns_rrdata_spf{spf = [<<"v=spf1 a mx ~all">>]}
+        }
+    ],
+    ?assertMatch({<<"example.com">>, Sha, Expected, []} when is_binary(Sha), R).
+
 json_to_erlang_ensure_sorting_and_defaults_test() ->
     ?assertEqual({"foo.org", [], [], []}, erldns_zone_parser:json_to_erlang([{<<"name">>, "foo.org"}, {<<"records">>, []}], [])).
 
