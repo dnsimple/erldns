@@ -569,7 +569,7 @@ json_record_to_erlang([Name, <<"PTR">>, Ttl, Data, _Context]) ->
     };
 json_record_to_erlang([Name, Type = <<"SSHFP">>, Ttl, Data, _Context]) when is_map(Data) ->
     %% This function call may crash. Handle it as a bad record.
-    try hex_to_bin(maps:get(<<"fp">>, Data)) of
+    try binary:decode_hex(maps:get(<<"fp">>, Data)) of
         Fp ->
             #dns_rr{
                 name = Name,
@@ -589,7 +589,7 @@ json_record_to_erlang([Name, Type = <<"SSHFP">>, Ttl, Data, _Context]) when is_m
     end;
 json_record_to_erlang([Name, Type = <<"SSHFP">>, Ttl, Data, _Context]) ->
     %% This function call may crash. Handle it as a bad record.
-    try hex_to_bin(erldns_config:keyget(<<"fp">>, Data)) of
+    try binary:decode_hex(erldns_config:keyget(<<"fp">>, Data)) of
         Fp ->
             #dns_rr{
                 name = Name,
@@ -664,7 +664,7 @@ json_record_to_erlang([Name, <<"NAPTR">>, Ttl, Data, _Context]) ->
         ttl = Ttl
     };
 json_record_to_erlang([Name, Type = <<"DS">>, Ttl, Data, _Context]) when is_map(Data) ->
-    try hex_to_bin(maps:get(<<"digest">>, Data)) of
+    try binary:decode_hex(maps:get(<<"digest">>, Data)) of
         Digest ->
             #dns_rr{
                 name = Name,
@@ -684,7 +684,7 @@ json_record_to_erlang([Name, Type = <<"DS">>, Ttl, Data, _Context]) when is_map(
             {}
     end;
 json_record_to_erlang([Name, Type = <<"DS">>, Ttl, Data, _Context]) ->
-    try hex_to_bin(erldns_config:keyget(<<"digest">>, Data)) of
+    try binary:decode_hex(erldns_config:keyget(<<"digest">>, Data)) of
         Digest ->
             #dns_rr{
                 name = Name,
@@ -704,7 +704,7 @@ json_record_to_erlang([Name, Type = <<"DS">>, Ttl, Data, _Context]) ->
             {}
     end;
 json_record_to_erlang([Name, Type = <<"CDS">>, Ttl, Data, _Context]) when is_map(Data) ->
-    try hex_to_bin(maps:get(<<"digest">>, Data)) of
+    try binary:decode_hex(maps:get(<<"digest">>, Data)) of
         Digest ->
             #dns_rr{
                 name = Name,
@@ -724,7 +724,7 @@ json_record_to_erlang([Name, Type = <<"CDS">>, Ttl, Data, _Context]) when is_map
             {}
     end;
 json_record_to_erlang([Name, Type = <<"CDS">>, Ttl, Data, _Context]) ->
-    try hex_to_bin(erldns_config:keyget(<<"digest">>, Data)) of
+    try binary:decode_hex(erldns_config:keyget(<<"digest">>, Data)) of
         Digest ->
             #dns_rr{
                 name = Name,
@@ -744,7 +744,7 @@ json_record_to_erlang([Name, Type = <<"CDS">>, Ttl, Data, _Context]) ->
             {}
     end;
 json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) when is_map(Data) ->
-    try base64_to_bin(maps:get(<<"public_key">>, Data)) of
+    try base64:decode(maps:get(<<"public_key">>, Data)) of
         PublicKey ->
             dnssec:add_keytag_to_dnskey(#dns_rr{
                 name = Name,
@@ -765,7 +765,7 @@ json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) when is_
             {}
     end;
 json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) ->
-    try base64_to_bin(erldns_config:keyget(<<"public_key">>, Data)) of
+    try base64:decode(erldns_config:keyget(<<"public_key">>, Data)) of
         PublicKey ->
             dnssec:add_keytag_to_dnskey(#dns_rr{
                 name = Name,
@@ -786,7 +786,7 @@ json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) ->
             {}
     end;
 json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) when is_map(Data) ->
-    try base64_to_bin(maps:get(<<"public_key">>, Data)) of
+    try base64:decode(maps:get(<<"public_key">>, Data)) of
         PublicKey ->
             dnssec:add_keytag_to_cdnskey(#dns_rr{
                 name = Name,
@@ -807,7 +807,7 @@ json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) when is
             {}
     end;
 json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) ->
-    try base64_to_bin(erldns_config:keyget(<<"public_key">>, Data)) of
+    try base64:decode(erldns_config:keyget(<<"public_key">>, Data)) of
         PublicKey ->
             dnssec:add_keytag_to_cdnskey(#dns_rr{
                 name = Name,
@@ -830,15 +830,5 @@ json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) ->
 json_record_to_erlang(_Data) ->
     {}.
 
-hex_to_bin(Bin) when is_binary(Bin) ->
-    Fun = fun(A, B) ->
-        case io_lib:fread("~16u", [A, B]) of
-            {ok, [V], []} -> V;
-            _ -> error(badarg)
-        end
-    end,
-    <<<<(Fun(A, B))>> || <<A, B>> <= Bin>>.
 
-base64_to_bin(Bin) when is_binary(Bin) ->
-    base64:decode(Bin).
 
