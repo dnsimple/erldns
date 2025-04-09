@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## 4.2.1
+
+- Ensure supervision tree starts correctly
+
 ## 4.2.0
 
 - Merge admin and metrics APIs into this repository.
