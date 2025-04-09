@@ -28,7 +28,10 @@ start(_Type, _Args) ->
     lager:info("Starting erldns application"),
     setup_metrics(),
     nodefinder:multicast_start(),
-    erldns_sup:start_link().
+    Ret = erldns_sup:start_link(),
+    erldns_metrics:maybe_start(),
+    erldns_admin:maybe_start(),
+    Ret.
 
 start_phase(post_start, _StartType, _PhaseArgs) ->
     erldns_events:add_handler(erldns_event_handler),
