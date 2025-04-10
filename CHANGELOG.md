@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## 4.2.2
+
+- Test admin API and fix bugs related to authentication and json encoding
+
 ## 4.2.1
 
 - Ensure supervision tree starts correctly
