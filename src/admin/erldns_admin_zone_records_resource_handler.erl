@@ -80,7 +80,7 @@ to_text(Req, State) ->
     {stop | cowboy_req:resp_body(), cowboy_req:req(), erldns_admin:handler_state()}.
 to_json(Req, State) ->
     ZoneName = cowboy_req:binding(zone_name, Req),
-    RecordName = cowboy_req:binding(record_name, Req, <<"">>),
+    RecordName = cowboy_req:binding(record_name, Req, <<>>),
     Params = cowboy_req:parse_qs(Req),
     case lists:keyfind(<<"type">>, 1, Params) of
         false ->

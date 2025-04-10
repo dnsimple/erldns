@@ -77,8 +77,8 @@ start(#{port := Port, username := Username, password := Password}) ->
             {'_', [
                 {"/", erldns_admin_root_handler, State},
                 {"/zones/:zone_name", erldns_admin_zone_resource_handler, State},
-                {"/zones/:zone_name/:action", erldns_admin_zone_control_handler, State},
-                {"/zones/:zone_name/records[/:record_name]", erldns_admin_zone_records_resource_handler, State}
+                {"/zones/:zone_name/records[/:record_name]", erldns_admin_zone_records_resource_handler, State},
+                {"/zones/:zone_name/:action", erldns_admin_zone_control_handler, State}
             ]}
         ]
     ),
@@ -93,8 +93,8 @@ start(#{port := Port, username := Username, password := Password}) ->
 is_authorized(Req, #{username := ValidUsername, password := ValidPassword} = State) ->
     maybe
         {basic, GivenUsername, GivenPassword} ?= cowboy_req:parse_header(<<"authorization">>, Req),
-        true ?= is_binary_of_equal_size(GivenUsername),
-        true ?= is_binary_of_equal_size(GivenPassword),
+        true ?= is_binary_of_equal_size(GivenUsername, ValidUsername),
+        true ?= is_binary_of_equal_size(GivenPassword, ValidPassword),
         true ?= crypto:hash_equals(GivenUsername, ValidUsername) andalso
             crypto:hash_equals(GivenPassword, ValidPassword),
         {true, Req, State}
@@ -103,9 +103,9 @@ is_authorized(Req, #{username := ValidUsername, password := ValidPassword} = Sta
             {{false, <<"Basic realm=\"erldns admin\"">>}, Req, State}
     end.
 
--spec is_binary_of_equal_size(term()) -> boolean().
-is_binary_of_equal_size(Bin) ->
-    is_binary(Bin) andalso byte_size(Bin) =:= byte_size(Bin).
+-spec is_binary_of_equal_size(term(), term()) -> boolean().
+is_binary_of_equal_size(Bin1, Bin2) ->
+    is_binary(Bin1) andalso is_binary(Bin2) andalso byte_size(Bin1) =:= byte_size(Bin2).
 
 -spec ensure_valid_config() -> false | disabled | config().
 ensure_valid_config() ->

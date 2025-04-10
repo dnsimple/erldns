@@ -171,53 +171,53 @@ encode_record(Record, Encoders) ->
             EncodedRecord
     end.
 
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SOA, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_SOA, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_NS, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_NS, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_A, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_A, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_AAAA, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_AAAA, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_CNAME, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_CNAME, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_MX, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_MX, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_HINFO, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_HINFO, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_TXT, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_TXT, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SPF, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_SPF, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SSHFP, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_SSHFP, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_SRV, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_SRV, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_NAPTR, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_NAPTR, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_CAA, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_CAA, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_DS, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_DS, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_CDS, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_CDS, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_DNSKEY, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_DNSKEY, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_CDNSKEY, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_CDNSKEY, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record({dns_rr, Name, _, Type = ?DNS_TYPE_RRSIG, Ttl, Data}) ->
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_RRSIG, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
     lager:warning("Unable to encode record (record: ~p)", [Record]),
     [].
 
 encode_record(Name, Type, Ttl, Data) ->
-    [
-        {<<"name">>, erlang:iolist_to_binary(io_lib:format("~s.", [Name]))},
-        {<<"type">>, dns:type_name(Type)},
-        {<<"ttl">>, Ttl},
-        {<<"content">>, encode_data(Data)}
-    ].
+    #{
+        <<"name">> => erlang:iolist_to_binary(io_lib:format("~s.", [Name])),
+        <<"type">> => dns:type_name(Type),
+        <<"ttl">> => Ttl,
+        <<"content">> => encode_data(Data)
+    }.
 
 try_custom_encoders(_Record, []) ->
     {};
@@ -262,14 +262,16 @@ encode_data({dns_rrdata_ds, Keytag, Alg, DigestType, Digest}) ->
 encode_data({dns_rrdata_cds, Keytag, Alg, DigestType, Digest}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s", [Keytag, Alg, DigestType, Digest]));
 encode_data({dns_rrdata_dnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
-    erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag]));
+    binary:encode_hex(erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])));
 encode_data({dns_rrdata_cdnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
-    erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag]));
+    binary:encode_hex(erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])));
 encode_data({dns_rrdata_rrsig, TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature}) ->
-    erlang:iolist_to_binary(
-        io_lib:format(
-            "~w ~w ~w ~w ~w ~w ~w ~w ~s",
-            [TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature]
+    binary:encode_hex(
+        erlang:iolist_to_binary(
+            io_lib:format(
+                "~w ~w ~w ~w ~w ~w ~w ~w ~s",
+                [TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature]
+            )
         )
     );
 encode_data(Data) ->
