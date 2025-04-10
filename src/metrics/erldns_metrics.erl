@@ -63,7 +63,7 @@ start(#{port := Port}) ->
             ]}
         ]
     ),
-    TransportOpts = #{socket_opts => [inet, inet6, {ip, {0, 0, 0, 0}}, {port, Port}]},
+    TransportOpts = #{socket_opts => [inet, inet6, {ip, any}, {port, Port}]},
     ProtocolOpts = #{env => #{dispatch => Dispatch}},
     cowboy:start_clear(?MODULE, TransportOpts, ProtocolOpts).
 
