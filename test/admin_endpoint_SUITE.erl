@@ -22,7 +22,8 @@ groups() ->
             get_zone_record_resource,
             get_zone_record_resource_name,
             get_zone_record_resource_name_type,
-            get_zone_record_resource_name_type_non_existing
+            get_zone_record_resource_name_type_non_existing,
+            get_zone_resources_for_dnssec_signed
         ]}
     ].
 
@@ -94,7 +95,7 @@ get_zones(CtConfig) ->
                     <<"erldns">> :=
                         #{
                             <<"zones">> :=
-                                #{<<"count">> := 1, <<"versions">> := _}
+                                #{<<"count">> := 2, <<"versions">> := _}
                         }
                 },
                 Body
@@ -190,7 +191,7 @@ get_zone_record_resource_name(CtConfig) ->
                         <<"content">> := <<"example.com.">>,
                         <<"name">> := <<"www.example.com.">>,
                         <<"ttl">> := 120,
-                        <<"type">> := <<"A">>
+                        <<"type">> := <<"CNAME">>
                     }
                 ],
                 Body
@@ -210,7 +211,7 @@ get_zone_record_resource_name_type(CtConfig) ->
                         <<"content">> := <<"example.com.">>,
                         <<"name">> := <<"www.example.com.">>,
                         <<"ttl">> := 120,
-                        <<"type">> := <<"A">>
+                        <<"type">> := <<"CNAME">>
                     }
                 ],
                 Body
@@ -225,6 +226,30 @@ get_zone_record_resource_name_type_non_existing(CtConfig) ->
         {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Payload}} ->
             Body = json:decode(iolist_to_binary(Payload)),
             ?assertMatch([], Body);
+        {_, Other} ->
+            ct:fail(Other)
+    end.
+
+get_zone_resources_for_dnssec_signed(CtConfig) ->
+    Request = {endpoint(CtConfig, "/zones/example-dnssec0.com"), headers(good)},
+    case httpc:request(get, Request, [], []) of
+        {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Payload}} ->
+            Body = json:decode(iolist_to_binary(Payload)),
+            ?assertMatch(
+                #{
+                    <<"erldns">> :=
+                        #{
+                            <<"zone">> :=
+                                #{
+                                    <<"name">> := <<"example-dnssec0.com">>,
+                                    <<"records">> := _,
+                                    <<"records_count">> := 8,
+                                    <<"version">> := <<>>
+                                }
+                        }
+                },
+                Body
+            );
         {_, Other} ->
             ct:fail(Other)
     end.
