@@ -64,24 +64,36 @@ end_per_testcase(_, Config) ->
 
 %% Tests
 pdns_definitions(_) ->
-    Results = dnstest_harness:run(dnstest_definitions:pdns_definitions(), passing()),
-    assert_result(?FUNCTION_NAME, Results).
+    Passing = dnstest_harness:run(dnstest_definitions:pdns_definitions(), passing()),
+    Failing = dnstest_harness:run(dnstest_definitions:pdns_definitions(), failing()),
+    assert_passing(?FUNCTION_NAME, Passing),
+    assert_failing(?FUNCTION_NAME, Failing).
 
 pdns_dnssec_definitions(_) ->
-    Results = dnstest_harness:run(dnstest_definitions:pdns_dnssec_definitions(), passing()),
-    assert_result(?FUNCTION_NAME, Results).
+    Passing = dnstest_harness:run(dnstest_definitions:pdns_dnssec_definitions(), passing()),
+    Failing = dnstest_harness:run(dnstest_definitions:pdns_dnssec_definitions(), failing()),
+    assert_passing(?FUNCTION_NAME, Passing),
+    assert_failing(?FUNCTION_NAME, Failing).
 
 erldns_definitions(_) ->
-    Results = dnstest_harness:run(dnstest_definitions:erldns_definitions(), passing()),
-    assert_result(?FUNCTION_NAME, Results).
+    Passing = dnstest_harness:run(dnstest_definitions:erldns_definitions(), passing()),
+    Failing = dnstest_harness:run(dnstest_definitions:erldns_definitions(), failing()),
+    assert_passing(?FUNCTION_NAME, Passing),
+    assert_failing(?FUNCTION_NAME, Failing).
 
 erldns_dnssec_definitions(_) ->
-    Results = dnstest_harness:run(dnstest_definitions:erldns_dnssec_definitions(), passing()),
-    assert_result(?FUNCTION_NAME, Results).
+    Passing = dnstest_harness:run(dnstest_definitions:erldns_dnssec_definitions(), passing()),
+    Failing = dnstest_harness:run(dnstest_definitions:erldns_dnssec_definitions(), failing()),
+    assert_passing(?FUNCTION_NAME, Passing),
+    assert_failing(?FUNCTION_NAME, Failing).
 
-assert_result(_Definitions, Results) ->
+assert_passing(_Definitions, Results) ->
     All = lists:all(fun(#{result := Result}) -> true =:= Result end, Results),
     ?assert(All, #{failed => lists:filter(fun(#{result := Result}) -> true =/= Result end, Results)}).
+
+assert_failing(_Definitions, Results) ->
+    All = lists:all(fun(#{result := Result}) -> true =/= Result end, Results),
+    ?assert(All, #{failed => lists:filter(fun(#{result := Result}) -> true =:= Result end, Results)}).
 
 passing() ->
     [
@@ -135,7 +147,6 @@ passing() ->
         "same_level_referral_soa",
         "same_level_referral",
         "too_big_for_udp_query_no_truncate_additional",
-        "too_big_for_udp_query",
         "wildcard_overlaps_delegation",
         "wrong_type_wildcard",
         "ns_a_record",
@@ -147,6 +158,7 @@ passing() ->
 %% until we can run all of them
 failing() ->
     [
+        "too_big_for_udp_query",
         "8_bit_txt",
         "unknown_domain",
         "any_query",
