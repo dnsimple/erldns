@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## 4.2.3
+
+- Update `dns_erlang`: fix EDNS0 compliance for truncated records and unsupported versions
+
 ## 4.2.2
 
 - Test admin API and fix bugs related to authentication and json encoding
