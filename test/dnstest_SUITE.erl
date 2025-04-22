@@ -146,6 +146,7 @@ passing() ->
         "rp",
         "same_level_referral_soa",
         "same_level_referral",
+        "too_big_for_udp_query",
         "too_big_for_udp_query_no_truncate_additional",
         "wildcard_overlaps_delegation",
         "wrong_type_wildcard",
@@ -158,7 +159,6 @@ passing() ->
 %% until we can run all of them
 failing() ->
     [
-        "too_big_for_udp_query",
         "8_bit_txt",
         "unknown_domain",
         "any_query",
