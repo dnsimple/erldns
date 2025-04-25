@@ -69,7 +69,7 @@ handle_call({process, DecodedMessage, Socket, Port, {udp, Host}}, _From, State) 
     Response = erldns_handler:handle(DecodedMessage, {udp, Host}),
     DestHost = ?DEST_HOST(Host),
 
-    Result = erldns_encoder:encode_message(Response, [{max_size, max_payload_size(Response)}]),
+    Result = erldns_encoder:encode_message(Response, #{max_size => max_payload_size(Response)}),
     case Result of
         {false, EncodedMessage} ->
             % lager:debug("Sending encoded response to ~p", [DestHost]),

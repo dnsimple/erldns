@@ -624,7 +624,7 @@ json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) when is_
                         protocol = maps:get(<<"protocol">>, Data),
                         alg = maps:get(<<"alg">>, Data),
                         public_key = PublicKey,
-                        key_tag = 0
+                        keytag = 0
                     },
                 ttl = Ttl
             })
@@ -645,7 +645,7 @@ json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) ->
                         protocol = erldns_config:keyget(<<"protocol">>, Data),
                         alg = erldns_config:keyget(<<"alg">>, Data),
                         public_key = PublicKey,
-                        key_tag = 0
+                        keytag = 0
                     },
                 ttl = Ttl
             })
@@ -666,7 +666,7 @@ json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) when is
                         protocol = maps:get(<<"protocol">>, Data),
                         alg = maps:get(<<"alg">>, Data),
                         public_key = PublicKey,
-                        key_tag = 0
+                        keytag = 0
                     },
                 ttl = Ttl
             })
@@ -687,7 +687,7 @@ json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) ->
                         protocol = erldns_config:keyget(<<"protocol">>, Data),
                         alg = erldns_config:keyget(<<"alg">>, Data),
                         public_key = PublicKey,
-                        key_tag = 0
+                        keytag = 0
                     },
                 ttl = Ttl
             })
