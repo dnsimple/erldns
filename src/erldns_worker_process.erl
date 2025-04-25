@@ -30,6 +30,7 @@
 ]).
 
 -define(MIN_PACKET_SIZE, 512).
+-define(MAX_PACKET_SIZE, 1232).
 -define(REDIRECT_TO_LOOPBACK, false).
 -define(LOOPBACK_DEST, {127, 0, 0, 10}).
 
@@ -106,9 +107,9 @@ send_tcp_message(Socket, EncodedMessage) ->
 max_payload_size(Message) ->
     case Message#dns_message.additional of
         [#dns_optrr{udp_payload_size = Size} | _] ->
-            case ?MIN_PACKET_SIZE =< Size of
+            case ?MIN_PACKET_SIZE =< Size andalso Size =< ?MAX_PACKET_SIZE of
                 true -> Size;
-                false -> ?MIN_PACKET_SIZE
+                false -> ?MAX_PACKET_SIZE
             end;
         _ ->
             ?MIN_PACKET_SIZE
