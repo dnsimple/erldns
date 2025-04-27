@@ -165,7 +165,22 @@ load_zones() ->
 
 %% @doc Load zones from a file. The default file name is "zones.json".(copied from erldns_zone_loader.erl)
 -spec load_zones(list()) -> {ok, integer()} | {err, atom()}.
-load_zones(Filename) when is_list(Filename) ->
+load_zones(Path) when is_list(Path) ->
+    IsDir = filelib:is_dir(Path),
+    load_zones(Path, IsDir).
+
+-spec load_zones(list(), boolean()) -> {ok, integer()} | {err, atom()}.
+load_zones(Path, true) when is_list(Path) ->
+    Filenames = filelib:wildcard(filename:join([Path, "*.json"])),
+    Result = lists:foldl(
+               fun(Filename, Acc) ->
+                       case load_zones(Filename, false) of
+                           {ok, N} -> Acc + N;
+                           _ -> Acc
+                       end
+               end, 0, Filenames),
+    {ok, Result};
+load_zones(Filename, false) when is_list(Filename) ->
     case file:read_file(Filename) of
         {ok, Binary} ->
             lager:debug("Parsing zones JSON"),
