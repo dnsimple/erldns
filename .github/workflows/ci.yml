@@ -34,7 +34,7 @@ jobs:
         uses: actionshub/yamllint@main
 
   test:
-    name: OTP ${{matrix.otp}}
+    name: OTP:${{matrix.otp}}-OS:${{ matrix.os }}
     strategy:
       matrix:
         os: ['ubuntu-24.04', 'ubuntu-22.04']
