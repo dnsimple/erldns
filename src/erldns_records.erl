@@ -113,7 +113,7 @@ rewrite_soa_ttl(Message, [R | Rest], NewAuthority) ->
 
 %% Various matching functions.
 
--spec match_name(dns:name()) -> fun((dns:rr()) -> boolean()).
+-spec match_name(dns:dname()) -> fun((dns:rr()) -> boolean()).
 match_name(Name) ->
     fun(R) when is_record(R, dns_rr) -> R#dns_rr.name =:= Name end.
 
@@ -121,7 +121,7 @@ match_name(Name) ->
 match_type(Type) ->
     fun(R) when is_record(R, dns_rr) -> R#dns_rr.type =:= Type end.
 
--spec match_name_and_type(dns:name(), dns:type()) -> fun((dns:rr()) -> boolean()).
+-spec match_name_and_type(dns:dname(), dns:type()) -> fun((dns:rr()) -> boolean()).
 match_name_and_type(Name, Type) ->
     fun(R) when is_record(R, dns_rr) -> (R#dns_rr.name =:= Name) and (R#dns_rr.type =:= Type) end.
 
