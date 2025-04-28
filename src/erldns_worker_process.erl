@@ -29,7 +29,8 @@
     code_change/3
 ]).
 
--define(MAX_PACKET_SIZE, 512).
+-define(MIN_PACKET_SIZE, 512).
+-define(MAX_PACKET_SIZE, 1232).
 -define(REDIRECT_TO_LOOPBACK, false).
 -define(LOOPBACK_DEST, {127, 0, 0, 10}).
 
@@ -105,14 +106,13 @@ send_tcp_message(Socket, EncodedMessage) ->
 %% options passed by the client.
 max_payload_size(Message) ->
     case Message#dns_message.additional of
-        [Opt | _] when is_record(Opt, dns_optrr) ->
-            Size = Opt#dns_optrr.udp_payload_size,
-            case Size < ?MAX_PACKET_SIZE of
+        [#dns_optrr{udp_payload_size = Size} | _] ->
+            case ?MIN_PACKET_SIZE =< Size andalso Size =< ?MAX_PACKET_SIZE of
                 true -> Size;
                 false -> ?MAX_PACKET_SIZE
             end;
         _ ->
-            ?MAX_PACKET_SIZE
+            ?MIN_PACKET_SIZE
     end.
 
 %simulate_timeout(DecodedMessage) ->
