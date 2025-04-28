@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## 4.2.4
+
+- Add support for zone records directory loading
+- Add the latest `dnstest` version fixing almost all tests
+
 ## 4.2.3
 
 - Update `dns_erlang`: fix EDNS0 compliance for truncated records and unsupported versions
