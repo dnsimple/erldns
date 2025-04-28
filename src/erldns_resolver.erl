@@ -103,10 +103,11 @@ resolve_qname_and_qtype(Message, AuthorityRecords, Qname, Qtype, Host) ->
         _ ->
             % Authority records present, continue resolution
             Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)),
-            ResolvedMessage = resolve_authoritative(Message, Qname, Qtype, Zone, Host, _CnameChain = []),
-            sort_answers(
-                erldns_dnssec:handle(additional_processing(erldns_records:rewrite_soa_ttl(ResolvedMessage), Host, Zone), Zone, Qname, Qtype)
-            )
+            Message1 = resolve_authoritative(Message, Qname, Qtype, Zone, Host, []),
+            Message2 = erldns_records:rewrite_soa_ttl(Message1),
+            Message3 = additional_processing(Message2, Host, Zone),
+            Message4 = erldns_dnssec:handle(Message3, Zone, Qname, Qtype),
+            sort_answers(Message4)
     end.
 
 -ifdef(TEST).
@@ -700,7 +701,7 @@ best_match(Qname, Zone) ->
 best_match(_Qname, _Zone, []) ->
     [];
 best_match(Qname, Zone, [_ | Rest]) ->
-    WildcardName = dns:labels_to_dname([<<"*">>] ++ Rest),
+    WildcardName = dns:labels_to_dname([<<"*">> | Rest]),
     best_match(Qname, Zone, Rest, erldns_zone_cache:get_records_by_name(WildcardName)).
 
 -spec best_match(dns:dname(), #zone{}, [dns:label()], [dns:rr()]) -> [dns:rr()].
@@ -761,7 +762,7 @@ filter_records(Records, [{Handler, _Types, Version} | Rest]) ->
 %% See if additional processing is necessary.
 additional_processing(Message, Host, Zone) ->
     RequiresAdditionalProcessing = requires_additional_processing(Message#dns_message.answers ++ Message#dns_message.authority, []),
-    additional_processing(Message, Host, Zone, lists:flatten(RequiresAdditionalProcessing)).
+    additional_processing(Message, Host, Zone, RequiresAdditionalProcessing).
 
 %% No records require additional processing.
 additional_processing(Message, _Host, _Zone, []) ->
@@ -780,20 +781,15 @@ additional_processing(Message, _Host, _Zone, _Names, Records) ->
     Message#dns_message{additional = Message#dns_message.additional ++ Records}.
 
 %% Given a list of answers find the names that require additional processing.
--spec requires_additional_processing(Records :: [dns:rr()], RequiresAdditional :: [dns:dname()]) -> [dns:dname()].
-requires_additional_processing([], RequiresAdditional) ->
-    RequiresAdditional;
-requires_additional_processing([Answer | Rest], RequiresAdditional) ->
-    Names =
-        case Answer#dns_rr.data of
-            Data when is_record(Data, dns_rrdata_ns) ->
-                [Data#dns_rrdata_ns.dname];
-            Data when is_record(Data, dns_rrdata_mx) ->
-                [Data#dns_rrdata_mx.exchange];
-            _ ->
-                []
-        end,
-    requires_additional_processing(Rest, RequiresAdditional ++ Names).
+-spec requires_additional_processing([dns:rr()], [dns:dname()]) -> [dns:dname()].
+requires_additional_processing([#dns_rr{data = #dns_rrdata_ns{dname = Dname}} | Rest], Acc) ->
+    requires_additional_processing(Rest, [Dname | Acc]);
+requires_additional_processing([#dns_rr{data = #dns_rrdata_mx{exchange = Exchange}} | Rest], Acc) ->
+    requires_additional_processing(Rest, [Exchange | Acc]);
+requires_additional_processing([_ | Rest], Acc) ->
+    requires_additional_processing(Rest, Acc);
+requires_additional_processing([], Acc) ->
+    lists:reverse(Acc).
 
 %% @doc Return true if DNSSEC is requested and enabled.
 -spec check_dnssec(Message :: dns:message(), Host :: dns:ip(), Question :: dns:query()) -> boolean().
