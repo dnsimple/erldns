@@ -96,7 +96,7 @@ assert_failing(_Definitions, Results) ->
 
 passing() ->
     [
-             "8_bit_txt",
+        "8_bit_txt",
         "any_nxdomain",
         "any_query",
         "any_wildcard",

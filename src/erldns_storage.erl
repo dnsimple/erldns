@@ -173,12 +173,15 @@ load_zones(Path) when is_list(Path) ->
 load_zones(Path, true) when is_list(Path) ->
     Filenames = filelib:wildcard(filename:join([Path, "*.json"])),
     Result = lists:foldl(
-               fun(Filename, Acc) ->
-                       case load_zones(Filename, false) of
-                           {ok, N} -> Acc + N;
-                           _ -> Acc
-                       end
-               end, 0, Filenames),
+        fun(Filename, Acc) ->
+            case load_zones(Filename, false) of
+                {ok, N} -> Acc + N;
+                _ -> Acc
+            end
+        end,
+        0,
+        Filenames
+    ),
     {ok, Result};
 load_zones(Filename, false) when is_list(Filename) ->
     case file:read_file(Filename) of
