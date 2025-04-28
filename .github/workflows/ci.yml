@@ -34,7 +34,7 @@ jobs:
         uses: actionshub/yamllint@main
 
   test:
-    name: OTP ${{matrix.otp}}
+    name: OTP:${{matrix.otp}}-OS:${{ matrix.os }}
     strategy:
       matrix:
         os: ['ubuntu-24.04', 'ubuntu-22.04']
@@ -52,7 +52,7 @@ jobs:
           path: |
             ~/.cache/rebar3
             _build
-          key: ${{ runner.os }}-erlang-${{ matrix.otp }}-rebar3-${{ matrix.rebar3 }}-hash-${{hashFiles('rebar.lock')}}
+          key: ${{ runner.os }}-erlang-${{ matrix.otp }}-rebar3-${{ matrix.rebar3 }}-hash-${{hashFiles('rebar.lock')}}-${{hashFiles('rebar.config')}}
       - run: make build
       - run: make test
       - name: Coveralls
