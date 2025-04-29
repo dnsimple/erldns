@@ -95,10 +95,13 @@ handle(Message, Zone, Qname, Qtype) ->
 -spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type(), boolean(), boolean()) -> dns:message().
 handle(Msg, _, _, _, _, false) ->
     Msg;
+handle(Msg, _, _, ?DNS_TYPE_NXNAME, _, true) ->
+    %% compact-denial-of-existence §3.5: Responses to explicit queries for NXNAME
+    Msg#dns_message{rc = ?DNS_RCODE_FORMERR, authority = []};
 handle(Msg, _, _, _, false, true) ->
     % DNSSEC requested, zone unsigned, nothing to do
     Msg;
-handle(#dns_message{answers = []} = Msg, Zone, Qname, Qtype, true, true) ->
+handle(#dns_message{answers = []} = Msg, Zone, Qname, _Qtype, true, true) ->
     % No answers found, return NSEC.
     Authority = lists:last(Zone#zone.authority),
     Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
@@ -190,12 +193,13 @@ map_nsec_rr_types(Types, Handlers) ->
         Types
     ).
 
-record_types_for_name(Name, Zone) ->
-    RecordsAtName = erldns_zone_cache:get_records_by_name(Name),
-    MatchedRecords =
-        case RecordsAtName of
-            [] -> erldns_resolver:best_match(Name, Zone);
-            _ -> RecordsAtName
-        end,
-    TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, MatchedRecords),
-    lists:usort(TypesCovered ++ [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]).
+%% compact-denial-of-existence-07
+record_types_for_name(Name, _Zone) ->
+    case erldns_zone_cache:get_records_by_name(Name) of
+        [] ->
+            lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME]);
+        RecordsAtName ->
+            %% §3.1: Responses for Non-Existent Names
+            TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
+            lists:usort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC | TypesCovered])
+    end.
