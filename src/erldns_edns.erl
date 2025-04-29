@@ -29,11 +29,9 @@ get_opts(Message) ->
     get_opts(Message#dns_message.additional, []).
 
 -spec get_opts([dns:rr() | dns:optrr()], [proplists:property()]) -> [proplists:property()].
-get_opts([], Opts) ->
-    Opts;
-get_opts([RR | Rest], Opts) when is_record(RR, dns_rr) ->
-    get_opts(Rest, Opts);
-get_opts([RR | Rest], Opts) when is_record(RR, dns_optrr) and RR#dns_optrr.dnssec ->
-    get_opts(Rest, Opts ++ [{dnssec, true}]);
+get_opts([#dns_optrr{dnssec = true} | Rest], Opts) ->
+    get_opts(Rest, [{dnssec, true} | Opts]);
 get_opts([_RR | Rest], Opts) ->
-    get_opts(Rest, Opts).
+    get_opts(Rest, Opts);
+get_opts([], Opts) ->
+    lists:reverse(Opts).
