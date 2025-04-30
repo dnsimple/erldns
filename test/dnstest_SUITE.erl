@@ -91,7 +91,6 @@ assert(_Definitions, Results) ->
 %% until we can run all of them
 failing() ->
     [
-        nsec_name_any,
         nsec_nxname_ent,
         nsec_rr_type_bitmap_wildcard,
         ns_zonecut_child_cname
