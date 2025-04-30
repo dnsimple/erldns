@@ -195,11 +195,11 @@ map_nsec_rr_types(Types, Handlers) ->
 
 %% compact-denial-of-existence-07
 record_types_for_name(Name, _Zone) ->
-    case erldns_zone_cache:get_records_by_name(Name) of
+    case erldns_resolver:best_match_at_node(Name) of
         [] ->
+            %% §3.1: Responses for Non-Existent Names
             lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME]);
         RecordsAtName ->
-            %% §3.1: Responses for Non-Existent Names
             TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
             lists:usort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC | TypesCovered])
     end.
