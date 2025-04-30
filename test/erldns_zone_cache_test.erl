@@ -12,8 +12,7 @@
 -define(TEST_MODULE, erldns_zone_cache).
 
 setup_cache() ->
-    lager:start(),
-    lager:set_loglevel(lager_console_backend, debug),
+    logger:set_application_level(erldns, debug),
     meck:new(folsom_metrics),
     meck:expect(
         folsom_metrics,

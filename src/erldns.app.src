@@ -9,7 +9,6 @@
         stdlib,
         inets,
         crypto,
-        lager,
         dns_erlang,
         ssl,
         mnesia,

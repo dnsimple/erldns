@@ -15,6 +15,8 @@
 %% @doc Functions for loading zones from local or remote sources.
 -module(erldns_zone_loader).
 
+-include_lib("kernel/include/logger.hrl").
+
 -export([load_zones/0]).
 
 -define(FILENAME, "zones.json").
@@ -32,9 +34,9 @@
 load_zones() ->
     case file:read_file(filename()) of
         {ok, Binary} ->
-            lager:info("Parsing zones JSON"),
+            ?LOG_INFO("Parsing zones JSON"),
             JsonZones = json:decode(Binary),
-            lager:info("Putting zones into cache"),
+            ?LOG_INFO("Putting zones into cache"),
             lists:foreach(
                 fun(JsonZone) ->
                     Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
@@ -45,7 +47,7 @@ load_zones() ->
                 end,
                 JsonZones
             ),
-            lager:info("Loaded zones (count: ~p)", [length(JsonZones)]),
+            ?LOG_INFO("Loaded zones (count: ~p)", [length(JsonZones)]),
             {ok, length(JsonZones)};
         {error, Reason} ->
             erldns_events:notify({?MODULE, read_file_error, Reason}),

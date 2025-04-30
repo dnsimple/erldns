@@ -72,7 +72,7 @@ handle_call({process, DecodedMessage, Socket, Port, {udp, Host}}, _From, State) 
     Result = erldns_encoder:encode_message(Response, [{max_size, max_payload_size(Response)}]),
     case Result of
         {false, EncodedMessage} ->
-            % lager:debug("Sending encoded response to ~p", [DestHost]),
+            % ?LOG_DEBUG("Sending encoded response to ~p", [DestHost]),
             gen_udp:send(Socket, DestHost, Port, EncodedMessage);
         {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
             gen_udp:send(Socket, DestHost, Port, EncodedMessage);
@@ -118,7 +118,7 @@ max_payload_size(Message) ->
 %simulate_timeout(DecodedMessage) ->
   %[Question] = DecodedMessage#dns_message.questions,
   %Name = Question#dns_query.name,
-  %lager:info("qname: ~p", [Name]),
+  %?LOG_INFO("qname: ~p", [Name]),
   %case Name of
 
     %<<"www.example.com">> ->

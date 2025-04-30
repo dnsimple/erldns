@@ -19,6 +19,7 @@
 -behavior(gen_server).
 
 -include_lib("dns_erlang/include/dns.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -include("erldns.hrl").
 
@@ -84,13 +85,13 @@ zone_records_to_json(ZoneName, RecordSetName, RecordSetType) ->
 %% @doc Register a list of encoder modules.
 -spec register_encoders([module()]) -> ok.
 register_encoders(Modules) ->
-    lager:info("Registering custom encoders (modules: ~p)", [Modules]),
+    ?LOG_INFO("Registering custom encoders (modules: ~p)", [Modules]),
     gen_server:call(?SERVER, {register_encoders, Modules}).
 
 %% @doc Register a single encoder module.
 -spec register_encoder(module()) -> ok.
 register_encoder(Module) ->
-    lager:info("Registering custom encoder (module: ~p)", [Module]),
+    ?LOG_INFO("Registering custom encoder (module: ~p)", [Module]),
     gen_server:call(?SERVER, {register_encoder, Module}).
 
 % Gen server hooks
@@ -162,10 +163,10 @@ encode(Encoders) ->
     fun(Record) -> encode_record(Record, Encoders) end.
 
 encode_record(Record, Encoders) ->
-    % lager:debug("Encoding record (record: ~p)", [Record]),
+    % ?LOG_DEBUG("Encoding record (record: ~p)", [Record]),
     case encode_record(Record) of
         [] ->
-            % lager:debug("Trying custom encoders (encoders: ~p)", [Encoders]),
+            % ?LOG_DEBUG("Trying custom encoders (encoders: ~p)", [Encoders]),
             try_custom_encoders(Record, Encoders);
         EncodedRecord ->
             EncodedRecord
@@ -208,7 +209,7 @@ encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_CDNSKEY, ttl = Ttl, d
 encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_RRSIG, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
-    lager:warning("Unable to encode record (record: ~p)", [Record]),
+    ?LOG_WARNING("Unable to encode record (record: ~p)", [Record]),
     [].
 
 encode_record(Name, Type, Ttl, Data) ->
@@ -222,7 +223,7 @@ encode_record(Name, Type, Ttl, Data) ->
 try_custom_encoders(_Record, []) ->
     {};
 try_custom_encoders(Record, [Encoder | Rest]) ->
-    % lager:debug("Trying custom encoder (encoder: ~p)", [Encoder]),
+    % ?LOG_DEBUG("Trying custom encoder (encoder: ~p)", [Encoder]),
     case Encoder:encode_record(Record) of
         [] ->
             try_custom_encoders(Record, Rest);

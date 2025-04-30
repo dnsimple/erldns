@@ -16,7 +16,7 @@
 -module(erldns_dnssec).
 
 -include_lib("dns_erlang/include/dns.hrl").
-
+-include_lib("kernel/include/logger.hrl").
 -include("erldns.hrl").
 
 -export([handle/4]).
@@ -131,7 +131,7 @@ handle(#dns_message{answers = []} = Msg, Zone, Qname, Qtype, true, true) ->
     Msg2 = sign_unsigned(Msg1, Zone),
     erldns_records:rewrite_soa_ttl(Msg2);
 handle(Msg, Zone, _, _, true, true) ->
-    % lager:debug("DNSSEC requested (name: ~p)", [Zone#zone.name]),
+    ?LOG_DEBUG("DNSSEC requested (name: ~p)", [Zone#zone.name]),
     AnswerSignatures = find_rrsigs(Msg#dns_message.answers),
     AuthoritySignatures = find_rrsigs(Msg#dns_message.authority),
     Msg1 = Msg#dns_message{

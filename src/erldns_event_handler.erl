@@ -15,6 +15,8 @@
 %% @doc Application event handler implementation.
 -module(erldns_event_handler).
 
+-include_lib("kernel/include/logger.hrl").
+
 -behavior(gen_event).
 
 -export([
@@ -35,7 +37,7 @@ handle_event({_M, start_servers}, State) ->
     case State#state.servers_running of
         false ->
             % Start up the UDP and TCP servers
-            lager:info("Starting the UDP and TCP supervisor"),
+            ?LOG_INFO("Starting the UDP and TCP supervisor"),
             supervisor:start_child(
                 erldns_sup,
                 #{
@@ -85,49 +87,49 @@ handle_event({_M = erldns_handler, _E = resolve_error, {_Exception, _Reason, _Me
     folsom_metrics:notify({erldns_handler_error_meter, 1}),
     {ok, State};
 handle_event({M = erldns_zone_encoder, E = unsupported_rrdata_type, Data}, State) ->
-    lager:info("Unable to encode rrdata (module: ~p, event: ~p, data: ~p)", [M, E, Data]),
+    ?LOG_INFO("Unable to encode rrdata (module: ~p, event: ~p, data: ~p)", [M, E, Data]),
     {ok, State};
 handle_event({M = erldns_zone_loader, E = read_file_error, Reason}, State) ->
-    lager:error("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
+    ?LOG_ERROR("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
     {ok, State};
 handle_event({M = erldns_zone_loader, E = put_zone_error, {JsonZone, Reason}}, State) ->
-    lager:error("Failed to load zones (module: ~p, event: ~p, reason: ~p, json: ~p)", [M, E, Reason, JsonZone]),
+    ?LOG_ERROR("Failed to load zones (module: ~p, event: ~p, reason: ~p, json: ~p)", [M, E, Reason, JsonZone]),
     {ok, State};
 handle_event({M = erldns_zone_parser, E = error, {Name, Type, Data, Reason}}, State) ->
-    lager:error("Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, reason: ~p)", [M, E, Name, Type, Data, Reason]),
+    ?LOG_ERROR("Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, reason: ~p)", [M, E, Name, Type, Data, Reason]),
     {ok, State};
 handle_event({M = erldns_zone_parser, E = error, {Name, Type, Data, Exception, Reason}}, State) ->
-    lager:error(
+    ?LOG_ERROR(
         "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
         [M, E, Name, Type, Data, Exception, Reason]
     ),
     {ok, State};
 handle_event({M = erldns_zone_parser, E = unsupported_record, Data}, State) ->
-    lager:warning("Unsupported record (module: ~p, event: ~p, data: ~p)", [M, E, Data]),
+    ?LOG_WARNING("Unsupported record (module: ~p, event: ~p, data: ~p)", [M, E, Data]),
     {ok, State};
 handle_event({M = erldns_decoder, E = decode_message_error, {Exception, Reason, Bin}}, State) ->
-    lager:error("Error decoding message (module: ~p, event: ~p, data: ~p, exception: ~p, reason: ~p)", [M, E, Bin, Exception, Reason]),
+    ?LOG_ERROR("Error decoding message (module: ~p, event: ~p, data: ~p, exception: ~p, reason: ~p)", [M, E, Bin, Exception, Reason]),
     {ok, State};
 handle_event({M = eldns_encoder, E = encode_message_error, {Exception, Reason, Response}}, State) ->
-    lager:error("Error encoding message (module: ~p, event: ~p, response: ~p, exception: ~p, reason: ~p)", [
+    ?LOG_ERROR("Error encoding message (module: ~p, event: ~p, response: ~p, exception: ~p, reason: ~p)", [
         M, E, Response, Exception, Reason
     ]),
     {ok, State};
 handle_event({M = erldns_encoder, E = encode_message_error, {Exception, Reason, Response, Opts}}, State) ->
-    lager:error(
+    ?LOG_ERROR(
         "Error encoding with opts (module: ~p, event: ~p, response: ~p, opts: ~p, exception: ~p, reason: ~p)",
         [M, E, Response, Opts, Exception, Reason]
     ),
     {ok, State};
 handle_event({M = erldns_storage, E = failed_zones_load, Reason}, State) ->
-    lager:error("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
+    ?LOG_ERROR("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
     {ok, State};
 handle_event({_M = erldns_worker, _E = timeout}, State) ->
     folsom_metrics:notify({worker_timeout_counter, {inc, 1}}),
     folsom_metrics:notify({worker_timeout_meter, 1}),
     {ok, State};
 handle_event({M = erldns_worker, E = restart_failed, Error}, State) ->
-    lager:error("Restart failed (module: ~p, event: ~p, error: ~p)", [M, E, Error]),
+    ?LOG_ERROR("Restart failed (module: ~p, event: ~p, error: ~p)", [M, E, Error]),
     {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.
