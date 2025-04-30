@@ -724,7 +724,7 @@ best_match(_Qname, _Zone, _Labels, WildcardMatches) ->
 best_match_at_node(Qname) ->
     Labels = dns:dname_to_labels(Qname),
     % If the Qname is already a wildcard, then we can just look for any matches
-    case  lists:member(<<"*">>, Labels) of
+    case lists:member(<<"*">>, Labels) of
         true ->
             erldns_zone_cache:get_records_by_name(Qname);
         false ->
