@@ -722,24 +722,29 @@ best_match(_Qname, _Zone, _Labels, WildcardMatches) ->
 % without attempting to walk down to the root.
 -spec best_match_at_node(dns:dname()) -> [dns:rr()].
 best_match_at_node(Qname) ->
-    Labels = dns:dname_to_labels(Qname),
-    % If the Qname is already a wildcard, then we can just look for any matches
-    case lists:member(<<"*">>, Labels) of
-        true ->
-            erldns_zone_cache:get_records_by_name(Qname);
-        false ->
-            % If the Qname is not a wildcard, then we need to look for exact matches first.
-            % If there are no exact matches, then we need to look for wildcard matches.
-            % This is the same as best_match/2 but without walking down the domain hierarchy.
-            case erldns_zone_cache:get_records_by_name(Qname) of
-                [] ->
-                    % No exact matches, so look for wildcard matches
-                    [_FirstLabel | Rest] = Labels,
-                    WildcardName = dns:labels_to_dname([<<"*">> | Rest]),
-                    erldns_zone_cache:get_records_by_name(WildcardName);
-                Matches ->
-                    Matches
-            end
+    case erldns_zone_cache:get_records_by_name(Qname) of
+        [] ->
+            Labels = dns:dname_to_labels(Qname),
+            % No exact matches, so look for wildcard matches
+            wildcard_match(Labels);
+        Matches ->
+            Matches
+    end.
+
+% Recursive wildcard lookup.
+-spec wildcard_match([dns:label()]) -> [dns:rr()].
+wildcard_match([]) ->
+    [];
+wildcard_match([_]) ->
+    [];
+wildcard_match(Labels) ->
+    [_FirstLabel | Rest] = Labels,
+    WildcardName = dns:labels_to_dname([<<"*">> | Rest]),
+    case erldns_zone_cache:get_records_by_name(WildcardName) of
+        [] ->
+            wildcard_match(Rest);
+        Matches ->
+            Matches
     end.
 
 %% Call all registered handlers.
