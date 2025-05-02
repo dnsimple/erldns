@@ -28,6 +28,7 @@
 -export([maybe_sign_rrset/3]).
 
 -export([map_nsec_rr_types/1]).
+-export([map_nsec_rr_types/2]).
 
 -define(NEXT_DNAME_PART, <<"\000">>).
 
