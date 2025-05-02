@@ -181,7 +181,7 @@ map_nsec_rr_types(Types) ->
             Types;
         Handlers ->
             %% Map the types using the handlers
-            MappedTypes = list:flatmap(
+            MappedTypes = lists:flatmap(
                 fun(Type) ->
                     case lists:keyfind([Type], 2, Handlers) of
                         false -> [Type];
@@ -199,7 +199,7 @@ map_nsec_rr_types(QType, Types) ->
     MappedTypes = map_nsec_rr_types(QType, Types, Handlers),
     lists:usort(MappedTypes).
 
--spec map_nsec_rr_types([dns:type()], dns:type(), [erldns_handler:versioned_handler()]) -> [dns:type()].
+-spec map_nsec_rr_types(dns:type(), [dns:type()], [erldns_handler:versioned_handler()]) -> [dns:type()].
 map_nsec_rr_types(_QType, Types, []) ->
     Types;
 map_nsec_rr_types(QType, Types, Handlers) ->
