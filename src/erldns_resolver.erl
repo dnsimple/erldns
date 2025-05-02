@@ -20,7 +20,7 @@
 -include("erldns.hrl").
 
 -export([resolve/3]).
--export([best_match/2]).
+-export([best_match/2, best_match_at_node/1]).
 
 -ifdef(TEST).
 
@@ -717,6 +717,35 @@ best_match(Qname, Zone, Labels, []) ->
     end;
 best_match(_Qname, _Zone, _Labels, WildcardMatches) ->
     WildcardMatches.
+
+% Find the best match records for the given Qname in the given zone. This will looking for both exact and wildcard matches AT the QNAME label count
+% without attempting to walk down to the root.
+-spec best_match_at_node(dns:dname()) -> [dns:rr()].
+best_match_at_node(Qname) ->
+    case erldns_zone_cache:get_records_by_name(Qname) of
+        [] ->
+            Labels = dns:dname_to_labels(Qname),
+            % No exact matches, so look for wildcard matches
+            wildcard_match(Labels);
+        Matches ->
+            Matches
+    end.
+
+% Recursive wildcard lookup.
+-spec wildcard_match([dns:label()]) -> [dns:rr()].
+wildcard_match([]) ->
+    [];
+wildcard_match([_]) ->
+    [];
+wildcard_match(Labels) ->
+    [_FirstLabel | Rest] = Labels,
+    WildcardName = dns:labels_to_dname([<<"*">> | Rest]),
+    case erldns_zone_cache:get_records_by_name(WildcardName) of
+        [] ->
+            wildcard_match(Rest);
+        Matches ->
+            Matches
+    end.
 
 %% Call all registered handlers.
 -spec call_handlers(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> fun(({module(), [dns:type()], integer()}) -> [dns:rr()]).
