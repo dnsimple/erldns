@@ -101,7 +101,7 @@ handle(Msg, _, _, ?DNS_TYPE_NXNAME, _, true) ->
 handle(Msg, _, _, _, false, true) ->
     % DNSSEC requested, zone unsigned, nothing to do
     Msg;
-handle(#dns_message{answers = []} = Msg, Zone, Qname, _Qtype, true, true) ->
+handle(#dns_message{answers = []} = Msg, Zone, Qname, Qtype, true, true) ->
     % No answers found, return NSEC.
     Authority = lists:last(Zone#zone.authority),
     Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
