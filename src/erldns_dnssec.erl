@@ -111,7 +111,7 @@ handle(#dns_message{answers = []} = Msg, Zone, Qname, _Qtype, true, true) ->
     NameToNormalise = dns:labels_to_dname([?NEXT_DNAME_PART | dns:dname_to_labels(Qname)]),
     NextDname = erldns:normalize_name(NameToNormalise),
     RecordTypesForQname = record_types_for_name(Qname, Zone),
-    NsecRrTypes = map_nsec_rr_types(RecordTypesForQname),
+    NsecRrTypes = map_nsec_rr_types(Qtype, RecordTypesForQname),
     NsecRecords =
         [
             #dns_rr{
@@ -175,19 +175,46 @@ find_unsigned_records(Records) ->
 
 -spec map_nsec_rr_types([dns:type()]) -> [dns:type()].
 map_nsec_rr_types(Types) ->
+    case erldns_handler:get_versioned_handlers() of
+        [] ->
+            %% No handlers, return the types as is
+            Types;
+        Handlers ->
+            %% Map the types using the handlers
+            MappedTypes = lists:flatmap(
+                fun(Type) ->
+                    case lists:keyfind([Type], 2, Handlers) of
+                        false -> [Type];
+                        {M, _, _} -> M:nsec_rr_type_mapper(Type)
+                    end
+                end,
+                Types
+            ),
+            lists:usort(MappedTypes)
+    end.
+
+-spec map_nsec_rr_types(dns:type(), [dns:type()]) -> [dns:type()].
+map_nsec_rr_types(QType, Types) ->
     Handlers = erldns_handler:get_versioned_handlers(),
-    MappedTypes = map_nsec_rr_types(Types, Handlers),
+    MappedTypes = map_nsec_rr_types(QType, Types, Handlers),
     lists:usort(MappedTypes).
 
--spec map_nsec_rr_types([dns:type()], [erldns_handler:versioned_handler()]) -> [dns:type()].
-map_nsec_rr_types(Types, []) ->
+-spec map_nsec_rr_types(dns:type(), [dns:type()], [erldns_handler:versioned_handler()]) -> [dns:type()].
+map_nsec_rr_types(_QType, Types, []) ->
     Types;
-map_nsec_rr_types(Types, Handlers) ->
+map_nsec_rr_types(QType, Types, Handlers) ->
     lists:flatmap(
         fun(Type) ->
             case lists:keyfind([Type], 2, Handlers) of
-                false -> [Type];
-                {M, _, _} -> M:nsec_rr_type_mapper(Type)
+                false ->
+                    [Type];
+                {M, _, _} ->
+                    case erlang:function_exported(M, nsec_rr_type_mapper, 2) of
+                        true ->
+                            M:nsec_rr_type_mapper(Type, QType);
+                        false ->
+                            M:nsec_rr_type_mapper(Type)
+                    end
             end
         end,
         Types
