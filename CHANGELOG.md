@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## 4.3.0
+
+- Add support for NSEC compact denial of existence
+
 ## 4.2.4
 
 - Add support for zone records directory loading
