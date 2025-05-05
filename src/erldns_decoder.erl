@@ -16,6 +16,7 @@
 %% system crash
 -module(erldns_decoder).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("dns_erlang/include/dns_records.hrl").
 
 -export([decode_message/1]).
@@ -36,7 +37,10 @@ decode_message(Bin) ->
                     M
             catch
                 Exception:Reason ->
-                    erldns_events:notify({?MODULE, decode_message_error, {Exception, Reason, Bin}}),
+                    ?LOG_ERROR(
+                        "Error decoding message (module: ~p, event: ~p, data: ~p, exception: ~p, reason: ~p)",
+                        [?MODULE, decode_message_error, Bin, Exception, Reason]
+                    ),
                     {formerr, Reason, Bin}
             end
     end.

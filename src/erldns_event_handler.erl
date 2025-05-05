@@ -107,20 +107,6 @@ handle_event({M = erldns_zone_parser, E = error, {Name, Type, Data, Exception, R
 handle_event({M = erldns_zone_parser, E = unsupported_record, Data}, State) ->
     ?LOG_WARNING("Unsupported record (module: ~p, event: ~p, data: ~p)", [M, E, Data]),
     {ok, State};
-handle_event({M = erldns_decoder, E = decode_message_error, {Exception, Reason, Bin}}, State) ->
-    ?LOG_ERROR("Error decoding message (module: ~p, event: ~p, data: ~p, exception: ~p, reason: ~p)", [M, E, Bin, Exception, Reason]),
-    {ok, State};
-handle_event({M = eldns_encoder, E = encode_message_error, {Exception, Reason, Response}}, State) ->
-    ?LOG_ERROR("Error encoding message (module: ~p, event: ~p, response: ~p, exception: ~p, reason: ~p)", [
-        M, E, Response, Exception, Reason
-    ]),
-    {ok, State};
-handle_event({M = erldns_encoder, E = encode_message_error, {Exception, Reason, Response, Opts}}, State) ->
-    ?LOG_ERROR(
-        "Error encoding with opts (module: ~p, event: ~p, response: ~p, opts: ~p, exception: ~p, reason: ~p)",
-        [M, E, Response, Opts, Exception, Reason]
-    ),
-    {ok, State};
 handle_event({M = erldns_storage, E = failed_zones_load, Reason}, State) ->
     ?LOG_ERROR("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
     {ok, State};
