@@ -54,29 +54,6 @@ handle_event({_M, start_servers}, State) ->
             erldns_events:notify({?MODULE, servers_already_started}),
             {ok, State}
     end;
-handle_event({_M, end_udp, [{host, _Host}]}, State) ->
-    folsom_metrics:notify({udp_request_meter, 1}),
-    folsom_metrics:notify({udp_request_counter, {inc, 1}}),
-    {ok, State};
-handle_event({_M, end_tcp, [{host, _Host}]}, State) ->
-    folsom_metrics:notify({tcp_request_meter, 1}),
-    folsom_metrics:notify({tcp_request_counter, {inc, 1}}),
-    {ok, State};
-handle_event({_M, udp_error, Reason}, State) ->
-    folsom_metrics:notify({udp_error_meter, 1}),
-    folsom_metrics:notify({udp_error_history, Reason}),
-    {ok, State};
-handle_event({_M, tcp_error, Reason}, State) ->
-    folsom_metrics:notify({tcp_error_meter, 1}),
-    folsom_metrics:notify({tcp_error_history, Reason}),
-    {ok, State};
-handle_event({_M = erldns_worker, _E = timeout}, State) ->
-    folsom_metrics:notify({worker_timeout_counter, {inc, 1}}),
-    folsom_metrics:notify({worker_timeout_meter, 1}),
-    {ok, State};
-handle_event({M = erldns_worker, E = restart_failed, Error}, State) ->
-    ?LOG_ERROR("Restart failed (module: ~p, event: ~p, error: ~p)", [M, E, Error]),
-    {ok, State};
 handle_event(_Event, State) ->
     {ok, State}.
 
