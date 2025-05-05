@@ -15,6 +15,8 @@
 %% @doc Handles DNS questions arriving via UDP.
 -module(erldns_udp_server).
 
+-include_lib("kernel/include/logger.hrl").
+
 -behavior(gen_server).
 
 % API
@@ -36,7 +38,6 @@
 % Internal API
 -export([handle_request/5]).
 
--define(SERVER, ?MODULE).
 % 1 MB
 -define(DEFAULT_UDP_RECBUF, 1024 * 1024).
 
@@ -105,7 +106,7 @@ handle_info({udp_passive, _Socket}, State) ->
     inet:setopts(State#state.socket, [{active, 100}]),
     {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
-    % lager:debug("Received request: ~p", [Bin]),
+    % ?LOG_DEBUG("Received request: ~p", [Bin]),
     folsom_metrics:histogram_timed_update(udp_handoff_histogram, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]);
 handle_info(_Message, State) ->
     {noreply, State}.
@@ -122,22 +123,22 @@ start(Port, InetFamily) ->
     start(erldns_config:get_address(InetFamily), Port, InetFamily).
 
 start(Address, Port, InetFamily) ->
-    lager:info("Starting UDP server (family: ~p, address: ~p, port: ~p)", [InetFamily, Address, Port]),
+    ?LOG_INFO("Starting UDP server (family: ~p, address: ~p, port: ~p)", [InetFamily, Address, Port]),
     case
         gen_udp:open(Port, [
             binary, {active, 100}, {reuseaddr, true}, {read_packets, 1000}, {ip, Address}, {recbuf, ?DEFAULT_UDP_RECBUF}, InetFamily
         ])
     of
         {ok, Socket} ->
-            lager:info("UDP server (family: ~p, address: ~p, socket: ~p)", [InetFamily, Address, Socket]),
+            ?LOG_INFO("UDP server (family: ~p, address: ~p, socket: ~p)", [InetFamily, Address, Socket]),
             {ok, Socket};
         {error, eacces} ->
-            lager:error("Failed to open UDP socket. Need to run as sudo?"),
+            ?LOG_ERROR("Failed to open UDP socket. Need to run as sudo?"),
             {error, eacces}
     end.
 
 start(Address, Port, InetFamily, SocketOpts) ->
-    lager:info("Starting UDP server (family: ~p, address: ~p, port ~p, sockopts: ~p)", [InetFamily, Address, Port, SocketOpts]),
+    ?LOG_INFO("Starting UDP server (family: ~p, address: ~p, port ~p, sockopts: ~p)", [InetFamily, Address, Port, SocketOpts]),
     case
         gen_udp:open(
             Port,
@@ -154,10 +155,10 @@ start(Address, Port, InetFamily, SocketOpts) ->
         )
     of
         {ok, Socket} ->
-            lager:info("UDP server (family: ~p, address: ~p, socket: ~p, sockopts: ~p)", [InetFamily, Address, Socket, SocketOpts]),
+            ?LOG_INFO("UDP server (family: ~p, address: ~p, socket: ~p, sockopts: ~p)", [InetFamily, Address, Socket, SocketOpts]),
             {ok, Socket};
         {error, eacces} ->
-            lager:error("Failed to open UDP socket. Need to run as sudo?"),
+            ?LOG_ERROR("Failed to open UDP socket. Need to run as sudo?"),
             {error, eacces}
     end.
 
@@ -172,7 +173,7 @@ handle_request(Socket, Host, Port, Bin, State) ->
         {empty, _Queue} ->
             folsom_metrics:notify({packet_dropped_empty_queue_counter, {inc, 1}}),
             folsom_metrics:notify({packet_dropped_empty_queue_meter, 1}),
-            lager:info("Queue is empty, dropping packet"),
+            ?LOG_INFO("Queue is empty, dropping packet"),
             {noreply, State}
     end.
 

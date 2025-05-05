@@ -18,6 +18,7 @@
 
 -dialyzer({nowarn_function, list_table/1}).
 
+-include_lib("kernel/include/logger.hrl").
 -include("erldns.hrl").
 
 %% API
@@ -44,42 +45,42 @@ create(schema) ->
     ok = ensure_mnesia_started(),
     case erldns_config:storage_dir() of
         undefined ->
-            lager:error("You need to add a directory for mnesia in erldns.config");
+            ?LOG_ERROR("You need to add a directory for mnesia in erldns.config");
         Dir ->
             ok = filelib:ensure_dir(Dir),
             ok = application:set_env(mnesia, dir, Dir)
     end,
 
     Connected = nodes(),
-    lager:debug("Creating schema ~p", [Connected]),
+    ?LOG_DEBUG("Creating schema ~p", [Connected]),
     case Connected of
         [] ->
             application:stop(mnesia),
             case mnesia:create_schema([node()]) of
                 {error, {_, {already_exists, _}}} ->
-                    lager:warning("The schema already exists (node: ~p)", [node()]),
+                    ?LOG_WARNING("The schema already exists (node: ~p)", [node()]),
                     ok;
                 ok ->
-                    lager:debug("Created the schema on this node ~p", [mnesia:system_info()]),
+                    ?LOG_DEBUG("Created the schema on this node ~p", [mnesia:system_info()]),
                     ok
             end;
         _ ->
-            lager:debug("Adding extra db_nodes ~p", [Connected]),
+            ?LOG_DEBUG("Adding extra db_nodes ~p", [Connected]),
             mnesia:change_config(extra_db_nodes, Connected),
-            lager:debug("Waiting for tables"),
+            ?LOG_DEBUG("Waiting for tables"),
             WaitResult = mnesia:wait_for_tables([zones, zone_records_typed, authorities], 5000),
-            lager:debug("Wait result ~p", [WaitResult]),
+            ?LOG_DEBUG("Wait result ~p", [WaitResult]),
             Tables = mnesia:system_info(tables),
-            lager:debug("Current tables ~p", [Tables]),
+            ?LOG_DEBUG("Current tables ~p", [Tables]),
             case Tables of
                 [] ->
                     application:stop(mnesia),
                     case mnesia:create_schema([node()]) of
                         {error, {_, {already_exists, _}}} ->
-                            lager:warning("The schema already exists (node: ~p)", [node()]),
+                            ?LOG_WARNING("The schema already exists (node: ~p)", [node()]),
                             ok;
                         ok ->
-                            lager:debug("Created the schema on this node with other connected nodes ~p", [mnesia:system_info()]),
+                            ?LOG_DEBUG("Created the schema on this node with other connected nodes ~p", [mnesia:system_info()]),
                             ok
                     end;
                 _ ->
@@ -87,7 +88,7 @@ create(schema) ->
                     Copy = lists:foldl(
                         fun(Table, Acc) -> Acc ++ [mnesia:add_table_copy(Table, node(), disc_copies)] end, [], Tables -- [schema]
                     ),
-                    lager:debug("Copy done Schema= ~p, Others=~p", [Schema, Copy])
+                    ?LOG_DEBUG("Copy done Schema= ~p, Others=~p", [Schema, Copy])
             end
     end,
     ok = ensure_mnesia_started();
@@ -101,7 +102,7 @@ create(zones) ->
     ok = ensure_mnesia_started(),
     case mnesia:create_table(zones, [{attributes, record_info(fields, zone)}, {record_name, zone}, {type, set}, {disc_copies, [node()]}]) of
         {aborted, {already_exists, zones}} ->
-            lager:warning("The zone table already exists (node: ~p)", [node()]),
+            ?LOG_WARNING("The zone table already exists (node: ~p)", [node()]),
             ok;
         {atomic, ok} ->
             ok;
@@ -115,7 +116,7 @@ create(zone_records_typed) ->
         ])
     of
         {aborted, {already_exists, zone_records_typed}} ->
-            lager:warning("The zone records typed table already exists (node: ~p)", [node()]),
+            ?LOG_WARNING("The zone records typed table already exists (node: ~p)", [node()]),
             ok;
         {atomic, ok} ->
             ok;
@@ -126,7 +127,7 @@ create(authorities) ->
     ok = ensure_mnesia_started(),
     case mnesia:create_table(authorities, [{attributes, record_info(fields, authorities)}, {disc_copies, [node()]}]) of
         {aborted, {already_exists, authorities}} ->
-            lager:warning("The authority table already exists (node: ~p)", [node()]),
+            ?LOG_WARNING("The authority table already exists (node: ~p)", [node()]),
             ok;
         {atomic, ok} ->
             ok;
@@ -137,7 +138,7 @@ create(sync_counters) ->
     ok = ensure_mnesia_started(),
     case mnesia:create_table(sync_counters, [{attributes, record_info(fields, sync_counters)}, {disc_copies, [node()]}]) of
         {aborted, {already_exists, sync_counters}} ->
-            lager:warning("The sync_counters table already exists (node: ~p)", [node()]),
+            ?LOG_WARNING("The sync_counters table already exists (node: ~p)", [node()]),
             ok;
         {atomic, ok} ->
             ok;

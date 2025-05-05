@@ -15,6 +15,8 @@
 %% @doc The erldns OTP application.
 -module(erldns_app).
 
+-include_lib("kernel/include/logger.hrl").
+
 -behavior(application).
 
 % Application hooks
@@ -25,7 +27,7 @@
 ]).
 
 start(_Type, _Args) ->
-    lager:info("Starting erldns application"),
+    ?LOG_INFO("Starting erldns application"),
     setup_metrics(),
     nodefinder:multicast_start(),
     Ret = erldns_sup:start_link(),
@@ -50,16 +52,16 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
             ok
     end,
 
-    lager:info("Loading zones from local file"),
+    ?LOG_INFO("Loading zones from local file"),
     erldns_zone_loader:load_zones(),
 
-    lager:info("Notifying servers to start"),
+    ?LOG_INFO("Notifying servers to start"),
     erldns_events:notify({?MODULE, start_servers}),
 
     ok.
 
 stop(_State) ->
-    lager:info("Stop erldns application"),
+    ?LOG_INFO("Stop erldns application"),
     ok.
 
 setup_metrics() ->

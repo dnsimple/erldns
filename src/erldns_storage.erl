@@ -19,6 +19,8 @@
 %% @end
 -module(erldns_storage).
 
+-include_lib("kernel/include/logger.hrl").
+
 -behaviour(gen_server).
 
 %% inter-module API
@@ -186,9 +188,9 @@ load_zones(Path, true) when is_list(Path) ->
 load_zones(Filename, false) when is_list(Filename) ->
     case file:read_file(Filename) of
         {ok, Binary} ->
-            lager:debug("Parsing zones JSON"),
+            ?LOG_DEBUG("Parsing zones JSON"),
             JsonZones = json:decode(Binary),
-            lager:debug("Putting zones into cache"),
+            ?LOG_DEBUG("Putting zones into cache"),
             lists:foreach(
                 fun(JsonZone) ->
                     Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
@@ -196,7 +198,7 @@ load_zones(Filename, false) when is_list(Filename) ->
                 end,
                 JsonZones
             ),
-            lager:debug("Loaded zones (count: ~p)", [length(JsonZones)]),
+            ?LOG_DEBUG("Loaded zones (count: ~p)", [length(JsonZones)]),
             {ok, length(JsonZones)};
         {error, Reason} ->
             erldns_events:notify({?MODULE, failed_zones_load, Reason}),

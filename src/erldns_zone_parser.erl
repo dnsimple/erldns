@@ -18,6 +18,7 @@
 -behavior(gen_server).
 
 -include_lib("dns_erlang/include/dns.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -include("erldns.hrl").
 
@@ -69,13 +70,13 @@ zone_to_erlang(Zone, Timeout) ->
 %% @doc Register a list of custom parser modules.
 -spec register_parsers([module()]) -> ok.
 register_parsers(Modules) ->
-    lager:info("Registering custom parsers (modules: ~p)", [Modules]),
+    ?LOG_INFO("Registering custom parsers (modules: ~p)", [Modules]),
     gen_server:call(?SERVER, {register_parsers, Modules}).
 
 %% @doc Register a custom parser module.
 -spec register_parser(module()) -> ok.
 register_parser(Module) ->
-    lager:info("Registering custom parser (module: ~p)", [Module]),
+    ?LOG_INFO("Registering custom parser (module: ~p)", [Module]),
     gen_server:call(?SERVER, {register_parser, Module}).
 
 -spec list_parsers() -> [module()].
