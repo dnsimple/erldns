@@ -74,9 +74,6 @@ handle_event({_M, dnssec_request, _Host, _Qname}, State) ->
     folsom_metrics:notify(dnssec_request_counter, {inc, 1}),
     folsom_metrics:notify(dnssec_request_meter, 1),
     {ok, State};
-handle_event({M = erldns_zone_encoder, E = unsupported_rrdata_type, Data}, State) ->
-    ?LOG_INFO("Unable to encode rrdata (module: ~p, event: ~p, data: ~p)", [M, E, Data]),
-    {ok, State};
 handle_event({M = erldns_zone_loader, E = read_file_error, Reason}, State) ->
     ?LOG_ERROR("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
     {ok, State};
