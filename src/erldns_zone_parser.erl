@@ -121,7 +121,10 @@ json_to_erlang(#{<<"name">> := Name, <<"records">> := JsonRecords} = Zone, Parse
                     pass ?= apply_context_options(Data),
                     {} ?= json_record_to_erlang(Data),
                     {} ?= try_custom_parsers(Data, Parsers),
-                    erldns_events:notify({?MODULE, unsupported_record, Data}),
+                    ?LOG_WARNING(
+                        "Unsupported record (module: ~p, event: ~p, data: ~p)",
+                        [?MODULE, unsupported_record, Data]
+                    ),
                     {}
                 else
                     fail ->
@@ -236,7 +239,10 @@ try_custom_parsers(Data, [Parser | Rest]) ->
 
 % Internal converters
 json_record_to_erlang([Name, Type, _Ttl, Data = null, _]) ->
-    erldns_events:notify({?MODULE, error, {Name, Type, Data, null_data}}),
+    ?LOG_ERROR(
+        "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, reason:~p)",
+        [?MODULE, error, Name, Type, Data, null_data]
+    ),
     {};
 json_record_to_erlang([Name, <<"SOA">>, Ttl, Data, _]) when is_map(Data) ->
     #dns_rr{
@@ -294,7 +300,10 @@ json_record_to_erlang([Name, Type = <<"A">>, Ttl, Data, _Context]) when is_map(D
                 ttl = Ttl
             };
         {error, Reason} ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, reason:~p)",
+                [?MODULE, error, Name, Type, Data, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, Type = <<"A">>, Ttl, Data, _Context]) ->
@@ -307,7 +316,10 @@ json_record_to_erlang([Name, Type = <<"A">>, Ttl, Data, _Context]) ->
                 ttl = Ttl
             };
         {error, Reason} ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, reason:~p)",
+                [?MODULE, error, Name, Type, Data, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, Type = <<"AAAA">>, Ttl, Data, _Context]) when is_map(Data) ->
@@ -320,7 +332,10 @@ json_record_to_erlang([Name, Type = <<"AAAA">>, Ttl, Data, _Context]) when is_ma
                 ttl = Ttl
             };
         {error, Reason} ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, reason:~p)",
+                [?MODULE, error, Name, Type, Data, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, Type = <<"AAAA">>, Ttl, Data, _Context]) ->
@@ -333,7 +348,10 @@ json_record_to_erlang([Name, Type = <<"AAAA">>, Ttl, Data, _Context]) ->
                 ttl = Ttl
             };
         {error, Reason} ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, reason:~p)",
+                [?MODULE, error, Name, Type, Data, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, <<"CAA">>, Ttl, Data, _Context]) when is_map(Data) ->
@@ -454,7 +472,10 @@ json_record_to_erlang([Name, Type = <<"SSHFP">>, Ttl, Data, _Context]) when is_m
             }
     catch
         Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
+                [?MODULE, error, Name, Type, Data, Exception, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, Type = <<"SSHFP">>, Ttl, Data, _Context]) ->
@@ -474,7 +495,10 @@ json_record_to_erlang([Name, Type = <<"SSHFP">>, Ttl, Data, _Context]) ->
             }
     catch
         Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
+                [?MODULE, error, Name, Type, Data, Exception, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, <<"SRV">>, Ttl, Data, _Context]) when is_map(Data) ->
@@ -550,7 +574,10 @@ json_record_to_erlang([Name, Type = <<"DS">>, Ttl, Data, _Context]) when is_map(
             }
     catch
         Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
+                [?MODULE, error, Name, Type, Data, Exception, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, Type = <<"DS">>, Ttl, Data, _Context]) ->
@@ -570,7 +597,10 @@ json_record_to_erlang([Name, Type = <<"DS">>, Ttl, Data, _Context]) ->
             }
     catch
         Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
+                [?MODULE, error, Name, Type, Data, Exception, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, Type = <<"CDS">>, Ttl, Data, _Context]) when is_map(Data) ->
@@ -590,7 +620,10 @@ json_record_to_erlang([Name, Type = <<"CDS">>, Ttl, Data, _Context]) when is_map
             }
     catch
         Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
+                [?MODULE, error, Name, Type, Data, Exception, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, Type = <<"CDS">>, Ttl, Data, _Context]) ->
@@ -610,7 +643,10 @@ json_record_to_erlang([Name, Type = <<"CDS">>, Ttl, Data, _Context]) ->
             }
     catch
         Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
+                [?MODULE, error, Name, Type, Data, Exception, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) when is_map(Data) ->
@@ -631,7 +667,10 @@ json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) when is_
             })
     catch
         Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
+                [?MODULE, error, Name, Type, Data, Exception, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) ->
@@ -652,7 +691,10 @@ json_record_to_erlang([Name, Type = <<"DNSKEY">>, Ttl, Data, _Context]) ->
             })
     catch
         Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
+                [?MODULE, error, Name, Type, Data, Exception, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) when is_map(Data) ->
@@ -673,7 +715,10 @@ json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) when is
             })
     catch
         Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
+                [?MODULE, error, Name, Type, Data, Exception, Reason]
+            ),
             {}
     end;
 json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) ->
@@ -694,7 +739,10 @@ json_record_to_erlang([Name, Type = <<"CDNSKEY">>, Ttl, Data, _Context]) ->
             })
     catch
         Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
+                [?MODULE, error, Name, Type, Data, Exception, Reason]
+            ),
             {}
     end;
 json_record_to_erlang(_Data) ->
@@ -736,7 +784,10 @@ json_record_to_erlang_txt([Name, Type, Ttl, Data, _Context, Value]) ->
         txt_or_spf_record(Type, Name, Ttl, lists:flatten(ParsedText))
     catch
         Exception:Reason ->
-            erldns_events:notify({?MODULE, error, {Name, Type, Data, Exception, Reason}}),
+            ?LOG_ERROR(
+                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
+                [?MODULE, error, Name, Type, Data, Exception, Reason]
+            ),
             {}
     end.
 
