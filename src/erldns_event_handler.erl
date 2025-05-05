@@ -74,18 +74,6 @@ handle_event({_M, dnssec_request, _Host, _Qname}, State) ->
     folsom_metrics:notify(dnssec_request_counter, {inc, 1}),
     folsom_metrics:notify(dnssec_request_meter, 1),
     {ok, State};
-handle_event({_M = erldns_handler, _E = refused_response, _Questions}, State) ->
-    folsom_metrics:notify({refused_response_meter, 1}),
-    folsom_metrics:notify({refused_response_counter, {inc, 1}}),
-    {ok, State};
-handle_event({_M = erldns_handler, _E = empty_response, _Message}, State) ->
-    folsom_metrics:notify({empty_response_meter, 1}),
-    folsom_metrics:notify({empty_response_counter, {inc, 1}}),
-    {ok, State};
-handle_event({_M = erldns_handler, _E = resolve_error, {_Exception, _Reason, _Message, _Stacktrace}}, State) ->
-    folsom_metrics:notify({erldns_handler_error_counter, {inc, 1}}),
-    folsom_metrics:notify({erldns_handler_error_meter, 1}),
-    {ok, State};
 handle_event({M = erldns_zone_encoder, E = unsupported_rrdata_type, Data}, State) ->
     ?LOG_INFO("Unable to encode rrdata (module: ~p, event: ~p, data: ~p)", [M, E, Data]),
     {ok, State};
