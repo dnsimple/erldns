@@ -70,10 +70,6 @@ handle_event({_M, tcp_error, Reason}, State) ->
     folsom_metrics:notify({tcp_error_meter, 1}),
     folsom_metrics:notify({tcp_error_history, Reason}),
     {ok, State};
-handle_event({_M, dnssec_request, _Host, _Qname}, State) ->
-    folsom_metrics:notify(dnssec_request_counter, {inc, 1}),
-    folsom_metrics:notify(dnssec_request_meter, 1),
-    {ok, State};
 handle_event({M = erldns_storage, E = failed_zones_load, Reason}, State) ->
     ?LOG_ERROR("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
     {ok, State};
