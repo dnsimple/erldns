@@ -74,12 +74,6 @@ handle_event({_M, dnssec_request, _Host, _Qname}, State) ->
     folsom_metrics:notify(dnssec_request_counter, {inc, 1}),
     folsom_metrics:notify(dnssec_request_meter, 1),
     {ok, State};
-handle_event({M = erldns_zone_loader, E = read_file_error, Reason}, State) ->
-    ?LOG_ERROR("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [M, E, Reason]),
-    {ok, State};
-handle_event({M = erldns_zone_loader, E = put_zone_error, {JsonZone, Reason}}, State) ->
-    ?LOG_ERROR("Failed to load zones (module: ~p, event: ~p, reason: ~p, json: ~p)", [M, E, Reason, JsonZone]),
-    {ok, State};
 handle_event({M = erldns_zone_parser, E = error, {Name, Type, Data, Reason}}, State) ->
     ?LOG_ERROR("Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, reason: ~p)", [M, E, Name, Type, Data, Reason]),
     {ok, State};
