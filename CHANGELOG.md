@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## 5.0.0
+
+- Introduce support for Logger
+- Remove lager
+- Remove the `erldns_events` singleton.
+
 ## 4.3.1
 
 - Export dnssec internal new API endpoint
