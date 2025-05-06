@@ -161,10 +161,8 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
                 Response ->
                     maybe_cache_packet(Response, Response#dns_message.aa)
             catch
-                _Exception:Reason:_Stacktrace ->
-                    % ?LOG_ERROR("Error answering request (module: ~p, event: ~p, exception: ~p, reason: ~p, message: ~p, stacktrace: "
-                    %            "~p)",
-                    %            [?MODULE, resolve_error, Exception, Reason, Message, Stacktrace]),
+                Class:Reason:Stacktrace ->
+                    ?LOG_ERROR(#{what => resolve_error, dns_message => Message, class => Class, reason => Reason, stacktrace => Stacktrace}),
                     folsom_metrics:notify({erldns_handler_error_counter, {inc, 1}}),
                     folsom_metrics:notify({erldns_handler_error_meter, 1}),
                     RCode =
