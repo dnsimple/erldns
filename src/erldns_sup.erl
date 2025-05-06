@@ -58,7 +58,6 @@ gc_registered(ProcessName) ->
 init(_Args) ->
     SysProcs =
         [
-            ?CHILD(erldns_events, worker, []),
             ?CHILD(erldns_zone_cache, worker, []),
             ?CHILD(erldns_zone_parser, worker, []),
             ?CHILD(erldns_zone_encoder, worker, []),

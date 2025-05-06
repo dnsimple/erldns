@@ -16,6 +16,7 @@
 %% system crash.
 -module(erldns_encoder).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("dns_erlang/include/dns_records.hrl").
 
 -export([
@@ -39,7 +40,9 @@ encode_message(Response) ->
                     M
             catch
                 Exception:Reason ->
-                    erldns_events:notify({?MODULE, encode_message_error, {Exception, Reason, Response}}),
+                    ?LOG_ERROR("Error encoding message (module: ~p, event: ~p, response: ~p, exception: ~p, reason: ~p)", [
+                        ?MODULE, encode_message_error, Response, Exception, Reason
+                    ]),
                     encode_message(build_error_response(Response))
             end
     end.
@@ -65,7 +68,10 @@ encode_message(Response, Opts) ->
                     M
             catch
                 Exception:Reason ->
-                    erldns_events:notify({?MODULE, encode_message_error, {Exception, Reason, Response, Opts}}),
+                    ?LOG_ERROR(
+                        "Error encoding with opts (module: ~p, event: ~p, response: ~p, opts: ~p, exception: ~p, reason: ~p)",
+                        [?MODULE, encode_message_error, Response, Opts, Exception, Reason]
+                    ),
                     {false, encode_message(build_error_response(Response))}
             end
     end.

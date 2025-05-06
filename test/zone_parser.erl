@@ -64,7 +64,6 @@ json_to_erlang_ensure_sorting_and_defaults_test() ->
     ).
 
 json_record_to_erlang_test() ->
-    erldns_events:start_link(),
     ?assertEqual({}, erldns_zone_parser:json_record_to_erlang([])),
     Name = <<"example.com">>,
     ?assertEqual({}, erldns_zone_parser:json_record_to_erlang([Name, <<"SOA">>, 3600, null, null])).

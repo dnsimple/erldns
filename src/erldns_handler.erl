@@ -107,9 +107,7 @@ handle(Message, Host, {throttled, Host, _ReqCount}) ->
 %% append the SOA record if it is a zone transfer and complete the response
 %% by filling out count-related header fields.
 handle(Message, Host, _) ->
-    erldns_events:notify({?MODULE, start_handle, [{host, Host}, {message, Message}]}),
     Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, Host]),
-    erldns_events:notify({?MODULE, end_handle, [{host, Host}, {message, Message}, {response, Response}]}),
     Response.
 
 do_handle(Message, Host) ->
@@ -123,10 +121,8 @@ do_handle(Message, Host) ->
 handle_message(Message, Host) ->
     case erldns_packet_cache:get({Message#dns_message.questions, Message#dns_message.additional}, Host) of
         {ok, CachedResponse} ->
-            erldns_events:notify({?MODULE, packet_cache_hit, [{host, Host}, {message, Message}]}),
             CachedResponse#dns_message{id = Message#dns_message.id};
         {error, Reason} ->
-            erldns_events:notify({?MODULE, packet_cache_miss, [{reason, Reason}, {host, Host}, {message, Message}]}),
             % SOA lookup
             handle_packet_cache_miss(Message, get_authority(Message), Host)
     end.
@@ -165,11 +161,10 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
                 Response ->
                     maybe_cache_packet(Response, Response#dns_message.aa)
             catch
-                Exception:Reason:Stacktrace ->
-                    % ?LOG_ERROR("Error answering request (module: ~p, event: ~p, exception: ~p, reason: ~p, message: ~p, stacktrace: "
-                    %            "~p)",
-                    %            [?MODULE, resolve_error, Exception, Reason, Message, Stacktrace]),
-                    erldns_events:notify({?MODULE, resolve_error, {Exception, Reason, Message, Stacktrace}}),
+                Class:Reason:Stacktrace ->
+                    ?LOG_ERROR(#{what => resolve_error, dns_message => Message, class => Class, reason => Reason, stacktrace => Stacktrace}),
+                    folsom_metrics:notify({erldns_handler_error_counter, {inc, 1}}),
+                    folsom_metrics:notify({erldns_handler_error_meter, 1}),
                     RCode =
                         case Reason of
                             {error, rcode, ?DNS_RCODE_SERVFAIL} -> ?DNS_RCODE_SERVFAIL;
@@ -210,11 +205,13 @@ complete_response(Message) ->
 notify_empty_response(Message) ->
     case {Message#dns_message.rc, Message#dns_message.anc + Message#dns_message.auc + Message#dns_message.adc} of
         {?DNS_RCODE_REFUSED, _} ->
-            erldns_events:notify({?MODULE, refused_response, Message#dns_message.questions}),
+            folsom_metrics:notify({refused_response_meter, 1}),
+            folsom_metrics:notify({refused_response_counter, {inc, 1}}),
             Message;
         {_, 0} ->
             ?LOG_INFO("Empty response (module: ~p, event: ~p, message: ~p)", [?MODULE, empty_response, Message]),
-            erldns_events:notify({?MODULE, empty_response, Message}),
+            folsom_metrics:notify({empty_response_meter, 1}),
+            folsom_metrics:notify({empty_response_counter, {inc, 1}}),
             Message;
         _ ->
             Message

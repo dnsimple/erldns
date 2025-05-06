@@ -86,7 +86,6 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerP
     case inet:peername(Socket) of
         {ok, {Address, _Port}} ->
             try
-                erldns_events:notify({?MODULE, start_tcp, [{host, Address}]}),
                 case Bin of
                     <<>> ->
                         ok;
@@ -97,7 +96,6 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerP
                                     "Decoded message included trailing garbage (module: ~p, event: ~p, message: ~p, garbage: ~p)",
                                     [?MODULE, decode_message_trailing_garbage, DecodedMessage, TrailingGarbage]
                                 ),
-                                % erldns_events:notify({?MODULE, decode_message_trailing_garbage, {DecodedMessage, TrailingGarbage}}),
                                 handle_decoded_tcp_message(
                                     DecodedMessage, Socket, Address, {WorkerProcessSup, WorkerProcess}
                                 );
@@ -106,7 +104,6 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerP
                                     "Error decoding message (module: ~p, event: ~p, error: ~p, message: ~p)",
                                     [?MODULE, decode_message_error, Error, Message]
                                 ),
-                                % erldns_events:notify({?MODULE, decode_message_error, {Error, Message}}),
                                 ok;
                             DecodedMessage ->
                                 handle_decoded_tcp_message(
@@ -116,21 +113,24 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerP
                 end
             of
                 Result ->
-                    erldns_events:notify({?MODULE, end_tcp, [{host, Address}]}),
+                    folsom_metrics:notify({tcp_request_meter, 1}),
+                    folsom_metrics:notify({tcp_request_counter, {inc, 1}}),
                     Result
             catch
-                Exception:Reason:_Stacktrace ->
+                Exception:Reason ->
+                    folsom_metrics:notify({tcp_error_meter, 1}),
+                    folsom_metrics:notify({tcp_error_history, Reason}),
                     {error, Exception, Reason}
             after
                 gen_tcp:close(Socket)
             end;
         {error, Reason} ->
             ?LOG_DEBUG("Notifying error reason: ~p", [Reason]),
-            erldns_events:notify({?MODULE, tcp_error, Reason})
+            folsom_metrics:notify({tcp_error_meter, 1}),
+            folsom_metrics:notify({tcp_error_history, Reason})
     end;
 handle_tcp_dns_query(Socket, BadPacket, _) ->
     ?LOG_ERROR("Received bad packet (module: ~p, event: ~p, protocol: ~p, packet: ~p)", [?MODULE, bad_packet, tcp, BadPacket]),
-    % erldns_events:notify({?MODULE, bad_packet, {tcp, BadPacket}}),
     gen_tcp:close(Socket).
 
 handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
@@ -147,7 +147,8 @@ handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {
                     ok
             catch
                 exit:{timeout, _} ->
-                    erldns_events:notify({?MODULE, timeout}),
+                    folsom_metrics:notify({worker_timeout_counter, {inc, 1}}),
+                    folsom_metrics:notify({worker_timeout_meter, 1}),
                     handle_timeout(WorkerProcessSup, WorkerProcessId);
                 Error:Reason ->
                     ?LOG_ERROR(
@@ -164,7 +165,6 @@ handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {
 -spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary(), {pid(), term()}) ->
     ok | {error, not_owner | timeout | inet:posix() | atom()} | {error, timeout, pid()}.
 handle_udp_dns_query(Socket, Host, Port, Bin, {WorkerProcessSup, WorkerProcess}) ->
-    erldns_events:notify({?MODULE, start_udp, [{host, Host}]}),
     Result =
         case erldns_decoder:decode_message(Bin) of
             {trailing_garbage, DecodedMessage, TrailingGarbage} ->
@@ -172,18 +172,17 @@ handle_udp_dns_query(Socket, Host, Port, Bin, {WorkerProcessSup, WorkerProcess})
                     "Decoded message included trailing garbage (module: ~p, event: ~p, message: ~p, garbage: ~p)",
                     [?MODULE, decode_message_trailing_garbage, DecodedMessage, TrailingGarbage]
                 ),
-                %erldns_events:notify({?MODULE, decode_message_trailing_garbage, {DecodedMessage, TrailingGarbage}}),
                 handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, WorkerProcess});
             {Error, Message, _} ->
                 ?LOG_ERROR("Error decoding message (module: ~p, event: ~p, error: ~p, message: ~p)", [
                     ?MODULE, decode_message_error, Error, Message
                 ]),
-                % erldns_events:notify({?MODULE, decode_message_error, {Error, Message}}),
                 ok;
             DecodedMessage ->
                 handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, WorkerProcess})
         end,
-    erldns_events:notify({?MODULE, end_udp, [{host, Host}]}),
+    folsom_metrics:notify({udp_request_meter, 1}),
+    folsom_metrics:notify({udp_request_counter, {inc, 1}}),
     Result.
 
 -spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number(), {
@@ -207,14 +206,14 @@ handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup
                     ?LOG_INFO("Worker timeout (module: ~p, event: ~p, protocol: ~p, message: ~p)", [
                         ?MODULE, timeout, udp, DecodedMessage
                     ]),
-                    erldns_events:notify({?MODULE, timeout}),
+                    folsom_metrics:notify({worker_timeout_counter, {inc, 1}}),
+                    folsom_metrics:notify({worker_timeout_meter, 1}),
                     handle_timeout(WorkerProcessSup, WorkerProcessId);
                 Error:Reason ->
                     ?LOG_ERROR(
                         "Worker process crashed (module: ~p, event: ~p, protocol: ~p, error: ~p, reason: ~p, message: ~p)",
                         [?MODULE, process_crashed, udp, Error, Reason, DecodedMessage]
                     ),
-                    % erldns_events:notify({?MODULE, process_crashed, {udp, Error, Reason, DecodedMessage}}),
                     {error, {Error, Reason}}
             end;
         true ->
@@ -225,13 +224,15 @@ handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup
 handle_timeout(WorkerProcessSup, WorkerProcessId) ->
     TerminateResult = supervisor:terminate_child(WorkerProcessSup, WorkerProcessId),
     ?LOG_DEBUG("Terminate result: ~p", [TerminateResult]),
-
     case supervisor:restart_child(WorkerProcessSup, WorkerProcessId) of
         {ok, NewChild} ->
             {error, timeout, NewChild};
         {ok, NewChild, _} ->
             {error, timeout, NewChild};
         {error, Error} ->
-            erldns_events:notify({?MODULE, restart_failed, {Error}}),
+            ?LOG_ERROR(
+                "Restart failed (module: ~p, event: ~p, error: ~p)",
+                [?MODULE, restart_failed, Error]
+            ),
             {error, timeout}
     end.

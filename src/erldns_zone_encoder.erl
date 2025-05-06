@@ -276,7 +276,7 @@ encode_data({dns_rrdata_rrsig, TypeCovered, Alg, Labels, OriginalTtl, Expiration
         )
     );
 encode_data(Data) ->
-    erldns_events:notify({?MODULE, unsupported_rrdata_type, Data}),
+    ?LOG_INFO("Unable to encode rrdata (module: ~p, event: ~p, data: ~p)", [?MODULE, unsupported_rrdata_type, Data]),
     {}.
 
 json_encode_kw_list(KwList) when is_list(KwList) ->

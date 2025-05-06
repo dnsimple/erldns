@@ -201,7 +201,10 @@ load_zones(Filename, false) when is_list(Filename) ->
             ?LOG_DEBUG("Loaded zones (count: ~p)", [length(JsonZones)]),
             {ok, length(JsonZones)};
         {error, Reason} ->
-            erldns_events:notify({?MODULE, failed_zones_load, Reason}),
+            ?LOG_ERROR(
+                "Failed to load zones (module: ~p, event: ~p, reason: ~p)",
+                [?MODULE, failed_zones_load, Reason]
+            ),
             {err, Reason}
     end.
 

@@ -41,8 +41,13 @@ load_zones() ->
                 fun(JsonZone) ->
                     Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
                     case erldns_zone_cache:put_zone(Zone) of
-                        {error, Reason} -> erldns_events:notify({?MODULE, put_zone_error, {JsonZone, Reason}});
-                        _ -> ok
+                        {error, Reason} ->
+                            ?LOG_ERROR(
+                                "Failed to load zones (module: ~p, event: ~p, reason: ~p, json: ~p)",
+                                [?MODULE, put_zone_error, Reason, JsonZone]
+                            );
+                        _ ->
+                            ok
                     end
                 end,
                 JsonZones
@@ -50,7 +55,7 @@ load_zones() ->
             ?LOG_INFO("Loaded zones (count: ~p)", [length(JsonZones)]),
             {ok, length(JsonZones)};
         {error, Reason} ->
-            erldns_events:notify({?MODULE, read_file_error, Reason}),
+            ?LOG_ERROR("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [?MODULE, read_file_error, Reason]),
             {err, Reason}
     end.
 
