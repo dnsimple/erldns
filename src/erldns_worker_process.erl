@@ -53,16 +53,17 @@ init(_Args) ->
     {ok, #state{}}.
 
 % Process a TCP request. Does not truncate the response.
-handle_call({process, DecodedMessage, Socket, {tcp, Address}}, _From, State) ->
+handle_call({process, DecodedMessage, Socket, {tcp, Address}, TS0}, _From, State) ->
     % Uncomment this and the function implementation to simulate a timeout when
     % querying www.example.com with the test zones
     % simulate_timeout(DecodedMessage),
     Response = erldns_handler:handle(DecodedMessage, {tcp, Address}),
     EncodedMessage = erldns_encoder:encode_message(Response),
     send_tcp_message(Socket, EncodedMessage),
+    measure_time(DecodedMessage, tcp, TS0),
     {reply, ok, State};
 % Process a UDP request. May truncate the response.
-handle_call({process, DecodedMessage, Socket, Port, {udp, Host}}, _From, State) ->
+handle_call({process, DecodedMessage, Socket, Port, {udp, Host}, TS0}, _From, State) ->
     % Uncomment this and the function implementation to simulate a timeout when
     % querying www.example.com with the test zones
     % simulate_timeout(DecodedMessage),
@@ -81,6 +82,7 @@ handle_call({process, DecodedMessage, Socket, Port, {udp, Host}}, _From, State) 
         {true, EncodedMessage, _TsigMac, _Message} ->
             gen_udp:send(Socket, DestHost, Port, EncodedMessage)
     end,
+    measure_time(DecodedMessage, udp, TS0),
     {reply, ok, State}.
 
 handle_cast(_Msg, State) ->
@@ -101,6 +103,12 @@ send_tcp_message(Socket, EncodedMessage) ->
     BinLength = byte_size(EncodedMessage),
     TcpEncodedMessage = <<BinLength:16, EncodedMessage/binary>>,
     gen_tcp:send(Socket, TcpEncodedMessage).
+
+measure_time(Message, Transport, TS0) ->
+    TS1 = erlang:monotonic_time(),
+    DnsSec = proplists:get_bool(dnssec, erldns_edns:get_opts(Message)),
+    Labels = [Transport, DnsSec],
+    prometheus_quantile_summary:observe(dns_request_duration_microseconds, Labels, TS1 - TS0).
 
 %% Determine the max payload size by looking for additional
 %% options passed by the client.
