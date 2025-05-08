@@ -61,7 +61,6 @@ to_json(Req, State) ->
         {<<"erldns">>, [
             {<<"metrics">>, erldns_metrics:filtered_metrics()},
             {<<"stats">>, erldns_metrics:filtered_stats()},
-            {<<"vm">>, erldns_metrics:filtered_vm()},
             {<<"ets">>, erldns_metrics:filtered_ets()},
             {<<"processes">>, erldns_metrics:filtered_process_metrics()}
         ]}
