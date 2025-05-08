@@ -45,8 +45,8 @@ handle_call(_Request, From, State) ->
     ?LOG_DEBUG("Received unexpected call (from: ~p)", [From]),
     {reply, ok, State}.
 
-handle_cast({tcp_query, Socket, Bin}, State) ->
-    case handle_tcp_dns_query(Socket, Bin, {State#state.worker_process_sup, State#state.worker_process}) of
+handle_cast({tcp_query, Socket, Bin, TS}, State) ->
+    case handle_tcp_dns_query(Socket, Bin, {State#state.worker_process_sup, State#state.worker_process}, TS) of
         ok ->
             {noreply, State};
         {error, timeout, NewWorkerPid} ->
@@ -56,8 +56,8 @@ handle_cast({tcp_query, Socket, Bin}, State) ->
             ?LOG_ERROR("Error handling TCP query (module: ~p, event: ~p, error: ~p)", [?MODULE, handle_tcp_query_error, Error]),
             {noreply, State}
     end;
-handle_cast({udp_query, Socket, Host, Port, Bin}, State) ->
-    case handle_udp_dns_query(Socket, Host, Port, Bin, {State#state.worker_process_sup, State#state.worker_process}) of
+handle_cast({udp_query, Socket, Host, Port, Bin, TS}, State) ->
+    case handle_udp_dns_query(Socket, Host, Port, Bin, {State#state.worker_process_sup, State#state.worker_process}, TS) of
         ok ->
             {noreply, State};
         {error, timeout, NewWorkerPid} ->
@@ -80,9 +80,9 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% @doc Handle DNS query that comes in over TCP
--spec handle_tcp_dns_query(gen_tcp:socket(), iodata(), {pid(), term()}) ->
+-spec handle_tcp_dns_query(gen_tcp:socket(), iodata(), {pid(), term()}, integer()) ->
     ok | {error, timeout} | {error, timeout, pid()}.
-handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerProcess}) ->
+handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerProcess}, TS) ->
     case inet:peername(Socket) of
         {ok, {Address, _Port}} ->
             try
@@ -97,7 +97,7 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerP
                                     [?MODULE, decode_message_trailing_garbage, DecodedMessage, TrailingGarbage]
                                 ),
                                 handle_decoded_tcp_message(
-                                    DecodedMessage, Socket, Address, {WorkerProcessSup, WorkerProcess}
+                                    DecodedMessage, Socket, Address, {WorkerProcessSup, WorkerProcess}, TS
                                 );
                             {Error, Message, _} ->
                                 ?LOG_ERROR(
@@ -107,7 +107,7 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerP
                                 ok;
                             DecodedMessage ->
                                 handle_decoded_tcp_message(
-                                    DecodedMessage, Socket, Address, {WorkerProcessSup, WorkerProcess}
+                                    DecodedMessage, Socket, Address, {WorkerProcessSup, WorkerProcess}, TS
                                 )
                         end
                 end
@@ -129,17 +129,17 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerP
             folsom_metrics:notify({tcp_error_meter, 1}),
             folsom_metrics:notify({tcp_error_history, Reason})
     end;
-handle_tcp_dns_query(Socket, BadPacket, _) ->
+handle_tcp_dns_query(Socket, BadPacket, _, _) ->
     ?LOG_ERROR("Received bad packet (module: ~p, event: ~p, protocol: ~p, packet: ~p)", [?MODULE, bad_packet, tcp, BadPacket]),
     gen_tcp:close(Socket).
 
-handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
+handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}, TS) ->
     case DecodedMessage#dns_message.qr of
         false ->
             try
                 gen_server:call(
                     WorkerProcessPid,
-                    {process, DecodedMessage, Socket, {tcp, Address}},
+                    {process, DecodedMessage, Socket, {tcp, Address}, TS},
                     _Timeout = erldns_config:ingress_tcp_request_timeout()
                 )
             of
@@ -162,9 +162,9 @@ handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {
     end.
 
 %% @doc Handle DNS query that comes in over UDP
--spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary(), {pid(), term()}) ->
+-spec handle_udp_dns_query(gen_udp:socket(), gen_udp:ip(), inet:port_number(), binary(), {pid(), term()}, integer()) ->
     ok | {error, not_owner | timeout | inet:posix() | atom()} | {error, timeout, pid()}.
-handle_udp_dns_query(Socket, Host, Port, Bin, {WorkerProcessSup, WorkerProcess}) ->
+handle_udp_dns_query(Socket, Host, Port, Bin, {WorkerProcessSup, WorkerProcess}, TS) ->
     Result =
         case erldns_decoder:decode_message(Bin) of
             {trailing_garbage, DecodedMessage, TrailingGarbage} ->
@@ -172,30 +172,28 @@ handle_udp_dns_query(Socket, Host, Port, Bin, {WorkerProcessSup, WorkerProcess})
                     "Decoded message included trailing garbage (module: ~p, event: ~p, message: ~p, garbage: ~p)",
                     [?MODULE, decode_message_trailing_garbage, DecodedMessage, TrailingGarbage]
                 ),
-                handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, WorkerProcess});
+                handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, WorkerProcess}, TS);
             {Error, Message, _} ->
                 ?LOG_ERROR("Error decoding message (module: ~p, event: ~p, error: ~p, message: ~p)", [
                     ?MODULE, decode_message_error, Error, Message
                 ]),
                 ok;
             DecodedMessage ->
-                handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, WorkerProcess})
+                handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, WorkerProcess}, TS)
         end,
     folsom_metrics:notify({udp_request_meter, 1}),
     folsom_metrics:notify({udp_request_counter, {inc, 1}}),
     Result.
 
--spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number(), {
-    pid(), term()
-}) ->
+-spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number(), {pid(), term()}, integer()) ->
     ok | {error, not_owner | timeout | inet:posix() | atom()} | {error, timeout, term()}.
-handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}) ->
+handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, {WorkerProcessId, WorkerProcessPid, _, _}}, TS) ->
     case DecodedMessage#dns_message.qr of
         false ->
             try
                 gen_server:call(
                     WorkerProcessPid,
-                    {process, DecodedMessage, Socket, Port, {udp, Host}},
+                    {process, DecodedMessage, Socket, Port, {udp, Host}, TS},
                     _Timeout = erldns_config:ingress_udp_request_timeout()
                 )
             of
