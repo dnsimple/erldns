@@ -20,12 +20,10 @@
 -export([
     metrics/0,
     stats/0,
-    vm/0,
     ets/0,
     process_metrics/0,
     filtered_metrics/0,
     filtered_stats/0,
-    filtered_vm/0,
     filtered_ets/0,
     filtered_process_metrics/0
 ]).
@@ -131,14 +129,6 @@ filter_stat_set([{histogram, _} | Rest], FilteredStatSet) ->
     filter_stat_set(Rest, FilteredStatSet);
 filter_stat_set([Pair | Rest], FilteredStatSet) ->
     filter_stat_set(Rest, FilteredStatSet ++ [Pair]).
-
-vm() ->
-    [
-        {<<"memory">>, folsom_vm_metrics:get_memory()}
-    ].
-
-filtered_vm() ->
-    vm().
 
 ets() ->
     [
