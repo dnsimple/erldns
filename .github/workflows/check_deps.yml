@@ -5,7 +5,7 @@ name: Check Dependencies
 on:
   workflow_dispatch:
   schedule:
-    - cron: '38 8 * * *'
+    - cron: '0 8 * * 0'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
