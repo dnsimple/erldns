@@ -17,6 +17,13 @@
 The module that handles the resolution of a single DNS question.
 
 The meat of the resolution occurs in erldns_resolver:resolve/3
+
+Emits the following telemetry events:
+- `[erldns, handler, handoff]` (span)
+- `[erldns, handler, throttle]`
+- `[erldns, handler, error]`
+- `[erldns, handler, refused]`
+- `[erldns, handler, emtpy]`
 """.
 
 -behavior(gen_server).
@@ -96,8 +103,7 @@ handle(Message, {_, Host}) ->
 %% Note: this should probably be changed to return the original packet without
 %% any answer data and with TC bit set to 1.
 handle(Message, Host, {throttled, Host, _ReqCount}) ->
-    folsom_metrics:notify({request_throttled_counter, {inc, 1}}),
-    folsom_metrics:notify({request_throttled_meter, 1}),
+    telemetry:execute([erldns, handler, throttle], #{count => 1}, #{}),
     Message#dns_message{
         tc = true,
         aa = true,
@@ -107,8 +113,9 @@ handle(Message, Host, {throttled, Host, _ReqCount}) ->
 %% append the SOA record if it is a zone transfer and complete the response
 %% by filling out count-related header fields.
 handle(Message, Host, _) ->
-    Response = folsom_metrics:histogram_timed_update(request_handled_histogram, ?MODULE, do_handle, [Message, Host]),
-    Response.
+    telemetry:span([erldns, handler, handoff], #{}, fun() ->
+        {?MODULE:do_handle(Message, Host), #{}}
+    end).
 
 do_handle(Message, Host) ->
     NewMessage = handle_message(Message, Host),
@@ -163,8 +170,7 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
             catch
                 Class:Reason:Stacktrace ->
                     ?LOG_ERROR(#{what => resolve_error, dns_message => Message, class => Class, reason => Reason, stacktrace => Stacktrace}),
-                    folsom_metrics:notify({erldns_handler_error_counter, {inc, 1}}),
-                    folsom_metrics:notify({erldns_handler_error_meter, 1}),
+                    telemetry:execute([erldns, handler, error], #{count => 1}, #{}),
                     RCode =
                         case Reason of
                             {error, rcode, ?DNS_RCODE_SERVFAIL} -> ?DNS_RCODE_SERVFAIL;
@@ -205,13 +211,11 @@ complete_response(Message) ->
 notify_empty_response(Message) ->
     case {Message#dns_message.rc, Message#dns_message.anc + Message#dns_message.auc + Message#dns_message.adc} of
         {?DNS_RCODE_REFUSED, _} ->
-            folsom_metrics:notify({refused_response_meter, 1}),
-            folsom_metrics:notify({refused_response_counter, {inc, 1}}),
+            telemetry:execute([erldns, handler, refused], #{count => 1}, #{}),
             Message;
         {_, 0} ->
             ?LOG_INFO("Empty response (module: ~p, event: ~p, message: ~p)", [?MODULE, empty_response, Message]),
-            folsom_metrics:notify({empty_response_meter, 1}),
-            folsom_metrics:notify({empty_response_counter, {inc, 1}}),
+            telemetry:execute([erldns, handler, empty], #{count => 1}, #{}),
             Message;
         _ ->
             Message

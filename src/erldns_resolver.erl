@@ -12,8 +12,13 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Resolve a DNS query.
 -module(erldns_resolver).
+-moduledoc """
+Resolve a DNS query.
+
+Emits the following telemetry events:
+- `[erldns, resolver, dnssec]`
+""".
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -825,8 +830,7 @@ requires_additional_processing([], Acc) ->
 check_dnssec(Message, Host, Question) ->
     case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
         true ->
-            folsom_metrics:notify(dnssec_request_counter, {inc, 1}),
-            folsom_metrics:notify(dnssec_request_meter, 1),
+            telemetry:execute([erldns, resolver, dnssec], #{count => 1}, #{}),
             true;
         false ->
             false

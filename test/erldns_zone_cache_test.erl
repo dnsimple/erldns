@@ -13,12 +13,7 @@
 
 setup_cache() ->
     logger:set_application_level(erldns, debug),
-    meck:new(folsom_metrics),
-    meck:expect(
-        folsom_metrics,
-        histogram_timed_update,
-        fun(_, Module, Handler, Args) -> erlang:apply(Module, Handler, Args) end
-    ),
+    meck:new(telemetry, [passthrough]),
     {ok, Pid} = erldns_zone_parser:start_link(),
     erldns_storage:create(schema),
     erldns_storage:create(zones),
@@ -33,10 +28,10 @@ load_standard_zone() ->
     erldns_storage:load_zones("test/standard-zone.json").
 
 teardown_cache(Pid) ->
-    ?assert(meck:validate(folsom_metrics)),
+    ?assert(meck:validate(telemetry)),
     gen_server:stop(Pid),
     ets:delete_all_objects(sync_counters),
-    meck:unload(folsom_metrics).
+    meck:unload(telemetry).
 
 put_zone_rrset_records_count_with_existing_rrset_test() ->
     Pid = setup_cache(),

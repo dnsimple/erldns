@@ -12,9 +12,16 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Worker module that asynchronously accepts a single DNS packet and
-%% hands it to a worker process that has a set timeout.
 -module(erldns_worker).
+-moduledoc """
+Worker module that asynchronously accepts a single DNS packet and
+hands it to a worker process that has a set timeout.
+
+Emits the following telemetry events:
+- `[erldns, request, success]`
+- `[erldns, request, error]`
+- `[erldns, worker, timeout]`
+""".
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -113,21 +120,18 @@ handle_tcp_dns_query(Socket, <<_Len:16, Bin/binary>>, {WorkerProcessSup, WorkerP
                 end
             of
                 Result ->
-                    folsom_metrics:notify({tcp_request_meter, 1}),
-                    folsom_metrics:notify({tcp_request_counter, {inc, 1}}),
+                    telemetry:execute([erldns, request, success], #{count => 1}, #{protocol => tcp}),
                     Result
             catch
                 Exception:Reason ->
-                    folsom_metrics:notify({tcp_error_meter, 1}),
-                    folsom_metrics:notify({tcp_error_history, Reason}),
+                    telemetry:execute([erldns, request, error], #{count => 1}, #{protocol => tcp, reason => Reason}),
                     {error, Exception, Reason}
             after
                 gen_tcp:close(Socket)
             end;
         {error, Reason} ->
             ?LOG_DEBUG("Notifying error reason: ~p", [Reason]),
-            folsom_metrics:notify({tcp_error_meter, 1}),
-            folsom_metrics:notify({tcp_error_history, Reason})
+            telemetry:execute([erldns, request, error], #{count => 1}, #{protocol => tcp, reason => Reason})
     end;
 handle_tcp_dns_query(Socket, BadPacket, _, _) ->
     ?LOG_ERROR("Received bad packet (module: ~p, event: ~p, protocol: ~p, packet: ~p)", [?MODULE, bad_packet, tcp, BadPacket]),
@@ -147,8 +151,7 @@ handle_decoded_tcp_message(DecodedMessage, Socket, Address, {WorkerProcessSup, {
                     ok
             catch
                 exit:{timeout, _} ->
-                    folsom_metrics:notify({worker_timeout_counter, {inc, 1}}),
-                    folsom_metrics:notify({worker_timeout_meter, 1}),
+                    telemetry:execute([erldns, worker, timeout], #{count => 1}, #{}),
                     handle_timeout(WorkerProcessSup, WorkerProcessId);
                 Error:Reason ->
                     ?LOG_ERROR(
@@ -181,8 +184,7 @@ handle_udp_dns_query(Socket, Host, Port, Bin, {WorkerProcessSup, WorkerProcess},
             DecodedMessage ->
                 handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup, WorkerProcess}, TS)
         end,
-    folsom_metrics:notify({udp_request_meter, 1}),
-    folsom_metrics:notify({udp_request_counter, {inc, 1}}),
+    telemetry:execute([erldns, request, success], #{count => 1}, #{protocol => udp}),
     Result.
 
 -spec handle_decoded_udp_message(dns:message(), gen_udp:socket(), gen_udp:ip(), inet:port_number(), {pid(), term()}, integer()) ->
@@ -204,8 +206,7 @@ handle_decoded_udp_message(DecodedMessage, Socket, Host, Port, {WorkerProcessSup
                     ?LOG_INFO("Worker timeout (module: ~p, event: ~p, protocol: ~p, message: ~p)", [
                         ?MODULE, timeout, udp, DecodedMessage
                     ]),
-                    folsom_metrics:notify({worker_timeout_counter, {inc, 1}}),
-                    folsom_metrics:notify({worker_timeout_meter, 1}),
+                    telemetry:execute([erldns, worker, timeout], #{count => 1}, #{}),
                     handle_timeout(WorkerProcessSup, WorkerProcessId);
                 Error:Reason ->
                     ?LOG_ERROR(
