@@ -23,15 +23,15 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: '27.x'
-          rebar3-version: '3.x'
+          otp-version: '27'
+          rebar3-version: '3.24'
 
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/rebar3
             _build
-          key: ${{ runner.os }}-erlang-${{ matrix.otp_version }}-${{ hashFiles('**/*rebar.lock') }}
+          key: ${{ runner.os }}-erlang-${{ steps.setup-beam.outputs.otp-version }}-rebar3-${{ steps.setup-beam.outputs.rebar3-version }}-hash-${{hashFiles('rebar.lock')}}-${{hashFiles('rebar.config')}}
 
       - name: Build
         run: make build
@@ -39,17 +39,12 @@ jobs:
       - name: Update dependencies
         id: update-deps
         run: |
-          _update_output="$(TERM=dumb rebar3 update-deps --replace)"
-
-          cat <<EOF > /tmp/pr-body.md
-          Output of running \`rebar3 update-deps\`:
-
-          \`\`\`
-          $_update_output
-          \`\`\`
-          EOF
-
+          echo "Output of running \`rebar3 update-deps\`:" > /tmp/pr-body.md
+          echo "\`\`\`" > /tmp/pr-body.md
+          rebar3 update-deps --replace >> /tmp/pr-body.md
+          rebar3 upgrade --all >> /tmp/pr-body.md
           rebar3 fmt --write
+          echo "\`\`\`" > /tmp/pr-body.md
 
       # We can always run this step because the action will exit silently if there are no changes.
       # See: https://github.com/marketplace/actions/create-pull-request#action-behaviour
@@ -60,6 +55,8 @@ jobs:
           # the same branch if there are new changes.
           branch: "automatic-dependencies-update"
           commit-message: "Update dependencies"
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           title: "Update dependencies"
           body-path: /tmp/pr-body.md
           labels: "dependencies,task"
