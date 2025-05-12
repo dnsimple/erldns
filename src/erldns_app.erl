@@ -73,13 +73,11 @@ stop(_State) ->
     ok.
 
 setup_metrics() ->
-    %% Bound is the number of buckets needed to measure up to 1h in microseconds with 1% error
-    prometheus_quantile_summary:declare([
-        {name, dns_request_duration_microseconds},
+    %% Buckets are what is needed to measure up to 1d in microseconds with 1% error
+    prometheus_histogram:declare([
+        {name, erldns_request_duration_microseconds},
         {labels, [transport, dnssec]},
-        {quantiles, [0.5, 0.75, 0.95, 0.99, 1.0]},
-        {error, 0.01},
-        {bound, 1101},
+        {buckets, {ddsketch, 0.01, 1260}},
         {help, "DNS request duration in microseconds"}
     ]),
 

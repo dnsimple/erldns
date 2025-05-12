@@ -108,7 +108,7 @@ measure_time(Message, Transport, TS0) ->
     TS1 = erlang:monotonic_time(),
     DnsSec = proplists:get_bool(dnssec, erldns_edns:get_opts(Message)),
     Labels = [Transport, DnsSec],
-    prometheus_quantile_summary:observe(dns_request_duration_microseconds, Labels, TS1 - TS0).
+    prometheus_histogram:observe(erldns_request_duration_microseconds, Labels, TS1 - TS0).
 
 %% Determine the max payload size by looking for additional
 %% options passed by the client.
