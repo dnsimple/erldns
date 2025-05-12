@@ -16,7 +16,7 @@
 %% for encoding zones from their Erlang representation to JSON.
 -module(erldns_zone_encoder).
 
--behavior(gen_server).
+-behaviour(gen_server).
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").

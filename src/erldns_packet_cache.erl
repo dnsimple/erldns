@@ -18,7 +18,7 @@
 %% The cache is swept for old cache data at regular intervals.
 -module(erldns_packet_cache).
 
--behavior(gen_server).
+-behaviour(gen_server).
 
 % API
 -export([

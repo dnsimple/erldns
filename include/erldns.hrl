@@ -18,15 +18,38 @@
     records = [] :: [dns:rr()] | trimmed,
     %% records_by_name is deprecated
     records_by_name :: #{binary() => [dns:rr()]} | trimmed,
-    %% records_by_type is no longer in use, but cannot (easily) be deleted due to Mnesia schema evolution
+    %% records_by_type is no longer in use,
+    %% but cannot (easily) be deleted due to Mnesia schema evolution
     %% We cannot set it to undefined, because, again, when fetched from Mnesia, it may be set
     records_by_type :: term(),
     keysets :: [erldns:keyset()]
 }).
--record(authorities, {owner_name, ttl, class, name_server, email_addr, serial_num, refresh, retry, expiry, nxdomain}).
--record(zone_records, {zone_name, fqdn, records}).
--record(zone_records_typed, {zone_name, fqdn, type, records}).
--record(sync_counters, {counter :: integer()}).
+-record(authorities, {
+    owner_name,
+    ttl,
+    class,
+    name_server,
+    email_addr,
+    serial_num,
+    refresh,
+    retry,
+    expiry,
+    nxdomain
+}).
+-record(zone_records, {
+    zone_name,
+    fqdn,
+    records
+}).
+-record(zone_records_typed, {
+    zone_name,
+    fqdn,
+    type,
+    records
+}).
+-record(sync_counters, {
+    counter :: integer()
+}).
 
 -define(DNSKEY_ZSK_TYPE, 256).
 -define(DNSKEY_KSK_TYPE, 257).

@@ -19,7 +19,7 @@ The module that handles the resolution of a single DNS question.
 The meat of the resolution occurs in erldns_resolver:resolve/3
 """.
 
--behavior(gen_server).
+-behaviour(gen_server).
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -122,7 +122,7 @@ handle_message(Message, Host) ->
     case erldns_packet_cache:get({Message#dns_message.questions, Message#dns_message.additional}, Host) of
         {ok, CachedResponse} ->
             CachedResponse#dns_message{id = Message#dns_message.id};
-        {error, Reason} ->
+        {error, _Reason} ->
             % SOA lookup
             handle_packet_cache_miss(Message, get_authority(Message), Host)
     end.
@@ -162,7 +162,13 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
                     maybe_cache_packet(Response, Response#dns_message.aa)
             catch
                 Class:Reason:Stacktrace ->
-                    ?LOG_ERROR(#{what => resolve_error, dns_message => Message, class => Class, reason => Reason, stacktrace => Stacktrace}),
+                    ?LOG_ERROR(#{
+                        what => resolve_error,
+                        dns_message => Message,
+                        class => Class,
+                        reason => Reason,
+                        stacktrace => Stacktrace
+                    }),
                     folsom_metrics:notify({erldns_handler_error_counter, {inc, 1}}),
                     folsom_metrics:notify({erldns_handler_error_meter, 1}),
                     RCode =

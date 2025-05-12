@@ -278,7 +278,8 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
             % There are no exact type matches and no referrals, return NOERROR with the authority set
             Message#dns_message{aa = true, authority = Zone#zone.authority};
         {[], _} ->
-            % There were no exact type matches, but there were other name matches and there are NS records, so this is an exact match referral
+            % There were no exact type matches, but there were other name matches and there are NS records,
+            % so this is an exact match referral
             resolve_exact_match_referral(Message, Qtype, MatchedRecords, ReferralRecords, AuthorityRecords);
         _ ->
             % There were exact matches of name and type.
@@ -327,7 +328,8 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
             SoaRecord = lists:last(Zone#zone.authority),
             case SoaRecord#dns_rr.name =:= NSRecord#dns_rr.name of
                 true ->
-                    % The SOA record name matches the NS record name, we are at the apex, NOERROR and append the matched records to the answers
+                    % The SOA record name matches the NS record name, we are at the apex,
+                    % NOERROR and append the matched records to the answers
                     Message#dns_message{
                         aa = true,
                         rc = ?DNS_RCODE_NOERROR,
@@ -718,7 +720,8 @@ best_match(Qname, Zone, Labels, []) ->
 best_match(_Qname, _Zone, _Labels, WildcardMatches) ->
     WildcardMatches.
 
-% Find the best match records for the given Qname in the given zone. This will looking for both exact and wildcard matches AT the QNAME label count
+% Find the best match records for the given Qname in the given zone.
+% This will looking for both exact and wildcard matches AT the QNAME label count
 % without attempting to walk down to the root.
 -spec best_match_at_node(dns:dname()) -> [dns:rr()].
 best_match_at_node(Qname) ->
@@ -822,7 +825,7 @@ requires_additional_processing([], Acc) ->
 
 %% @doc Return true if DNSSEC is requested and enabled.
 -spec check_dnssec(Message :: dns:message(), Host :: dns:ip(), Question :: dns:query()) -> boolean().
-check_dnssec(Message, Host, Question) ->
+check_dnssec(Message, _Host, _Question) ->
     case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
         true ->
             folsom_metrics:notify(dnssec_request_counter, {inc, 1}),

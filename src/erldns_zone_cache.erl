@@ -19,7 +19,7 @@
 %% underlying data store, depending on performance requirements.
 -module(erldns_zone_cache).
 
--behavior(gen_server).
+-behaviour(gen_server).
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").

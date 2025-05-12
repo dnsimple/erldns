@@ -17,7 +17,7 @@
 %% servers are running.
 -module(erldns_server_sup).
 
--behavior(supervisor).
+-behaviour(supervisor).
 
 % API
 -export([start_link/0]).

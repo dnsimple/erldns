@@ -15,7 +15,7 @@
 %% @doc Process for parsing zone data from JSON to Erlang representations.
 -module(erldns_zone_parser).
 
--behavior(gen_server).
+-behaviour(gen_server).
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
