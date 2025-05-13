@@ -6,8 +6,6 @@
 -include_lib("erldns/include/erldns.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--define(TEST_MODULE, erldns_storage).
-
 zone_meta_to_json_with_valid_zone_test() ->
     {ok, Pid} = erldns_zone_parser:start_link(),
     erldns_storage:create(zones),

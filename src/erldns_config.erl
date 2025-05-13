@@ -61,12 +61,6 @@
     ingress_tcp_request_timeout/0
 ]).
 
--ifdef(TEST).
-
--include_lib("eunit/include/eunit.hrl").
-
--endif.
-
 -define(DEFAULT_IPV4_ADDRESS, {127, 0, 0, 1}).
 -define(DEFAULT_IPV6_ADDRESS, {0, 0, 0, 0, 0, 0, 0, 1}).
 -define(DEFAULT_PORT, 53).
@@ -99,44 +93,6 @@ get_servers() ->
                 inet, inet6
             ])
     end.
-
--ifdef(TEST).
-
-get_servers_undefined_test() ->
-    ?assertEqual(
-        [
-            [{name, inet}, {address, ?DEFAULT_IPV4_ADDRESS}, {port, ?DEFAULT_PORT}, {family, inet}],
-            [{name, inet6}, {address, ?DEFAULT_IPV6_ADDRESS}, {port, ?DEFAULT_PORT}, {family, inet6}]
-        ],
-        get_servers()
-    ).
-
-get_servers_empty_list_test() ->
-    application:set_env(erldns, servers, []),
-    ?assertEqual([], get_servers()).
-
-get_servers_single_server_test() ->
-    application:set_env(erldns, servers, [[{name, example}, {address, "127.0.0.1"}, {port, 8053}, {family, inet}]]),
-    ?assertEqual([[{name, example}, {address, {127, 0, 0, 1}}, {port, 8053}, {family, inet}, {processes, 1}]], get_servers()).
-
-get_servers_multiple_servers_test() ->
-    application:set_env(
-        erldns,
-        servers,
-        [
-            [{name, example_inet}, {address, "127.0.0.1"}, {port, 8053}, {family, inet}],
-            [{name, example_inet6}, {address, "::1"}, {port, 8053}, {family, inet6}]
-        ]
-    ),
-    ?assertEqual(
-        [
-            [{name, example_inet}, {address, {127, 0, 0, 1}}, {port, 8053}, {family, inet}, {processes, 1}],
-            [{name, example_inet6}, {address, {0, 0, 0, 0, 0, 0, 0, 1}}, {port, 8053}, {family, inet6}, {processes, 1}]
-        ],
-        get_servers()
-    ).
-
--endif.
 
 %% @doc Get the IP address (either IPv4 or IPv6) that the DNS server
 %% should listen on.

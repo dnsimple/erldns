@@ -21,12 +21,6 @@
 
 -define(FILENAME, "zones.json").
 
--ifdef(TEST).
-
--include_lib("eunit/include/eunit.hrl").
-
--endif.
-
 % Public API
 
 %% @doc Load zones from a file. The default file name is "zones.json".

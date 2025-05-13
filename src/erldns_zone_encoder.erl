@@ -54,7 +54,7 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %% @doc Encode a Zone meta data into JSON.
--spec zone_meta_to_json(#zone{}) -> binary().
+-spec zone_meta_to_json(erldns:zone()) -> binary().
 zone_meta_to_json(Zone) ->
     json_encode_kw_list([
         {<<"erldns">>, [
@@ -68,7 +68,7 @@ zone_meta_to_json(Zone) ->
     ]).
 
 %% @doc Encode a Zone meta data plus all of its records into JSON.
--spec zone_to_json(#zone{}) -> binary().
+-spec zone_to_json(erldns:zone()) -> binary().
 zone_to_json(Zone) ->
     gen_server:call(?SERVER, {encode_zone, Zone}).
 
