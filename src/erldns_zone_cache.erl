@@ -19,7 +19,7 @@
 %% underlying data store, depending on performance requirements.
 -module(erldns_zone_cache).
 
--behavior(gen_server).
+-behaviour(gen_server).
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -66,6 +66,8 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {parsers, tref = none}).
+-opaque state() :: #state{}.
+-export_type([state/0]).
 
 %% @doc Start the zone cache process.
 -spec start_link() -> any().
@@ -76,13 +78,13 @@ start_link() ->
 % Read API
 
 %% @doc Find a zone for a given qname.
--spec find_zone(dns:dname()) -> #zone{} | {error, zone_not_found} | {error, not_authoritative}.
+-spec find_zone(dns:dname()) -> erldns:zone() | {error, zone_not_found} | {error, not_authoritative}.
 find_zone(Qname) ->
     find_zone(erldns:normalize_name(Qname), get_authority(Qname)).
 
 %% @doc Find a zone for a given qname.
 -spec find_zone(dns:dname(), {error, any()} | {ok, dns:rr()} | [dns:rr()] | dns:rr()) ->
-    #zone{} | {error, zone_not_found} | {error, not_authoritative}.
+    erldns:zone() | {error, zone_not_found} | {error, not_authoritative}.
 find_zone(Qname, {error, _}) ->
     find_zone(Qname, []);
 find_zone(Qname, {ok, Authority}) ->
@@ -112,7 +114,7 @@ find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
 
 %% @doc Get a zone for the specific name. This function will not attempt to resolve
 %% the dname in any way, it will simply look up the name in the underlying data store.
--spec get_zone(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
+-spec get_zone(dns:dname()) -> {ok, erldns:zone()} | {error, zone_not_found}.
 get_zone(Name) ->
     NormalizedName = erldns:normalize_name(Name),
     case erldns_storage:select(zones, NormalizedName) of
@@ -129,7 +131,7 @@ get_zone(Name) ->
 %% @doc Get a zone for the specific name, including the records for the zone.
 %% @deprecated Use {@link erldns_zone_cache:get_zone/1} to get the zone meta data and
 %% {@link erldns_zone_cache:get_zone_records/1} to get the records for the zone.
--spec get_zone_with_records(dns:dname()) -> {ok, #zone{}} | {error, zone_not_found}.
+-spec get_zone_with_records(dns:dname()) -> {ok, erldns:zone()} | {error, zone_not_found}.
 get_zone_with_records(Name) ->
     NormalizedName = erldns:normalize_name(Name),
     case erldns_storage:select(zones, NormalizedName) of
@@ -463,7 +465,7 @@ filter_rrsig_records_with_type_covered(RRFqdn, TypeCovered) ->
 % Gen server init
 
 %% @doc Initialize the zone cache.
--spec init([]) -> {ok, #state{}}.
+-spec init([]) -> {ok, state()}.
 init([]) ->
     erldns_storage:create(schema),
     erldns_storage:create(zones),
@@ -565,7 +567,7 @@ build_zone(Qname, Version, Records, Keys) ->
         keysets = Keys
     }.
 
--spec build_named_index([#dns_rr{}]) -> #{binary() => [#dns_rr{}]}.
+-spec build_named_index([dns:rr()]) -> #{binary() => [dns:rr()]}.
 build_named_index(Records) ->
     NamedIndex =
         lists:foldl(
@@ -578,7 +580,7 @@ build_named_index(Records) ->
         ),
     maps:map(fun(_K, V) -> lists:reverse(V) end, NamedIndex).
 
--spec build_typed_index([#dns_rr{}]) -> #{dns:type() => [#dns_rr{}]}.
+-spec build_typed_index([dns:rr()]) -> #{dns:type() => [dns:rr()]}.
 build_typed_index(Records) ->
     TypedIndex = lists:foldl(fun(R, Idx) -> maps:update_with(R#dns_rr.type, fun(RR) -> [R | RR] end, [R], Idx) end, #{}, Records),
     maps:map(fun(_K, V) -> lists:reverse(V) end, TypedIndex).

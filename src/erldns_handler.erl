@@ -26,7 +26,7 @@ Emits the following telemetry events:
 - `[erldns, handler, emtpy]`
 """.
 
--behavior(gen_server).
+-behaviour(gen_server).
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -51,10 +51,10 @@ Emits the following telemetry events:
 -record(handlers_state, {
     handlers = [] :: [versioned_handler()]
 }).
--type state() :: #handlers_state{}.
+-opaque state() :: #handlers_state{}.
 -type versioned_handler() :: {module(), [dns:type()], integer()}.
 -type handler() :: {module(), [dns:type()]}.
--export_type([versioned_handler/0, handler/0]).
+-export_type([state/0, versioned_handler/0, handler/0]).
 
 -doc "Start the handler registry process".
 -spec start_link() -> gen_server:start_ret().
@@ -129,7 +129,7 @@ handle_message(Message, Host) ->
     case erldns_packet_cache:get({Message#dns_message.questions, Message#dns_message.additional}, Host) of
         {ok, CachedResponse} ->
             CachedResponse#dns_message{id = Message#dns_message.id};
-        {error, Reason} ->
+        {error, _Reason} ->
             % SOA lookup
             handle_packet_cache_miss(Message, get_authority(Message), Host)
     end.
@@ -169,7 +169,13 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
                     maybe_cache_packet(Response, Response#dns_message.aa)
             catch
                 Class:Reason:Stacktrace ->
-                    ?LOG_ERROR(#{what => resolve_error, dns_message => Message, class => Class, reason => Reason, stacktrace => Stacktrace}),
+                    ?LOG_ERROR(#{
+                        what => resolve_error,
+                        dns_message => Message,
+                        class => Class,
+                        reason => Reason,
+                        stacktrace => Stacktrace
+                    }),
                     telemetry:execute([erldns, handler, error], #{count => 1}, #{}),
                     RCode =
                         case Reason of

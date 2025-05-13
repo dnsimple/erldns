@@ -23,7 +23,7 @@ Emits the following telemetry events:
 
 -include_lib("kernel/include/logger.hrl").
 
--behavior(gen_server).
+-behaviour(gen_server).
 
 % API
 -export([

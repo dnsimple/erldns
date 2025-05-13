@@ -20,6 +20,7 @@ clean:
 .PHONY: test
 test:
 	rebar3 fmt --check
+	rebar3 lint
 	rebar3 xref
 	rebar3 dialyzer
 	rebar3 ex_doc

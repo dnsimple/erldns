@@ -301,7 +301,7 @@ empty_table(Table) ->
     end.
 
 %% @doc Lists the contents of the given table.
--spec list_table(atom()) -> [] | [#zone{}] | [#authorities{}] | [tuple()] | {error, doesnt_exist}.
+-spec list_table(atom()) -> [] | [erldns:zone()] | [erldns:authorities()] | [tuple()] | {error, doesnt_exist}.
 list_table(zones) ->
     Pattern =
         #zone{

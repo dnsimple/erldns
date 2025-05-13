@@ -76,17 +76,14 @@ handle_call({process, DecodedMessage, Socket, Port, {udp, Host}, TS0}, _From, St
     DestHost = ?DEST_HOST(Host),
 
     Result = erldns_encoder:encode_message(Response, [{max_size, max_payload_size(Response)}]),
-    case Result of
-        {false, EncodedResponse} ->
-            % ?LOG_DEBUG("Sending encoded response to ~p", [DestHost]),
-            gen_udp:send(Socket, DestHost, Port, EncodedResponse);
-        {true, EncodedResponse, Message} when is_record(Message, dns_message) ->
-            gen_udp:send(Socket, DestHost, Port, EncodedResponse);
-        {false, EncodedResponse, _TsigMac} ->
-            gen_udp:send(Socket, DestHost, Port, EncodedResponse);
-        {true, EncodedResponse, _TsigMac, _Message} ->
-            gen_udp:send(Socket, DestHost, Port, EncodedResponse)
-    end,
+    EncodedResponse =
+        case Result of
+            {false, Enc} -> Enc;
+            {true, Enc, Message} when is_record(Message, dns_message) -> Enc;
+            {false, Enc, _TsigMac} -> Enc;
+            {true, Enc, _TsigMac, _Message} -> Enc
+        end,
+    gen_udp:send(Socket, DestHost, Port, EncodedResponse),
     measure_time(DecodedMessage, EncodedResponse, udp, TS0),
     {reply, ok, State}.
 

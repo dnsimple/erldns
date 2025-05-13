@@ -25,7 +25,7 @@ Emits the following telemetry events:
 - `[erldns, cache, hit]`
 """.
 
--behavior(gen_server).
+-behaviour(gen_server).
 
 % API
 -export([
@@ -50,6 +50,8 @@ Emits the following telemetry events:
 -define(SERVER, ?MODULE).
 
 -record(state, {ttl :: non_neg_integer(), ttl_overrides :: [{binary(), non_neg_integer()}], tref :: timer:tref()}).
+-opaque state() :: #state{}.
+-export_type([state/0]).
 
 % Public API
 
@@ -108,7 +110,7 @@ stop() ->
     gen_server:call(?SERVER, stop).
 
 %% Gen server hooks
--spec init([non_neg_integer()]) -> {ok, #state{}}.
+-spec init([non_neg_integer()]) -> {ok, state()}.
 init([]) ->
     init([erldns_config:packet_cache_default_ttl()]);
 init([TTL]) ->
