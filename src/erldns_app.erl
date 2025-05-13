@@ -17,7 +17,7 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--behavior(application).
+-behaviour(application).
 
 % Application hooks
 -export([

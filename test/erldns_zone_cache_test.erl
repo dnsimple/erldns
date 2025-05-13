@@ -9,8 +9,6 @@
 -include_lib("erldns/include/erldns.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--define(TEST_MODULE, erldns_zone_cache).
-
 setup_cache() ->
     logger:set_application_level(erldns, debug),
     meck:new(folsom_metrics),

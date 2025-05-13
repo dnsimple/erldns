@@ -22,10 +22,12 @@
 
 -export_type([
     keyset/0,
+    authorities/0,
     zone/0
 ]).
 
 -type keyset() :: #keyset{}.
+-type authorities() :: #authorities{}.
 -type zone() :: #zone{}.
 
 -spec start() -> any().

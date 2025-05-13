@@ -16,7 +16,7 @@
 %% that is attached to an erldns_worker.
 -module(erldns_worker_process_sup).
 
--behavior(supervisor).
+-behaviour(supervisor).
 
 -export([start_link/1]).
 -export([init/1]).

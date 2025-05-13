@@ -17,10 +17,6 @@
 
 -include_lib("dns_erlang/include/dns.hrl").
 
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
 -include("erldns.hrl").
 
 -export([json_record_to_erlang/1]).
@@ -43,21 +39,3 @@ json_record_to_erlang([Name, <<"SAMPLE">>, Ttl, Data, _Context]) ->
     };
 json_record_to_erlang(_) ->
     {}.
-
--ifdef(TEST).
-
-json_record_to_erlang_with_map_test() ->
-    Record = json_record_to_erlang([<<"example.com">>, <<"SAMPLE">>, 60, #{<<"dname">> => <<"example.net">>}, undefined]),
-    ?assertEqual(<<"example.com">>, Record#dns_rr.name),
-    ?assertEqual(40000, Record#dns_rr.type),
-    ?assertEqual(60, Record#dns_rr.ttl),
-    ?assertEqual(<<"example.net">>, Record#dns_rr.data).
-
-json_record_to_erlang_with_proplist_test() ->
-    Record = json_record_to_erlang([<<"example.com">>, <<"SAMPLE">>, 60, [{<<"dname">>, <<"example.net">>}], undefined]),
-    ?assertEqual(<<"example.com">>, Record#dns_rr.name),
-    ?assertEqual(40000, Record#dns_rr.type),
-    ?assertEqual(60, Record#dns_rr.ttl),
-    ?assertEqual(<<"example.net">>, Record#dns_rr.data).
-
--endif.

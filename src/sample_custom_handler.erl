@@ -19,7 +19,7 @@
 
 -include("erldns.hrl").
 
--behavior(gen_server).
+-behaviour(gen_server).
 
 -export([
     start_link/0,

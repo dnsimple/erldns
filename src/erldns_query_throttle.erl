@@ -17,7 +17,7 @@
 %% This throttling is useful for stopping DNS reflection/amplification attacks.
 -module(erldns_query_throttle).
 
--behavior(gen_server).
+-behaviour(gen_server).
 
 -include_lib("dns_erlang/include/dns_records.hrl").
 

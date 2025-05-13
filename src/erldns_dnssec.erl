@@ -87,10 +87,10 @@ maybe_sign_rrset(Message, Records, Zone) ->
 %% @doc Apply DNSSEC records to the given message if the zone is signed
 %% and DNSSEC is requested.
 -spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type()) -> dns:message().
-handle(Message, Zone, Qname, Qtype) ->
+handle(Message, Zone, Qname, QType) ->
     HasKeySets = [] =/= Zone#zone.keysets,
     RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Message)),
-    handle(Message, Zone, Qname, Qtype, HasKeySets, RequestDnssec).
+    handle(Message, Zone, Qname, QType, HasKeySets, RequestDnssec).
 
 %%% Internal functions
 -spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type(), boolean(), boolean()) -> dns:message().
@@ -102,7 +102,7 @@ handle(Msg, _, _, ?DNS_TYPE_NXNAME, _, true) ->
 handle(Msg, _, _, _, false, true) ->
     % DNSSEC requested, zone unsigned, nothing to do
     Msg;
-handle(#dns_message{answers = []} = Msg, Zone, Qname, Qtype, true, true) ->
+handle(#dns_message{answers = []} = Msg, Zone, Qname, QType, true, true) ->
     % No answers found, return NSEC.
     Authority = lists:last(Zone#zone.authority),
     Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
@@ -112,7 +112,7 @@ handle(#dns_message{answers = []} = Msg, Zone, Qname, Qtype, true, true) ->
     NameToNormalise = dns:labels_to_dname([?NEXT_DNAME_PART | dns:dname_to_labels(Qname)]),
     NextDname = erldns:normalize_name(NameToNormalise),
     RecordTypesForQname = record_types_for_name(Qname, Zone),
-    NsecRrTypes = map_nsec_rr_types(Qtype, RecordTypesForQname),
+    NsecRrTypes = map_nsec_rr_types(QType, RecordTypesForQname),
     NsecRecords =
         [
             #dns_rr{

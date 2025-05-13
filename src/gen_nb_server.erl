@@ -20,8 +20,6 @@
 
 -module(gen_nb_server).
 
--author('kevin@hypotheticalabs.com').
-
 -behaviour(gen_server).
 
 %% API
@@ -38,7 +36,11 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {cb, sock, server_state}).
+-record(state, {
+    cb :: module(),
+    sock :: gen_tcp:socket(),
+    server_state :: term()
+}).
 
 -type state() :: term().
 
