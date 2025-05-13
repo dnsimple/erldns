@@ -673,30 +673,29 @@ wildcard_match(Labels) ->
 
 %% Call all registered handlers.
 -spec call_handlers(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> fun(({module(), [dns:type()], integer()}) -> [dns:rr()]).
+call_handlers(Qname, ?DNS_TYPE_ANY, Records, Message) ->
+    fun
+        ({Module, _, 1}) ->
+            Module:handle(Qname, ?DNS_TYPE_ANY, Records);
+        ({Module, _, 2}) ->
+            Module:handle(Qname, ?DNS_TYPE_ANY, Records, Message)
+    end;
 call_handlers(Qname, Qtype, Records, Message) ->
-    fun({Module, Types, Version}) ->
-        case Version of
-            1 ->
-                case lists:member(Qtype, Types) of
-                    true ->
-                        Module:handle(Qname, Qtype, Records);
-                    false ->
-                        case Qtype =:= ?DNS_TYPE_ANY of
-                            true -> Module:handle(Qname, Qtype, Records);
-                            false -> []
-                        end
-                end;
-            2 ->
-                case lists:member(Qtype, Types) of
-                    true ->
-                        Module:handle(Qname, Qtype, Records, Message);
-                    false ->
-                        case Qtype =:= ?DNS_TYPE_ANY of
-                            true -> Module:handle(Qname, Qtype, Records, Message);
-                            false -> []
-                        end
-                end
-        end
+    fun
+        ({Module, Types, 1}) ->
+            case lists:member(Qtype, Types) of
+                true ->
+                    Module:handle(Qname, Qtype, Records);
+                false ->
+                    []
+            end;
+        ({Module, Types, 2}) ->
+            case lists:member(Qtype, Types) of
+                true ->
+                    Module:handle(Qname, Qtype, Records, Message);
+                false ->
+                    []
+            end
     end.
 
 % Filter records through registered handlers.
@@ -827,14 +826,14 @@ resolve_authoritative_zone_cut_test() ->
     erldns_zone_cache:start_link(),
     erldns_handler:start_link(),
     Qname = <<"delegated.example.com">>,
-    NsRecords = [#dns_rr{name = Qname, type = ?DNS_TYPE_NS}],
+    NSRecord = [#dns_rr{name = Qname, type = ?DNS_TYPE_NS}],
     Z = #zone{name = ZoneName = <<"example.com">>, authority = Authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_SOA}]},
     Q = #dns_message{questions = [#dns_query{name = Qname, type = Qtype = ?DNS_TYPE_A}]},
-    erldns_zone_cache:put_zone({ZoneName, <<"_">>, Authority ++ NsRecords}),
+    erldns_zone_cache:put_zone({ZoneName, <<"_">>, Authority ++ NSRecord}),
     A = erldns_resolver:resolve_authoritative(Q, Qname, Qtype, Z, {}, []),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
-    ?assertEqual(NsRecords, A#dns_message.authority),
+    ?assertEqual(NSRecord, A#dns_message.authority),
     ?assertEqual([], A#dns_message.answers),
     erldns_zone_cache:delete_zone(ZoneName).
 
@@ -850,14 +849,14 @@ resolve_authoritative_zone_cut_with_cnames_test() ->
                 data = #dns_rrdata_cname{dname = <<"delegated-ns.example.com">>}
             }
         ],
-    NsRecords = [#dns_rr{name = <<"delegated-ns.example.com">>, type = ?DNS_TYPE_NS}],
+    NSRecord = [#dns_rr{name = <<"delegated-ns.example.com">>, type = ?DNS_TYPE_NS}],
     Z = #zone{name = ZoneName = <<"example.com">>, authority = Authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_SOA}]},
     Q = #dns_message{questions = [#dns_query{name = Qname, type = Qtype = ?DNS_TYPE_A}]},
-    erldns_zone_cache:put_zone({ZoneName, <<"_">>, Authority ++ NsRecords ++ CnameRecords}),
+    erldns_zone_cache:put_zone({ZoneName, <<"_">>, Authority ++ NSRecord ++ CnameRecords}),
     A = erldns_resolver:resolve_authoritative(Q, Qname, Qtype, Z, {}, _CnameChain = []),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
-    ?assertEqual(NsRecords, A#dns_message.authority),
+    ?assertEqual(NSRecord, A#dns_message.authority),
     ?assertEqual(CnameRecords, A#dns_message.answers),
     erldns_zone_cache:delete_zone(ZoneName).
 -endif.

@@ -44,10 +44,10 @@ The meat of the resolution occurs in erldns_resolver:resolve/3
 -record(handlers_state, {
     handlers = [] :: [versioned_handler()]
 }).
--type state() :: #handlers_state{}.
+-opaque state() :: #handlers_state{}.
 -type versioned_handler() :: {module(), [dns:type()], integer()}.
 -type handler() :: {module(), [dns:type()]}.
--export_type([versioned_handler/0, handler/0]).
+-export_type([state/0, versioned_handler/0, handler/0]).
 
 -doc "Start the handler registry process".
 -spec start_link() -> gen_server:start_ret().

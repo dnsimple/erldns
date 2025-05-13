@@ -66,7 +66,8 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {parsers, tref = none}).
--type state() :: #state{}.
+-opaque state() :: #state{}.
+-export_type([state/0]).
 
 %% @doc Start the zone cache process.
 -spec start_link() -> any().

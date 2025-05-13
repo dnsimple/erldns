@@ -258,10 +258,10 @@ encode_data({dns_rrdata_srv, Priority, Weight, Port, Dname}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s.", [Priority, Weight, Port, Dname]));
 encode_data({dns_rrdata_naptr, Order, Preference, Flags, Services, Regexp, Replacements}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~w ~s ~s ~s ~s", [Order, Preference, Flags, Services, Regexp, Replacements]));
-encode_data({dns_rrdata_ds, Keytag, Alg, DigestType, Digest}) ->
-    erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s", [Keytag, Alg, DigestType, Digest]));
-encode_data({dns_rrdata_cds, Keytag, Alg, DigestType, Digest}) ->
-    erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s", [Keytag, Alg, DigestType, Digest]));
+encode_data({dns_rrdata_ds, KeyTag, Alg, DigestType, Digest}) ->
+    erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest]));
+encode_data({dns_rrdata_cds, KeyTag, Alg, DigestType, Digest}) ->
+    erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest]));
 encode_data({dns_rrdata_dnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
     binary:encode_hex(erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])));
 encode_data({dns_rrdata_cdnskey, Flags, Protocol, Alg, Key, KeyTag}) ->

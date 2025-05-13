@@ -39,4 +39,3 @@ json_record_to_erlang([Name, <<"SAMPLE">>, Ttl, Data, _Context]) ->
     };
 json_record_to_erlang(_) ->
     {}.
-

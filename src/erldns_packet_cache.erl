@@ -43,7 +43,8 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {ttl :: non_neg_integer(), ttl_overrides :: [{binary(), non_neg_integer()}], tref :: timer:tref()}).
--type state() :: #state{}.
+-opaque state() :: #state{}.
+-export_type([state/0]).
 
 % Public API
 

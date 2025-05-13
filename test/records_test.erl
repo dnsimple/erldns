@@ -16,7 +16,9 @@ minimum_soa_ttl_test_() ->
 replace_name_test_() ->
     [
         ?_assertEqual([], lists:map(erldns_records:replace_name(<<"example">>), [])),
-        ?_assertMatch([#dns_rr{name = <<"example">>}], lists:map(erldns_records:replace_name(<<"example">>), [#dns_rr{name = <<"test.com">>}]))
+        ?_assertMatch(
+            [#dns_rr{name = <<"example">>}], lists:map(erldns_records:replace_name(<<"example">>), [#dns_rr{name = <<"test.com">>}])
+        )
     ].
 
 match_name_test_() ->
@@ -46,8 +48,16 @@ match_wildcard_test_() ->
 
 match_delegation_test_() ->
     [
-        ?_assert(lists:any(erldns_records:match_delegation(<<"ns1.example.com">>), [#dns_rr{data = #dns_rrdata_ns{dname = <<"ns1.example.com">>}}])),
-        ?_assertNot(lists:any(erldns_records:match_delegation(<<"ns1.example.com">>), [#dns_rr{data = #dns_rrdata_ns{dname = <<"ns2.example.com">>}}]))
+        ?_assert(
+            lists:any(erldns_records:match_delegation(<<"ns1.example.com">>), [
+                #dns_rr{data = #dns_rrdata_ns{dname = <<"ns1.example.com">>}}
+            ])
+        ),
+        ?_assertNot(
+            lists:any(erldns_records:match_delegation(<<"ns1.example.com">>), [
+                #dns_rr{data = #dns_rrdata_ns{dname = <<"ns2.example.com">>}}
+            ])
+        )
     ].
 
 match_wildcard_label_test_() ->
