@@ -109,20 +109,9 @@ erldns_zone_cache:put_zone({
 
 AXFR zone transfers are not currently implemented. The current "implementation" is just a stub.
 
-## Metrics
+## Instrumentation
 
-Folsom is used to gather runtime metrics and statistics.
-
-There is an HTTP API for querying metric data available, you can read more about it at `m:erldns_metrics`
-
-Here's an example script that shows how to get the output with `curl` and pass it through Python to format it in a pretty fashion. It assumes you have this API running on port `8082`.
-
-```bash
-curl -s http://localhost:8082/ -H "Accept: application/json" | python -mjson.tool
-```
-
-> [!IMPORTANT]
-> Timing stats are given in microseconds.
+[Telemetry](https://hex.pm/packages/telemetry) is used to instrument the code.
 
 ## Admin
 
