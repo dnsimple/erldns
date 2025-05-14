@@ -168,6 +168,15 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
                 Response ->
                     maybe_cache_packet(Response, Response#dns_message.aa)
             catch
+                throw:{error, rcode, ?DNS_RCODE_SERVFAIL} ->
+                    telemetry:execute([erldns, handler, error], #{count => 1}, #{}),
+                    Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL};
+                throw:{error, rcode, ?DNS_RCODE_NXDOMAIN} ->
+                    telemetry:execute([erldns, handler, error], #{count => 1}, #{}),
+                    Message#dns_message{aa = false, rc = ?DNS_RCODE_NXDOMAIN};
+                throw:{error, rcode, ?DNS_RCODE_REFUSED} ->
+                    telemetry:execute([erldns, handler, error], #{count => 1}, #{}),
+                    Message#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED};
                 Class:Reason:Stacktrace ->
                     ?LOG_ERROR(#{
                         what => resolve_error,
@@ -177,14 +186,7 @@ safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
                         stacktrace => Stacktrace
                     }),
                     telemetry:execute([erldns, handler, error], #{count => 1}, #{}),
-                    RCode =
-                        case Reason of
-                            {error, rcode, ?DNS_RCODE_SERVFAIL} -> ?DNS_RCODE_SERVFAIL;
-                            {error, rcode, ?DNS_RCODE_NXDOMAIN} -> ?DNS_RCODE_NXDOMAIN;
-                            {error, rcode, ?DNS_RCODE_REFUSED} -> ?DNS_RCODE_REFUSED;
-                            _ -> ?DNS_RCODE_SERVFAIL
-                        end,
-                    Message#dns_message{aa = false, rc = RCode}
+                    Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
             end
     end.
 
