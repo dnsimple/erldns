@@ -12,8 +12,13 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Worker module that processes a single DNS packet.
 -module(erldns_worker_process).
+-moduledoc """
+%% @doc Worker module that processes a single DNS packet.
+
+Emits the following telemetry events:
+- `[erldns, request, processed]`
+""".
 
 -include_lib("dns_erlang/include/dns.hrl").
 
@@ -53,16 +58,17 @@ init(_Args) ->
     {ok, #state{}}.
 
 % Process a TCP request. Does not truncate the response.
-handle_call({process, DecodedMessage, Socket, {tcp, Address}}, _From, State) ->
+handle_call({process, DecodedMessage, Socket, {tcp, Address}, TS0}, _From, State) ->
     % Uncomment this and the function implementation to simulate a timeout when
     % querying www.example.com with the test zones
     % simulate_timeout(DecodedMessage),
     Response = erldns_handler:handle(DecodedMessage, {tcp, Address}),
-    EncodedMessage = erldns_encoder:encode_message(Response),
-    send_tcp_message(Socket, EncodedMessage),
+    EncodedResponse = erldns_encoder:encode_message(Response),
+    send_tcp_message(Socket, EncodedResponse),
+    measure_time(DecodedMessage, EncodedResponse, tcp, TS0),
     {reply, ok, State};
 % Process a UDP request. May truncate the response.
-handle_call({process, DecodedMessage, Socket, Port, {udp, Host}}, _From, State) ->
+handle_call({process, DecodedMessage, Socket, Port, {udp, Host}, TS0}, _From, State) ->
     % Uncomment this and the function implementation to simulate a timeout when
     % querying www.example.com with the test zones
     % simulate_timeout(DecodedMessage),
@@ -70,17 +76,15 @@ handle_call({process, DecodedMessage, Socket, Port, {udp, Host}}, _From, State) 
     DestHost = ?DEST_HOST(Host),
 
     Result = erldns_encoder:encode_message(Response, [{max_size, max_payload_size(Response)}]),
-    case Result of
-        {false, EncodedMessage} ->
-            % ?LOG_DEBUG("Sending encoded response to ~p", [DestHost]),
-            gen_udp:send(Socket, DestHost, Port, EncodedMessage);
-        {true, EncodedMessage, Message} when is_record(Message, dns_message) ->
-            gen_udp:send(Socket, DestHost, Port, EncodedMessage);
-        {false, EncodedMessage, _TsigMac} ->
-            gen_udp:send(Socket, DestHost, Port, EncodedMessage);
-        {true, EncodedMessage, _TsigMac, _Message} ->
-            gen_udp:send(Socket, DestHost, Port, EncodedMessage)
-    end,
+    EncodedResponse =
+        case Result of
+            {false, Enc} -> Enc;
+            {true, Enc, Message} when is_record(Message, dns_message) -> Enc;
+            {false, Enc, _TsigMac} -> Enc;
+            {true, Enc, _TsigMac, _Message} -> Enc
+        end,
+    gen_udp:send(Socket, DestHost, Port, EncodedResponse),
+    measure_time(DecodedMessage, EncodedResponse, udp, TS0),
     {reply, ok, State}.
 
 handle_cast(_Msg, State) ->
@@ -97,10 +101,24 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Internal private functions
 
-send_tcp_message(Socket, EncodedMessage) ->
-    BinLength = byte_size(EncodedMessage),
-    TcpEncodedMessage = <<BinLength:16, EncodedMessage/binary>>,
+send_tcp_message(Socket, EncodedResponse) ->
+    BinLength = byte_size(EncodedResponse),
+    TcpEncodedMessage = <<BinLength:16, EncodedResponse/binary>>,
     gen_tcp:send(Socket, TcpEncodedMessage).
+
+measure_time(DecodedMessage, EncodedResponse, Protocol, TS0) ->
+    TS1 = erlang:monotonic_time(),
+    Measurements = #{
+        monotonic_time => TS1,
+        duration => TS1 - TS0,
+        response_size => byte_size(EncodedResponse)
+    },
+    DnsSec = proplists:get_bool(dnssec, erldns_edns:get_opts(DecodedMessage)),
+    Metadata = #{
+        protocol => Protocol,
+        dnssec => DnsSec
+    },
+    telemetry:execute([erldns, request, processed], Measurements, Metadata).
 
 %% Determine the max payload size by looking for additional
 %% options passed by the client.

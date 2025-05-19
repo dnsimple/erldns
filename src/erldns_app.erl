@@ -28,10 +28,8 @@
 
 start(_Type, _Args) ->
     ?LOG_INFO("Starting erldns application"),
-    setup_metrics(),
     nodefinder:multicast_start(),
     Ret = erldns_sup:start_link(),
-    erldns_metrics:maybe_start(),
     erldns_admin:maybe_start(),
     Ret.
 
@@ -71,43 +69,3 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
 stop(_State) ->
     ?LOG_INFO("Stop erldns application"),
     ok.
-
-setup_metrics() ->
-    folsom_metrics:new_counter(udp_request_counter),
-    folsom_metrics:new_counter(tcp_request_counter),
-    folsom_metrics:new_meter(udp_request_meter),
-    folsom_metrics:new_meter(tcp_request_meter),
-
-    folsom_metrics:new_meter(udp_error_meter),
-    folsom_metrics:new_meter(tcp_error_meter),
-    folsom_metrics:new_history(udp_error_history),
-    folsom_metrics:new_history(tcp_error_history),
-
-    folsom_metrics:new_meter(refused_response_meter),
-    folsom_metrics:new_counter(refused_response_counter),
-
-    folsom_metrics:new_meter(empty_response_meter),
-    folsom_metrics:new_counter(empty_response_counter),
-
-    folsom_metrics:new_histogram(udp_handoff_histogram),
-    folsom_metrics:new_histogram(tcp_handoff_histogram),
-
-    folsom_metrics:new_counter(request_throttled_counter),
-    folsom_metrics:new_meter(request_throttled_meter),
-    folsom_metrics:new_histogram(request_handled_histogram),
-
-    folsom_metrics:new_counter(packet_dropped_empty_queue_counter),
-    folsom_metrics:new_meter(packet_dropped_empty_queue_meter),
-
-    folsom_metrics:new_counter(worker_timeout_counter),
-    folsom_metrics:new_meter(worker_timeout_meter),
-
-    folsom_metrics:new_meter(cache_hit_meter),
-    folsom_metrics:new_meter(cache_expired_meter),
-    folsom_metrics:new_meter(cache_miss_meter),
-
-    folsom_metrics:new_counter(dnssec_request_counter),
-    folsom_metrics:new_meter(dnssec_request_meter),
-
-    folsom_metrics:new_counter(erldns_handler_error_counter),
-    folsom_metrics:new_meter(erldns_handler_error_meter).

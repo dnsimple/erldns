@@ -12,8 +12,14 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Handles DNS questions arriving via TCP.
 -module(erldns_tcp_server).
+-moduledoc """
+Handles DNS questions arriving via TCP.
+
+Emits the following telemetry events:
+- `[erldns, request, handoff]` (span)
+- `[erldns, request, packet_dropped_empty_queue]`
+""".
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -36,7 +42,7 @@
     code_change/3
 ]).
 % Internal API
--export([handle_request/3]).
+-export([handle_request/4]).
 
 -record(state, {port, workers}).
 
@@ -61,8 +67,10 @@ handle_cast(_Message, State) ->
     {noreply, State}.
 
 handle_info({tcp, Socket, Bin}, State) ->
-    Response = folsom_metrics:histogram_timed_update(tcp_handoff_histogram, ?MODULE, handle_request, [Socket, Bin, State]),
-    Response;
+    TS = erlang:monotonic_time(),
+    telemetry:span([erldns, request, handoff], #{protocol => tcp}, fun() ->
+        {?MODULE:handle_request(Socket, Bin, TS, State), #{}}
+    end);
 handle_info(_Message, State) ->
     {noreply, State}.
 
@@ -79,14 +87,13 @@ new_connection(Socket, State) ->
 code_change(_PreviousVersion, State, _Extra) ->
     {ok, State}.
 
-handle_request(Socket, Bin, State) ->
+handle_request(Socket, Bin, TS, State) ->
     case queue:out(State#state.workers) of
         {{value, Worker}, Queue} ->
-            gen_server:cast(Worker, {tcp_query, Socket, Bin}),
+            gen_server:cast(Worker, {tcp_query, Socket, Bin, TS}),
             {noreply, State#state{workers = queue:in(Worker, Queue)}};
         {empty, _Queue} ->
-            folsom_metrics:notify({packet_dropped_empty_queue_counter, {inc, 1}}),
-            folsom_metrics:notify({packet_dropped_empty_queue_meter, 1}),
+            telemetry:execute([erldns, request, packet_dropped_empty_queue], #{count => 1}, #{protocol => tcp}),
             ?LOG_INFO("Queue is empty, dropping packet"),
             {noreply, State}
     end.

@@ -12,8 +12,14 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Handles DNS questions arriving via UDP.
 -module(erldns_udp_server).
+-moduledoc """
+Handles DNS questions arriving via UDP.
+
+Emits the following telemetry events:
+- `[erldns, request, handoff]` (span)
+- `[erldns, request, packet_dropped_empty_queue]`
+""".
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -36,7 +42,7 @@
     code_change/3
 ]).
 % Internal API
--export([handle_request/5]).
+-export([handle_request/6]).
 
 % 1 MB
 -define(DEFAULT_UDP_RECBUF, 1024 * 1024).
@@ -107,7 +113,10 @@ handle_info({udp_passive, _Socket}, State) ->
     {noreply, State};
 handle_info({udp, Socket, Host, Port, Bin}, State) ->
     % ?LOG_DEBUG("Received request: ~p", [Bin]),
-    folsom_metrics:histogram_timed_update(udp_handoff_histogram, ?MODULE, handle_request, [Socket, Host, Port, Bin, State]);
+    TS = erlang:monotonic_time(),
+    telemetry:span([erldns, request, handoff], #{protocol => udp}, fun() ->
+        {?MODULE:handle_request(Socket, Host, Port, Bin, TS, State), #{}}
+    end);
 handle_info(_Message, State) ->
     {noreply, State}.
 
@@ -165,14 +174,13 @@ start(Address, Port, InetFamily, SocketOpts) ->
 %% This function executes in a single process and thus
 %% must return very fast. The execution time of this function
 %% will determine the overall QPS of the system.
-handle_request(Socket, Host, Port, Bin, State) ->
+handle_request(Socket, Host, Port, Bin, TS, State) ->
     case queue:out(State#state.workers) of
         {{value, Worker}, Queue} ->
-            gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin}),
+            gen_server:cast(Worker, {udp_query, Socket, Host, Port, Bin, TS}),
             {noreply, State#state{workers = queue:in(Worker, Queue)}};
         {empty, _Queue} ->
-            folsom_metrics:notify({packet_dropped_empty_queue_counter, {inc, 1}}),
-            folsom_metrics:notify({packet_dropped_empty_queue_meter, 1}),
+            telemetry:execute([erldns, request, packet_dropped_empty_queue], #{count => 1}, #{protocol => udp}),
             ?LOG_INFO("Queue is empty, dropping packet"),
             {noreply, State}
     end.
