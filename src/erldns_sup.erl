@@ -64,8 +64,11 @@ init(_Args) ->
             ?CHILD(erldns_packet_cache, worker, []),
             ?CHILD(erldns_query_throttle, worker, []),
             ?CHILD(erldns_handler, worker, []),
-            ?CHILD(sample_custom_handler, worker, [])
-            | erldns_listeners:child_specs()
+            ?CHILD(sample_custom_handler, worker, []),
+            #{
+                id => erldns_listeners,
+                start => {erldns_listeners, start_link, []},
+                type => supervisor
+            }
         ],
-
-    {ok, {{one_for_one, 20, 10}, SysProcs}}.
+    {ok, {#{strategy => one_for_one, intensity => 20, period => 10}, SysProcs}}.

@@ -21,7 +21,7 @@ init(Ref) ->
     proc_lib:set_label(?MODULE),
     TS = erlang:monotonic_time(),
     Timeout = erldns_config:ingress_tcp_request_timeout(),
-    {Pid, _Ref} = erlang:spawn_monitor(?MODULE, init_timer, [Timeout, Self]),
+    {Pid, _Ref} = proc_lib:spawn_opt(?MODULE, init_timer, [Timeout, Self], [monitor]),
     {ok, Socket} = ranch:handshake(Ref),
     loop(Socket, TS, Timeout, Pid).
 
@@ -88,7 +88,7 @@ handle_decoded_tcp_message(Socket, TS0, Pid, DecodedMessage, Address) ->
             Response = erldns_handler:do_handle(DecodedMessage, Address),
             EncodedResponse = erldns_encoder:encode_message(Response),
             exit(Pid, kill),
-            gen_tcp:send(Socket, [byte_size(EncodedResponse), EncodedResponse]),
+            ok = gen_tcp:send(Socket, [<<(byte_size(EncodedResponse)):16>>, EncodedResponse]),
             measure_time(DecodedMessage, EncodedResponse, tcp, TS0);
         true ->
             {error, not_a_question}

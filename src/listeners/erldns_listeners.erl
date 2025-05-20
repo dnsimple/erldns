@@ -18,10 +18,20 @@ where `Name` is any desired name,
 and `Port` is a valid port.
 """.
 
+-behaviour(supervisor).
+
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_IP, any).
 
--export([child_specs/0]).
+-export([start_link/0, init/1]).
+
+-spec start_link() -> supervisor:startlink_ret().
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, noargs).
+
+-spec init(noargs) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
+init(noargs) ->
+    {ok, {#{strategy => one_for_one}, child_specs()}}.
 
 -spec child_specs() -> [supervisor:child_spec()].
 child_specs() ->
@@ -29,17 +39,19 @@ child_specs() ->
     [tcp_child_spec(Name, Config) || Name := #{protocol := tcp} = Config <- Listeners].
 
 tcp_child_spec(Name, Config) ->
-    IP = get_ip(Name, Config),
+    IpConfig = get_ip(Name, Config),
     Port = get_port(Name, Config),
     Timeout = erldns_config:ingress_tcp_request_timeout(),
-    SocketOpts = [
-        {ip, IP},
-        {port, Port},
-        {send_timeout, Timeout},
-        {keepalive, true},
-        {reuseport, true},
-        {reuseport_lb, true}
-    ],
+    SocketOpts =
+        IpConfig ++
+            [
+                {nodelay, true},
+                {port, Port},
+                {send_timeout, Timeout},
+                {keepalive, true},
+                {reuseport, true},
+                {reuseport_lb, true}
+            ],
     Parallelism = erlang:system_info(schedulers),
     TransOpts = #{
         %% Potentially introduce a cap on the concurrent QPS.
@@ -55,13 +67,17 @@ tcp_child_spec(Name, Config) ->
 get_ip(Name, Config) ->
     case maps:get(ip, Config, ?DEFAULT_IP) of
         any ->
-            any;
-        IP when is_tuple(IP), tuple_size(IP) =:= 4 orelse tuple_size(IP) =:= 16 ->
-            IP;
+            [inet6, {ipv6_v6only, false}, {ip, any}];
+        IP when is_tuple(IP), tuple_size(IP) =:= 4 ->
+            [inet, {ip, IP}];
+        IP when is_tuple(IP), tuple_size(IP) =:= 8 ->
+            [inet6, {ipv6_v6only, false}, {ip, IP}];
         IP when is_list(IP) ->
             case inet:parse_address(IP) of
-                {ok, IpAddr} ->
-                    IpAddr;
+                {ok, IpAddr} when is_tuple(IpAddr), tuple_size(IpAddr) =:= 4 ->
+                    [inet, {ip, IpAddr}];
+                {ok, IpAddr} when is_tuple(IpAddr), tuple_size(IpAddr) =:= 8 ->
+                    [inet6, {ipv6_v6only, false}, {ip, IpAddr}];
                 {error, _} ->
                     error({invalid_listener_ip, Name, Config})
             end
