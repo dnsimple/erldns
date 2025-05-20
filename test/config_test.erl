@@ -21,7 +21,10 @@ get_servers_empty_list_test() ->
 
 get_servers_single_server_test() ->
     application:set_env(erldns, servers, [[{name, example}, {address, "127.0.0.1"}, {port, 8053}, {family, inet}]]),
-    ?assertEqual([[{name, example}, {address, {127, 0, 0, 1}}, {port, 8053}, {family, inet}, {processes, 1}]], erldns_config:get_servers()).
+    ?assertEqual(
+        [[{name, example}, {address, {127, 0, 0, 1}}, {port, 8053}, {family, inet}, {processes, 1}, {with_tcp, true}]],
+        erldns_config:get_servers()
+    ).
 
 get_servers_multiple_servers_test() ->
     application:set_env(
@@ -34,8 +37,8 @@ get_servers_multiple_servers_test() ->
     ),
     ?assertEqual(
         [
-            [{name, example_inet}, {address, {127, 0, 0, 1}}, {port, 8053}, {family, inet}, {processes, 1}],
-            [{name, example_inet6}, {address, {0, 0, 0, 0, 0, 0, 0, 1}}, {port, 8053}, {family, inet6}, {processes, 1}]
+            [{name, example_inet}, {address, {127, 0, 0, 1}}, {port, 8053}, {family, inet}, {processes, 1}, {with_tcp, true}],
+            [{name, example_inet6}, {address, {0, 0, 0, 0, 0, 0, 0, 1}}, {port, 8053}, {family, inet6}, {processes, 1}, {with_tcp, true}]
         ],
         erldns_config:get_servers()
     ).
