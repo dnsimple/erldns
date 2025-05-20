@@ -71,13 +71,13 @@ get_ip(Name, Config) ->
         IP when is_tuple(IP), tuple_size(IP) =:= 4 ->
             [inet, {ip, IP}];
         IP when is_tuple(IP), tuple_size(IP) =:= 8 ->
-            [inet6, {ipv6_v6only, false}, {ip, IP}];
+            [inet6, {ip, IP}];
         IP when is_list(IP) ->
             case inet:parse_address(IP) of
                 {ok, IpAddr} when is_tuple(IpAddr), tuple_size(IpAddr) =:= 4 ->
                     [inet, {ip, IpAddr}];
                 {ok, IpAddr} when is_tuple(IpAddr), tuple_size(IpAddr) =:= 8 ->
-                    [inet6, {ipv6_v6only, false}, {ip, IpAddr}];
+                    [inet6, {ip, IpAddr}];
                 {error, _} ->
                     error({invalid_listener_ip, Name, Config})
             end
