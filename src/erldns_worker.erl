@@ -94,7 +94,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 report_message_queue_len() ->
     Self = self(),
-    QueueLen = erlang:process_info(Self, message_queue_len),
+    {message_queue_len, QueueLen} = erlang:process_info(Self, message_queue_len),
     telemetry:execute([erldns, worker, message_queue_len], #{count => QueueLen}, #{pid => Self}).
 
 %% @doc Handle DNS query that comes in over TCP
