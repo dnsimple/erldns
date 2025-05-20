@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## 6.0.1
+
+- Add terminating context to telemetry span events
+
 ## 6.0.0
 
 - Instrument code using telemetry in a metrics agnostic way.
