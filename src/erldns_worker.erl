@@ -21,6 +21,7 @@ Emits the following telemetry events:
 - `[erldns, request, success]`
 - `[erldns, request, error]`
 - `[erldns, worker, timeout]`
+- `[erldns, worker, message_queue_len]`
 """.
 
 -include_lib("dns_erlang/include/dns.hrl").
@@ -49,10 +50,12 @@ init([WorkerId]) ->
     {ok, #state{worker_process_sup = WorkerProcessSup, worker_process = WorkerProcess}}.
 
 handle_call(_Request, From, State) ->
+    report_message_queue_len(),
     ?LOG_DEBUG("Received unexpected call (from: ~p)", [From]),
     {reply, ok, State}.
 
 handle_cast({tcp_query, Socket, Bin, TS}, State) ->
+    report_message_queue_len(),
     case handle_tcp_dns_query(Socket, Bin, {State#state.worker_process_sup, State#state.worker_process}, TS) of
         ok ->
             {noreply, State};
@@ -64,6 +67,7 @@ handle_cast({tcp_query, Socket, Bin, TS}, State) ->
             {noreply, State}
     end;
 handle_cast({udp_query, Socket, Host, Port, Bin, TS}, State) ->
+    report_message_queue_len(),
     case handle_udp_dns_query(Socket, Host, Port, Bin, {State#state.worker_process_sup, State#state.worker_process}, TS) of
         ok ->
             {noreply, State};
@@ -75,9 +79,11 @@ handle_cast({udp_query, Socket, Host, Port, Bin, TS}, State) ->
             {noreply, State}
     end;
 handle_cast(_Msg, State) ->
+    report_message_queue_len(),
     {noreply, State}.
 
 handle_info(_Info, State) ->
+    report_message_queue_len(),
     {noreply, State}.
 
 terminate(_Reason, _State) ->
@@ -85,6 +91,10 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+report_message_queue_len() ->
+    QueueLen = erlang:process_info(self(), message_queue_len),
+    telemetry:execute([erldns, worker, message_queue_len], #{count => QueueLen}, #{}).
 
 %% @doc Handle DNS query that comes in over TCP
 -spec handle_tcp_dns_query(gen_tcp:socket(), iodata(), {pid(), term()}, integer()) ->
