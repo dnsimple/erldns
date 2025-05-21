@@ -21,9 +21,9 @@ init(Ref) ->
     proc_lib:set_label(?MODULE),
     TS = erlang:monotonic_time(),
     Timeout = erldns_config:ingress_tcp_request_timeout(),
-    {Pid, _Ref} = proc_lib:spawn_opt(?MODULE, init_timer, [Timeout, Self], [monitor]),
+    {TimerPid, _Ref} = proc_lib:spawn_opt(?MODULE, init_timer, [Timeout, Self], [monitor]),
     {ok, Socket} = ranch:handshake(Ref),
-    loop(Socket, TS, Timeout, Pid).
+    loop(Socket, TimerPid, TS, Timeout).
 
 -spec init_timer(integer(), pid()) -> any().
 init_timer(Timeout, Parent) ->
@@ -31,11 +31,12 @@ init_timer(Timeout, Parent) ->
     after Timeout -> exit(Parent, kill)
     end.
 
-loop(Socket, TS, Timeout, Pid) ->
+-spec loop(dynamic(), pid(), integer(), integer()) -> dynamic().
+loop(Socket, TimerPid, TS, Timeout) ->
     inet:setopts(Socket, [{active, once}]),
     receive
         {tcp, Socket, <<Len:16, Bin/binary>>} ->
-            loop(Socket, TS, Timeout, Pid, Len, Bin);
+            loop(Socket, TimerPid, TS, Timeout, Len, Bin);
         {tcp_error, Socket, Reason} ->
             ?LOG_INFO(#{what => tcp_error, reason => Reason});
         {tcp_closed, Socket} ->
@@ -44,13 +45,14 @@ loop(Socket, TS, Timeout, Pid) ->
         gen_tcp:close(Socket)
     end.
 
-loop(Socket, TS, _, Pid, Len, Acc) when Len =:= byte_size(Acc) ->
-    handle_tcp_query(Socket, TS, Pid, Acc);
-loop(Socket, TS, Timeout, Pid, Len, Acc) ->
+-spec loop(inet:socket(), pid(), integer(), integer(), non_neg_integer(), binary()) -> dynamic().
+loop(Socket, TimerPid, TS, _, Len, Acc) when Len =:= byte_size(Acc) ->
+    handle(Socket, TimerPid, TS, Acc);
+loop(Socket, TimerPid, TS, Timeout, Len, Acc) ->
     inet:setopts(Socket, [{active, once}]),
     receive
         {tcp, Socket, Bin} ->
-            loop(Socket, TS, Timeout, Pid, Len, <<Acc/binary, Bin/binary>>);
+            loop(Socket, TimerPid, TS, Timeout, Len, <<Acc/binary, Bin/binary>>);
         {tcp_error, Socket, Reason} ->
             ?LOG_INFO(#{what => tcp_error, reason => Reason});
         {tcp_closed, Socket} ->
@@ -59,18 +61,19 @@ loop(Socket, TS, Timeout, Pid, Len, Acc) ->
         gen_tcp:close(Socket)
     end.
 
-handle_tcp_query(Socket, TS, Pid, Bin) ->
+-spec handle(inet:socket(), pid(), integer(), binary()) -> dynamic().
+handle(Socket, TimerPid, TS, Bin) ->
     try
         {ok, {Address, _Port}} = inet:peername(Socket),
         case erldns_decoder:decode_message(Bin) of
-            {trailing_garbage, DecodedMessage, TrailingGarbage} ->
+            {trailing_garbage, #dns_message{} = DecodedMessage, TrailingGarbage} ->
                 ?LOG_INFO(#{what => trailing_garbage, trailing_garbage => TrailingGarbage}),
-                handle_decoded_tcp_message(Socket, TS, Pid, DecodedMessage, Address);
+                handle_decoded(Socket, TimerPid, TS, DecodedMessage, Address);
             {Error, Message, _} ->
                 ?LOG_INFO(#{what => error_decoding, error => Error, message => Message}),
                 ok;
             DecodedMessage ->
-                handle_decoded_tcp_message(Socket, TS, Pid, DecodedMessage, Address)
+                handle_decoded(Socket, TimerPid, TS, DecodedMessage, Address)
         end
     catch
         Class:Reason:Stacktrace ->
@@ -82,19 +85,17 @@ handle_tcp_query(Socket, TS, Pid, Bin) ->
             })
     end.
 
-handle_decoded_tcp_message(Socket, TS0, Pid, DecodedMessage, Address) ->
-    case DecodedMessage#dns_message.qr of
-        false ->
-            Response = erldns_handler:do_handle(DecodedMessage, Address),
-            EncodedResponse = erldns_encoder:encode_message(Response),
-            exit(Pid, kill),
-            ok = gen_tcp:send(Socket, [<<(byte_size(EncodedResponse)):16>>, EncodedResponse]),
-            measure_time(DecodedMessage, EncodedResponse, tcp, TS0);
-        true ->
-            {error, not_a_question}
-    end.
+-spec handle_decoded(inet:socket(), pid(), integer(), dns:message(), dynamic()) -> dynamic().
+handle_decoded(_, _, _, #dns_message{qr = true}, _) ->
+    {error, not_a_question};
+handle_decoded(Socket, TimerPid, TS0, DecodedMessage, Address) ->
+    Response = erldns_handler:do_handle(DecodedMessage, Address),
+    EncodedResponse = erldns_encoder:encode_message(Response),
+    exit(TimerPid, kill),
+    ok = gen_tcp:send(Socket, [<<(byte_size(EncodedResponse)):16>>, EncodedResponse]),
+    measure_time(DecodedMessage, EncodedResponse, TS0).
 
-measure_time(DecodedMessage, EncodedResponse, Protocol, TS0) ->
+measure_time(DecodedMessage, EncodedResponse, TS0) ->
     TS1 = erlang:monotonic_time(),
     Measurements = #{
         monotonic_time => TS1,
@@ -103,7 +104,7 @@ measure_time(DecodedMessage, EncodedResponse, Protocol, TS0) ->
     },
     DnsSec = proplists:get_bool(dnssec, erldns_edns:get_opts(DecodedMessage)),
     Metadata = #{
-        protocol => Protocol,
+        protocol => tcp,
         dnssec => DnsSec
     },
     telemetry:execute([erldns, request, processed], Measurements, Metadata).
