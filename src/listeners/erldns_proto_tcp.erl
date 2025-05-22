@@ -1,4 +1,4 @@
--module(erldns_tcp_proto).
+-module(erldns_proto_tcp).
 -moduledoc false.
 
 -include_lib("kernel/include/logger.hrl").

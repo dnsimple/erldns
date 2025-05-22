@@ -62,7 +62,7 @@ tcp_child_spec(Name, Config) ->
         socket_opts => SocketOpts
     },
     ProtoOpts = [],
-    ranch:child_spec({?MODULE, Name}, ranch_tcp, TransOpts, erldns_tcp_proto, ProtoOpts).
+    ranch:child_spec({?MODULE, Name}, ranch_tcp, TransOpts, erldns_proto_tcp, ProtoOpts).
 
 get_ip(Name, Config) ->
     case maps:get(ip, Config, ?DEFAULT_IP) of
