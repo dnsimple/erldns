@@ -83,7 +83,8 @@ get_servers() ->
                         {address, parse_address(keyget(address, Server))},
                         {port, keyget(port, Server)},
                         {family, keyget(family, Server)},
-                        {processes, keyget(processes, Server, 1)}
+                        {processes, keyget(processes, Server, 1)},
+                        {with_tcp, keyget(with_tcp, Server, true)}
                     ]
                 end,
                 Servers
