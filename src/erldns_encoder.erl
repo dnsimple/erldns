@@ -53,7 +53,7 @@ encode_message(Response) ->
 %% Note that if the erldns catch_exceptions property is set in the
 %% configuration, then this function should never throw an
 %% exception.
--spec encode_message(dns:message(), [dns:encode_message_opt()]) ->
+-spec encode_message(dns:message(), dns:encode_message_opts()) ->
     {false, dns:message_bin()}
     | {true, dns:message_bin(), dns:message()}
     | {false, dns:message_bin(), dns:tsig_mac()}

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 6.0.0
 
 - Instrument code using telemetry in a metrics agnostic way.
+- Upgrade dns_erlang to v4.
 
 ## 5.0.0
 

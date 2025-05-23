@@ -74,8 +74,7 @@ handle_call({process, DecodedMessage, Socket, Port, {udp, Host}, TS0}, _From, St
     % simulate_timeout(DecodedMessage),
     Response = erldns_handler:handle(DecodedMessage, {udp, Host}),
     DestHost = ?DEST_HOST(Host),
-
-    Result = erldns_encoder:encode_message(Response, [{max_size, max_payload_size(Response)}]),
+    Result = erldns_encoder:encode_message(Response, #{max_size => max_payload_size(Response)}),
     EncodedResponse =
         case Result of
             {false, Enc} -> Enc;
