@@ -13,11 +13,9 @@
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 -module(erldns_admin_zone_control_handler).
--moduledoc """
-Cowboy handler that handles Admin API requests to /zones/:name/:action
-
-Currently no actions are supported.
-""".
+-moduledoc false.
+%% Cowboy handler that handles Admin API requests to /zones/:name/:action
+%% Currently no actions are supported.
 
 -include_lib("kernel/include/logger.hrl").
 

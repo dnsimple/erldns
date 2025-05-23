@@ -11,6 +11,7 @@
         crypto,
         dns_erlang,
         ssl,
+        segmented_cache,
         mnesia,
         telemetry,
         iso8601,

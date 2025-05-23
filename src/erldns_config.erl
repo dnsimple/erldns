@@ -23,12 +23,6 @@
 ]).
 -export([use_root_hints/0]).
 -export([
-    packet_cache_enabled/0,
-    packet_cache_default_ttl/0,
-    packet_cache_sweep_interval/0,
-    packet_cache_ttl_overrides/0
-]).
--export([
     zone_server_env/0,
     zone_server_max_processes/0,
     zone_server_protocol/0,
@@ -65,9 +59,6 @@
 -define(DEFAULT_IPV6_ADDRESS, {0, 0, 0, 0, 0, 0, 0, 1}).
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_NUM_WORKERS, 10).
--define(DEFAULT_CACHE_TTL, 20).
-% Every 3 minutes
--define(DEFAULT_SWEEP_INTERVAL, 1000 * 60 * 3).
 -define(DEFAULT_ZONE_SERVER_PORT, 443).
 -define(DEFAULT_WEBSOCKET_PATH, "/ws").
 -define(DEFAULT_UDP_PROCESS_TIMEOUT, 500).
@@ -147,21 +138,6 @@ use_root_hints() ->
         _ ->
             true
     end.
-
-packet_cache() ->
-    application:get_env(erldns, packet_cache, []).
-
-packet_cache_enabled() ->
-    keyget(enabled, packet_cache(), true).
-
-packet_cache_default_ttl() ->
-    keyget(default_ttl, packet_cache(), ?DEFAULT_CACHE_TTL).
-
-packet_cache_sweep_interval() ->
-    keyget(sweep_interval, packet_cache(), ?DEFAULT_SWEEP_INTERVAL).
-
-packet_cache_ttl_overrides() ->
-    keyget(ttl_overrides, packet_cache(), []).
 
 keyget(Key, Data) ->
     keyget(Key, Data, undefined).

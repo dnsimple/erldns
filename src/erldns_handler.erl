@@ -118,7 +118,7 @@ do_handle(Message, Host) ->
 %% If the cache is missed, then the SOA (Start of Authority) is discovered here.
 handle_message(Message, Host) ->
     case erldns_packet_cache:get({Message#dns_message.questions, Message#dns_message.additional}, Host) of
-        {ok, CachedResponse} ->
+        #dns_message{} = CachedResponse ->
             CachedResponse#dns_message{id = Message#dns_message.id};
         {error, _Reason} ->
             % SOA lookup
