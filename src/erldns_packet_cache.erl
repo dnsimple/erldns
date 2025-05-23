@@ -19,133 +19,91 @@ same question received within the cache TTL.
 
 The cache is swept for old cache data at regular intervals.
 
-Emits the following telemetry events:
-- `[erldns, cache, expired]`
-- `[erldns, cache, miss]`
-- `[erldns, cache, hit]`
+## Configuration
+
+```erlang
+{erldns, [
+    {packet_cache, #{
+        enabled := boolean(), %% defaults to true
+        ttl := non_neg_integer(), %% Seconds, defaults to 30
+    }}
+]}
+```
+
+## Telemetry events
+
+See `m:segmented_cache` for telemetry events. The name is `erldns_cache`.
 """.
 
--behaviour(gen_server).
+-include_lib("dns_erlang/include/dns.hrl").
 
-% API
 -export([
     start_link/0,
     get/1,
     get/2,
     put/2,
-    sweep/0,
-    clear/0,
-    stop/0
-]).
-% Gen server hooks
--export([
-    init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    code_change/3
+    clear/0
 ]).
 
--define(SERVER, ?MODULE).
+-define(NAME, erldns_cache).
+-define(DEFAULT_CACHE_TTL, 30).
 
--record(state, {ttl :: non_neg_integer(), ttl_overrides :: [{binary(), non_neg_integer()}], tref :: timer:tref()}).
--opaque state() :: #state{}.
--export_type([state/0]).
-
-% Public API
-
-%% @doc Start the cache.
+-doc false.
 -spec start_link() -> any().
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    Config = #{
+        scope => erldns,
+        segment_num => 3,
+        ttl => {seconds, packet_cache_default_ttl() div 3}
+    },
+    segmented_cache:start_link(?NAME, Config).
 
-%% @doc Try to retrieve a cached response for the given question.
--spec get(dns:question() | {dns:question(), [dns:rr()]}) -> {ok, dns:message()} | {error, cache_expired} | {error, cache_miss}.
+-doc "Try to retrieve a cached response for the given question.".
+-spec get(dns:questions() | {dns:questions(), dns:additional()}) ->
+    dns:message() | {error, cache_expired | cache_miss}.
 get(Key) ->
-    get(Key, unknown).
+    get(Key, undefined).
 
-%% @doc Try to retrieve a cached response for the given question sent
-%% by the given host.
--spec get(dns:question() | {dns:question(), [dns:rr()]}, dns:ip()) -> {ok, dns:message()} | {error, cache_expired} | {error, cache_miss}.
+-doc "Try to retrieve a cached response for the given question sent by the given host.".
+-spec get(dns:questions() | {dns:questions(), dns:additional()}, undefined | inet:ip_address()) ->
+    dns:message() | {error, cache_expired | cache_miss}.
 get(Key, _Host) ->
-    case erldns_storage:select(packet_cache, Key) of
-        [{Key, {Response, ExpiresAt}}] ->
-            case timestamp() > ExpiresAt of
-                true ->
-                    telemetry:execute([erldns, cache, expired], #{count => 1}, #{}),
-                    {error, cache_expired};
-                false ->
-                    telemetry:execute([erldns, cache, hit], #{count => 1}, #{}),
-                    {ok, Response}
-            end;
-        _ ->
-            telemetry:execute([erldns, cache, miss], #{count => 1}, #{}),
+    case segmented_cache:get_entry(?NAME, Key) of
+        #dns_message{} = Value ->
+            Value;
+        not_found ->
             {error, cache_miss}
     end.
 
-%% @doc Put the response in the cache for the given question.
--spec put(dns:question() | {dns:question(), [dns:rr()]}, dns:message()) -> ok.
+-doc "Put the response in the cache for the given question.".
+-spec put({dns:questions(), dns:additional()}, dns:message()) -> boolean().
 put(Key, Response) ->
-    case erldns_config:packet_cache_enabled() of
+    case packet_cache_enabled() of
         true ->
-            gen_server:call(?SERVER, {set_packet, [Key, Response]});
-        _ ->
-            ok
+            segmented_cache:put_entry(?NAME, Key, Response);
+        false ->
+            false
     end.
 
-%% @doc Remove all old cached packets from the cache.
--spec sweep() -> any().
-sweep() ->
-    gen_server:cast(?SERVER, sweep).
-
-%% @doc Clean the cache
+-doc "Clear the cache".
 -spec clear() -> any().
 clear() ->
-    gen_server:cast(?SERVER, clear).
+    segmented_cache:delete_pattern(?NAME, '_').
 
-%% @doc Stop the cache
--spec stop() -> any().
-stop() ->
-    gen_server:call(?SERVER, stop).
+-spec packet_cache_enabled() -> boolean().
+packet_cache_enabled() ->
+    case application:get_env(erldns, packet_cache, #{}) of
+        #{enabled := Bool} when is_boolean(Bool) ->
+            Bool;
+        _ ->
+            true
+    end.
 
-%% Gen server hooks
--spec init([non_neg_integer()]) -> {ok, state()}.
-init([]) ->
-    init([erldns_config:packet_cache_default_ttl()]);
-init([TTL]) ->
-    erldns_storage:create(packet_cache),
-    {ok, Tref} = timer:apply_interval(erldns_config:packet_cache_sweep_interval(), ?MODULE, sweep, []),
-    {ok, #state{
-        ttl = TTL,
-        ttl_overrides = erldns_config:packet_cache_ttl_overrides(),
-        tref = Tref
-    }}.
-
-handle_call({set_packet, [Key, Response]}, _From, State) ->
-    erldns_storage:insert(packet_cache, {Key, {Response, timestamp() + State#state.ttl}}),
-    {reply, ok, State};
-handle_call(stop, _From, State) ->
-    {stop, normal, ok, State}.
-
-handle_cast(sweep, State) ->
-    Keys = erldns_storage:select(packet_cache, [{{'$1', {'_', '$2'}}, [{'<', '$2', timestamp() - 10}], ['$1']}], infinite),
-    lists:foreach(fun(K) -> erldns_storage:delete(packet_cache, K) end, Keys),
-    {noreply, State};
-handle_cast(clear, State) ->
-    erldns_storage:empty_table(packet_cache),
-    {noreply, State}.
-
-handle_info(_Message, State) ->
-    {noreply, State}.
-
-terminate(_Reason, _State) ->
-    erldns_storage:delete_table(packet_cache),
-    ok.
-
-code_change(_PreviousVersion, State, _Extra) ->
-    {ok, State}.
-
-timestamp() ->
-    {TM, TS, _} = os:timestamp(),
-    TM * 1000000 + TS.
+-spec packet_cache_default_ttl() -> pos_integer().
+packet_cache_default_ttl() ->
+    case application:get_env(erldns, packet_cache, #{}) of
+        #{ttl := TTL} when is_integer(TTL), 0 < TTL ->
+            TTL;
+        _ ->
+            ?DEFAULT_CACHE_TTL
+    end.
