@@ -45,7 +45,7 @@ See `m:segmented_cache` for telemetry events. The name is `erldns_cache`.
     clear/0
 ]).
 
--define(NAME, erldns_cache).
+-define(DEFAULT_CACHE_BUCKETS, 3).
 -define(DEFAULT_CACHE_TTL, 30).
 
 -doc false.
@@ -53,10 +53,10 @@ See `m:segmented_cache` for telemetry events. The name is `erldns_cache`.
 start_link() ->
     Config = #{
         scope => erldns,
-        segment_num => 3,
-        ttl => {seconds, packet_cache_default_ttl() div 3}
+        segment_num => ?DEFAULT_CACHE_BUCKETS,
+        ttl => {seconds, packet_cache_default_ttl() div ?DEFAULT_CACHE_BUCKETS}
     },
-    segmented_cache:start_link(?NAME, Config).
+    segmented_cache:start_link(?MODULE, Config).
 
 -doc "Try to retrieve a cached response for the given question.".
 -spec get(dns:questions() | {dns:questions(), dns:additional()}) ->
@@ -68,19 +68,23 @@ get(Key) ->
 -spec get(dns:questions() | {dns:questions(), dns:additional()}, undefined | inet:ip_address()) ->
     dns:message() | {error, cache_expired | cache_miss}.
 get(Key, _Host) ->
-    case segmented_cache:get_entry(?NAME, Key) of
+    case segmented_cache:get_entry(?MODULE, Key) of
         #dns_message{} = Value ->
             Value;
         not_found ->
             {error, cache_miss}
     end.
 
--doc "Put the response in the cache for the given question.".
+-doc """
+Put the response in the cache for the given question.
+
+Returns if a new record was actually inserted, meaning a duplicate would return false.
+""".
 -spec put({dns:questions(), dns:additional()}, dns:message()) -> boolean().
 put(Key, Response) ->
     case packet_cache_enabled() of
         true ->
-            segmented_cache:put_entry(?NAME, Key, Response);
+            segmented_cache:put_entry(?MODULE, Key, Response);
         false ->
             false
     end.
@@ -88,7 +92,7 @@ put(Key, Response) ->
 -doc "Clear the cache".
 -spec clear() -> any().
 clear() ->
-    segmented_cache:delete_pattern(?NAME, '_').
+    segmented_cache:delete_pattern(?MODULE, '_').
 
 -spec packet_cache_enabled() -> boolean().
 packet_cache_enabled() ->
