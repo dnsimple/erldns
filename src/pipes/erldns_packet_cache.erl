@@ -37,56 +37,52 @@ See `m:segmented_cache` for telemetry events under this module name.
 
 -include_lib("dns_erlang/include/dns.hrl").
 
--export([
-    start_link/0,
-    get/1,
-    get/2,
-    put/2,
-    clear/0
-]).
+-behaviour(erldns_pipeline).
+-export([prepare/1, call/2]).
+-export([start_link/0, clear/0]).
 
 -define(DEFAULT_CACHE_BUCKETS, 3).
 -define(DEFAULT_CACHE_TTL, 30).
 
+-spec prepare(erldns_pipeline:opts()) -> disabled | erldns_pipeline:opts().
+prepare(Opts) ->
+    case enabled() of
+        false -> disabled;
+        true -> Opts#{?MODULE => false}
+    end.
+
+-spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
+call(Msg, #{?MODULE := cached}) ->
+    Msg;
+%% We are authoritative so cache the packet and return the message.
+call(#dns_message{aa = true} = Msg, #{?MODULE := miss} = Opts) ->
+    Key = {Msg#dns_message.questions, Msg#dns_message.additional},
+    segmented_cache:put_entry(?MODULE, Key, Msg),
+    {Msg, Opts#{?MODULE := cached}};
+call(Msg, #{?MODULE := false} = Opts) ->
+    Key = {Msg#dns_message.questions, Msg#dns_message.additional},
+    case segmented_cache:get_entry(?MODULE, Key) of
+        #dns_message{} = CachedResponse ->
+            {CachedResponse#dns_message{id = Msg#dns_message.id}, Opts#{?MODULE := cached}};
+        not_found ->
+            {Msg, Opts#{?MODULE := miss}}
+    end;
+call(Msg, _) ->
+    Msg.
+
 -doc false.
 -spec start_link() -> any().
 start_link() ->
-    Config = #{
-        scope => erldns,
-        segment_num => ?DEFAULT_CACHE_BUCKETS,
-        ttl => {seconds, packet_cache_default_ttl() div ?DEFAULT_CACHE_BUCKETS}
-    },
-    segmented_cache:start_link(?MODULE, Config).
-
--doc "Try to retrieve a cached response for the given question.".
--spec get(dns:questions() | {dns:questions(), dns:additional()}) ->
-    dns:message() | {error, cache_expired | cache_miss}.
-get(Key) ->
-    get(Key, undefined).
-
--doc "Try to retrieve a cached response for the given question sent by the given host.".
--spec get(dns:questions() | {dns:questions(), dns:additional()}, undefined | inet:ip_address()) ->
-    dns:message() | {error, cache_expired | cache_miss}.
-get(Key, _Host) ->
-    case segmented_cache:get_entry(?MODULE, Key) of
-        #dns_message{} = Value ->
-            Value;
-        not_found ->
-            {error, cache_miss}
-    end.
-
--doc """
-Put the response in the cache for the given question.
-
-Returns if a new record was actually inserted, meaning a duplicate would return false.
-""".
--spec put({dns:questions(), dns:additional()}, dns:message()) -> boolean().
-put(Key, Response) ->
-    case packet_cache_enabled() of
-        true ->
-            segmented_cache:put_entry(?MODULE, Key, Response);
+    case enabled() of
         false ->
-            false
+            ignore;
+        true ->
+            Config = #{
+                scope => erldns,
+                segment_num => ?DEFAULT_CACHE_BUCKETS,
+                ttl => {seconds, default_ttl() div ?DEFAULT_CACHE_BUCKETS}
+            },
+            segmented_cache:start_link(?MODULE, Config)
     end.
 
 -doc "Clear the cache".
@@ -94,8 +90,8 @@ put(Key, Response) ->
 clear() ->
     segmented_cache:delete_pattern(?MODULE, '_').
 
--spec packet_cache_enabled() -> boolean().
-packet_cache_enabled() ->
+-spec enabled() -> boolean().
+enabled() ->
     case application:get_env(erldns, packet_cache, #{}) of
         #{enabled := Bool} when is_boolean(Bool) ->
             Bool;
@@ -103,8 +99,8 @@ packet_cache_enabled() ->
             true
     end.
 
--spec packet_cache_default_ttl() -> pos_integer().
-packet_cache_default_ttl() ->
+-spec default_ttl() -> pos_integer().
+default_ttl() ->
     case application:get_env(erldns, packet_cache, #{}) of
         #{ttl := TTL} when is_integer(TTL), 0 < TTL ->
             TTL;

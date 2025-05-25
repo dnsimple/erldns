@@ -62,7 +62,7 @@ handle_call({process, DecodedMessage, Socket, {tcp, Address}, TS0}, _From, State
     % Uncomment this and the function implementation to simulate a timeout when
     % querying www.example.com with the test zones
     % simulate_timeout(DecodedMessage),
-    Response = erldns_handler:handle(DecodedMessage, {tcp, Address}),
+    Response = erldns_pipeline:call(DecodedMessage, #{transport => tcp, host => Address}),
     EncodedResponse = erldns_encoder:encode_message(Response),
     send_tcp_message(Socket, EncodedResponse),
     measure_time(DecodedMessage, EncodedResponse, tcp, TS0),
@@ -72,7 +72,7 @@ handle_call({process, DecodedMessage, Socket, Port, {udp, Host}, TS0}, _From, St
     % Uncomment this and the function implementation to simulate a timeout when
     % querying www.example.com with the test zones
     % simulate_timeout(DecodedMessage),
-    Response = erldns_handler:handle(DecodedMessage, {udp, Host}),
+    Response = erldns_pipeline:call(DecodedMessage, #{transport => udp, host => Host}),
     DestHost = ?DEST_HOST(Host),
 
     Result = erldns_encoder:encode_message(Response, [{max_size, max_payload_size(Response)}]),

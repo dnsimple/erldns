@@ -33,9 +33,62 @@ Emits the following telemetry events:
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
+-behaviour(erldns_pipeline).
+
+-export([call/2]).
+
+-spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
+call(Msg, Opts) ->
+    case erldns_zone_cache:get_authority(Msg) of
+        {ok, Authority} ->
+            complete_response(call(Msg, Opts, Authority));
+        {error, _} ->
+            complete_response(Msg#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED})
+    end.
+
+call(Msg, _, []) ->
+    case erldns_config:use_root_hints() of
+        true ->
+            {Authority, Additional} = erldns_records:root_hints(),
+            Msg#dns_message{
+                aa = false,
+                rc = ?DNS_RCODE_REFUSED,
+                authority = Authority,
+                additional = Additional
+            };
+        _ ->
+            Msg#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED}
+    end;
+call(Msg, #{host := Host}, AuthorityRecords) ->
+    try
+        resolve(Msg, AuthorityRecords, Host)
+    catch
+        throw:{error, rcode, RC} ->
+            telemetry:execute([erldns, handler, error], #{count => 1}, #{rc => RC}),
+            Msg#dns_message{aa = false, rc = RC};
+        Class:Reason:Stacktrace ->
+            ?LOG_ERROR(#{
+                what => resolve_error,
+                dns_message => Msg,
+                class => Class,
+                reason => Reason,
+                stacktrace => Stacktrace
+            }),
+            telemetry:execute([erldns, handler, error], #{count => 1}, #{rc => ?DNS_RCODE_SERVFAIL}),
+            Msg#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
+    end.
+
+complete_response(Message) ->
+    Message#dns_message{
+        anc = length(Message#dns_message.answers),
+        auc = length(Message#dns_message.authority),
+        adc = length(Message#dns_message.additional),
+        qr = true
+    }.
+
 %% @doc Resolve the first question in the message. If no message is present, return the original
 %% message. If multiple questions are present, only resolve the first question.
--spec resolve(Message :: dns:message(), AuthorityRecords :: [dns:rr()], Host :: dns:ip()) -> dns:message().
+-spec resolve(Message :: dns:message(), AuthorityRecords :: [dns:rr()], Host :: inet:ip_address()) -> dns:message().
 resolve(Message, AuthorityRecords, Host) ->
     case Message#dns_message.questions of
         [] ->
