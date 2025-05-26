@@ -32,7 +32,7 @@ The cache is swept for old cache data at regular intervals.
 
 ## Telemetry events
 
-See `m:segmented_cache` for telemetry events. The name is `erldns_cache`.
+See `m:segmented_cache` for telemetry events. The name is `erldns_packet_cache`.
 """.
 
 -include_lib("dns_erlang/include/dns.hrl").
