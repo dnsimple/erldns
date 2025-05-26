@@ -96,6 +96,8 @@ should_throttle(Msg, Host, Limit) ->
 -spec should_throttle(host(), non_neg_integer()) -> false | {true, non_neg_integer()}.
 should_throttle({127, 0, 0, 1}, _) ->
     false;
+should_throttle({0, 0, 0, 0, 0, 0, 0, 1}, _) ->
+    false;
 should_throttle(Host, Limit) ->
     case segmented_cache:get_entry(?MODULE, Host) of
         not_found ->
