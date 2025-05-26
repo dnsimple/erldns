@@ -12,14 +12,12 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Example middleware for erldns admin API.
-%%
-%% This is a simple example middleware that demonstrates how to create
-%% custom middleware for the erldns admin API. This middleware adds a
-%% custom header to all responses.
 -module(example_middleware).
 -moduledoc """
 Example middleware for erldns admin API.
+
+This is a simple example middleware that demonstrates how to create
+custom middleware for the erldns admin API.
 
 This middleware adds a custom header 'X-Admin-Middleware' to all responses
 to demonstrate how custom middleware can be integrated.
@@ -42,7 +40,9 @@ To use this middleware, add it to your sys.config:
 
 -include_lib("kernel/include/logger.hrl").
 
-%% @doc Execute the middleware
+-doc """
+Execute the middleware
+""".
 -spec execute(cowboy_req:req(), cowboy_middleware:env()) ->
     {ok, cowboy_req:req(), cowboy_middleware:env()}
     | {stop, cowboy_req:req()}.
