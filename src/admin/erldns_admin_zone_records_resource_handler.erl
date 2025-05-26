@@ -13,7 +13,8 @@
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 -module(erldns_admin_zone_records_resource_handler).
--moduledoc "Cowbow handler that handles Admin API requests to /zones/:name".
+-moduledoc false.
+%% Cowbow handler that handles Admin API requests to /zones/:name.
 
 -export([init/2]).
 -export([content_types_provided/2, is_authorized/2, resource_exists/2, allowed_methods/2]).
