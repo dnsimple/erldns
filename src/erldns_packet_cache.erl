@@ -24,15 +24,15 @@ The cache is swept for old cache data at regular intervals.
 ```erlang
 {erldns, [
     {packet_cache, #{
-        enabled := boolean(), %% defaults to true
-        ttl := non_neg_integer(), %% Seconds, defaults to 30
+        enabled => boolean(), %% defaults to true
+        ttl => non_neg_integer(), %% Seconds, defaults to 30
     }}
 ]}
 ```
 
 ## Telemetry events
 
-See `m:segmented_cache` for telemetry events. The name is `erldns_packet_cache`.
+See `m:segmented_cache` for telemetry events under this module name.
 """.
 
 -include_lib("dns_erlang/include/dns.hrl").

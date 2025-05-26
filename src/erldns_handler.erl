@@ -93,8 +93,7 @@ handle(Message, {_, Host}) ->
 %%
 %% Note: this should probably be changed to return the original packet without
 %% any answer data and with TC bit set to 1.
-handle(Message, Host, {throttled, Host, _ReqCount}) ->
-    telemetry:execute([erldns, handler, throttle], #{count => 1}, #{}),
+handle(Message, _Host, throttled) ->
     Message#dns_message{
         tc = true,
         aa = true,
