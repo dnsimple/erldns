@@ -69,7 +69,7 @@ handle_cast(_Message, State) ->
 handle_info({tcp, Socket, Bin}, State) ->
     TS = erlang:monotonic_time(),
     telemetry:span([erldns, request, handoff], #{protocol => tcp}, fun() ->
-        {?MODULE:handle_request(Socket, Bin, TS, State), #{}}
+        {?MODULE:handle_request(Socket, Bin, TS, State), #{protocol => tcp}}
     end);
 handle_info(_Message, State) ->
     {noreply, State}.

@@ -115,7 +115,7 @@ handle_info({udp, Socket, Host, Port, Bin}, State) ->
     % ?LOG_DEBUG("Received request: ~p", [Bin]),
     TS = erlang:monotonic_time(),
     telemetry:span([erldns, request, handoff], #{protocol => udp}, fun() ->
-        {?MODULE:handle_request(Socket, Host, Port, Bin, TS, State), #{}}
+        {?MODULE:handle_request(Socket, Host, Port, Bin, TS, State), #{protocol => udp}}
     end);
 handle_info(_Message, State) ->
     {noreply, State}.

@@ -13,7 +13,7 @@
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 -module(erldns_admin_root_handler).
--moduledoc "Cowboy handler that handles Admin API requests to".
+-moduledoc false.
 
 -export([init/2]).
 -export([content_types_provided/2, is_authorized/2]).

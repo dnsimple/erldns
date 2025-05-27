@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
-- Instrument code using telemetry in a metrics agnostic way.
 - Upgrade dns_erlang to v4.
+
+## 6.0.2
+
+- Add mailbox length telemetry events.
+- Keep the handlers state in an ets table and avoid the singleton gen_server call.
+
+## 6.0.1
+
+- Add terminating context to telemetry span events
+
+## 6.0.0
+
+- Instrument code using telemetry in a metrics agnostic way.
 
 ## 5.0.0
 
