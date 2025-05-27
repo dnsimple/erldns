@@ -52,6 +52,10 @@ init_per_suite(Config0) ->
 -spec end_per_suite(ct_suite:ct_config()) -> term().
 end_per_suite(Config) ->
     application:stop(erldns),
+    app_helper:stop(Config),
+    PrivDir = proplists:get_value(priv_dir, Config),
+    File = filename:join([PrivDir, "dnstest.log"]),
+    ?assert(filelib:is_file(File)),
     Config.
 
 -spec init_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> ct_suite:ct_config().
