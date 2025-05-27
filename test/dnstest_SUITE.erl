@@ -21,22 +21,32 @@ groups() ->
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
-init_per_suite(Config) ->
+init_per_suite(Config0) ->
     Servers = [
         [
             {name, inet_localhost_1},
-            {address, "127.0.0.1"},
+            {address, "0.0.0.0"},
             {port, 8053},
             {family, inet},
             {processes, 10}
         ]
     ],
-    application:set_env(erldns, servers, Servers),
-    application:set_env(erldns, ff_use_txts_field, true),
-    application:set_env(dnstest, inet4, {127, 0, 0, 1}),
-    application:set_env(dnstest, port, 8053),
-    application:ensure_all_started([erldns, dnstest]),
-    {ok, _} = erldns_storage:load_zones(code:priv_dir(dnstest)),
+    AppConfig = [
+        {erldns, [
+            {servers, Servers},
+            {zones, code:priv_dir(dnstest)},
+            {ff_use_txts_field, true}
+        ]},
+        {kernel, [
+            {logger_level, info},
+            {logger, [{handler, default, logger_std_h, #{}}]}
+        ]}
+    ],
+    Config = app_helper:start_peer(Config0),
+    app_helper:start_erldns(Config, AppConfig),
+    DnsTestConfig = [{dnstest, [{inet4, {127, 0, 0, 1}}, {port, 8053}]}],
+    application:set_env(DnsTestConfig),
+    {ok, _} = application:ensure_all_started([dnstest]),
     Config.
 
 -spec end_per_suite(ct_suite:ct_config()) -> term().

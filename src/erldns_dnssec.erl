@@ -48,7 +48,7 @@ key_rrset_signer(ZoneName, RRs) ->
         PrivateKey = Keyset#keyset.key_signing_key,
         Inception = dns:unix_time(Keyset#keyset.inception),
         Expiration = dns:unix_time(Keyset#keyset.valid_until),
-        dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [{inception, Inception}, {expiration, Expiration}])
+        dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, #{inception => Inception, expiration => Expiration})
     end.
 
 %% @doc Return a function that can be used to sign the given records using the zone signing key.
@@ -62,7 +62,7 @@ zone_rrset_signer(ZoneName, RRs) ->
         PrivateKey = Keyset#keyset.zone_signing_key,
         Inception = dns:unix_time(Keyset#keyset.inception),
         Expiration = dns:unix_time(Keyset#keyset.valid_until),
-        dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, [{inception, Inception}, {expiration, Expiration}])
+        dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, #{inception => Inception, expiration => Expiration})
     end.
 
 %% @doc This function will potentially sign the given RR set if the following

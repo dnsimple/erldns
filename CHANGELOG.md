@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## 7.0.0-rc1
+
+- Upgrade `dns_erlang` to v4.
+- Use `segmented_cache` for the zone cache and the throttle modules.
+
 ## 6.0.2
 
 - Add mailbox length telemetry events.

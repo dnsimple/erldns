@@ -215,7 +215,7 @@ encode_record(Record) ->
 encode_record(Name, Type, Ttl, Data) ->
     #{
         <<"name">> => erlang:iolist_to_binary(io_lib:format("~s.", [Name])),
-        <<"type">> => dns:type_name(Type),
+        <<"type">> => dns_names:type_name(Type),
         <<"ttl">> => Ttl,
         <<"content">> => encode_data(Data)
     }.
