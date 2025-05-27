@@ -26,12 +26,14 @@ This application will read from your `sys.config` the following example:
 {erldns, [
     {admin, [
         {credentials, {<<"username">>, <<"password">>}},
-        {port, 8083}
+        {port, 8083},
+        {middleware, [my_custom_middleware, another_middleware]}
     ]}
 ]}
 ```
 where `credentials` is a tuple of `username` and `password` as either strings or binaries,
-and `port` is a valid Unix port to listen on.
+`port` is a valid Unix port to listen on, and `middleware` is an optional list of
+middleware modules that will be applied to all admin API requests.
 """.
 
 -define(DEFAULT_PORT, 8083).
@@ -40,13 +42,18 @@ and `port` is a valid Unix port to listen on.
 
 -export([maybe_start/0, is_authorized/2]).
 
+-ifdef(TEST).
+-export([middleware/1]).
+-endif.
+
 -doc """
 Configuration parameters, see the module documentation for details.
 """.
 -type config() :: #{
     port := 0..65535,
     username := binary(),
-    password := binary()
+    password := binary(),
+    middleware => [module()]
 }.
 
 -doc "Common state for all handlers".
@@ -70,7 +77,7 @@ maybe_start() ->
     end.
 
 -spec start(config()) -> {ok, pid()} | {error, any()}.
-start(#{port := Port, username := Username, password := Password}) ->
+start(#{port := Port, username := Username, password := Password} = Config) ->
     State = #{username => Username, password => Password},
     Dispatch = cowboy_router:compile(
         [
@@ -83,7 +90,11 @@ start(#{port := Port, username := Username, password := Password}) ->
         ]
     ),
     TransportOpts = #{socket_opts => [inet, {ip, {0, 0, 0, 0}}, {port, Port}]},
-    ProtocolOpts = #{env => #{dispatch => Dispatch}},
+    Middleware = maps:get(middleware, Config, []),
+    ProtocolOpts = #{
+        env => #{dispatch => Dispatch},
+        middlewares => [cowboy_router] ++ Middleware ++ [cowboy_handler]
+    },
     cowboy:start_clear(?MODULE, TransportOpts, ProtocolOpts).
 
 -doc false.
@@ -113,7 +124,8 @@ ensure_valid_config() ->
         {true, Env} ?= env(),
         {true, Port} ?= port(Env),
         {true, Username, Password} ?= credentials(Env),
-        #{port => Port, username => Username, password => Password}
+        {true, Middleware} ?= middleware(Env),
+        #{port => Port, username => Username, password => Password, middleware => Middleware}
     end.
 
 -spec port(env()) -> {true, 1..65535} | false.
@@ -136,6 +148,24 @@ credentials(Env) ->
         OtherValue ->
             ?LOG_ERROR(#{what => erldns_admin_bad_config, credentials => OtherValue}),
             false
+    end.
+
+-spec middleware(env()) -> {true, [module()]}.
+middleware(Env) ->
+    case lists:keyfind(middleware, 1, Env) of
+        {middleware, Modules} when is_list(Modules) ->
+            case lists:all(fun is_atom/1, Modules) of
+                true ->
+                    {true, Modules};
+                false ->
+                    ?LOG_ERROR(#{what => erldns_admin_bad_config, middleware => Modules}),
+                    {true, []}
+            end;
+        false ->
+            {true, []};
+        OtherValue ->
+            ?LOG_ERROR(#{what => erldns_admin_bad_config, middleware => OtherValue}),
+            {true, []}
     end.
 
 -spec env() -> {true, env()} | false | disabled.
