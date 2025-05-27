@@ -35,7 +35,7 @@ Also emits the following telemetry events:
 
 -define(DEFAULT_LIMIT, 1).
 -define(DEFAULT_BUCKETS, 3).
--define(DEFAULT_CACHE_TTL, 30).
+-define(DEFAULT_CACHE_TTL, 60).
 
 -spec prepare(erldns_pipeline:opts()) -> disabled | erldns_pipeline:opts().
 prepare(Opts) ->
@@ -109,8 +109,8 @@ clear() ->
 -spec enabled() -> boolean().
 enabled() ->
     case application:get_env(erldns, query_throttle, #{}) of
-        #{enabled := Bool} when is_boolean(Bool) ->
-            Bool;
+        #{enabled := Value} when is_boolean(Value) ->
+            Value;
         _ ->
             true
     end.
