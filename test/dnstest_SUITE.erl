@@ -101,9 +101,6 @@ assert(_Definitions, Results) ->
 %% until we can run all of them
 failing() ->
     [
-        nsec_alias_a,
-        nsec_alias_aaaa,
-        nsec_alias_other,
         nsec_nxname_ent,
         ns_zonecut_child_cname
     ].
