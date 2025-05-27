@@ -17,7 +17,8 @@
 A basic packet cache that is used to avoid multiple lookups for the
 same question received within the cache TTL.
 
-The cache is swept for old cache data at regular intervals.
+In order to work correctly, it should be added to the packet pipeline twice,
+once early in the processing pipeline, and once _after_
 
 ## Configuration
 
@@ -63,7 +64,9 @@ call(Msg, #{?MODULE := false} = Opts) ->
     Key = {Msg#dns_message.questions, Msg#dns_message.additional},
     case segmented_cache:get_entry(?MODULE, Key) of
         #dns_message{} = CachedResponse ->
-            {CachedResponse#dns_message{id = Msg#dns_message.id}, Opts#{?MODULE := cached}};
+            Msg1 = CachedResponse#dns_message{id = Msg#dns_message.id},
+            Opts1 = Opts#{?MODULE := cached, resolved => true},
+            {Msg1, Opts1};
         not_found ->
             {Msg, Opts#{?MODULE := miss}}
     end;

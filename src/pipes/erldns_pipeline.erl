@@ -67,6 +67,7 @@ call(Msg, _Opts) ->
 -type transport() :: tcp | udp.
 -doc "Options that can be passed and accumulated to the pipeline.".
 -type opts() :: #{
+    resolved => boolean(),
     transport => transport(),
     host => host(),
     atom() => dynamic()
@@ -187,7 +188,7 @@ get_pipeline() ->
 -spec store_pipeline() -> ok.
 store_pipeline() ->
     Pipes = application:get_env(erldns, packet_pipeline, ?DEFAULT_PACKET_PIPELINE),
-    DefOpts = #{transport => udp, host => undefined},
+    DefOpts = #{resolved => false, transport => udp, host => undefined},
     {Pipeline, Opts} = lists:foldl(fun prepare_pipe/2, {[], DefOpts}, Pipes),
     persistent_term:put(?MODULE, {lists:reverse(Pipeline), Opts}).
 

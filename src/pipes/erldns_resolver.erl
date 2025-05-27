@@ -38,13 +38,15 @@ Emits the following telemetry events:
 -export([call/2]).
 
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
-call(Msg, Opts) ->
+call(Msg, #{resolved := false} = Opts) ->
     case erldns_zone_cache:get_authority(Msg) of
         {ok, Authority} ->
             complete_response(call(Msg, Opts, Authority));
         {error, _} ->
             complete_response(Msg#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED})
-    end.
+    end;
+call(Msg, _) ->
+    Msg.
 
 call(Msg, _, []) ->
     case erldns_config:use_root_hints() of
