@@ -57,6 +57,17 @@ jobs:
       - run: make test
       - name: Coveralls
         uses: coverallsapp/github-action@v2
+        parallel: true
         with:
           file: _build/test/covertool/erldns.covertool.xml
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  finish:
+    needs: test
+    if: $
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close parallel build
+        uses: coverallsapp/github-action@v2
+        with:
+          parallel-finished: true

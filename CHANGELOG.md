@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+- Upgrade dns_erlang to v4.
+
 ## 6.0.2
 
 - Add mailbox length telemetry events.
