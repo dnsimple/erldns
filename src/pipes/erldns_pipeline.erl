@@ -124,7 +124,7 @@ call(Msg) ->
 -spec call(dns:message(), opts()) -> dns:message().
 call(Msg, Opts) ->
     {Pipeline, DefOpts} = get_pipeline(),
-    do_call(Msg, Pipeline, maps:merge(Opts, DefOpts)).
+    do_call(Msg, Pipeline, maps:merge(DefOpts, Opts)).
 
 -spec do_call(dns:message(), pipeline(), opts()) -> dns:message().
 do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
