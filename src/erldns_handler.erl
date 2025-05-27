@@ -53,7 +53,7 @@ Emits the following telemetry events:
 -doc "Start the handler registry process".
 -spec start_link() -> gen_server:start_ret().
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, noargs, []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, noargs, [{hibernate_after, 1000}]).
 
 -doc "Register a record handler with the default version of 1".
 -spec register_handler([dns:type()], module()) -> ok.
