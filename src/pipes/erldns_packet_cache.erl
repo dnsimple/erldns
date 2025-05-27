@@ -53,8 +53,6 @@ prepare(Opts) ->
     end.
 
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
-call(Msg, #{?MODULE := cached}) ->
-    Msg;
 %% We are authoritative so cache the packet and return the message.
 call(#dns_message{aa = true} = Msg, #{?MODULE := miss} = Opts) ->
     Key = {Msg#dns_message.questions, Msg#dns_message.additional},
