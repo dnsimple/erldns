@@ -7,8 +7,8 @@
     zone_signing_key :: crypto:rsa_private(),
     zone_signing_key_tag :: non_neg_integer(),
     zone_signing_alg :: non_neg_integer(),
-    inception :: erlang:timestamp() | calendar:datetime1970(),
-    valid_until :: erlang:timestamp() | calendar:datetime1970()
+    inception :: integer(),
+    valid_until :: integer()
 }).
 -record(zone, {
     name :: dns:dname(),

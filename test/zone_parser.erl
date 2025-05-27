@@ -9,7 +9,7 @@ json_to_erlang_test() ->
     ?assertMatch({_, _, _, _}, R).
 
 json_to_erlang_txt_spf_records_test() ->
-    I = """
+    I = ~"""
     {
       "name": "example.com",
       "records": [
@@ -37,7 +37,7 @@ json_to_erlang_txt_spf_records_test() ->
       "sha": "10ea56ad7be9d3e6e75be3a15ef0dfabe9facafba486d74914e7baf8fb36638e"
     }
     """,
-    Json = json:decode(iolist_to_binary(I)),
+    Json = json:decode(I),
     R = erldns_zone_parser:json_to_erlang(Json, []),
     Expected = [
         #dns_rr{
@@ -183,7 +183,7 @@ parse_json_keys_unsorted_proplists_test() ->
                     9170529505818457214552347052832728824507861128011245996056627438339703762731346681703094163316286362641501571794424157931806097889892946273849538579240359,
                     5130491166023191463112131781994138738077497356216817935415696052248528225933414267440640871636073852185344964288812312263453467652493907737029964715172561
                 ],
-                49016, 8, {{2016, 11, 14}, {11, 36, 58}}, {{2017, 2, 12}, {11, 36, 58}}}
+                49016, 8, 1479123418852, 1486899418849}
         ],
         erldns_zone_parser:parse_json_keys_as_maps([
             #{
@@ -234,7 +234,7 @@ base64_to_bin_test() ->
     ).
 
 input() ->
-    I = """
+    ~"""
     {
       "name": "example.com",
       "records": [
@@ -526,5 +526,4 @@ input() ->
       ],
       "sha": "10ea56ad7be9d3e6e75be3a15ef0dfabe9facafba486d74914e7baf8fb36638e"
     }
-    """,
-    iolist_to_binary(I).
+    """.

@@ -46,8 +46,8 @@ key_rrset_signer(ZoneName, RRs) ->
         Keytag = Keyset#keyset.key_signing_key_tag,
         Alg = Keyset#keyset.key_signing_alg,
         PrivateKey = Keyset#keyset.key_signing_key,
-        Inception = dns:unix_time(Keyset#keyset.inception),
-        Expiration = dns:unix_time(Keyset#keyset.valid_until),
+        Inception = Keyset#keyset.inception,
+        Expiration = Keyset#keyset.valid_until,
         dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, #{inception => Inception, expiration => Expiration})
     end.
 
@@ -60,8 +60,8 @@ zone_rrset_signer(ZoneName, RRs) ->
         Keytag = Keyset#keyset.zone_signing_key_tag,
         Alg = Keyset#keyset.zone_signing_alg,
         PrivateKey = Keyset#keyset.zone_signing_key,
-        Inception = dns:unix_time(Keyset#keyset.inception),
-        Expiration = dns:unix_time(Keyset#keyset.valid_until),
+        Inception = Keyset#keyset.inception,
+        Expiration = Keyset#keyset.valid_until,
         dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, #{inception => Inception, expiration => Expiration})
     end.
 
