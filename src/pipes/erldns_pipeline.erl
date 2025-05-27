@@ -195,7 +195,7 @@ store_pipeline() ->
 -spec prepare_pipe(pipe(), {pipeline(), opts()}) -> {pipeline(), opts()}.
 prepare_pipe(Module, {Pipeline, Opts}) when is_atom(Module) ->
     maybe
-        code:load_file(Module),
+        {module, Module} = code:ensure_loaded(Module),
         true ?= erlang:function_exported(Module, call, 2),
         false ?= erlang:function_exported(Module, prepare, 1),
         {[fun Module:call/2 | Pipeline], Opts}
