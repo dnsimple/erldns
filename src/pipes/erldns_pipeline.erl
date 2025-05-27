@@ -67,9 +67,9 @@ call(Msg, _Opts) ->
 -type transport() :: tcp | udp.
 -doc "Options that can be passed and accumulated to the pipeline.".
 -type opts() :: #{
-    resolved => boolean(),
-    transport => transport(),
-    host => host(),
+    resolved := boolean(),
+    transport := transport(),
+    host := host(),
     atom() => dynamic()
 }.
 -type return() :: dns:message() | {dns:message(), opts()} | {stop, dns:message()}.
