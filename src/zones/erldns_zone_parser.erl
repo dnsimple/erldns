@@ -155,8 +155,8 @@ parse_json_keys_as_maps([Key | Rest], Keys) ->
             zone_signing_key = to_crypto_key(maps:get(<<"zsk">>, Key)),
             zone_signing_key_tag = maps:get(<<"zsk_keytag">>, Key),
             zone_signing_alg = maps:get(<<"zsk_alg">>, Key),
-            inception = iso8601:parse(maps:get(<<"inception">>, Key)),
-            valid_until = iso8601:parse(maps:get(<<"until">>, Key))
+            inception = calendar:rfc3339_to_system_time(binary_to_list(maps:get(<<"inception">>, Key)), [{unit, millisecond}]),
+            valid_until = calendar:rfc3339_to_system_time(binary_to_list(maps:get(<<"until">>, Key)), [{unit, millisecond}])
         },
     parse_json_keys_as_maps(Rest, [KeySet | Keys]).
 

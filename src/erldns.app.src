@@ -14,7 +14,6 @@
         segmented_cache,
         mnesia,
         telemetry,
-        iso8601,
         nodefinder,
         cowboy,
         ranch
