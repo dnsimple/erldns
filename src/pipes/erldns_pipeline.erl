@@ -111,7 +111,6 @@ This callback can return
     erldns_packet_cache,
     erldns_resolver,
     erldns_packet_cache,
-    erldns_axfr,
     erldns_empty_verification
 ]).
 

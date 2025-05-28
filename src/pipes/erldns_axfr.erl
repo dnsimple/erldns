@@ -15,6 +15,10 @@
 -module(erldns_axfr).
 -moduledoc """
 Implementation of AXFR with IP address whitelisting required.
+
+### AXFR Support
+
+AXFR zone transfers are not currently implemented. The current "implementation" is just a stub.
 """.
 
 -include_lib("dns_erlang/include/dns.hrl").
@@ -49,13 +53,8 @@ is_enabled(Host, Metadata) ->
 
 append_soa(Message, []) ->
     Message;
-append_soa(Message, [Answer | Rest]) ->
-    append_soa(Message, Answer#dns_rr.type, Answer, Rest).
-
-append_soa(Message, ?DNS_TYPE_SOA_NUMBER, Answer, _) ->
+append_soa(Message, [#dns_rr{type = ?DNS_TYPE_SOA} = Answer | _Rest]) ->
     Answers = lists:flatten(Message#dns_message.answers ++ [Answer]),
     Message#dns_message{anc = length(Answers), answers = Answers};
-append_soa(Message, _, _, []) ->
-    Message;
-append_soa(Message, _, _, [Answer | Rest]) ->
-    append_soa(Message, Answer#dns_rr.type, Answer, Rest).
+append_soa(Message, [_Answer | Rest]) ->
+    append_soa(Message, Rest).
