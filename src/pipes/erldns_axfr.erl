@@ -12,15 +12,31 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Implementation of AXFR with IP address whitelisting required.
 -module(erldns_axfr).
+-moduledoc """
+Implementation of AXFR with IP address whitelisting required.
+
+### AXFR Support
+
+AXFR zone transfers are not currently implemented. The current "implementation" is just a stub.
+""".
 
 -include_lib("dns_erlang/include/dns.hrl").
 
--export([
-    is_enabled/2,
-    optionally_append_soa/1
-]).
+-behaviour(erldns_pipeline).
+
+-export([call/2]).
+-export([is_enabled/2]).
+
+-spec call(dns:message(), erldns_pipeline:opts()) -> dns:message().
+call(#dns_message{questions = Questions} = Msg, _) ->
+    %% If the message is an AXFR request then append the SOA record.
+    case lists:any(fun(#dns_query{type = T}) -> T =:= ?DNS_TYPE_AXFR end, Questions) of
+        true ->
+            append_soa(Msg, Msg#dns_message.answers);
+        false ->
+            Msg
+    end.
 
 %% Determine if AXFR is enabled for the given request host.
 is_enabled(Host, Metadata) ->
@@ -35,29 +51,10 @@ is_enabled(Host, Metadata) ->
         ),
     length(MatchingMetadata) > 0.
 
-%% If the message is an AXFR request then append the SOA record.
-optionally_append_soa(Message) ->
-    optionally_append_soa(Message, Message#dns_message.questions).
-
-optionally_append_soa(Message, []) ->
-    Message;
-optionally_append_soa(Message, [Q | Rest]) ->
-    case Q#dns_query.type of
-        ?DNS_TYPE_AXFR_NUMBER ->
-            append_soa(Message, Message#dns_message.answers);
-        _ ->
-            optionally_append_soa(Message, Rest)
-    end.
-
 append_soa(Message, []) ->
     Message;
-append_soa(Message, [Answer | Rest]) ->
-    append_soa(Message, Answer#dns_rr.type, Answer, Rest).
-
-append_soa(Message, ?DNS_TYPE_SOA_NUMBER, Answer, _) ->
+append_soa(Message, [#dns_rr{type = ?DNS_TYPE_SOA} = Answer | _Rest]) ->
     Answers = lists:flatten(Message#dns_message.answers ++ [Answer]),
     Message#dns_message{anc = length(Answers), answers = Answers};
-append_soa(Message, _, _, []) ->
-    Message;
-append_soa(Message, _, _, [Answer | Rest]) ->
-    append_soa(Message, Answer#dns_rr.type, Answer, Rest).
+append_soa(Message, [_Answer | Rest]) ->
+    append_soa(Message, Rest).

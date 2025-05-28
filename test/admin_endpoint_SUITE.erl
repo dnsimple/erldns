@@ -28,7 +28,7 @@ groups() ->
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
-init_per_suite(Config) ->
+init_per_suite(Config0) ->
     Servers = [
         [
             {name, inet_localhost_1},
@@ -39,9 +39,11 @@ init_per_suite(Config) ->
         ]
     ],
     AdminPort = 8083,
+    FileName = filename:join([code:priv_dir(erldns), "zones-example.json"]),
     AppConfig = [
         {erldns, [
             {servers, Servers},
+            {zones, FileName},
             {ff_use_txts_field, true},
             {admin, [
                 {credentials, {<<"username">>, <<"password">>}},
@@ -49,15 +51,13 @@ init_per_suite(Config) ->
             ]}
         ]}
     ],
-    application:set_env(AppConfig),
-    {ok, _} = application:ensure_all_started([erldns, ssl, inets]),
-    FileName = filename:join([code:priv_dir(erldns), "zones-example.json"]),
-    {ok, _} = erldns_storage:load_zones(FileName),
+    Config = app_helper:start_peer(Config0),
+    app_helper:start_erldns(Config, AppConfig),
     [{port, AdminPort} | Config].
 
 -spec end_per_suite(ct_suite:ct_config()) -> term().
-end_per_suite(_) ->
-    application:stop(erldns).
+end_per_suite(Config) ->
+    app_helper:stop(Config).
 
 -spec init_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_group(_, Config) ->

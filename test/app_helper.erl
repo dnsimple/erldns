@@ -29,6 +29,11 @@ start_peer(Config) ->
 start_erldns(Config, Env) ->
     Node = proplists:get_value(node, Config),
     ok = erpc:call(Node, application, set_env, [Env]),
+    PrivDir = proplists:get_value(priv_dir, Config),
+    File = filename:join([PrivDir, "dnstest.log"]),
+    ct:pal("Log file ~p~n", [File]),
+    ok = erpc:call(Node, logger, update_primary_config, [#{level => info}]),
+    ok = erpc:call(Node, logger, add_handler, [dnstest, logger_std_h, #{config => #{file => File}}]),
     {ok, _} = erpc:call(Node, application, ensure_all_started, [erldns]),
     {ok, _} = erpc:call(Node, erldns_storage, load_zones, []),
     ok.

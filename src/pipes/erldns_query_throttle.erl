@@ -1,16 +1,3 @@
-%% Copyright (c) 2012-2020, DNSimple Corporation
-%%
-%% Permission to use, copy, modify, and/or distribute this software for any
-%% purpose with or without fee is hereby granted, provided that the above
-%% copyright notice and this permission notice appear in all copies.
-%%
-%% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-%% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-%% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-%% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-%% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-%% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 -module(erldns_query_throttle).
 -moduledoc """
 Stateful query throttling. Currently only throttles `ANY` queries.
@@ -23,8 +10,9 @@ for reflection/amplification attacks.
 ```erlang
 {erldns, [
     {query_throttle, #{
-        enabled => boolean(), %% defaults to true
-        ttl => non_neg_integer(), %% Seconds, defaults to 30
+        enabled := boolean(), %% defaults to true
+        limit := non_neg_integer(), %% Number of queries to allow, defaults to 1
+        ttl := non_neg_integer(), %% Seconds, defaults to 30
     }}
 ]}
 ```
@@ -37,19 +25,41 @@ Also emits the following telemetry events:
 - `[erldns, pipeline, throttle]` with `host` in the metadata.
 """.
 
--include_lib("dns_erlang/include/dns_records.hrl").
+-include_lib("dns_erlang/include/dns.hrl").
 
--export([start_link/0, throttle/2, clear/0, merger/2]).
-
--export_type([host/0, throttle_result/0, throttle_hit_count/0]).
+-behaviour(erldns_pipeline).
+-export([prepare/1, call/2]).
+-export([start_link/0, clear/0, merger/2]).
 
 -type host() :: inet:ip_address() | inet:hostname().
--type throttle_hit_count() :: non_neg_integer().
--type throttle_result() :: ok | throttled.
 
 -define(DEFAULT_LIMIT, 1).
 -define(DEFAULT_BUCKETS, 3).
 -define(DEFAULT_CACHE_TTL, 60).
+
+-spec prepare(erldns_pipeline:opts()) -> disabled | erldns_pipeline:opts().
+prepare(Opts) ->
+    case enabled() of
+        false -> disabled;
+        true -> Opts#{packet_throttle_limit => default_limit()}
+    end.
+
+-spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
+call(Msg, #{transport := udp, host := Host, packet_throttle_limit := Limit}) ->
+    case should_throttle(Msg, Host, Limit) of
+        {true, ReqCount} ->
+            Metadata = #{transport => udp, host => Host},
+            telemetry:execute([erldns, pipeline, throttle], #{count => ReqCount}, Metadata),
+            {stop, Msg#dns_message{
+                tc = true,
+                aa = true,
+                rc = ?DNS_RCODE_NOERROR
+            }};
+        false ->
+            Msg
+    end;
+call(Msg, _) ->
+    Msg.
 
 -doc false.
 -spec start_link() -> any().
@@ -68,26 +78,6 @@ start_link() ->
             segmented_cache:start_link(?MODULE, Config)
     end.
 
--doc false.
--spec merger(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
-merger(_A, B) ->
-    B + 1.
-
--doc "Throttle the given message if necessary.".
--spec throttle(dns:message(), Context :: {term(), Host :: host()}) ->
-    ok | throttled.
-throttle(Msg, {udp, Host}) ->
-    case should_throttle(Msg, Host, ?DEFAULT_LIMIT) of
-        {true, ReqCount} ->
-            Metadata = #{protocol => udp, host => Host},
-            telemetry:execute([erldns, pipeline, throttle], #{count => ReqCount}, Metadata),
-            throttled;
-        false ->
-            ok
-    end;
-throttle(_Message, {tcp, _Host}) ->
-    ok.
-
 -spec should_throttle(dns:message(), host(), non_neg_integer()) -> false | {true, non_neg_integer()}.
 should_throttle(Msg, Host, Limit) ->
     HasAny = lists:any(fun(#dns_query{type = T}) -> T =:= ?DNS_TYPE_ANY end, Msg#dns_message.questions),
@@ -104,25 +94,39 @@ should_throttle(Host, Limit) ->
             segmented_cache:put_entry(?MODULE, Host, 1),
             false;
         ReqCount when is_integer(ReqCount), ReqCount < Limit ->
-            segmented_cache:put_entry(?MODULE, Host, ReqCount + 1),
+            segmented_cache:put_entry(?MODULE, Host, ReqCount),
             false;
         ReqCount when is_integer(ReqCount), ReqCount >= Limit ->
-            segmented_cache:put_entry(?MODULE, Host, ReqCount + 1),
+            segmented_cache:put_entry(?MODULE, Host, ReqCount),
             {true, ReqCount}
     end.
 
 -doc "Clear the cache".
 -spec clear() -> any().
 clear() ->
-    gen_server:cast(?MODULE, clear).
+    segmented_cache:delete_pattern(?MODULE, '_').
+
+-doc false.
+-spec merger(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
+merger(_A, B) ->
+    B + 1.
 
 -spec enabled() -> boolean().
 enabled() ->
     case application:get_env(erldns, query_throttle, #{}) of
-        #{enabled := Bool} when is_boolean(Bool) ->
-            Bool;
+        #{enabled := Value} when is_boolean(Value) ->
+            Value;
         _ ->
             true
+    end.
+
+-spec default_limit() -> pos_integer().
+default_limit() ->
+    case application:get_env(erldns, query_throttle, #{}) of
+        #{limit := Value} when is_integer(Value), 0 < Value ->
+            Value;
+        _ ->
+            ?DEFAULT_LIMIT
     end.
 
 -spec default_ttl() -> pos_integer().
