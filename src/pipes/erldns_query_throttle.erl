@@ -29,7 +29,7 @@ Also emits the following telemetry events:
 
 -behaviour(erldns_pipeline).
 -export([prepare/1, call/2]).
--export([start_link/0, clear/0]).
+-export([start_link/0, clear/0, merger/2]).
 
 -type host() :: inet:ip_address() | inet:hostname().
 
@@ -71,7 +71,7 @@ start_link() ->
             Config = #{
                 scope => erldns,
                 strategy => lru,
-                merger_fun => fun erlang:'+'/2,
+                merger_fun => fun ?MODULE:merger/2,
                 segment_num => ?DEFAULT_BUCKETS,
                 ttl => {seconds, default_ttl() div ?DEFAULT_BUCKETS}
             },
@@ -94,10 +94,10 @@ should_throttle(Host, Limit) ->
             segmented_cache:put_entry(?MODULE, Host, 1),
             false;
         ReqCount when is_integer(ReqCount), ReqCount < Limit ->
-            segmented_cache:put_entry(?MODULE, Host, ReqCount + 1),
+            segmented_cache:put_entry(?MODULE, Host, ReqCount),
             false;
         ReqCount when is_integer(ReqCount), ReqCount >= Limit ->
-            segmented_cache:put_entry(?MODULE, Host, ReqCount + 1),
+            segmented_cache:put_entry(?MODULE, Host, ReqCount),
             {true, ReqCount}
     end.
 
@@ -105,6 +105,11 @@ should_throttle(Host, Limit) ->
 -spec clear() -> any().
 clear() ->
     segmented_cache:delete_pattern(?MODULE, '_').
+
+-doc false.
+-spec merger(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
+merger(_A, B) ->
+    B + 1.
 
 -spec enabled() -> boolean().
 enabled() ->

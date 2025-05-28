@@ -32,6 +32,20 @@ It is a module that exports:
 
 The API expected by a module pipe is defined as a behaviour by this module.
 
+## Configuration
+
+```erlang
+{erldns, [
+    {packet_pipeline, [
+        erldns_query_throttle,
+        erldns_packet_cache,
+        erldns_resolver,
+        erldns_packet_cache,
+        erldns_empty_verification
+    ]},
+]}
+```
+
 ## Examples
 
 Here's an example of a function pipe that arbitrarily sets the truncated bit
@@ -103,8 +117,13 @@ This callback can return
 
 -behaviour(gen_server).
 
+-export([call/2]).
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, terminate/2]).
--export([call/1, call/2]).
+-ifdef(TEST).
+-export([def_opts/0]).
+-else.
+-compile({inline, [def_opts/0]}).
+-endif.
 
 -define(DEFAULT_PACKET_PIPELINE, [
     erldns_query_throttle,
@@ -113,12 +132,6 @@ This callback can return
     erldns_packet_cache,
     erldns_empty_verification
 ]).
-
--doc #{equiv => call(Msg, #{})}.
--spec call(dns:message()) -> dns:message().
-call(Msg) ->
-    {Pipeline, DefOpts} = get_pipeline(),
-    do_call(Msg, Pipeline, DefOpts).
 
 -spec call(dns:message(), #{atom() => dynamic()}) -> dns:message().
 call(Msg, Opts) ->
@@ -133,7 +146,17 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
         {#dns_message{} = Msg1, Opts1} ->
             do_call(Msg1, Pipes, Opts1);
         {stop, #dns_message{} = Msg1} ->
-            Msg1
+            Msg1;
+        Other ->
+            ?LOG_ERROR(#{
+                what => pipe_failed,
+                pipe => Pipe,
+                msg => Msg,
+                opts => Opts,
+                unexpected_return => Other
+            }),
+            ct:pal("Value ~p~n", [Other]),
+            do_call(Msg, Pipes, Opts)
     catch
         C:E:S ->
             ?LOG_ERROR(#{
@@ -187,18 +210,19 @@ get_pipeline() ->
 -spec store_pipeline() -> ok.
 store_pipeline() ->
     Pipes = application:get_env(erldns, packet_pipeline, ?DEFAULT_PACKET_PIPELINE),
-    DefOpts = #{resolved => false, transport => udp, host => undefined},
-    {Pipeline, Opts} = lists:foldl(fun prepare_pipe/2, {[], DefOpts}, Pipes),
+    {Pipeline, Opts} = lists:foldl(fun prepare_pipe/2, {[], def_opts()}, Pipes),
     persistent_term:put(?MODULE, {lists:reverse(Pipeline), Opts}).
 
 -spec prepare_pipe(pipe(), {pipeline(), opts()}) -> {pipeline(), opts()}.
 prepare_pipe(Module, {Pipeline, Opts}) when is_atom(Module) ->
     maybe
-        {module, Module} = code:ensure_loaded(Module),
+        {module, Module} ?= code:ensure_loaded(Module),
         true ?= erlang:function_exported(Module, call, 2),
         false ?= erlang:function_exported(Module, prepare, 1),
         {[fun Module:call/2 | Pipeline], Opts}
     else
+        {error, Reason} ->
+            erlang:error({badpipe, {module, Reason}});
         false ->
             erlang:error({badpipe, module_does_not_export_call});
         true ->
@@ -213,4 +237,9 @@ prepare_pipe(Module, {Pipeline, Opts}) when is_atom(Module) ->
             end
     end;
 prepare_pipe(Fun, {Pipeline, Opts}) when is_function(Fun, 2) ->
-    {[Fun | Pipeline], Opts}.
+    {[Fun | Pipeline], Opts};
+prepare_pipe(Fun, _) when is_function(Fun) ->
+    erlang:error({badpipe, {function_pipe_has_wrong_arity, Fun}}).
+
+def_opts() ->
+    #{resolved => false, transport => udp, host => undefined}.
