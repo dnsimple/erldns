@@ -121,7 +121,7 @@ call(Msg) ->
     {Pipeline, DefOpts} = get_pipeline(),
     do_call(Msg, Pipeline, DefOpts).
 
--spec call(dns:message(), opts()) -> dns:message().
+-spec call(dns:message(), #{atom() => dynamic()}) -> dns:message().
 call(Msg, Opts) ->
     {Pipeline, DefOpts} = get_pipeline(),
     do_call(Msg, Pipeline, maps:merge(DefOpts, Opts)).
