@@ -50,7 +50,7 @@ handle(Socket, IpAddr, Port, TS, Bin) ->
     Metadata = #{transport => udp},
     telemetry:execute([erldns, request, start], Measurements, Metadata),
     try
-        case erldns_decoder:decode_message(Bin) of
+        case dns:decode_message(Bin) of
             {trailing_garbage, DecodedMessage, TrailingGarbage} ->
                 ?LOG_INFO(#{what => trailing_garbage, trailing_garbage => TrailingGarbage}),
                 handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS);
