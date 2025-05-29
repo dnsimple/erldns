@@ -17,7 +17,9 @@ all() ->
         tcp_overrun,
         udp_overrun,
         udp_reactivate,
-        udp_coverage
+        udp_coverage,
+        udp_encoder_failure,
+        tcp_encoder_failure
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -184,6 +186,34 @@ udp_coverage(_) ->
     wpool:cast(WorkersPool, anything, random_worker),
     wpool_pool:random_worker(WorkersPool) ! anything.
 
+tcp_encoder_failure(_) ->
+    Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A},
+    Msg = #dns_message{qc = 1, questions = [Q]},
+    Packet = dns:encode_message(Msg),
+    application:set_env(erldns, ingress_udp_request_timeout, 50),
+    application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, transport => tcp, port => 8053}]),
+    application:set_env(erldns, packet_pipeline, [fun bad_record/2]),
+    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, 8053, [binary, {packet, 2}, {active, false}], 1000),
+    Response = request_response(tcp, Socket, Packet),
+    ct:pal("Value ~p~n", [Response]),
+    ?assertEqual(?DNS_RCODE_SERVFAIL, Response#dns_message.rc).
+
+udp_encoder_failure(_) ->
+    Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A},
+    Msg = #dns_message{qc = 1, questions = [Q]},
+    Packet = dns:encode_message(Msg),
+    application:set_env(erldns, ingress_udp_request_timeout, 50),
+    application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]),
+    application:set_env(erldns, packet_pipeline, [fun bad_record/2]),
+    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    Response = request_response(udp, Socket, Packet),
+    ct:pal("Value ~p~n", [Response]),
+    ?assertEqual(?DNS_RCODE_SERVFAIL, Response#dns_message.rc).
+
 def_opts() ->
     erldns_pipeline:def_opts().
 
@@ -218,3 +248,6 @@ assert_telemetry_event() ->
 sleeping_pipe(A, _) ->
     ct:sleep(3000),
     A.
+
+bad_record(A, _) ->
+    A#dns_message{authority = [#dns_query{}]}.
