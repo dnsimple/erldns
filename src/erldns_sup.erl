@@ -55,7 +55,8 @@ init(_Args) ->
             worker(erldns_packet_cache),
             worker(erldns_query_throttle),
             worker(erldns_handler),
-            worker(erldns_pipeline)
+            worker(erldns_pipeline),
+            supervisor(erldns_listeners)
         ],
     {ok, {#{strategy => one_for_one, intensity => 20, period => 10}, Children}}.
 
