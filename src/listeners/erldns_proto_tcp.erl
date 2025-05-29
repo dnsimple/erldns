@@ -67,7 +67,7 @@ handle(Socket, TimerPid, TS, Bin) ->
     telemetry:execute([erldns, request, start], Measurements, Metadata),
     try
         {ok, {IpAddr, _Port}} = inet:peername(Socket),
-        case erldns_decoder:decode_message(Bin) of
+        case dns:decode_message(Bin) of
             {trailing_garbage, #dns_message{} = DecodedMessage, TrailingGarbage} ->
                 ?LOG_INFO(#{what => trailing_garbage, trailing_garbage => TrailingGarbage}),
                 handle_decoded(Socket, TimerPid, TS, DecodedMessage, IpAddr);
