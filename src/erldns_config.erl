@@ -12,15 +12,9 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Provide application-wide configuration access.
 -module(erldns_config).
+-moduledoc "Provide application-wide configuration access.".
 
--export([
-    get_servers/0,
-    get_address/1,
-    get_port/0,
-    get_num_workers/0
-]).
 -export([use_root_hints/0]).
 -export([
     zone_server_env/0,
@@ -55,80 +49,10 @@
     ingress_tcp_request_timeout/0
 ]).
 
--define(DEFAULT_IPV4_ADDRESS, {127, 0, 0, 1}).
--define(DEFAULT_IPV6_ADDRESS, {0, 0, 0, 0, 0, 0, 0, 1}).
--define(DEFAULT_PORT, 53).
--define(DEFAULT_NUM_WORKERS, 10).
 -define(DEFAULT_ZONE_SERVER_PORT, 443).
 -define(DEFAULT_WEBSOCKET_PATH, "/ws").
 -define(DEFAULT_UDP_PROCESS_TIMEOUT, 500).
 -define(DEFAULT_TCP_PROCESS_TIMEOUT, 1000).
-
-get_servers() ->
-    case application:get_env(erldns, servers) of
-        {ok, Servers} ->
-            lists:map(
-                fun(Server) ->
-                    [
-                        {name, keyget(name, Server)},
-                        {address, parse_address(keyget(address, Server))},
-                        {port, keyget(port, Server)},
-                        {family, keyget(family, Server)},
-                        {processes, keyget(processes, Server, 1)}
-                    ]
-                end,
-                Servers
-            );
-        undefined ->
-            lists:map(fun(Family) -> [{name, Family}, {address, get_address(Family)}, {port, get_port()}, {family, Family}] end, [
-                inet, inet6
-            ])
-    end.
-
-%% @doc Get the IP address (either IPv4 or IPv6) that the DNS server
-%% should listen on.
-%%
-%% IPv4 default: 127.0.0.1
-%% IPv6 default: ::1
--spec get_address(inet | inet6) -> inet:ip_address().
-get_address(inet) ->
-    case application:get_env(erldns, inet4) of
-        {ok, Address} ->
-            parse_address(Address);
-        _ ->
-            ?DEFAULT_IPV4_ADDRESS
-    end;
-get_address(inet6) ->
-    case application:get_env(erldns, inet6) of
-        {ok, Address} ->
-            parse_address(Address);
-        _ ->
-            ?DEFAULT_IPV6_ADDRESS
-    end.
-
-%% @doc The the port that the DNS server should listen on.
-%%
-%% Default: 53
--spec get_port() -> inet:port_number().
-get_port() ->
-    case application:get_env(erldns, port) of
-        {ok, Port} ->
-            Port;
-        _ ->
-            ?DEFAULT_PORT
-    end.
-
-%% @doc Get the number of workers to run for handling DNS requests.
-%%
-%% Default: 10
--spec get_num_workers() -> non_neg_integer().
-get_num_workers() ->
-    case application:get_env(erldns, num_workers) of
-        {ok, NumWorkers} ->
-            NumWorkers;
-        _ ->
-            ?DEFAULT_NUM_WORKERS
-    end.
 
 -spec use_root_hints() -> boolean().
 use_root_hints() ->
@@ -231,12 +155,6 @@ ingress_tcp_request_timeout() ->
     end.
 
 % Private functions
-
-parse_address(Address) when is_list(Address) ->
-    {ok, Tuple} = inet_parse:address(Address),
-    Tuple;
-parse_address(Address) ->
-    Address.
 
 get_env_value(Key, Name) ->
     case lists:keyfind(Key, 1, get_env(Name)) of

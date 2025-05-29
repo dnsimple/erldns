@@ -29,20 +29,11 @@ groups() ->
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_suite(Config0) ->
-    Servers = [
-        [
-            {name, inet_localhost_1},
-            {address, "127.0.0.1"},
-            {port, 8053},
-            {family, inet},
-            {processes, 10}
-        ]
-    ],
     AdminPort = 8083,
     FileName = filename:join([code:priv_dir(erldns), "zones-example.json"]),
     AppConfig = [
         {erldns, [
-            {servers, Servers},
+            {listeners, [#{name => inet_1, port => 8053}]},
             {zones, FileName},
             {ff_use_txts_field, true},
             {admin, [
@@ -51,8 +42,7 @@ init_per_suite(Config0) ->
             ]}
         ]}
     ],
-    Config = app_helper:start_peer(Config0),
-    app_helper:start_erldns(Config, AppConfig),
+    Config = app_helper:start_erldns(Config0, AppConfig),
     [{port, AdminPort} | Config].
 
 -spec end_per_suite(ct_suite:ct_config()) -> term().
