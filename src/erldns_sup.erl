@@ -12,61 +12,61 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Application supervisor. Supervises everything except the UDP and TCP
-%% listeners and the zone checker.
 -module(erldns_sup).
+-moduledoc false.
 
 -behaviour(supervisor).
 
-% API
 -export([start_link/0]).
--export([
-    gc/0,
-    gc_registered/0,
-    gc_registered/1
-]).
-% Supervisor hooks
+-export([gc/0, gc_registered/0, gc_registered/1]).
+
 -export([init/1]).
 
--define(SUPERVISOR, ?MODULE).
-%% Helper macro for declaring children of supervisor
--define(CHILD(I, Type, Args), {I, {I, start_link, Args}, permanent, 5000, Type, [I]}).
-
 %% Public API
--spec start_link() -> any().
+-spec start_link() -> supervisor:startlink_ret().
 start_link() ->
-    supervisor:start_link({local, ?SUPERVISOR}, ?MODULE, []).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-%% @doc Garbage collect all processes.
+%% Garbage collect all processes.
 -spec gc() -> integer().
 gc() ->
-    length(lists:map(fun(Pid) -> garbage_collect(Pid) end, processes())).
+    length(lists:map(fun erlang:garbage_collect/1, processes())).
 
-%% @doc Garbage collect all registered processes.
+%% Garbage collect all registered processes.
 -spec gc_registered() -> integer().
 gc_registered() ->
-    length(lists:map(fun(ProcessName) -> gc_registered(ProcessName) end, registered())).
+    length(lists:map(fun gc_registered/1, registered())).
 
-%% @doc Garbage collect a named process.
+%% Garbage collect a named process.
 -spec gc_registered(atom()) -> ok.
 gc_registered(ProcessName) ->
     Pid = whereis(ProcessName),
-    garbage_collect(Pid),
+    erlang:garbage_collect(Pid),
     ok.
 
 %% Callbacks
 init(_Args) ->
-    SysProcs =
+    Children =
         [
-            ?CHILD(pg, worker, [erldns]),
-            ?CHILD(erldns_zone_cache, worker, []),
-            ?CHILD(erldns_zone_parser, worker, []),
-            ?CHILD(erldns_zone_encoder, worker, []),
-            ?CHILD(erldns_packet_cache, worker, []),
-            ?CHILD(erldns_query_throttle, worker, []),
-            ?CHILD(erldns_handler, worker, []),
-            ?CHILD(erldns_pipeline, worker, []),
-            ?CHILD(sample_custom_handler, worker, [])
+            worker(erldns_pg, pg, [erldns]),
+            worker(erldns_zone_cache),
+            worker(erldns_zone_parser),
+            worker(erldns_zone_encoder),
+            worker(erldns_packet_cache),
+            worker(erldns_query_throttle),
+            worker(erldns_handler),
+            worker(erldns_pipeline),
+            supervisor(erldns_listeners)
         ],
+    {ok, {#{strategy => one_for_one, intensity => 20, period => 10}, Children}}.
 
-    {ok, {{one_for_one, 20, 10}, SysProcs}}.
+worker(Name) ->
+    worker(Name, Name, []).
+worker(Name, Module, Args) ->
+    child(worker, Name, Module, Args).
+
+supervisor(Name) ->
+    child(supervisor, Name, Name, []).
+
+child(Type, Name, Module, Args) ->
+    #{id => Name, start => {Module, start_link, Args}, type => Type}.
