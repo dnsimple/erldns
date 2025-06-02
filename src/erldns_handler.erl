@@ -18,6 +18,7 @@ The module that handles the resolution of a single DNS question.
 
 The meat of the resolution occurs in erldns_resolver:resolve/3
 
+## Telemetry events
 Emits the following telemetry events:
 - `[erldns, handler, handoff]` (span)
 - `[erldns, handler, throttle]`
@@ -28,9 +29,7 @@ Emits the following telemetry events:
 
 -behaviour(gen_server).
 
--include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
--include("erldns.hrl").
 
 -define(DEFAULT_HANDLER_VERSION, 1).
 
@@ -38,14 +37,10 @@ Emits the following telemetry events:
     start_link/0,
     register_handler/2,
     register_handler/3,
-    get_versioned_handlers/0,
-    handle/2
+    get_versioned_handlers/0
 ]).
--export([do_handle/2]).
-% Gen server hooks
+
 -export([init/1, handle_call/3, handle_cast/2]).
-% Internal API
--export([handle_message/2]).
 
 -record(handlers_state, {
     handlers = [] :: [versioned_handler()]
@@ -65,7 +60,7 @@ start_link() ->
 register_handler(RecordTypes, Module) ->
     register_handler(RecordTypes, Module, ?DEFAULT_HANDLER_VERSION).
 
--doc "Register a record handler with a version number".
+-doc "Register a record handler with version".
 -spec register_handler([dns:type()], module(), integer()) -> ok.
 register_handler(RecordTypes, Module, Version) ->
     gen_server:call(?MODULE, {register_handler, RecordTypes, Module, Version}).
@@ -74,150 +69,6 @@ register_handler(RecordTypes, Module, Version) ->
 -spec get_versioned_handlers() -> [versioned_handler()].
 get_versioned_handlers() ->
     ets:lookup_element(?MODULE, handlers, 2, []).
-
-%% If the message has trailing garbage just throw the garbage away and continue
-%% trying to process the message.
-handle({trailing_garbage, Message, _}, Context) ->
-    handle(Message, Context);
-%% Handle the message, checking to see if it is throttled.
-handle(Message, Context = {_, Host}) when is_record(Message, dns_message) ->
-    handle(Message, Host, erldns_query_throttle:throttle(Message, Context));
-%% The message was bad so just return it.
-%% TODO: consider just throwing away the message
-handle(Message, {_, Host}) ->
-    ?LOG_ERROR("Received a bad message (module: ~p, event: ~p, message: ~p, host: ~p)", [?MODULE, bad_message, Message, Host]),
-    Message.
-
-%% We throttle ANY queries to discourage use of our authoritative name servers
-%% for reflection attacks.
-%%
-%% Note: this should probably be changed to return the original packet without
-%% any answer data and with TC bit set to 1.
-handle(Message, _Host, throttled) ->
-    Message#dns_message{
-        tc = true,
-        aa = true,
-        rc = ?DNS_RCODE_NOERROR
-    };
-%% Message was not throttled, so handle it, then do EDNS handling, optionally
-%% append the SOA record if it is a zone transfer and complete the response
-%% by filling out count-related header fields.
-handle(Message, Host, _) ->
-    telemetry:span([erldns, handler, handoff], #{}, fun() ->
-        {?MODULE:do_handle(Message, Host), #{}}
-    end).
-
-do_handle(Message, Host) ->
-    NewMessage = handle_message(Message, Host),
-    complete_response(erldns_axfr:optionally_append_soa(NewMessage)).
-
-%% Handle the message by hitting the packet cache and either
-%% using the cached packet or continuing with the lookup process.
-%%
-%% If the cache is missed, then the SOA (Start of Authority) is discovered here.
-handle_message(Message, Host) ->
-    case erldns_packet_cache:get({Message#dns_message.questions, Message#dns_message.additional}, Host) of
-        #dns_message{} = CachedResponse ->
-            CachedResponse#dns_message{id = Message#dns_message.id};
-        {error, _Reason} ->
-            % SOA lookup
-            handle_packet_cache_miss(Message, get_authority(Message), Host)
-    end.
-
-%% If the packet is not in the cache and we are not authoritative (because there
-%% is no SOA record for this zone), then answer immediately setting the AA flag to false.
-%% If erldns is configured to use root hints then those will be added to the response.
--spec handle_packet_cache_miss(Message :: dns:message(), AuthorityRecords :: dns:authority(), Host :: dns:ip()) -> dns:message().
-handle_packet_cache_miss(Message, [], _Host) ->
-    case erldns_config:use_root_hints() of
-        true ->
-            {Authority, Additional} = erldns_records:root_hints(),
-            Message#dns_message{
-                aa = false,
-                rc = ?DNS_RCODE_REFUSED,
-                authority = Authority,
-                additional = Additional
-            };
-        _ ->
-            Message#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED}
-    end;
-%% The packet is not in the cache yet we are authoritative, so try to resolve
-%% the request. This is the point the request moves on to the erldns_resolver
-%% module.
-handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
-    safe_handle_packet_cache_miss(Message#dns_message{ra = false}, AuthorityRecords, Host).
-
--spec safe_handle_packet_cache_miss(Message :: dns:message(), AuthorityRecords :: dns:authority(), Host :: dns:ip()) -> dns:message().
-safe_handle_packet_cache_miss(Message, AuthorityRecords, Host) ->
-    case application:get_env(erldns, catch_exceptions) of
-        {ok, false} ->
-            Response = erldns_resolver:resolve(Message, AuthorityRecords, Host),
-            maybe_cache_packet(Response, Response#dns_message.aa);
-        _ ->
-            try erldns_resolver:resolve(Message, AuthorityRecords, Host) of
-                Response ->
-                    maybe_cache_packet(Response, Response#dns_message.aa)
-            catch
-                throw:{error, rcode, ?DNS_RCODE_SERVFAIL} ->
-                    telemetry:execute([erldns, handler, error], #{count => 1}, #{}),
-                    Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL};
-                throw:{error, rcode, ?DNS_RCODE_NXDOMAIN} ->
-                    telemetry:execute([erldns, handler, error], #{count => 1}, #{}),
-                    Message#dns_message{aa = false, rc = ?DNS_RCODE_NXDOMAIN};
-                throw:{error, rcode, ?DNS_RCODE_REFUSED} ->
-                    telemetry:execute([erldns, handler, error], #{count => 1}, #{}),
-                    Message#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED};
-                Class:Reason:Stacktrace ->
-                    ?LOG_ERROR(#{
-                        what => resolve_error,
-                        dns_message => Message,
-                        class => Class,
-                        reason => Reason,
-                        stacktrace => Stacktrace
-                    }),
-                    telemetry:execute([erldns, handler, error], #{count => 1}, #{}),
-                    Message#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
-            end
-    end.
-
-%% We are authoritative so cache the packet and return the message.
-maybe_cache_packet(Message, true) ->
-    erldns_packet_cache:put({Message#dns_message.questions, Message#dns_message.additional}, Message),
-    Message;
-%% We are not authoritative so just return the message.
-maybe_cache_packet(Message, false) ->
-    Message.
-
-%% Get the SOA authority for the current query.
-get_authority(MessageOrName) ->
-    case erldns_zone_cache:get_authority(MessageOrName) of
-        {ok, Authority} ->
-            Authority;
-        {error, _} ->
-            []
-    end.
-
-%% Update the message counts and set the QR flag to true.
-complete_response(Message) ->
-    notify_empty_response(Message#dns_message{
-        anc = length(Message#dns_message.answers),
-        auc = length(Message#dns_message.authority),
-        adc = length(Message#dns_message.additional),
-        qr = true
-    }).
-
-notify_empty_response(Message) ->
-    case {Message#dns_message.rc, Message#dns_message.anc + Message#dns_message.auc + Message#dns_message.adc} of
-        {?DNS_RCODE_REFUSED, _} ->
-            telemetry:execute([erldns, handler, refused], #{count => 1}, #{}),
-            Message;
-        {_, 0} ->
-            ?LOG_INFO("Empty response (module: ~p, event: ~p, message: ~p)", [?MODULE, empty_response, Message]),
-            telemetry:execute([erldns, handler, empty], #{count => 1}, #{}),
-            Message;
-        _ ->
-            Message
-    end.
 
 % gen_server callbacks
 -doc false.

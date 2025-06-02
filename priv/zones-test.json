@@ -1302,9 +1302,6 @@
         }
       },
       {
-        "comment": "Insert all of the hosts here"
-      },
-      {
         "name": "double.example.com",
         "type": "A",
         "ttl": 120,
@@ -2660,9 +2657,6 @@
         "data": {
           "ip": "192.168.99.90"
         }
-      },
-      {
-        "comment": "Insert all of the hosts here"
       },
       {
         "name": "double.example-dnssec.com",

@@ -33,9 +33,64 @@ Emits the following telemetry events:
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
-%% @doc Resolve the first question in the message. If no message is present, return the original
+-behaviour(erldns_pipeline).
+
+-export([call/2]).
+
+-spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
+call(Msg, #{resolved := false} = Opts) ->
+    case erldns_zone_cache:get_authority(Msg) of
+        {ok, Authority} ->
+            complete_response(call(Msg, Opts, Authority));
+        {error, _} ->
+            complete_response(Msg#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED})
+    end;
+call(Msg, _) ->
+    Msg.
+
+call(Msg, _, []) ->
+    case erldns_config:use_root_hints() of
+        true ->
+            {Authority, Additional} = erldns_records:root_hints(),
+            Msg#dns_message{
+                aa = false,
+                rc = ?DNS_RCODE_REFUSED,
+                authority = Authority,
+                additional = Additional
+            };
+        _ ->
+            Msg#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED}
+    end;
+call(Msg, #{host := Host}, AuthorityRecords) ->
+    try
+        resolve(Msg, AuthorityRecords, Host)
+    catch
+        throw:{error, rcode, RC} ->
+            telemetry:execute([erldns, handler, error], #{count => 1}, #{rc => RC}),
+            Msg#dns_message{aa = false, rc = RC};
+        Class:Reason:Stacktrace ->
+            ?LOG_ERROR(#{
+                what => resolve_error,
+                dns_message => Msg,
+                class => Class,
+                reason => Reason,
+                stacktrace => Stacktrace
+            }),
+            telemetry:execute([erldns, handler, error], #{count => 1}, #{rc => ?DNS_RCODE_SERVFAIL}),
+            Msg#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
+    end.
+
+complete_response(Message) ->
+    Message#dns_message{
+        anc = length(Message#dns_message.answers),
+        auc = length(Message#dns_message.authority),
+        adc = length(Message#dns_message.additional),
+        qr = true
+    }.
+
+%% Resolve the first question in the message. If no message is present, return the original
 %% message. If multiple questions are present, only resolve the first question.
--spec resolve(Message :: dns:message(), AuthorityRecords :: [dns:rr()], Host :: dns:ip()) -> dns:message().
+-spec resolve(Message :: dns:message(), AuthorityRecords :: [dns:rr()], Host :: inet:ip_address()) -> dns:message().
 resolve(Message, AuthorityRecords, Host) ->
     case Message#dns_message.questions of
         [] ->
@@ -46,10 +101,10 @@ resolve(Message, AuthorityRecords, Host) ->
             resolve_question(Message, AuthorityRecords, Host, Question)
     end.
 
-%% @doc Start the resolution process on the given question.
+%% Start the resolution process on the given question.
 %% Step 1: Set the RA bit to false as we do not handle recursive queries.
 -spec resolve_question(
-    Message :: dns:message(), AuthorityRecords :: [dns:rr()], Host :: dns:ip(), Questions :: dns:questions() | dns:query()
+    Message :: dns:message(), AuthorityRecords :: [dns:rr()], Host :: inet:ip_address(), Questions :: dns:questions() | dns:query()
 ) ->
     dns:message().
 resolve_question(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
@@ -77,7 +132,7 @@ resolve_question(Message, AuthorityRecords, Host, Question) when is_record(Quest
             )
     end.
 
-%% @doc With the extracted Qname and Qtype in hand, find the nearest zone
+%% With the extracted Qname and Qtype in hand, find the nearest zone
 %% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
 %%
 %% If the request required DNSSEC, apply the DNSSEC records. Sort answers prior to returning.
@@ -270,7 +325,7 @@ resolve_exact_type_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords
             end
     end.
 
-%% @doc There is an exact name and type match and there NS records present. This may indicate the name is at the apex
+%% There is an exact name and type match and there NS records present. This may indicate the name is at the apex
 %% or it may indicate that the name is delegated.
 -spec resolve_exact_type_match_delegated(
     Message :: dns:message(),
@@ -403,7 +458,7 @@ best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords,
             resolve_best_match_referral(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zone, ReferralRecords)
     end.
 
-%% @doc There is no referral, so check to see if there is a wildcard.
+%% There is no referral, so check to see if there is a wildcard.
 %%
 %% If there is a wildcard present, then the resolver needs to continue to handle various possible types.
 %%
@@ -599,7 +654,7 @@ restart_delegated_query(Message, Qname, Qtype, Host, CnameChain, Zone, false) ->
 
 %% Utility functions
 
-%% @doc If root hints are enabled, return an updated message with the root hints.
+%% If root hints are enabled, return an updated message with the root hints.
 -spec optionally_add_root_hints(dns:message()) -> dns:message().
 optionally_add_root_hints(Message) ->
     case erldns_config:use_root_hints() of
@@ -748,7 +803,7 @@ requires_additional_processing([_ | Rest], Acc) ->
 requires_additional_processing([], Acc) ->
     lists:reverse(Acc).
 
-%% @doc Return true if DNSSEC is requested and enabled.
+%% Return true if DNSSEC is requested and enabled.
 -spec check_dnssec(Message :: dns:message(), Host :: dns:ip(), Question :: dns:query()) -> boolean().
 check_dnssec(Message, _Host, _Question) ->
     case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
@@ -759,7 +814,7 @@ check_dnssec(Message, _Host, _Question) ->
             false
     end.
 
-%% @doc Sort the answers in the given message.
+%% Sort the answers in the given message.
 -spec sort_answers(dns:message()) -> dns:message().
 sort_answers(Message) ->
     Message#dns_message{answers = lists:usort(fun sort_fun/2, Message#dns_message.answers)}.
