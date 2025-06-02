@@ -51,19 +51,6 @@ start_phase(post_start, _StartType, _PhaseArgs) ->
     ?LOG_INFO("Loading zones from local file"),
     erldns_zone_loader:load_zones(),
 
-    % Start up the UDP and TCP servers
-    ?LOG_INFO("Starting the UDP and TCP supervisor"),
-    supervisor:start_child(
-        erldns_sup,
-        #{
-            id => erldns_server_sup,
-            start => {erldns_server_sup, start_link, []},
-            restart => permanent,
-            shutdown => infinity,
-            type => supervisor
-        }
-    ),
-
     ok.
 
 stop(_State) ->
