@@ -19,7 +19,8 @@ all() ->
         udp_reactivate,
         udp_coverage,
         udp_encoder_failure,
-        tcp_encoder_failure
+        tcp_encoder_failure,
+        stats
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -213,6 +214,20 @@ udp_encoder_failure(_) ->
     Response = request_response(udp, Socket, Packet),
     ct:pal("Value ~p~n", [Response]),
     ?assertEqual(?DNS_RCODE_SERVFAIL, Response#dns_message.rc).
+
+stats(_) ->
+    Listeners = [#{name => stats_1, port => 8053}, #{name => stats_2, port => 8054}],
+    application:set_env(erldns, listeners, Listeners),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    ?assertMatch(
+        #{
+            {stats_1, udp} := #{queue_length := _},
+            {stats_2, udp} := #{queue_length := _},
+            {stats_1, tcp} := #{queue_length := _},
+            {stats_2, tcp} := #{queue_length := _}
+        },
+        erldns_listeners:get_stats()
+    ).
 
 def_opts() ->
     erldns_pipeline:def_opts().

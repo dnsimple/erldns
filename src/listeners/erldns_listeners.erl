@@ -86,17 +86,48 @@ transport := udp | tcp
     port => inet:port_number(),
     parallel_factor => parallel_factor()
 }.
--export_type([name/0, transport/0, parallel_factor/0, config/0]).
 
--export([start_link/0, init/1]).
+-doc """
+Statistics about each listener.
+""".
+-type stats() :: #{
+    {name(), tcp | udp} => #{queue_length := non_neg_integer()}
+}.
+-export_type([name/0, transport/0, parallel_factor/0, config/0, stats/0]).
 
+-export([start_link/0, init/1, get_stats/0]).
+
+-doc false.
 -spec start_link() -> supervisor:startlink_ret().
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, noargs).
 
+-doc false.
 -spec init(noargs) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init(noargs) ->
     {ok, {#{strategy => one_for_one}, child_specs()}}.
+
+-doc """
+Get statistics about all listeners.
+""".
+-spec get_stats() -> stats().
+get_stats() ->
+    Children = supervisor:which_children(?MODULE),
+    lists:foldl(fun get_stats/2, #{}, Children).
+
+get_stats({{ranch_embedded_sup, {?MODULE, Name}}, _, _, _}, #{} = Stats) ->
+    #{active_connections := ActiveConns} = ranch:info({?MODULE, Name}),
+    Stats#{{Name, tcp} => #{queue_length => ActiveConns}};
+get_stats({Name, Sup, _, [erldns_proto_udp_sup]}, Stats) ->
+    [
+        {Pool1, _, _, [wpool]},
+        {Pool2, _, _, [wpool]}
+    ] = supervisor:which_children(Sup),
+    StatsPool1 = wpool:stats(Pool1),
+    StatsPool2 = wpool:stats(Pool2),
+    {_, TotalPool1} = lists:keyfind(total_message_queue_len, 1, StatsPool1),
+    {_, TotalPool2} = lists:keyfind(total_message_queue_len, 1, StatsPool2),
+    Stats#{{Name, udp} => #{queue_length => TotalPool1 + TotalPool2}}.
 
 -spec child_specs() -> [supervisor:child_spec()].
 child_specs() ->
