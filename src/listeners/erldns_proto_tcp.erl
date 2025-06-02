@@ -72,7 +72,7 @@ handle(Socket, TimerPid, TS, Bin) ->
                 ?LOG_INFO(#{what => trailing_garbage, trailing_garbage => TrailingGarbage}),
                 handle_decoded(Socket, TimerPid, TS, DecodedMessage, IpAddr);
             {Error, Message, _} ->
-                ErrorMetadata = #{transport => tcp, error => Error, message => Message},
+                ErrorMetadata = #{transport => tcp, reason => Error, message => Message},
                 telemetry:execute([erldns, request, error], #{count => 1}, ErrorMetadata);
             DecodedMessage ->
                 handle_decoded(Socket, TimerPid, TS, DecodedMessage, IpAddr)
