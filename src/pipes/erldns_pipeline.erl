@@ -155,7 +155,6 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
                 opts => Opts,
                 unexpected_return => Other
             }),
-            ct:pal("Value ~p~n", [Other]),
             do_call(Msg, Pipes, Opts)
     catch
         C:E:S ->
