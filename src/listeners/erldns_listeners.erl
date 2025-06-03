@@ -11,13 +11,7 @@ In order to configure, add to the application environment:
     ]}
 ]}
 ```
-where
-- `Name` is any desired name in the form of an atom,
-- `IP` is `any` or a valid ip address in tuple or string format. Default is `any`.
-- `Port` is a valid port. Default is `53`.
-- `Protocol` is either `tcp` or `udp`, or `both`. Default is `both`.
-- `PFactor` is a positive integer less than or equal to 512,
-    indicating the parallelism factor. Default is `1`.
+See the type `t:config/0` for details.
 
 ## Telemetry events
 
@@ -76,9 +70,33 @@ transport := udp | tcp
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_IP, any).
 
+-doc "Name of the listener, a required parameter.".
 -type name() :: atom().
+
+-doc "TCP or UDP, or both. Default is `both`".
 -type transport() :: tcp | udp | both.
+
+-doc """
+A multiplying factor for parallelisation.
+
+The number of schedulers is multiplied by this factor when creating worker pools.
+By default, it is `1`. The number of TCP and UDP acceptors will be of this size,
+while the number of UDP workers will be 4x and the maximum number of TCP workers will be 1024x.
+Note that the UDP pool is static, while the TCP pool is dynamic.
+See `m:wpool` and `m:ranch` respectively for details.
+""".
 -type parallel_factor() :: 1..512.
+
+-doc """
+Configuration map for a listener.
+
+It can contain the following keys:
+- `Name` is any desired name in the form of an atom,
+- `IP` is `any`, in which case it will listen on all interfaces,
+    or a valid ip address in tuple or string format. Default is `any`.
+- `Port` is a valid port number. Default is `53`.
+- `Protocol` is either `tcp` or `udp`, or `both`. Default is `both`.
+""".
 -type config() :: #{
     name := name(),
     transport => transport(),
