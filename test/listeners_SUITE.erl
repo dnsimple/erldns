@@ -150,7 +150,7 @@ tcp_overrun(_) ->
         #{name => ?FUNCTION_NAME, transport => tcp, port => 8053}
     ]),
     application:set_env(erldns, packet_pipeline, [fun sleeping_pipe/2]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     {ok, Socket1} = gen_tcp:connect(
         {127, 0, 0, 1}, 8053, [binary, {packet, 2}, {active, false}], 1000
@@ -171,7 +171,7 @@ udp_overrun(_) ->
         #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
     ]),
     application:set_env(erldns, packet_pipeline, [fun sleeping_pipe/2]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
     ok = gen_udp:send(Socket, {127, 0, 0, 1}, 8053, Packet),
@@ -188,7 +188,7 @@ udp_reactivate(_) ->
         #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
     ]),
     application:set_env(erldns, packet_pipeline, []),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
     [request_response(udp, Socket, Packet) || _ <- lists:seq(1, Iterations)].
@@ -218,7 +218,7 @@ tcp_encoder_failure(_) ->
         #{name => ?FUNCTION_NAME, transport => tcp, port => 8053}
     ]),
     application:set_env(erldns, packet_pipeline, [fun bad_record/2]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     {ok, Socket} = gen_tcp:connect(
         {127, 0, 0, 1}, 8053, [binary, {packet, 2}, {active, false}], 1000
@@ -236,7 +236,7 @@ udp_encoder_failure(_) ->
         #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
     ]),
     application:set_env(erldns, packet_pipeline, [fun bad_record/2]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
     Response = request_response(udp, Socket, Packet),

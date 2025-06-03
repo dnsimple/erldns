@@ -27,9 +27,9 @@ operations occur directly through the underlying data store.
     zone_names_and_versions/0,
     get_rrset_sync_counter/3
 ]).
-% Deprecated APIs
+
 -export([get_zone_with_records/1]).
-% Write APIs
+
 -export([
     put_zone/1,
     put_zone/2,
@@ -38,6 +38,7 @@ operations occur directly through the underlying data store.
     put_zone_rrset/4,
     delete_zone_rrset/5
 ]).
+
 -export([create/1]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2]).
