@@ -109,7 +109,9 @@ code_change(_, State, _) ->
     {ok, State}.
 
 % Internal API
-json_to_erlang(#{<<"name">> := Name, <<"records">> := JsonRecords} = Zone, Parsers) when is_map(Zone) ->
+json_to_erlang(#{<<"name">> := Name, <<"records">> := JsonRecords} = Zone, Parsers) when
+    is_map(Zone)
+->
     Sha = maps:get(<<"sha">>, Zone, <<"">>),
     JsonKeys = maps:get(<<"keys">>, Zone, []),
     Records =
@@ -155,14 +157,20 @@ parse_json_keys_as_maps([Key | Rest], Keys) ->
             zone_signing_key = to_crypto_key(maps:get(<<"zsk">>, Key)),
             zone_signing_key_tag = maps:get(<<"zsk_keytag">>, Key),
             zone_signing_alg = maps:get(<<"zsk_alg">>, Key),
-            inception = calendar:rfc3339_to_system_time(binary_to_list(maps:get(<<"inception">>, Key)), [{unit, millisecond}]),
-            valid_until = calendar:rfc3339_to_system_time(binary_to_list(maps:get(<<"until">>, Key)), [{unit, millisecond}])
+            inception = calendar:rfc3339_to_system_time(
+                binary_to_list(maps:get(<<"inception">>, Key)), [{unit, millisecond}]
+            ),
+            valid_until = calendar:rfc3339_to_system_time(
+                binary_to_list(maps:get(<<"until">>, Key)), [{unit, millisecond}]
+            )
         },
     parse_json_keys_as_maps(Rest, [KeySet | Keys]).
 
 to_crypto_key(RsaKeyBin) ->
     % Where E is the public exponent, N is public modulus and D is the private exponent
-    [_, _, M, E, N | _] = tuple_to_list(public_key:pem_entry_decode(lists:last(public_key:pem_decode(RsaKeyBin)))),
+    [_, _, M, E, N | _] = tuple_to_list(
+        public_key:pem_entry_decode(lists:last(public_key:pem_decode(RsaKeyBin)))
+    ),
     [E, M, N].
 
 record_filter() ->
@@ -203,8 +211,12 @@ apply_context_options([_, _, _, _, Context]) ->
             ContextSet = sets:from_list(Context),
             Result =
                 lists:append([
-                    apply_context_match_empty_check(erldns_config:keyget(match_empty, ContextOptions), Context),
-                    apply_context_list_check(sets:from_list(erldns_config:keyget(allow, ContextOptions)), ContextSet)
+                    apply_context_match_empty_check(
+                        erldns_config:keyget(match_empty, ContextOptions), Context
+                    ),
+                    apply_context_list_check(
+                        sets:from_list(erldns_config:keyget(allow, ContextOptions)), ContextSet
+                    )
                 ]),
             case lists:any(fun(I) -> I =:= pass end, Result) of
                 true ->
@@ -396,7 +408,9 @@ json_record_to_erlang([Name, <<"MX">>, Ttl, Data, _Context]) when is_map(Data) -
     #dns_rr{
         name = Name,
         type = ?DNS_TYPE_MX,
-        data = #dns_rrdata_mx{exchange = maps:get(<<"exchange">>, Data), preference = maps:get(<<"preference">>, Data)},
+        data = #dns_rrdata_mx{
+            exchange = maps:get(<<"exchange">>, Data), preference = maps:get(<<"preference">>, Data)
+        },
         ttl = Ttl
     };
 json_record_to_erlang([Name, <<"MX">>, Ttl, Data, _Context]) ->
@@ -404,7 +418,8 @@ json_record_to_erlang([Name, <<"MX">>, Ttl, Data, _Context]) ->
         name = Name,
         type = ?DNS_TYPE_MX,
         data = #dns_rrdata_mx{
-            exchange = erldns_config:keyget(<<"exchange">>, Data), preference = erldns_config:keyget(<<"preference">>, Data)
+            exchange = erldns_config:keyget(<<"exchange">>, Data),
+            preference = erldns_config:keyget(<<"preference">>, Data)
         },
         ttl = Ttl
     };
@@ -419,7 +434,9 @@ json_record_to_erlang([Name, <<"HINFO">>, Ttl, Data, _Context]) ->
     #dns_rr{
         name = Name,
         type = ?DNS_TYPE_HINFO,
-        data = #dns_rrdata_hinfo{cpu = erldns_config:keyget(<<"cpu">>, Data), os = erldns_config:keyget(<<"os">>, Data)},
+        data = #dns_rrdata_hinfo{
+            cpu = erldns_config:keyget(<<"cpu">>, Data), os = erldns_config:keyget(<<"os">>, Data)
+        },
         ttl = Ttl
     };
 json_record_to_erlang([Name, <<"RP">>, Ttl, Data, _Context]) when is_map(Data) ->
@@ -433,7 +450,10 @@ json_record_to_erlang([Name, <<"RP">>, Ttl, Data, _Context]) ->
     #dns_rr{
         name = Name,
         type = ?DNS_TYPE_RP,
-        data = #dns_rrdata_rp{mbox = erldns_config:keyget(<<"mbox">>, Data), txt = erldns_config:keyget(<<"txt">>, Data)},
+        data = #dns_rrdata_rp{
+            mbox = erldns_config:keyget(<<"mbox">>, Data),
+            txt = erldns_config:keyget(<<"txt">>, Data)
+        },
         ttl = Ttl
     };
 json_record_to_erlang([_Name, Type, _Ttl, _Data, _Context | _] = Input) when
@@ -753,7 +773,9 @@ json_record_to_erlang_txt(Input, true) ->
 json_record_to_erlang_txt(Input, false) ->
     json_record_to_erlang_txt(Input).
 
-json_record_to_erlang_txts([Name, Type, Ttl, #{<<"txts">> := Txts} = Data, Context]) when is_list(Txts) ->
+json_record_to_erlang_txts([Name, Type, Ttl, #{<<"txts">> := Txts} = Data, Context]) when
+    is_list(Txts)
+->
     json_record_to_erlang_txts([Name, Type, Ttl, Data, Context, Txts]);
 json_record_to_erlang_txts([Name, Type, Ttl, Data, Context]) when is_list(Data) ->
     Txts =

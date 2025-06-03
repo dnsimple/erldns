@@ -104,7 +104,8 @@ handle_call({encode_zone, Zone}, _From, State) ->
 handle_call({encode_zone_records, ZoneName, RecordName}, _From, State) ->
     {reply, encode_zone_records_to_json(ZoneName, RecordName, State#state.encoders), State};
 handle_call({encode_zone_records, ZoneName, RecordName, RecordType}, _From, State) ->
-    {reply, encode_zone_records_to_json(ZoneName, RecordName, RecordType, State#state.encoders), State};
+    {reply, encode_zone_records_to_json(ZoneName, RecordName, RecordType, State#state.encoders),
+        State};
 handle_call({register_encoders, Modules}, _From, State) ->
     {reply, ok, State#state{encoders = State#state.encoders ++ Modules}};
 handle_call({register_encoder, Module}, _From, State) ->
@@ -144,7 +145,9 @@ encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
     json_encode_kw_list(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
 
 encode_zone_records_to_json(_ZoneName, RecordName, RecordType, Encoders) ->
-    Records = erldns_zone_cache:get_records_by_name_and_type(RecordName, erldns_records:name_type(RecordType)),
+    Records = erldns_zone_cache:get_records_by_name_and_type(
+        RecordName, erldns_records:name_type(RecordType)
+    ),
     json_encode_kw_list(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
 
 record_filter() ->
@@ -232,7 +235,11 @@ try_custom_encoders(Record, [Encoder | Rest]) ->
     end.
 
 encode_data({dns_rrdata_soa, Mname, Rname, Serial, Refresh, Retry, Expire, Minimum}) ->
-    erlang:iolist_to_binary(io_lib:format("~s. ~s. (~w ~w ~w ~w ~w)", [Mname, Rname, Serial, Refresh, Retry, Expire, Minimum]));
+    erlang:iolist_to_binary(
+        io_lib:format("~s. ~s. (~w ~w ~w ~w ~w)", [
+            Mname, Rname, Serial, Refresh, Retry, Expire, Minimum
+        ])
+    );
 encode_data({dns_rrdata_ns, Dname}) ->
     erlang:iolist_to_binary(io_lib:format("~s.", [Dname]));
 encode_data({dns_rrdata_a, Address}) ->
@@ -257,26 +264,53 @@ encode_data({dns_rrdata_sshfp, Alg, Fptype, Fp}) ->
 encode_data({dns_rrdata_srv, Priority, Weight, Port, Dname}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s.", [Priority, Weight, Port, Dname]));
 encode_data({dns_rrdata_naptr, Order, Preference, Flags, Services, Regexp, Replacements}) ->
-    erlang:iolist_to_binary(io_lib:format("~w ~w ~s ~s ~s ~s", [Order, Preference, Flags, Services, Regexp, Replacements]));
+    erlang:iolist_to_binary(
+        io_lib:format("~w ~w ~s ~s ~s ~s", [
+            Order, Preference, Flags, Services, Regexp, Replacements
+        ])
+    );
 encode_data({dns_rrdata_ds, KeyTag, Alg, DigestType, Digest}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest]));
 encode_data({dns_rrdata_cds, KeyTag, Alg, DigestType, Digest}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest]));
 encode_data({dns_rrdata_dnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
-    binary:encode_hex(erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])));
+    binary:encode_hex(
+        erlang:iolist_to_binary(
+            io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])
+        )
+    );
 encode_data({dns_rrdata_cdnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
-    binary:encode_hex(erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])));
-encode_data({dns_rrdata_rrsig, TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature}) ->
+    binary:encode_hex(
+        erlang:iolist_to_binary(
+            io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])
+        )
+    );
+encode_data(
+    {dns_rrdata_rrsig, TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag,
+        SignersName, Signature}
+) ->
     binary:encode_hex(
         erlang:iolist_to_binary(
             io_lib:format(
                 "~w ~w ~w ~w ~w ~w ~w ~w ~s",
-                [TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag, SignersName, Signature]
+                [
+                    TypeCovered,
+                    Alg,
+                    Labels,
+                    OriginalTtl,
+                    Expiration,
+                    Inception,
+                    KeyTag,
+                    SignersName,
+                    Signature
+                ]
             )
         )
     );
 encode_data(Data) ->
-    ?LOG_INFO("Unable to encode rrdata (module: ~p, event: ~p, data: ~p)", [?MODULE, unsupported_rrdata_type, Data]),
+    ?LOG_INFO("Unable to encode rrdata (module: ~p, event: ~p, data: ~p)", [
+        ?MODULE, unsupported_rrdata_type, Data
+    ]),
     {}.
 
 json_encode_kw_list(KwList) when is_list(KwList) ->

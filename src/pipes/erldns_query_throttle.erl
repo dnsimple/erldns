@@ -78,9 +78,12 @@ start_link() ->
             segmented_cache:start_link(?MODULE, Config)
     end.
 
--spec should_throttle(dns:message(), host(), non_neg_integer()) -> false | {true, non_neg_integer()}.
+-spec should_throttle(dns:message(), host(), non_neg_integer()) ->
+    false | {true, non_neg_integer()}.
 should_throttle(Msg, Host, Limit) ->
-    HasAny = lists:any(fun(#dns_query{type = T}) -> T =:= ?DNS_TYPE_ANY end, Msg#dns_message.questions),
+    HasAny = lists:any(
+        fun(#dns_query{type = T}) -> T =:= ?DNS_TYPE_ANY end, Msg#dns_message.questions
+    ),
     HasAny andalso should_throttle(Host, Limit).
 
 -spec should_throttle(host(), non_neg_integer()) -> false | {true, non_neg_integer()}.

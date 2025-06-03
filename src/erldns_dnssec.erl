@@ -48,7 +48,9 @@ key_rrset_signer(ZoneName, RRs) ->
         PrivateKey = Keyset#keyset.key_signing_key,
         Inception = Keyset#keyset.inception,
         Expiration = Keyset#keyset.valid_until,
-        dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, #{inception => Inception, expiration => Expiration})
+        dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, #{
+            inception => Inception, expiration => Expiration
+        })
     end.
 
 %% @doc Return a function that can be used to sign the given records using the zone signing key.
@@ -62,7 +64,9 @@ zone_rrset_signer(ZoneName, RRs) ->
         PrivateKey = Keyset#keyset.zone_signing_key,
         Inception = Keyset#keyset.inception,
         Expiration = Keyset#keyset.valid_until,
-        dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, #{inception => Inception, expiration => Expiration})
+        dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, #{
+            inception => Inception, expiration => Expiration
+        })
     end.
 
 %% @doc This function will potentially sign the given RR set if the following
@@ -93,7 +97,8 @@ handle(Message, Zone, Qname, QType) ->
     handle(Message, Zone, Qname, QType, HasKeySets, RequestDnssec).
 
 %%% Internal functions
--spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type(), boolean(), boolean()) -> dns:message().
+-spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type(), boolean(), boolean()) ->
+    dns:message().
 handle(Msg, _, _, _, _, false) ->
     Msg;
 handle(Msg, _, _, ?DNS_TYPE_NXNAME, _, true) ->
@@ -108,7 +113,9 @@ handle(#dns_message{answers = []} = Msg, Zone, Qname, QType, true, true) ->
     Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
     ApexRecords = erldns_zone_cache:get_records_by_name(Zone#zone.name),
     ApexRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), ApexRecords),
-    SoaRRSigRecords = lists:filter(erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords),
+    SoaRRSigRecords = lists:filter(
+        erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords
+    ),
     NameToNormalise = dns:labels_to_dname([?NEXT_DNAME_PART | dns:dname_to_labels(Qname)]),
     NextDname = erldns:normalize_name(NameToNormalise),
     RecordTypesForQname = record_types_for_name(Qname, Zone),
@@ -149,7 +156,9 @@ handle(Msg, Zone, _, _, true, true) ->
 % @doc Find all RRSIG records that cover the records in the provided record list.
 -spec find_rrsigs([dns:rr()]) -> [dns:rr()].
 find_rrsigs(MessageRecords) ->
-    NamesAndTypes = lists:usort(lists:map(fun(RR) -> {RR#dns_rr.name, RR#dns_rr.type} end, MessageRecords)),
+    NamesAndTypes = lists:usort(
+        lists:map(fun(RR) -> {RR#dns_rr.name, RR#dns_rr.type} end, MessageRecords)
+    ),
     lists:flatmap(
         fun({Name, Type}) ->
             NamedRRSigs = erldns_zone_cache:get_records_by_name_and_type(Name, ?DNS_TYPE_RRSIG),
@@ -169,7 +178,9 @@ find_unsigned_records(Records) ->
     lists:filter(
         fun(RR) ->
             (RR#dns_rr.type =/= ?DNS_TYPE_RRSIG) and
-                (lists:filter(erldns_records:match_name_and_type(RR#dns_rr.name, ?DNS_TYPE_RRSIG), Records) =:= [])
+                (lists:filter(
+                    erldns_records:match_name_and_type(RR#dns_rr.name, ?DNS_TYPE_RRSIG), Records
+                ) =:= [])
         end,
         Records
     ).
@@ -200,7 +211,8 @@ map_nsec_rr_types(QType, Types) ->
     MappedTypes = map_nsec_rr_types(QType, Types, Handlers),
     lists:usort(MappedTypes).
 
--spec map_nsec_rr_types(dns:type(), [dns:type()], [erldns_handler:versioned_handler()]) -> [dns:type()].
+-spec map_nsec_rr_types(dns:type(), [dns:type()], [erldns_handler:versioned_handler()]) ->
+    [dns:type()].
 map_nsec_rr_types(_QType, Types, []) ->
     Types;
 map_nsec_rr_types(QType, Types, Handlers) ->

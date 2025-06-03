@@ -102,7 +102,9 @@ put_zone_rrset_records_count_matches_cache_test() ->
     ),
     ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
     % New RRSet is being added with one record we should see an increase by 1
-    ?assertEqual(length(erldns_zone_cache:get_zone_records(ZoneName)), ZoneModified#zone.record_count),
+    ?assertEqual(
+        length(erldns_zone_cache:get_zone_records(ZoneName)), ZoneModified#zone.record_count
+    ),
     teardown_cache(Pid).
 
 put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset_test() ->
@@ -177,5 +179,7 @@ delete_zone_rrset_records_count_matches_cache_test() ->
     ),
     ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
     % Deletes a CNAME RRSet with one record + RRSig
-    ?assertEqual(length(erldns_zone_cache:get_zone_records(ZoneName)), ZoneModified#zone.record_count),
+    ?assertEqual(
+        length(erldns_zone_cache:get_zone_records(ZoneName)), ZoneModified#zone.record_count
+    ),
     teardown_cache(Pid).

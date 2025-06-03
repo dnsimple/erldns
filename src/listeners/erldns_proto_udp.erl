@@ -44,7 +44,8 @@ handle_info(Info, State) ->
     ?LOG_INFO(#{what => unexpected_info, info => Info}),
     {noreply, State}.
 
--spec handle(inet:socket(), inet:ip_address(), inet:port_number(), integer(), binary()) -> dynamic().
+-spec handle(inet:socket(), inet:ip_address(), inet:port_number(), integer(), binary()) ->
+    dynamic().
 handle(Socket, IpAddr, Port, TS, Bin) ->
     Measurements = #{monotonic_time => TS, request_size => byte_size(Bin)},
     Metadata = #{transport => udp},
@@ -62,11 +63,15 @@ handle(Socket, IpAddr, Port, TS, Bin) ->
         end
     catch
         Class:Reason:Stacktrace ->
-            MetaData = #{transport => udp, kind => Class, reason => Reason, stacktrace => Stacktrace},
+            MetaData = #{
+                transport => udp, kind => Class, reason => Reason, stacktrace => Stacktrace
+            },
             telemetry:execute([erldns, request, error], #{count => 1}, MetaData)
     end.
 
--spec handle_decoded(inet:socket(), inet:ip_address(), inet:port_number(), dns:message(), dynamic()) -> dynamic().
+-spec handle_decoded(
+    inet:socket(), inet:ip_address(), inet:port_number(), dns:message(), dynamic()
+) -> dynamic().
 handle_decoded(_, _, _, #dns_message{qr = true}, _) ->
     {error, not_a_question};
 handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS0) ->

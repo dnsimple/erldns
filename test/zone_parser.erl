@@ -112,7 +112,9 @@ json_record_ns_to_erlang_test() ->
             data = #dns_rrdata_ns{dname = <<"ns1.example.com">>},
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang([Name, <<"NS">>, 3600, [{<<"dname">>, <<"ns1.example.com">>}], undefined])
+        erldns_zone_parser:json_record_to_erlang([
+            Name, <<"NS">>, 3600, [{<<"dname">>, <<"ns1.example.com">>}], undefined
+        ])
     ).
 
 json_record_a_to_erlang_test() ->
@@ -124,7 +126,9 @@ json_record_a_to_erlang_test() ->
             data = #dns_rrdata_a{ip = {1, 2, 3, 4}},
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang([Name, <<"A">>, 3600, [{<<"ip">>, <<"1.2.3.4">>}], undefined])
+        erldns_zone_parser:json_record_to_erlang([
+            Name, <<"A">>, 3600, [{<<"ip">>, <<"1.2.3.4">>}], undefined
+        ])
     ).
 
 json_record_aaaa_to_erlang_test() ->
@@ -136,7 +140,9 @@ json_record_aaaa_to_erlang_test() ->
             data = #dns_rrdata_aaaa{ip = {0, 0, 0, 0, 0, 0, 0, 1}},
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang([Name, <<"AAAA">>, 3600, [{<<"ip">>, <<"::1">>}], undefined])
+        erldns_zone_parser:json_record_to_erlang([
+            Name, <<"AAAA">>, 3600, [{<<"ip">>, <<"::1">>}], undefined
+        ])
     ).
 
 json_record_cds_to_erlang_test() ->
@@ -150,7 +156,9 @@ json_record_cds_to_erlang_test() ->
                     keytag = 0,
                     digest_type = 2,
                     alg = 8,
-                    digest = binary:decode_hex(<<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>)
+                    digest = binary:decode_hex(
+                        <<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>
+                    )
                 },
             ttl = 3600
         },
@@ -162,7 +170,8 @@ json_record_cds_to_erlang_test() ->
                 {<<"keytag">>, 0},
                 {<<"digest_type">>, 2},
                 {<<"alg">>, 8},
-                {<<"digest">>, <<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>}
+                {<<"digest">>,
+                    <<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>}
             ],
             undefined
         ])
@@ -222,11 +231,13 @@ hex_to_bin_test() ->
 base64_to_bin_test() ->
     ?assertEqual(<<"">>, base64:decode(<<"">>)),
     ?assertEqual(
-        <<3, 1, 0, 1, 191, 165, 76, 56, 217, 9, 250, 187, 15, 147, 125, 112, 215, 117, 186, 13, 244, 192, 186, 219, 9, 112, 125, 153, 82,
-            73, 64, 105, 80, 64, 122, 98, 28, 121, 76, 104, 177, 134, 177, 93, 191, 143, 159, 158, 162, 49, 233, 249, 100, 20, 204, 218, 78,
-            206, 181, 11, 23, 169, 172, 108, 75, 212, 185, 93, 160, 72, 73, 233, 110, 231, 145, 87, 139, 112, 59, 201, 174, 24, 79, 177,
-            121, 75, 172, 121, 42, 7, 135, 246, 147, 164, 15, 25, 245, 35, 238, 109, 189, 53, 153, 219, 170, 169, 165, 4, 55, 146, 110, 207,
-            100, 56, 132, 93, 29, 73, 68, 137, 98, 82, 79, 42, 26, 122, 54, 179, 160, 161, 236, 163>>,
+        <<3, 1, 0, 1, 191, 165, 76, 56, 217, 9, 250, 187, 15, 147, 125, 112, 215, 117, 186, 13, 244,
+            192, 186, 219, 9, 112, 125, 153, 82, 73, 64, 105, 80, 64, 122, 98, 28, 121, 76, 104,
+            177, 134, 177, 93, 191, 143, 159, 158, 162, 49, 233, 249, 100, 20, 204, 218, 78, 206,
+            181, 11, 23, 169, 172, 108, 75, 212, 185, 93, 160, 72, 73, 233, 110, 231, 145, 87, 139,
+            112, 59, 201, 174, 24, 79, 177, 121, 75, 172, 121, 42, 7, 135, 246, 147, 164, 15, 25,
+            245, 35, 238, 109, 189, 53, 153, 219, 170, 169, 165, 4, 55, 146, 110, 207, 100, 56, 132,
+            93, 29, 73, 68, 137, 98, 82, 79, 42, 26, 122, 54, 179, 160, 161, 236, 163>>,
         base64:decode(<<
             "AwEAAb+lTDjZCfq7D5N9cNd1ug30wLrbCXB9mVJJQGlQQHpiHHlMaLGGsV2/j5+eojHp+WQUzNpOzrULF6msbEvUuV2gSEnpbueRV4twO8mu"
             "GE+xeUuseSoHh/aTpA8Z9SPubb01mduqqaUEN5Juz2Q4hF0dSUSJYlJPKhp6NrOgoeyj"

@@ -33,7 +33,8 @@ parse([]) ->
 parse([C | Rest]) ->
     parse_char([C | Rest], C, Rest, [], false).
 
--spec parse(String :: string(), Rest :: string(), Tokens :: [[binary()]], Escaped :: boolean()) -> [binary()] | [[binary()]].
+-spec parse(String :: string(), Rest :: string(), Tokens :: [[binary()]], Escaped :: boolean()) ->
+    [binary()] | [[binary()]].
 parse(String, [], [], _) ->
     [split(String)];
 parse(_, [], Tokens, _) ->

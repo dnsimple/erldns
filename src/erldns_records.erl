@@ -126,7 +126,9 @@ match_types(Types) ->
 
 -spec match_wildcard() -> fun((dns:rr()) -> boolean()).
 match_wildcard() ->
-    fun(R) when is_record(R, dns_rr) -> lists:any(match_wildcard_label(), dns:dname_to_labels(R#dns_rr.name)) end.
+    fun(R) when is_record(R, dns_rr) ->
+        lists:any(match_wildcard_label(), dns:dname_to_labels(R#dns_rr.name))
+    end.
 
 -spec match_wildcard_label() -> fun((binary()) -> boolean()).
 match_wildcard_label() ->

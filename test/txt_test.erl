@@ -13,7 +13,8 @@ parse_test() ->
     ?assertEqual([], erldns_txt:parse("")),
     ?assertEqual([[<<"test">>]], erldns_txt:parse("test")),
     ?assertEqual(
-        [[list_to_binary(lists:duplicate(255, "x")), list_to_binary(lists:duplicate(15, "x"))]], erldns_txt:parse(lists:duplicate(270, "x"))
+        [[list_to_binary(lists:duplicate(255, "x")), list_to_binary(lists:duplicate(15, "x"))]],
+        erldns_txt:parse(lists:duplicate(270, "x"))
     ),
     ?assertEqual([[<<"test">>]], erldns_txt:parse(<<"test">>)),
     ?assertEqual([[<<"test">>], [<<"test">>]], erldns_txt:parse("\"test\" \"test\"")),

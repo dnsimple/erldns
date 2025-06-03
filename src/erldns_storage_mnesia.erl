@@ -80,13 +80,21 @@ create(schema) ->
                             ?LOG_WARNING("The schema already exists (node: ~p)", [node()]),
                             ok;
                         ok ->
-                            ?LOG_DEBUG("Created the schema on this node with other connected nodes ~p", [mnesia:system_info()]),
+                            ?LOG_DEBUG(
+                                "Created the schema on this node with other connected nodes ~p", [
+                                    mnesia:system_info()
+                                ]
+                            ),
                             ok
                     end;
                 _ ->
                     Schema = mnesia:change_table_copy_type(schema, node(), disc_copies),
                     Copy = lists:foldl(
-                        fun(Table, Acc) -> Acc ++ [mnesia:add_table_copy(Table, node(), disc_copies)] end, [], Tables -- [schema]
+                        fun(Table, Acc) ->
+                            Acc ++ [mnesia:add_table_copy(Table, node(), disc_copies)]
+                        end,
+                        [],
+                        Tables -- [schema]
                     ),
                     ?LOG_DEBUG("Copy done Schema= ~p, Others=~p", [Schema, Copy])
             end
@@ -100,7 +108,14 @@ create(schema) ->
 %% @end
 create(zones) ->
     ok = ensure_mnesia_started(),
-    case mnesia:create_table(zones, [{attributes, record_info(fields, zone)}, {record_name, zone}, {type, set}, {disc_copies, [node()]}]) of
+    case
+        mnesia:create_table(zones, [
+            {attributes, record_info(fields, zone)},
+            {record_name, zone},
+            {type, set},
+            {disc_copies, [node()]}
+        ])
+    of
         {aborted, {already_exists, zones}} ->
             ?LOG_WARNING("The zone table already exists (node: ~p)", [node()]),
             ok;
@@ -112,7 +127,9 @@ create(zones) ->
 create(zone_records_typed) ->
     case
         mnesia:create_table(zone_records_typed, [
-            {attributes, record_info(fields, zone_records_typed)}, {disc_copies, [node()]}, {type, bag}
+            {attributes, record_info(fields, zone_records_typed)},
+            {disc_copies, [node()]},
+            {type, bag}
         ])
     of
         {aborted, {already_exists, zone_records_typed}} ->
@@ -125,7 +142,11 @@ create(zone_records_typed) ->
     end;
 create(authorities) ->
     ok = ensure_mnesia_started(),
-    case mnesia:create_table(authorities, [{attributes, record_info(fields, authorities)}, {disc_copies, [node()]}]) of
+    case
+        mnesia:create_table(authorities, [
+            {attributes, record_info(fields, authorities)}, {disc_copies, [node()]}
+        ])
+    of
         {aborted, {already_exists, authorities}} ->
             ?LOG_WARNING("The authority table already exists (node: ~p)", [node()]),
             ok;
@@ -136,7 +157,11 @@ create(authorities) ->
     end;
 create(sync_counters) ->
     ok = ensure_mnesia_started(),
-    case mnesia:create_table(sync_counters, [{attributes, record_info(fields, sync_counters)}, {disc_copies, [node()]}]) of
+    case
+        mnesia:create_table(sync_counters, [
+            {attributes, record_info(fields, sync_counters)}, {disc_copies, [node()]}
+        ])
+    of
         {aborted, {already_exists, sync_counters}} ->
             ?LOG_WARNING("The sync_counters table already exists (node: ~p)", [node()]),
             ok;
@@ -232,7 +257,9 @@ delete(Table, Key) ->
 select_delete(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}]) ->
     SelectDelete =
         fun() ->
-            Records = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, write),
+            Records = mnesia:match_object(
+                Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, write
+            ),
             lists:foreach(fun(R) -> mnesia:dirty_delete_object(R) end, Records),
             {ok, length(Records)}
         end,
@@ -274,7 +301,9 @@ select(Table, [{{{ZoneName, Fqdn}, _}, _, _}], _Limit) ->
 select(Table, [{{{ZoneName, Fqdn, Type}, _}, _, _}], _Limit) ->
     SelectFun =
         fun() ->
-            Records = mnesia:match_object(Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, read),
+            Records = mnesia:match_object(
+                Table, {zone_records_typed, ZoneName, Fqdn, Type, '_'}, read
+            ),
             [Record || {_, _, _, _, Record} <- Records]
         end,
     mnesia:activity(transaction, SelectFun).
@@ -301,7 +330,8 @@ empty_table(Table) ->
     end.
 
 %% @doc Lists the contents of the given table.
--spec list_table(atom()) -> [] | [erldns:zone()] | [erldns:authorities()] | [tuple()] | {error, doesnt_exist}.
+-spec list_table(atom()) ->
+    [] | [erldns:zone()] | [erldns:authorities()] | [tuple()] | {error, doesnt_exist}.
 list_table(zones) ->
     Pattern =
         #zone{

@@ -46,7 +46,9 @@ name_must_be_atom(_) ->
     application:set_env(erldns, listeners, [#{}]),
     ?assertMatch({error, {{invalid_listener, name, #{}}, _}}, erldns_listeners:start_link()),
     application:set_env(erldns, listeners, [#{name => <<"bad">>}]),
-    ?assertMatch({error, {{invalid_listener, name, #{name := <<"bad">>}}, _}}, erldns_listeners:start_link()),
+    ?assertMatch(
+        {error, {{invalid_listener, name, #{name := <<"bad">>}}, _}}, erldns_listeners:start_link()
+    ),
     application:set_env(erldns, listeners, [#{name => good_name, port => 0}]),
     ?assertMatch({ok, _}, erldns_listeners:start_link()).
 
@@ -95,7 +97,9 @@ p_factor_must_be_positive(_) ->
         {error, {{invalid_listener, parallel_factor, #{parallel_factor := 0}}, _}},
         erldns_listeners:start_link()
     ),
-    application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, parallel_factor => 1, port => 0}]),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, parallel_factor => 1, port => 0}
+    ]),
     ?assertMatch({ok, _}, erldns_listeners:start_link()).
 
 ip_must_be_inet_parseable(_) ->
@@ -117,10 +121,14 @@ ip_must_be_inet_parseable(_) ->
     application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, ip => any, port => 0}]),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     gen_server:stop(erldns_listeners),
-    application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, ip => {0, 0, 0, 0}, port => 0}]),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, ip => {0, 0, 0, 0}, port => 0}
+    ]),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     gen_server:stop(erldns_listeners),
-    application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, ip => {0, 0, 0, 0, 0, 0, 0, 0}, port => 0}]),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, ip => {0, 0, 0, 0, 0, 0, 0, 0}, port => 0}
+    ]),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     gen_server:stop(erldns_listeners),
     application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, ip => "::0", port => 0}]),
@@ -131,27 +139,37 @@ ip_must_be_inet_parseable(_) ->
 
 tcp_overrun(_) ->
     TelemetryEventName = [erldns, request, timeout],
-    ok = telemetry:attach(?FUNCTION_NAME, TelemetryEventName, fun ?MODULE:telemetry_handler/4, self()),
+    ok = telemetry:attach(
+        ?FUNCTION_NAME, TelemetryEventName, fun ?MODULE:telemetry_handler/4, self()
+    ),
     Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A},
     Msg = #dns_message{qc = 1, questions = [Q]},
     Packet = dns:encode_message(Msg),
     application:set_env(erldns, ingress_tcp_request_timeout, 50),
-    application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, transport => tcp, port => 8053}]),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, transport => tcp, port => 8053}
+    ]),
     application:set_env(erldns, packet_pipeline, [fun sleeping_pipe/2]),
     ?assertMatch({ok, _}, erldns_pipeline:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
-    {ok, Socket1} = gen_tcp:connect({127, 0, 0, 1}, 8053, [binary, {packet, 2}, {active, false}], 1000),
+    {ok, Socket1} = gen_tcp:connect(
+        {127, 0, 0, 1}, 8053, [binary, {packet, 2}, {active, false}], 1000
+    ),
     ok = gen_tcp:send(Socket1, Packet),
     assert_telemetry_event().
 
 udp_overrun(_) ->
     TelemetryEventName = [erldns, request, timeout],
-    ok = telemetry:attach(?FUNCTION_NAME, TelemetryEventName, fun ?MODULE:telemetry_handler/4, self()),
+    ok = telemetry:attach(
+        ?FUNCTION_NAME, TelemetryEventName, fun ?MODULE:telemetry_handler/4, self()
+    ),
     Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A},
     Msg = #dns_message{qc = 1, questions = [Q]},
     Packet = dns:encode_message(Msg),
     application:set_env(erldns, ingress_udp_request_timeout, 50),
-    application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
+    ]),
     application:set_env(erldns, packet_pipeline, [fun sleeping_pipe/2]),
     ?assertMatch({ok, _}, erldns_pipeline:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
@@ -166,7 +184,9 @@ udp_reactivate(_) ->
     Msg = #dns_message{qc = 1, questions = [Q]},
     Packet = dns:encode_message(Msg),
     application:set_env(erldns, ingress_udp_request_timeout, 50),
-    application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
+    ]),
     application:set_env(erldns, packet_pipeline, []),
     ?assertMatch({ok, _}, erldns_pipeline:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
@@ -175,7 +195,9 @@ udp_reactivate(_) ->
 
 udp_coverage(_) ->
     application:set_env(erldns, ingress_udp_request_timeout, 50),
-    application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
+    ]),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     Children = supervisor:which_children(erldns_listeners),
     {_, Me, _, _} = lists:keyfind(?FUNCTION_NAME, 1, Children),
@@ -192,11 +214,15 @@ tcp_encoder_failure(_) ->
     Msg = #dns_message{qc = 1, questions = [Q]},
     Packet = dns:encode_message(Msg),
     application:set_env(erldns, ingress_udp_request_timeout, 50),
-    application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, transport => tcp, port => 8053}]),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, transport => tcp, port => 8053}
+    ]),
     application:set_env(erldns, packet_pipeline, [fun bad_record/2]),
     ?assertMatch({ok, _}, erldns_pipeline:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
-    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, 8053, [binary, {packet, 2}, {active, false}], 1000),
+    {ok, Socket} = gen_tcp:connect(
+        {127, 0, 0, 1}, 8053, [binary, {packet, 2}, {active, false}], 1000
+    ),
     Response = request_response(tcp, Socket, Packet),
     ct:pal("Value ~p~n", [Response]),
     ?assertEqual(?DNS_RCODE_SERVFAIL, Response#dns_message.rc).
@@ -206,7 +232,9 @@ udp_encoder_failure(_) ->
     Msg = #dns_message{qc = 1, questions = [Q]},
     Packet = dns:encode_message(Msg),
     application:set_env(erldns, ingress_udp_request_timeout, 50),
-    application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
+    ]),
     application:set_env(erldns, packet_pipeline, [fun bad_record/2]),
     ?assertMatch({ok, _}, erldns_pipeline:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),

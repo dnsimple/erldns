@@ -84,7 +84,8 @@ start(#{port := Port, username := Username, password := Password} = Config) ->
             {'_', [
                 {"/", erldns_admin_root_handler, State},
                 {"/zones/:zone_name", erldns_admin_zone_resource_handler, State},
-                {"/zones/:zone_name/records[/:record_name]", erldns_admin_zone_records_resource_handler, State},
+                {"/zones/:zone_name/records[/:record_name]",
+                    erldns_admin_zone_records_resource_handler, State},
                 {"/zones/:zone_name/:action", erldns_admin_zone_control_handler, State}
             ]}
         ]

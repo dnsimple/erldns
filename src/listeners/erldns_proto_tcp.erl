@@ -79,7 +79,9 @@ handle(Socket, TimerPid, TS, Bin) ->
         end
     catch
         Class:Reason:Stacktrace ->
-            MetaData = #{transport => tcp, kind => Class, reason => Reason, stacktrace => Stacktrace},
+            MetaData = #{
+                transport => tcp, kind => Class, reason => Reason, stacktrace => Stacktrace
+            },
             telemetry:execute([erldns, request, error], #{count => 1}, MetaData)
     end.
 

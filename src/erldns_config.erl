@@ -108,7 +108,8 @@ websocket_path() ->
     keyget(path, websocket_env(), ?DEFAULT_WEBSOCKET_PATH).
 
 websocket_url() ->
-    atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++ integer_to_list(websocket_port()) ++ websocket_path().
+    atom_to_list(websocket_protocol()) ++ "://" ++ websocket_host() ++ ":" ++
+        integer_to_list(websocket_port()) ++ websocket_path().
 
 %% Storage configuration
 
@@ -167,7 +168,14 @@ get_env_value(Key, Name) ->
 get_env(storage) ->
     case application:get_env(erldns, storage) of
         undefined ->
-            [{type, erldns_storage_json}, {dir, undefined}, {user, undefined}, {pass, undefined}, {host, undefined}, {port, undefined}];
+            [
+                {type, erldns_storage_json},
+                {dir, undefined},
+                {user, undefined},
+                {pass, undefined},
+                {host, undefined},
+                {port, undefined}
+            ];
         {ok, Env} ->
             Env
     end.

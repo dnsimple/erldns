@@ -78,7 +78,8 @@ start_link() ->
 % Read API
 
 %% @doc Find a zone for a given qname.
--spec find_zone(dns:dname()) -> erldns:zone() | {error, zone_not_found} | {error, not_authoritative}.
+-spec find_zone(dns:dname()) ->
+    erldns:zone() | {error, zone_not_found} | {error, not_authoritative}.
 find_zone(Qname) ->
     find_zone(erldns:normalize_name(Qname), get_authority(Qname)).
 
@@ -142,7 +143,8 @@ get_zone_with_records(Name) ->
     end.
 
 %% @doc Find the SOA record for the given DNS question.
--spec get_authority(dns:message() | dns:dname()) -> {error, no_question} | {error, authority_not_found} | {ok, dns:authority()}.
+-spec get_authority(dns:message() | dns:dname()) ->
+    {error, no_question} | {error, authority_not_found} | {ok, dns:authority()}.
 get_authority(Message) when is_record(Message, dns_message) ->
     case Message#dns_message.questions of
         [] ->
@@ -169,7 +171,20 @@ get_delegations(Name) ->
                 lists:flatten(
                     erldns_storage:select(
                         zone_records_typed,
-                        [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), ?DNS_TYPE_NS}, '$1'}, [], ['$$']}],
+                        [
+                            {
+                                {
+                                    {
+                                        erldns:normalize_name(Zone#zone.name),
+                                        erldns:normalize_name(Name),
+                                        ?DNS_TYPE_NS
+                                    },
+                                    '$1'
+                                },
+                                [],
+                                ['$$']
+                            }
+                        ],
                         infinite
                     )
                 ),
@@ -185,7 +200,9 @@ get_zone_records(Name) ->
         {ok, Zone} ->
             lists:flatten(
                 erldns_storage:select(
-                    zone_records_typed, [{{{erldns:normalize_name(Zone#zone.name), '_', '_'}, '$1'}, [], ['$$']}], infinite
+                    zone_records_typed,
+                    [{{{erldns:normalize_name(Zone#zone.name), '_', '_'}, '$1'}, [], ['$$']}],
+                    infinite
                 )
             );
         _ ->
@@ -200,7 +217,20 @@ get_records_by_name_and_type(Name, Type) ->
             lists:flatten(
                 erldns_storage:select(
                     zone_records_typed,
-                    [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), Type}, '$1'}, [], ['$$']}],
+                    [
+                        {
+                            {
+                                {
+                                    erldns:normalize_name(Zone#zone.name),
+                                    erldns:normalize_name(Name),
+                                    Type
+                                },
+                                '$1'
+                            },
+                            [],
+                            ['$$']
+                        }
+                    ],
                     infinite
                 )
             );
@@ -216,7 +246,20 @@ get_records_by_name(Name) ->
             lists:flatten(
                 erldns_storage:select(
                     zone_records_typed,
-                    [{{{erldns:normalize_name(Zone#zone.name), erldns:normalize_name(Name), '_'}, '$1'}, [], ['$$']}],
+                    [
+                        {
+                            {
+                                {
+                                    erldns:normalize_name(Zone#zone.name),
+                                    erldns:normalize_name(Name),
+                                    '_'
+                                },
+                                '$1'
+                            },
+                            [],
+                            ['$$']
+                        }
+                    ],
                     infinite
                 )
             );
@@ -242,7 +285,9 @@ record_name_in_zone(ZoneName, Name) ->
             case
                 lists:flatten(
                     erldns_storage:select(
-                        zone_records_typed, [{{{ZoneName, erldns:normalize_name(Name), '_'}, '$1'}, [], ['$$']}], infinite
+                        zone_records_typed,
+                        [{{{ZoneName, erldns:normalize_name(Name), '_'}, '$1'}, [], ['$$']}],
+                        infinite
                     )
                 )
             of
@@ -262,9 +307,21 @@ zone_names_and_versions() ->
     % ETS and Mnesia foldl/3 differ in return values -> Mnesia's version is missing key
     case erldns_config:storage_type() of
         erldns_storage_json ->
-            erldns_storage:foldl(fun({_, Zone}, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones);
+            erldns_storage:foldl(
+                fun({_, Zone}, NamesAndShas) ->
+                    NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}]
+                end,
+                [],
+                zones
+            );
         erldns_storage_mnesia ->
-            erldns_storage:foldl(fun(Zone, NamesAndShas) -> NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}] end, [], zones)
+            erldns_storage:foldl(
+                fun(Zone, NamesAndShas) ->
+                    NamesAndShas ++ [{Zone#zone.name, Zone#zone.version}]
+                end,
+                [],
+                zones
+            )
     end.
 
 %% @doc Return current sync counter
@@ -272,7 +329,13 @@ zone_names_and_versions() ->
 get_rrset_sync_counter(ZoneName, RRFqdn, Type) ->
     case
         erldns_storage:select(
-            sync_counters, [{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), Type, '$1'}, [], ['$_']}], infinite
+            sync_counters,
+            [
+                {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), Type, '$1'}, [], [
+                    '$_'
+                ]}
+            ],
+            infinite
         )
     of
         [{ZoneName, RRFqdn, Type, Counter}] ->
@@ -294,7 +357,9 @@ write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}) ->
 %% used to determine if the zone requires updating.
 %%
 %% This function will build the necessary Zone record before inserting.
--spec put_zone({Name, Sha, Records, Keys} | {Name, Sha, Records}) -> ok | {error, Reason :: term()} when
+-spec put_zone({Name, Sha, Records, Keys} | {Name, Sha, Records}) ->
+    ok | {error, Reason :: term()}
+when
     Name :: binary(),
     Sha :: binary(),
     Records :: [dns:rr()],
@@ -323,7 +388,10 @@ put_zone_records(Name, RecordsByName) ->
 
 %% @doc Put zone RRSet
 -spec put_zone_rrset(
-    {dns:dname(), binary(), [dns:rr()]} | {dns:dname(), binary(), [dns:rr()], [any()]}, dns:dname(), dns:type(), integer()
+    {dns:dname(), binary(), [dns:rr()]} | {dns:dname(), binary(), [dns:rr()], [any()]},
+    dns:dname(),
+    dns:type(),
+    integer()
 ) ->
     ok | {error, Reason :: term()}.
 put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter) ->
@@ -332,10 +400,14 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
     case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
         {ok, Zone} ->
             % TODO: remove debug
-            ?LOG_DEBUG("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [RRFqdn, Type, ZoneName, Records]),
+            ?LOG_DEBUG("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [
+                RRFqdn, Type, ZoneName, Records
+            ]),
             KeySets = Zone#zone.keysets,
             SignedRRSet = sign_rrset(ZoneName, Records, KeySets),
-            {RRSigRecsCovering, RRSigRecsNotCovering} = filter_rrsig_records_with_type_covered(RRFqdn, Type),
+            {RRSigRecsCovering, RRSigRecsNotCovering} = filter_rrsig_records_with_type_covered(
+                RRFqdn, Type
+            ),
             % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
             TypedRecords = build_typed_index(Records ++ SignedRRSet ++ RRSigRecsNotCovering),
             CurrentRRSetRecords = get_records_by_name_and_type(RRFqdn, Type),
@@ -366,7 +438,9 @@ put_zone_records_entry(Name, {K, V, I}) ->
 put_zone_records_typed_entry(_, _, none) ->
     ok;
 put_zone_records_typed_entry(ZoneName, Fqdn, {K, V, I}) ->
-    erldns_storage:insert(zone_records_typed, {{erldns:normalize_name(ZoneName), erldns:normalize_name(Fqdn), K}, V}),
+    erldns_storage:insert(zone_records_typed, {
+        {erldns:normalize_name(ZoneName), erldns:normalize_name(Fqdn), K}, V
+    }),
     put_zone_records_typed_entry(ZoneName, Fqdn, maps:next(I)).
 
 %% @doc Remove a zone from the cache without waiting for a response.
@@ -376,7 +450,9 @@ delete_zone(Name) ->
 
 -spec delete_zone_records(binary()) -> any().
 delete_zone_records(Name) ->
-    erldns_storage:select_delete(zone_records_typed, [{{{erldns:normalize_name(Name), '_', '_'}, '_'}, [], [true]}]).
+    erldns_storage:select_delete(zone_records_typed, [
+        {{{erldns:normalize_name(Name), '_', '_'}, '_'}, [], [true]}
+    ]).
 
 %% @doc Remove zone RRSet
 -spec delete_zone_rrset(binary(), binary(), binary(), integer(), integer()) -> any().
@@ -392,17 +468,38 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                     CurrentRRSetRecords = get_records_by_name_and_type(RRFqdn, Type),
                     erldns_storage:select_delete(
                         zone_records_typed,
-                        [{{{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), Type}, '_'}, [], [true]}]
+                        [
+                            {
+                                {
+                                    {
+                                        erldns:normalize_name(ZoneName),
+                                        erldns:normalize_name(RRFqdn),
+                                        Type
+                                    },
+                                    '_'
+                                },
+                                [],
+                                [true]
+                            }
+                        ]
                     ),
 
                     % remove the RRSIG for the given record type
                     {RRSigsCovering, RRSigsNotCovering} =
                         lists:partition(
-                            erldns_records:match_type_covered(Type), get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_RRSIG_NUMBER)
+                            erldns_records:match_type_covered(Type),
+                            get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_RRSIG_NUMBER)
                         ),
                     erldns_storage:insert(
                         zone_records_typed,
-                        {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), ?DNS_TYPE_RRSIG_NUMBER}, RRSigsNotCovering}
+                        {
+                            {
+                                erldns:normalize_name(ZoneName),
+                                erldns:normalize_name(RRFqdn),
+                                ?DNS_TYPE_RRSIG_NUMBER
+                            },
+                            RRSigsNotCovering
+                        }
                     ),
 
                     % only write counter if called explicitly with Counter value i.e. different than 0.
@@ -415,22 +512,28 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                                 ZoneRecordsCount -
                                     length(CurrentRRSetRecords) -
                                     length(RRSigsCovering),
-                            update_zone_records_and_digest(ZoneName, UpdatedZoneRecordsCount, Digest),
+                            update_zone_records_and_digest(
+                                ZoneName, UpdatedZoneRecordsCount, Digest
+                            ),
                             write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter});
                         _ ->
                             ok
                     end;
                 N when CurrentCounter > N ->
-                    ?LOG_DEBUG("Not processing delete operation for RRSet (~p): counter (~p) provided is lower than system", [
-                        RRFqdn, Counter
-                    ])
+                    ?LOG_DEBUG(
+                        "Not processing delete operation for RRSet (~p): counter (~p) provided is lower than system",
+                        [
+                            RRFqdn, Counter
+                        ]
+                    )
             end;
         _ ->
             {error, zone_not_found}
     end.
 
 %% @doc Given a zone name, list of records, and a digest, update the zone metadata in cache.
--spec update_zone_records_and_digest(dns:dname(), integer(), binary()) -> ok | {error, Reason :: term()}.
+-spec update_zone_records_and_digest(dns:dname(), integer(), binary()) ->
+    ok | {error, Reason :: term()}.
 update_zone_records_and_digest(ZoneName, RecordsCount, Digest) ->
     case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
         {ok, Zone} ->
@@ -447,7 +550,8 @@ update_zone_records_and_digest(ZoneName, RecordsCount, Digest) ->
     end.
 
 %% @doc Filter RRSig records for FQDN, removing type covered.
--spec filter_rrsig_records_with_type_covered(dns:dname(), dns:type()) -> {[dns:rr()], [dns:rr()]} | {[], []}.
+-spec filter_rrsig_records_with_type_covered(dns:dname(), dns:type()) ->
+    {[dns:rr()], [dns:rr()]} | {[], []}.
 filter_rrsig_records_with_type_covered(RRFqdn, TypeCovered) ->
     % guards below do not allow fun calls to prevent side effects
     case find_zone_in_cache(erldns:normalize_name(RRFqdn)) of
@@ -503,7 +607,11 @@ is_name_in_zone(Name, Zone) ->
     ZoneName = erldns:normalize_name(Zone#zone.name),
     case
         lists:flatten(
-            erldns_storage:select(zone_records_typed, [{{{ZoneName, erldns:normalize_name(Name), '_'}, '$1'}, [], ['$$']}], infinite)
+            erldns_storage:select(
+                zone_records_typed,
+                [{{{ZoneName, erldns:normalize_name(Name), '_'}, '$1'}, [], ['$$']}],
+                infinite
+            )
         )
     of
         [] ->
@@ -522,7 +630,13 @@ is_name_in_zone(Name, Zone) ->
 is_name_in_zone_with_wildcard(Name, Zone) ->
     ZoneName = erldns:normalize_name(Zone#zone.name),
     WildcardName = erldns:normalize_name(erldns_records:wildcard_qname(Name)),
-    case lists:flatten(erldns_storage:select(zone_records_typed, [{{{ZoneName, WildcardName, '_'}, '$1'}, [], ['$$']}], infinite)) of
+    case
+        lists:flatten(
+            erldns_storage:select(
+                zone_records_typed, [{{{ZoneName, WildcardName, '_'}, '$1'}, [], ['$$']}], infinite
+            )
+        )
+    of
         [] ->
             case dns:dname_to_labels(Name) of
                 [] ->
@@ -582,7 +696,11 @@ build_named_index(Records) ->
 
 -spec build_typed_index([dns:rr()]) -> #{dns:type() => [dns:rr()]}.
 build_typed_index(Records) ->
-    TypedIndex = lists:foldl(fun(R, Idx) -> maps:update_with(R#dns_rr.type, fun(RR) -> [R | RR] end, [R], Idx) end, #{}, Records),
+    TypedIndex = lists:foldl(
+        fun(R, Idx) -> maps:update_with(R#dns_rr.type, fun(RR) -> [R | RR] end, [R], Idx) end,
+        #{},
+        Records
+    ),
     maps:map(fun(_K, V) -> lists:reverse(V) end, TypedIndex).
 
 -spec sign_zone(erldns:zone()) -> erldns:zone().
@@ -590,14 +708,18 @@ sign_zone(Zone = #zone{keysets = []}) ->
     Zone;
 sign_zone(Zone) ->
     DnskeyRRs = lists:filter(erldns_records:match_type(?DNS_TYPE_DNSKEY), Zone#zone.records),
-    KeyRRSigRecords = lists:flatten(lists:map(erldns_dnssec:key_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets)),
+    KeyRRSigRecords = lists:flatten(
+        lists:map(erldns_dnssec:key_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets)
+    ),
     % TODO: remove wildcard signatures as they will not be used but are taking up space
     ZoneRRSigRecords =
         lists:flatten(
             lists:map(
                 erldns_dnssec:zone_rrset_signer(
                     Zone#zone.name,
-                    lists:filter(fun(RR) -> RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY end, Zone#zone.records)
+                    lists:filter(
+                        fun(RR) -> RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY end, Zone#zone.records
+                    )
                 ),
                 Zone#zone.keysets
             )
@@ -605,7 +727,10 @@ sign_zone(Zone) ->
     Records =
         Zone#zone.records ++
             KeyRRSigRecords ++
-            rewrite_soa_rrsig_ttl(Zone#zone.records, ZoneRRSigRecords -- lists:filter(erldns_records:match_wildcard(), ZoneRRSigRecords)),
+            rewrite_soa_rrsig_ttl(
+                Zone#zone.records,
+                ZoneRRSigRecords -- lists:filter(erldns_records:match_wildcard(), ZoneRRSigRecords)
+            ),
     #zone{
         name = Zone#zone.name,
         version = Zone#zone.version,

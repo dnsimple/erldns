@@ -49,7 +49,9 @@ load_zones() ->
             ?LOG_INFO("Loaded zones (count: ~p)", [length(JsonZones)]),
             {ok, length(JsonZones)};
         {error, Reason} ->
-            ?LOG_ERROR("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [?MODULE, read_file_error, Reason]),
+            ?LOG_ERROR("Failed to load zones (module: ~p, event: ~p, reason: ~p)", [
+                ?MODULE, read_file_error, Reason
+            ]),
             {err, Reason}
     end.
 

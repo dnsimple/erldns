@@ -191,7 +191,9 @@ get_zone_record_resource_name(CtConfig) ->
     end.
 
 get_zone_record_resource_name_type(CtConfig) ->
-    Request = {endpoint(CtConfig, "/zones/example.com/records/www.example.com?type=CNAME"), headers(good)},
+    Request = {
+        endpoint(CtConfig, "/zones/example.com/records/www.example.com?type=CNAME"), headers(good)
+    },
     case httpc:request(get, Request, [], []) of
         {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Payload}} ->
             Body = json:decode(iolist_to_binary(Payload)),
@@ -211,7 +213,9 @@ get_zone_record_resource_name_type(CtConfig) ->
     end.
 
 get_zone_record_resource_name_type_non_existing(CtConfig) ->
-    Request = {endpoint(CtConfig, "/zones/example.com/records/www.example.com?type=A"), headers(good)},
+    Request = {
+        endpoint(CtConfig, "/zones/example.com/records/www.example.com?type=A"), headers(good)
+    },
     case httpc:request(get, Request, [], []) of
         {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Payload}} ->
             Body = json:decode(iolist_to_binary(Payload)),
