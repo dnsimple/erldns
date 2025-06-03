@@ -11,13 +11,7 @@ In order to configure, add to the application environment:
     ]}
 ]}
 ```
-where
-- `Name` is any desired name in the form of an atom,
-- `IP` is `any` or a valid ip address in tuple or string format. Default is `any`.
-- `Port` is a valid port. Default is `53`.
-- `Protocol` is either `tcp` or `udp`, or `both`. Default is `both`.
-- `PFactor` is a positive integer less than or equal to 512,
-    indicating the parallelism factor. Default is `1`.
+See the type `t:config/0` for details.
 
 ## Telemetry events
 
@@ -76,9 +70,33 @@ transport := udp | tcp
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_IP, any).
 
+-doc "Name of the listener, a required parameter.".
 -type name() :: atom().
+
+-doc "TCP or UDP, or both. Default is `both`".
 -type transport() :: tcp | udp | both.
+
+-doc """
+A multiplying factor for parallelisation.
+
+The number of schedulers is multiplied by this factor when creating worker pools.
+By default, it is `1`. The number of TCP and UDP acceptors will be of this size,
+while the number of UDP workers will be 4x and the maximum number of TCP workers will be 1024x.
+Note that the UDP pool is static, while the TCP pool is dynamic.
+See `m:wpool` and `m:ranch` respectively for details.
+""".
 -type parallel_factor() :: 1..512.
+
+-doc """
+Configuration map for a listener.
+
+It can contain the following keys:
+- `Name` is any desired name in the form of an atom,
+- `IP` is `any`, in which case it will listen on all interfaces,
+    or a valid ip address in tuple or string format. Default is `any`.
+- `Port` is a valid port number. Default is `53`.
+- `Protocol` is either `tcp` or `udp`, or `both`. Default is `both`.
+""".
 -type config() :: #{
     name := name(),
     transport => transport(),
@@ -86,17 +104,48 @@ transport := udp | tcp
     port => inet:port_number(),
     parallel_factor => parallel_factor()
 }.
--export_type([name/0, transport/0, parallel_factor/0, config/0]).
 
--export([start_link/0, init/1]).
+-doc """
+Statistics about each listener.
+""".
+-type stats() :: #{
+    {name(), tcp | udp} => #{queue_length := non_neg_integer()}
+}.
+-export_type([name/0, transport/0, parallel_factor/0, config/0, stats/0]).
 
+-export([start_link/0, init/1, get_stats/0]).
+
+-doc false.
 -spec start_link() -> supervisor:startlink_ret().
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, noargs).
 
+-doc false.
 -spec init(noargs) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init(noargs) ->
     {ok, {#{strategy => one_for_one}, child_specs()}}.
+
+-doc """
+Get statistics about all listeners.
+""".
+-spec get_stats() -> stats().
+get_stats() ->
+    Children = supervisor:which_children(?MODULE),
+    lists:foldl(fun get_stats/2, #{}, Children).
+
+get_stats({{ranch_embedded_sup, {?MODULE, Name}}, _, _, _}, #{} = Stats) ->
+    #{active_connections := ActiveConns} = ranch:info({?MODULE, Name}),
+    Stats#{{Name, tcp} => #{queue_length => ActiveConns}};
+get_stats({Name, Sup, _, [erldns_proto_udp_sup]}, Stats) ->
+    [
+        {Pool1, _, _, [wpool]},
+        {Pool2, _, _, [wpool]}
+    ] = supervisor:which_children(Sup),
+    StatsPool1 = wpool:stats(Pool1),
+    StatsPool2 = wpool:stats(Pool2),
+    {_, TotalPool1} = lists:keyfind(total_message_queue_len, 1, StatsPool1),
+    {_, TotalPool2} = lists:keyfind(total_message_queue_len, 1, StatsPool2),
+    Stats#{{Name, udp} => #{queue_length => TotalPool1 + TotalPool2}}.
 
 -spec child_specs() -> [supervisor:child_spec()].
 child_specs() ->

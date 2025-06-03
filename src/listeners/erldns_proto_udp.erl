@@ -55,7 +55,7 @@ handle(Socket, IpAddr, Port, TS, Bin) ->
                 ?LOG_INFO(#{what => trailing_garbage, trailing_garbage => TrailingGarbage}),
                 handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS);
             {Error, Message, _} ->
-                ErrorMetadata = #{transport => udp, error => Error, message => Message},
+                ErrorMetadata = #{transport => udp, reason => Error, message => Message},
                 telemetry:execute([erldns, request, error], #{count => 1}, ErrorMetadata);
             DecodedMessage ->
                 handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS)
