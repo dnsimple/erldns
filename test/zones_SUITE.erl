@@ -95,7 +95,7 @@ bad_json_not_list(Config) ->
 wildcard_loose(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     application:set_env(erldns, zones, #{strict => false, path => DataDir}),
-    ?assertMatch({ok, 1}, erldns_zone_loader:load_zones()).
+    ?assertMatch({ok, 2}, erldns_zone_loader:load_zones()).
 
 valid_zones(Config) ->
     DataDir = proplists:get_value(data_dir, Config),

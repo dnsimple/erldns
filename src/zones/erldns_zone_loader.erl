@@ -77,14 +77,11 @@ load_zone_file(Filename) ->
         {ok, FileContent} ?= file:read_file(Filename),
         {ok, JsonZones} ?= safe_json_decode(FileContent),
         ?LOG_INFO(#{what => putting_zones_into_cache}),
-        true ?= lists:all(fun load_zone/1, JsonZones),
+        lists:foreach(fun load_zone/1, JsonZones),
         Count = length(JsonZones),
         ?LOG_INFO(#{what => loaded_zones, count => Count}),
         {ok, Count}
     else
-        false ->
-            ?LOG_ERROR(#{what => read_zone_error, reason => failed_to_load_zone}),
-            {error, failed_to_load_zone};
         {error, Reason} ->
             ?LOG_ERROR(#{what => read_zone_error, reason => Reason}),
             {error, Reason}
@@ -92,13 +89,7 @@ load_zone_file(Filename) ->
 
 load_zone(JsonZone) ->
     Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-    case erldns_zone_cache:put_zone(Zone) of
-        {error, Reason} ->
-            ?LOG_ERROR(#{what => put_zone_error, reason => Reason, json => JsonZone}),
-            false;
-        _ ->
-            true
-    end.
+    erldns_zone_cache:put_zone(Zone).
 
 % Internal API
 get_config() ->

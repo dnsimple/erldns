@@ -4,8 +4,8 @@
 
 load_zones_with_existing_file_test() ->
     {ok, Pid} = erldns_zone_parser:start_link(),
-    erldns_storage:create(zones),
-    erldns_storage:create(zone_records_typed),
+    erldns_zone_cache:create(zones),
+    erldns_zone_cache:create(zone_records_typed),
     Filename = filename:join(tmp_dir(), "zones.json"),
 
     ok = file:write_file(

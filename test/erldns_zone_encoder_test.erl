@@ -8,8 +8,8 @@
 
 zone_meta_to_json_with_valid_zone_test() ->
     {ok, Pid} = erldns_zone_parser:start_link(),
-    erldns_storage:create(zones),
-    erldns_storage:create(zone_records_typed),
+    erldns_zone_cache:create(zones),
+    erldns_zone_cache:create(zone_records_typed),
 
     Z = #zone{
         name = <<"example.com">>,
