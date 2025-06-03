@@ -34,7 +34,7 @@ init_per_suite(Config0) ->
     AppConfig = [
         {erldns, [
             {listeners, [#{name => inet_1, port => 8053}]},
-            {zones, FileName},
+            {zones, #{path => FileName}},
             {ff_use_txts_field, true},
             {admin, [
                 {credentials, {<<"username">>, <<"password">>}},

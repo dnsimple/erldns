@@ -20,10 +20,10 @@ setup_cache() ->
     Pid.
 
 load_dnssec_zone() ->
-    erldns_storage:load_zones("test/dnssec-zone.json").
+    erldns_zone_loader:load_zones(#{path => "test/dnssec-zone.json", strict => true}).
 
 load_standard_zone() ->
-    erldns_storage:load_zones("test/standard-zone.json").
+    erldns_zone_loader:load_zones(#{path => "test/standard-zone.json", strict => true}).
 
 teardown_cache(Pid) ->
     ?assert(meck:validate(telemetry)),
