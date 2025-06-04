@@ -24,7 +24,7 @@ make
 When dependencies are updated the rebar.lock file will need to be updated for the new dependency to be used. The following command does this:
 
 ```shell
-./rebar3 upgrade --all
+rebar3 upgrade --all
 ```
 
 ## Formatting
@@ -77,4 +77,4 @@ The following instructions uses `$VERSION` as a placeholder, where `$VERSION` is
 
 Submit unit tests for your changes. You can test your changes on your machine by [running the test suite](#testing).
 
-When you submit a PR, tests will also be run on the [continuous integration environment via GitHub Actions](https://github.com/dnsimple/dnsimple-ruby/actions/workflows/ci.yml).
+When you submit a PR, tests will also be run on the [continuous integration environment via GitHub Actions](https://github.com/dnsimple/erldns/actions/workflows/ci.yml).

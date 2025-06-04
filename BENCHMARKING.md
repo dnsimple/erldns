@@ -29,7 +29,8 @@ www.example.com. CNAME
 
 ## Start the Server
 
-> [!IMPORTANT]
+> ### Important {: .tip}
+>
 > Start `erldns` as a release to make sure it gets compiled with production-like settings, rather than dev settings (as in `rebar3 shell`).
 
 First, create a release:
@@ -56,9 +57,9 @@ See `dnsperf -h` for an explanation of the flags.
 
 ### Latest Benchmark
 
-The latest benchmark was run on 2024/10/06 by @whatyouhide, on an 2021 Apple MacBook Pro, 14-inch, M1 Pro CPU, 16 GB of memory.
+The latest benchmark was run on 2024/10/06 by @whatyouhide, on an 2023 Apple MacBook Pro, 16-inch, M3 Pro CPU, 36GB of memory.
 
-In these conditions, `erldns` can serve around 58k queries per second. The details of the benchmark are below.
+In these conditions, `erldns` can serve around 68k queries per second. The details of the benchmark are below.
 
 #### Input queries file
 
@@ -74,7 +75,7 @@ www.example.com. CNAME
 #### Command
 
 ```shell
-dnsperf -p 8053 -d ./queries.txt -T 4 -c 20 -n 10000
+dnsperf -p 8053 -d ./queries.txt -T 6 -c 256 -l 30
 ```
 
 #### Results
@@ -83,23 +84,23 @@ dnsperf -p 8053 -d ./queries.txt -T 4 -c 20 -n 10000
 DNS Performance Testing Tool
 Version 2.14.0
 
-[Status] Command line: dnsperf -p 8053 -d ./queries.txt -T 4 -c 20 -n 10000
-[Status] Sending queries (to 127.0.0.1:8053)
-[Status] Started at: Sun Oct  6 15:05:52 2024
-[Status] Stopping after 10000 runs through file
-[Status] Testing complete (end of file)
+[Status] Command line: dnsperf -p 8053 -d ./queries.txt -T 6 -c 256 -l 30
+[Status] Sending queries (to 127.0.0.1:8888)
+[Status] Started at: Sun Mar 30 09:02:25 2025
+[Status] Stopping after 30.000000 seconds
+[Status] Testing complete (time limit)
 
 Statistics:
 
-  Queries sent:         60000
-  Queries completed:    60000 (100.00%)
+  Queries sent:         2048492
+  Queries completed:    2048492 (100.00%)
   Queries lost:         0 (0.00%)
 
-  Response codes:       NOERROR 20000 (33.33%), REFUSED 40000 (66.67%)
-  Average packet size:  request 33, response 38
-  Run time (s):         1.029389
-  Queries per second:   58287.003261
+  Response codes:       NOERROR 2048492 (100.00%)
+  Average packet size:  request 48, response 64
+  Run time (s):         30.001079
+  Queries per second:   68280.610841
 
-  Average Latency (s):  0.001682 (min 0.000085, max 0.006491)
-  Latency StdDev (s):   0.001155
+  Average Latency (s):  0.001239 (min 0.000055, max 0.021753)
+  Latency StdDev (s):   0.000768
 ```

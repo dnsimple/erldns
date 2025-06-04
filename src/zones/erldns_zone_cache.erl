@@ -328,9 +328,31 @@ Put a name and its records into the cache, along with a SHA which can be
 used to determine if the zone requires updating.
 
 This function will build the necessary Zone record before inserting.
+
+The name of each record must be the fully qualified domain name (including the zone part).
+
+Here's an example:
+
+```erlang
+erldns_zone_cache:put_zone({
+  <<"example.com">>, <<"someDigest">>, [
+    #dns_rr{
+      name = <<"example.com">>,
+      type = ?DNS_TYPE_A,
+      ttl = 3600,
+      data = #dns_rrdata_a{ip = {1,2,3,4}}
+    },
+    #dns_rr{
+      name = <<"www.example.com">>,
+      type = ?DNS_TYPE_CNAME,
+      ttl = 3600,
+      data = #dns_rrdata_cname{dname = <<"example.com">>}
+    }
+  ]}).
+```
 """.
 -spec put_zone({Name, Sha, Records, Keys} | {Name, Sha, Records}) -> ok when
-    Name :: binary(),
+    Name :: dns:dname(),
     Sha :: binary(),
     Records :: [dns:rr()],
     Keys :: [erldns:keyset()].

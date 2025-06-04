@@ -1,19 +1,5 @@
-%% Copyright (c) 2012-2020, DNSimple Corporation
-%%
-%% Permission to use, copy, modify, and/or distribute this software for any
-%% purpose with or without fee is hereby granted, provided that the above
-%% copyright notice and this permission notice appear in all copies.
-%%
-%% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-%% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-%% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-%% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-%% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-%% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-%% Functions related to DNS records.
 -module(erldns_records).
+-moduledoc false.
 
 -include("erldns.hrl").
 
@@ -48,7 +34,7 @@
     replace_name/1
 ]).
 
-%% @doc If given Name is a wildcard name then the original qname needs to be returned in its place.
+-doc "If given Name is a wildcard name then the original qname needs to be returned in its place.".
 -spec optionally_convert_wildcard(dns:dname(), dns:dname()) -> dns:dname().
 optionally_convert_wildcard(Name, Qname) ->
     [Head | _] = dns:dname_to_labels(Name),
@@ -59,13 +45,17 @@ optionally_convert_wildcard(Name, Qname) ->
             Name
     end.
 
-%% @doc Get a wildcard variation of a Qname. Replaces the leading abel with an asterisk for wildcard lookup.
+-doc """
+Get a wildcard variation of a Qname.
+
+Replaces the leading abel with an asterisk for wildcard lookup.
+""".
 -spec wildcard_qname(dns:dname()) -> dns:dname().
 wildcard_qname(Qname) ->
     [_ | Rest] = dns:dname_to_labels(Qname),
     dns:labels_to_dname([<<"*">>] ++ Rest).
 
-%% @doc Return the TTL value or 3600 if it is undefined.
+-doc "Return the TTL value or 3600 if it is undefined.".
 -spec default_ttl(integer() | undefined) -> integer().
 default_ttl(TTL) ->
     case TTL of
@@ -75,7 +65,7 @@ default_ttl(TTL) ->
             Value
     end.
 
-%% @doc Return the Priority value or 0 if it is undefined.
+-doc "Return the Priority value or 0 if it is undefined.".
 -spec default_priority(integer() | undefined) -> integer().
 default_priority(Priority) ->
     case Priority of
@@ -85,18 +75,22 @@ default_priority(Priority) ->
             Value
     end.
 
-%% @doc Applies a minimum TTL based on the SOA minimum value.
-%%
-%% The first argument is the Record that is being updated.
-%% The second argument is the SOA RR Data.
+-doc """
+Applies a minimum TTL based on the SOA minimum value.
+
+The first argument is the Record that is being updated.
+The second argument is the SOA RR Data.
+""".
 -spec minimum_soa_ttl(dns:rr(), dns:rrdata()) -> dns:rr().
 minimum_soa_ttl(Record, Data) when is_record(Data, dns_rrdata_soa) ->
     Record#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, Record#dns_rr.ttl)};
 minimum_soa_ttl(Record, _) ->
     Record.
 
-%% @doc According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
-%% must be set to the value of the minimum field in the SOA content.
+-doc """
+According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
+must be set to the value of the minimum field in the SOA content.
+""".
 -spec rewrite_soa_ttl(dns:message()) -> dns:message().
 rewrite_soa_ttl(Message) ->
     rewrite_soa_ttl(Message, Message#dns_message.authority, []).
@@ -147,7 +141,7 @@ match_type_covered(Qtype) ->
 replace_name(Name) ->
     fun(R) when is_record(R, dns_rr) -> R#dns_rr{name = Name} end.
 
-%% @doc Returns the type value given a binary string.
+-doc "Returns the type value given a binary string.".
 -spec name_type(binary()) -> dns:type() | undefined.
 name_type(Type) when is_binary(Type) ->
     case Type of
