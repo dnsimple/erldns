@@ -18,7 +18,6 @@
         cowboy,
         nodefinder
     ]},
-    {start_phases, [{post_start, []}]},
     {licenses, ["Apache-2.0"]},
     {links, [{"GitHub", "https://github.com/dnsimple/erldns"}]}
 ]}.

@@ -97,7 +97,14 @@ register_encoder(Module) ->
 % Gen server hooks
 
 init([]) ->
-    {ok, #state{encoders = []}}.
+    Encoders =
+        case application:get_env(erldns, custom_zone_encoders) of
+            {ok, L} ->
+                lists:reverse(L);
+            _ ->
+                []
+        end,
+    {ok, #state{encoders = Encoders}}.
 
 handle_call({encode_zone, Zone}, _From, State) ->
     {reply, encode_zone_to_json(Zone, State#state.encoders), State};

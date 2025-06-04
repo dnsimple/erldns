@@ -85,7 +85,14 @@ list_parsers() ->
 
 %% Gen server hooks
 init([]) ->
-    {ok, #state{parsers = []}}.
+    Parsers =
+        case application:get_env(erldns, custom_zone_parsers) of
+            {ok, L} ->
+                lists:reverse(L);
+            _ ->
+                []
+        end,
+    {ok, #state{parsers = Parsers}}.
 
 handle_call({parse_zone, Zone}, _From, State) ->
     {reply, json_to_erlang(Zone, State#state.parsers), State};

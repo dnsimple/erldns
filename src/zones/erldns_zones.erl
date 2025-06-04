@@ -17,7 +17,8 @@ init(noargs) ->
         [
             worker(erldns_zone_cache),
             worker(erldns_zone_parser),
-            worker(erldns_zone_encoder)
+            worker(erldns_zone_encoder),
+            worker(erldns_zone_loader)
         ],
     {ok, {SupFlags, Children}}.
 

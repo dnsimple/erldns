@@ -26,13 +26,16 @@ Path can be a wildcard, and `strict` declares whether load failure should crash 
     strict => boolean()
 }.
 
+-behaviour(gen_server).
 -export([load_zones/0, load_zones/1]).
+-export([start_link/0, init/1, handle_call/3, handle_cast/2]).
 
 -define(PATH, "zones.json").
 
 -doc "Load zones.".
 -spec load_zones() -> {ok, integer()}.
 load_zones() ->
+    ?LOG_INFO(#{what => loading_zones_from_local_file}),
     Config = get_config(),
     load_zones(Config).
 
@@ -123,3 +126,27 @@ safe_json_decode(Binary) ->
     catch
         error:Reason -> {error, Reason}
     end.
+
+-doc false.
+-spec start_link() -> term().
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, noargs, [{hibernate_after, 0}]).
+
+-doc false.
+-spec init(noargs) -> {ok, nostate}.
+init(noargs) ->
+    load_zones(),
+    {ok, nostate}.
+
+-doc false.
+-spec handle_call(dynamic(), gen_server:from(), nostate) ->
+    {reply, not_implemented, nostate}.
+handle_call(Call, From, State) ->
+    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}),
+    {reply, not_implemented, State}.
+
+-doc false.
+-spec handle_cast(dynamic(), nostate) -> {noreply, nostate}.
+handle_cast(Cast, State) ->
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
+    {noreply, State}.
