@@ -43,19 +43,16 @@ operations occur directly through the underlying data store.
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2]).
 
-% ----------------------------------------------------------------------------------------------------
-% Read API
-
--doc "Call to a module's create. Creates a new table.".
+-doc "Creates a new table.".
 -spec create(atom()) -> ok | {error, Reason :: term()}.
-create(Name = zones) ->
-    create_ets_table(Name, set);
-create(Name = zone_records_typed) ->
-    create_ets_table(Name, ordered_set);
-create(Name = authorities) ->
-    create_ets_table(Name, set);
-create(Name = sync_counters) ->
-    create_ets_table(Name, set).
+create(zones) ->
+    create_ets_table(zones, set);
+create(zone_records_typed) ->
+    create_ets_table(zone_records_typed, ordered_set);
+create(authorities) ->
+    create_ets_table(authorities, set);
+create(sync_counters) ->
+    create_ets_table(sync_counters, set).
 
 -doc "Find a zone for a given qname.".
 -spec find_zone(dns:dname()) ->
