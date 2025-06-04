@@ -61,7 +61,7 @@ create(Name = sync_counters) ->
 -spec find_zone(dns:dname()) ->
     erldns:zone() | {error, zone_not_found} | {error, not_authoritative}.
 find_zone(Qname) ->
-    find_zone(erldns:normalize_name(Qname), get_authority(Qname)).
+    find_zone(dns:dname_to_lower(Qname), get_authority(Qname)).
 
 -doc "Find a zone for a given qname.".
 -spec find_zone(dns:dname(), {error, any()} | {ok, dns:rr()} | [dns:rr()] | dns:rr()) ->
@@ -75,7 +75,7 @@ find_zone(_Qname, []) ->
 find_zone(Qname, Authorities) when is_list(Authorities) ->
     find_zone(Qname, lists:last(Authorities));
 find_zone(Qname, Authority) when is_record(Authority, dns_rr) ->
-    Name = erldns:normalize_name(Qname),
+    Name = dns:dname_to_lower(Qname),
     case dns:dname_to_labels(Name) of
         [] ->
             {error, zone_not_found};
@@ -99,7 +99,7 @@ the dname in any way, it will simply look up the name in the underlying data sto
 """.
 -spec get_zone(dns:dname()) -> {ok, erldns:zone()} | {error, zone_not_found}.
 get_zone(Name) ->
-    NormalizedName = erldns:normalize_name(Name),
+    NormalizedName = dns:dname_to_lower(Name),
     case ets:lookup(zones, NormalizedName) of
         [{NormalizedName, Zone}] ->
             {ok, Zone#zone{
@@ -119,7 +119,7 @@ Get a zone for the specific name, including the records for the zone.
 """.
 -spec get_zone_with_records(dns:dname()) -> {ok, erldns:zone()} | {error, zone_not_found}.
 get_zone_with_records(Name) ->
-    NormalizedName = erldns:normalize_name(Name),
+    NormalizedName = dns:dname_to_lower(Name),
     case ets:lookup(zones, NormalizedName) of
         [{NormalizedName, Zone}] ->
             {ok, Zone};
@@ -139,7 +139,7 @@ get_authority(Message) when is_record(Message, dns_message) ->
             get_authority(Question#dns_query.name)
     end;
 get_authority(Name) ->
-    case find_zone_in_cache(erldns:normalize_name(Name)) of
+    case find_zone_in_cache(dns:dname_to_lower(Name)) of
         {ok, Zone} ->
             {ok, Zone#zone.authority};
         _ ->
@@ -163,8 +163,8 @@ get_delegations(Name) ->
                             {
                                 {
                                     {
-                                        erldns:normalize_name(Zone#zone.name),
-                                        erldns:normalize_name(Name),
+                                        dns:dname_to_lower(Zone#zone.name),
+                                        dns:dname_to_lower(Name),
                                         ?DNS_TYPE_NS
                                     },
                                     '$1'
@@ -188,7 +188,7 @@ get_zone_records(Name) ->
             lists:flatten(
                 ets:select(
                     zone_records_typed,
-                    [{{{erldns:normalize_name(Zone#zone.name), '_', '_'}, '$1'}, [], ['$$']}]
+                    [{{{dns:dname_to_lower(Zone#zone.name), '_', '_'}, '$1'}, [], ['$$']}]
                 )
             );
         _ ->
@@ -207,8 +207,8 @@ get_records_by_name_and_type(Name, Type) ->
                         {
                             {
                                 {
-                                    erldns:normalize_name(Zone#zone.name),
-                                    erldns:normalize_name(Name),
+                                    dns:dname_to_lower(Zone#zone.name),
+                                    dns:dname_to_lower(Name),
                                     Type
                                 },
                                 '$1'
@@ -235,8 +235,8 @@ get_records_by_name(Name) ->
                         {
                             {
                                 {
-                                    erldns:normalize_name(Zone#zone.name),
-                                    erldns:normalize_name(Name),
+                                    dns:dname_to_lower(Zone#zone.name),
+                                    dns:dname_to_lower(Name),
                                     '_'
                                 },
                                 '$1'
@@ -270,7 +270,7 @@ record_name_in_zone(ZoneName, Name) ->
                 lists:flatten(
                     ets:select(
                         zone_records_typed,
-                        [{{{ZoneName, erldns:normalize_name(Name), '_'}, '$1'}, [], ['$$']}]
+                        [{{{ZoneName, dns:dname_to_lower(Name), '_'}, '$1'}, [], ['$$']}]
                     )
                 )
             of
@@ -301,7 +301,7 @@ get_rrset_sync_counter(ZoneName, RRFqdn, Type) ->
         ets:select(
             sync_counters,
             [
-                {{erldns:normalize_name(ZoneName), erldns:normalize_name(RRFqdn), Type, '$1'}, [], [
+                {{dns:dname_to_lower(ZoneName), dns:dname_to_lower(RRFqdn), Type, '$1'}, [], [
                     '$_'
                 ]}
             ]
@@ -339,14 +339,14 @@ put_zone({Name, Sha, Records}) ->
 put_zone({Name, Sha, Records, Keys}) ->
     SignedZone = sign_zone(build_zone(Name, Sha, Records, Keys)),
     NamedRecords = build_named_index(SignedZone#zone.records),
-    delete_zone_records(erldns:normalize_name(Name)),
-    true = put_zone(erldns:normalize_name(Name), SignedZone#zone{records = trimmed}),
-    put_zone_records(erldns:normalize_name(Name), NamedRecords).
+    delete_zone_records(dns:dname_to_lower(Name)),
+    true = put_zone(dns:dname_to_lower(Name), SignedZone#zone{records = trimmed}),
+    put_zone_records(dns:dname_to_lower(Name), NamedRecords).
 
 -doc "Put a zone into the cache and wait for a response.".
 -spec put_zone(dns:dname(), erldns:zone()) -> true.
 put_zone(Name, Zone) ->
-    ets:insert(zones, {erldns:normalize_name(Name), Zone}).
+    ets:insert(zones, {dns:dname_to_lower(Name), Zone}).
 
 -spec put_zone_records(dns:dname(), map()) -> ok.
 put_zone_records(Name, RecordsByName) ->
@@ -363,7 +363,7 @@ put_zone_records(Name, RecordsByName) ->
 put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter) ->
     put_zone_rrset({ZoneName, Digest, Records, []}, RRFqdn, Type, Counter);
 put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
-    case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
+    case find_zone_in_cache(dns:dname_to_lower(ZoneName)) of
         {ok, Zone} ->
             % TODO: remove debug
             ?LOG_DEBUG("Putting RRSet (~p) with Type: ~p for Zone (~p): ~p", [
@@ -405,26 +405,26 @@ put_zone_records_typed_entry(_, _, none) ->
     ok;
 put_zone_records_typed_entry(ZoneName, Fqdn, {K, V, I}) ->
     ets:insert(zone_records_typed, {
-        {erldns:normalize_name(ZoneName), erldns:normalize_name(Fqdn), K}, V
+        {dns:dname_to_lower(ZoneName), dns:dname_to_lower(Fqdn), K}, V
     }),
     put_zone_records_typed_entry(ZoneName, Fqdn, maps:next(I)).
 
 -doc "Remove a zone from the cache without waiting for a response.".
 -spec delete_zone(binary()) -> any().
 delete_zone(Name) ->
-    ets:delete(zones, erldns:normalize_name(Name)),
+    ets:delete(zones, dns:dname_to_lower(Name)),
     delete_zone_records(Name).
 
 -spec delete_zone_records(binary()) -> any().
 delete_zone_records(Name) ->
     ets:select_delete(zone_records_typed, [
-        {{{erldns:normalize_name(Name), '_', '_'}, '_'}, [], [true]}
+        {{{dns:dname_to_lower(Name), '_', '_'}, '_'}, [], [true]}
     ]).
 
 -doc "Remove zone RRSet".
 -spec delete_zone_rrset(binary(), binary(), binary(), integer(), integer()) -> any().
 delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
-    case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
+    case find_zone_in_cache(dns:dname_to_lower(ZoneName)) of
         {ok, Zone} ->
             Zone,
             CurrentCounter = get_rrset_sync_counter(ZoneName, RRFqdn, Type),
@@ -439,8 +439,8 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                             {
                                 {
                                     {
-                                        erldns:normalize_name(ZoneName),
-                                        erldns:normalize_name(RRFqdn),
+                                        dns:dname_to_lower(ZoneName),
+                                        dns:dname_to_lower(RRFqdn),
                                         Type
                                     },
                                     '_'
@@ -461,8 +461,8 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                         zone_records_typed,
                         {
                             {
-                                erldns:normalize_name(ZoneName),
-                                erldns:normalize_name(RRFqdn),
+                                dns:dname_to_lower(ZoneName),
+                                dns:dname_to_lower(RRFqdn),
                                 ?DNS_TYPE_RRSIG_NUMBER
                             },
                             RRSigsNotCovering
@@ -502,7 +502,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
 -spec update_zone_records_and_digest(dns:dname(), integer(), binary()) ->
     ok | {error, Reason :: term()}.
 update_zone_records_and_digest(ZoneName, RecordsCount, Digest) ->
-    case find_zone_in_cache(erldns:normalize_name(ZoneName)) of
+    case find_zone_in_cache(dns:dname_to_lower(ZoneName)) of
         {ok, Zone} ->
             Zone,
             UpdatedZone =
@@ -521,7 +521,7 @@ update_zone_records_and_digest(ZoneName, RecordsCount, Digest) ->
     {[dns:rr()], [dns:rr()]} | {[], []}.
 filter_rrsig_records_with_type_covered(RRFqdn, TypeCovered) ->
     % guards below do not allow fun calls to prevent side effects
-    case find_zone_in_cache(erldns:normalize_name(RRFqdn)) of
+    case find_zone_in_cache(dns:dname_to_lower(RRFqdn)) of
         {ok, _Zone} ->
             % {RRSigsCovering, RRSigsNotCovering} =
             lists:partition(
@@ -534,12 +534,12 @@ filter_rrsig_records_with_type_covered(RRFqdn, TypeCovered) ->
 
 % Internal API
 is_name_in_zone(Name, Zone) ->
-    ZoneName = erldns:normalize_name(Zone#zone.name),
+    ZoneName = dns:dname_to_lower(Zone#zone.name),
     case
         lists:flatten(
             ets:select(
                 zone_records_typed,
-                [{{{ZoneName, erldns:normalize_name(Name), '_'}, '$1'}, [], ['$$']}]
+                [{{{ZoneName, dns:dname_to_lower(Name), '_'}, '$1'}, [], ['$$']}]
             )
         )
     of
@@ -557,8 +557,8 @@ is_name_in_zone(Name, Zone) ->
     end.
 
 is_name_in_zone_with_wildcard(Name, Zone) ->
-    ZoneName = erldns:normalize_name(Zone#zone.name),
-    WildcardName = erldns:normalize_name(erldns_records:wildcard_qname(Name)),
+    ZoneName = dns:dname_to_lower(Zone#zone.name),
+    WildcardName = dns:dname_to_lower(erldns_records:wildcard_qname(Name)),
     case
         lists:flatten(
             ets:select(
@@ -580,7 +580,7 @@ is_name_in_zone_with_wildcard(Name, Zone) ->
     end.
 
 find_zone_in_cache(Qname) ->
-    Name = erldns:normalize_name(Qname),
+    Name = dns:dname_to_lower(Qname),
     find_zone_in_cache(Name, dns:dname_to_labels(Name)).
 
 find_zone_in_cache(_Name, []) ->
@@ -615,7 +615,7 @@ build_named_index(Records) ->
     NamedIndex =
         lists:foldl(
             fun(R, Idx) ->
-                Name = erldns:normalize_name(R#dns_rr.name),
+                Name = dns:dname_to_lower(R#dns_rr.name),
                 maps:update_with(Name, fun(RR) -> [R | RR] end, [R], Idx)
             end,
             #{},

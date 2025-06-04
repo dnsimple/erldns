@@ -33,7 +33,7 @@ put_zone_rrset_records_count_with_existing_rrset_test() ->
     Pid = setup_cache(),
     load_standard_zone(),
     ZoneName = <<"example.com">>,
-    ZoneBase = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, <<"irrelevantDigest">>,
             [
@@ -49,7 +49,7 @@ put_zone_rrset_records_count_with_existing_rrset_test() ->
         5,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     % There should be no change in record count
     ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count),
     teardown_cache(Pid).
@@ -58,7 +58,7 @@ put_zone_rrset_records_count_with_new_rrset_test() ->
     Pid = setup_cache(),
     load_standard_zone(),
     ZoneName = <<"example.com">>,
-    ZoneBase = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, <<"irrelevantDigest">>,
             [
@@ -74,7 +74,7 @@ put_zone_rrset_records_count_with_new_rrset_test() ->
         5,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     % New RRSet is being added with one record we should see an increase by 1
     ?assertEqual(ZoneBase#zone.record_count + 1, ZoneModified#zone.record_count),
     teardown_cache(Pid).
@@ -98,7 +98,7 @@ put_zone_rrset_records_count_matches_cache_test() ->
         5,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     % New RRSet is being added with one record we should see an increase by 1
     ?assertEqual(
         length(erldns_zone_cache:get_zone_records(ZoneName)), ZoneModified#zone.record_count
@@ -109,7 +109,7 @@ put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset_test() ->
     Pid = setup_cache(),
     load_dnssec_zone(),
     ZoneName = <<"example-dnssec.com">>,
-    Zone = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    Zone = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, <<"irrelevantDigest">>,
             [
@@ -125,7 +125,7 @@ put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset_test() ->
         5,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     % New RRSet entry for the CNAME + 1 RRSig record
     ?assertEqual(Zone#zone.record_count + 2, ZoneModified#zone.record_count),
     teardown_cache(Pid).
@@ -134,15 +134,15 @@ delete_zone_rrset_records_count_width_existing_rrset_test() ->
     Pid = setup_cache(),
     load_standard_zone(),
     ZoneName = <<"example.com">>,
-    ZoneBase = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     erldns_zone_cache:delete_zone_rrset(
         ZoneName,
         <<"irrelevantDigest">>,
-        erldns:normalize_name(<<"cname.example.com">>),
+        dns:dname_to_lower(<<"cname.example.com">>),
         5,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     % Deletes a CNAME RRSet with one record
     ?assertEqual(ZoneBase#zone.record_count - 1, ZoneModified#zone.record_count),
     teardown_cache(Pid).
@@ -151,15 +151,15 @@ delete_zone_rrset_records_count_width_dnssec_zone_and_existing_rrset_test() ->
     Pid = setup_cache(),
     load_dnssec_zone(),
     ZoneName = <<"example-dnssec.com">>,
-    ZoneBase = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     erldns_zone_cache:delete_zone_rrset(
         ZoneName,
         <<"irrelevantDigest">>,
-        erldns:normalize_name(<<"cname2.example-dnssec.com">>),
+        dns:dname_to_lower(<<"cname2.example-dnssec.com">>),
         5,
         2
     ),
-    ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     % Deletes a CNAME RRSet with one record + RRSig
     ?assertEqual(ZoneBase#zone.record_count - 2, ZoneModified#zone.record_count),
     teardown_cache(Pid).
@@ -171,11 +171,11 @@ delete_zone_rrset_records_count_matches_cache_test() ->
     erldns_zone_cache:delete_zone_rrset(
         ZoneName,
         <<"irrelevantDigest">>,
-        erldns:normalize_name(<<"cname2.example-dnssec.com">>),
+        dns:dname_to_lower(<<"cname2.example-dnssec.com">>),
         5,
         2
     ),
-    ZoneModified = erldns_zone_cache:find_zone(erldns:normalize_name(ZoneName)),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     % Deletes a CNAME RRSet with one record + RRSig
     ?assertEqual(
         length(erldns_zone_cache:get_zone_records(ZoneName)), ZoneModified#zone.record_count
