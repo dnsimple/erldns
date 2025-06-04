@@ -78,7 +78,7 @@ zone_records_to_json(ZoneName, RecordSetName) ->
     gen_server:call(?SERVER, {encode_zone_records, ZoneName, RecordSetName}).
 
 %% @doc Encode the records in the zone with the given RRSet name and type into JSON
--spec zone_records_to_json(dns:dname(), dns:dname(), dns:rrtype()) -> binary().
+-spec zone_records_to_json(dns:dname(), dns:dname(), binary()) -> binary().
 zone_records_to_json(ZoneName, RecordSetName, RecordSetType) ->
     gen_server:call(?SERVER, {encode_zone_records, ZoneName, RecordSetName, RecordSetType}).
 

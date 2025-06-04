@@ -64,7 +64,7 @@ find_zone(Qname) ->
     find_zone(dns:dname_to_lower(Qname), get_authority(Qname)).
 
 -doc "Find a zone for a given qname.".
--spec find_zone(dns:dname(), {error, any()} | {ok, dns:rr()} | [dns:rr()] | dns:rr()) ->
+-spec find_zone(dns:dname(), {error, term()} | {ok, dns:rr()} | [dns:rr()] | dns:rr()) ->
     erldns:zone() | {error, zone_not_found} | {error, not_authoritative}.
 find_zone(Qname, {error, _}) ->
     find_zone(Qname, []);
@@ -354,7 +354,7 @@ put_zone_records(Name, RecordsByName) ->
 
 -doc "Put zone RRSet".
 -spec put_zone_rrset(
-    {dns:dname(), binary(), [dns:rr()]} | {dns:dname(), binary(), [dns:rr()], [any()]},
+    {dns:dname(), binary(), [dns:rr()]} | {dns:dname(), binary(), [dns:rr()], [term()]},
     dns:dname(),
     dns:type(),
     integer()
@@ -410,19 +410,19 @@ put_zone_records_typed_entry(ZoneName, Fqdn, {K, V, I}) ->
     put_zone_records_typed_entry(ZoneName, Fqdn, maps:next(I)).
 
 -doc "Remove a zone from the cache without waiting for a response.".
--spec delete_zone(binary()) -> any().
+-spec delete_zone(binary()) -> term().
 delete_zone(Name) ->
     ets:delete(zones, dns:dname_to_lower(Name)),
     delete_zone_records(Name).
 
--spec delete_zone_records(binary()) -> any().
+-spec delete_zone_records(binary()) -> term().
 delete_zone_records(Name) ->
     ets:select_delete(zone_records_typed, [
         {{{dns:dname_to_lower(Name), '_', '_'}, '_'}, [], [true]}
     ]).
 
 -doc "Remove zone RRSet".
--spec delete_zone_rrset(binary(), binary(), binary(), integer(), integer()) -> any().
+-spec delete_zone_rrset(binary(), binary(), binary(), integer(), integer()) -> term().
 delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
     case find_zone_in_cache(dns:dname_to_lower(ZoneName)) of
         {ok, Zone} ->
@@ -711,7 +711,7 @@ rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
     ).
 
 -doc false.
--spec start_link() -> any().
+-spec start_link() -> term().
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, noargs, [{hibernate_after, 0}]).
 
