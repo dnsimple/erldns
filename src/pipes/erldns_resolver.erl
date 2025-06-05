@@ -16,6 +16,9 @@
 -moduledoc """
 Resolve a DNS query.
 
+Supports only a single question per request: if a request contains multiple questions,
+only the first question will be resolved.
+
 Emits the following telemetry events:
 - `[erldns, resolver, dnssec]`
 """.
@@ -96,8 +99,6 @@ resolve(Message, AuthorityRecords, Host) ->
     case Message#dns_message.questions of
         [] ->
             Message;
-        [Question] ->
-            resolve_question(Message, AuthorityRecords, Host, Question);
         [Question | _] ->
             resolve_question(Message, AuthorityRecords, Host, Question)
     end.
@@ -150,7 +151,7 @@ resolve_qname_and_qtype(Message, AuthorityRecords, Qname, Qtype, Host) ->
             Message#dns_message{rc = ?DNS_RCODE_REFUSED};
         _ ->
             % Authority records present, continue resolution
-            Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)),
+            Zone = erldns_zone_cache:find_zone(Qname, AuthorityRecords),
             Message1 = resolve_authoritative(Message, Qname, Qtype, Zone, Host, []),
             Message2 = erldns_records:rewrite_soa_ttl(Message1),
             Message3 = additional_processing(Message2, Host, Zone),
