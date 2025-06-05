@@ -12,8 +12,8 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Sample custom zone parser.
 -module(sample_custom_zone_parser).
+-moduledoc "Sample custom zone parser.".
 
 -include_lib("dns_erlang/include/dns.hrl").
 
@@ -23,19 +23,12 @@
 
 -define(DNS_TYPE_SAMPLE, 40000).
 
-json_record_to_erlang([Name, <<"SAMPLE">>, Ttl, Data, _Context]) when is_map(Data) ->
+json_record_to_erlang(#{~"name" := Name, ~"type" := ~"SAMPLE", ~"ttl" := Ttl, ~"data" := Data}) ->
     #dns_rr{
         name = Name,
         type = ?DNS_TYPE_SAMPLE,
-        data = maps:get(<<"dname">>, Data),
-        ttl = Ttl
-    };
-json_record_to_erlang([Name, <<"SAMPLE">>, Ttl, Data, _Context]) ->
-    #dns_rr{
-        name = Name,
-        type = ?DNS_TYPE_SAMPLE,
-        data = erldns_config:keyget(<<"dname">>, Data),
+        data = maps:get(~"dname", Data),
         ttl = Ttl
     };
 json_record_to_erlang(_) ->
-    {}.
+    not_implemented.

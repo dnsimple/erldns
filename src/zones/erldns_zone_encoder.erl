@@ -1,20 +1,8 @@
-%% Copyright (c) 2012-2020, DNSimple Corporation
-%%
-%% Permission to use, copy, modify, and/or distribute this software for any
-%% purpose with or without fee is hereby granted, provided that the above
-%% copyright notice and this permission notice appear in all copies.
-%%
-%% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-%% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-%% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-%% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-%% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-%% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-%% @doc A process that maintains a collection of encoders in its state
-%% for encoding zones from their Erlang representation to JSON.
 -module(erldns_zone_encoder).
+-moduledoc """
+A process that maintains a collection of encoders in its state
+for encoding zones from their Erlang representation to JSON.
+""".
 
 -behaviour(gen_server).
 
@@ -23,112 +11,75 @@
 
 -include("erldns.hrl").
 
--export([start_link/0]).
 -export([
     zone_meta_to_json/1,
     zone_to_json/1,
     zone_records_to_json/2,
     zone_records_to_json/3,
     register_encoders/1,
-    register_encoder/1
-]).
-% Gen server hooks
--export([
-    init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    code_change/3
+    register_encoder/1,
+    list_encoders/0
 ]).
 
--define(SERVER, ?MODULE).
+-export([start_link/0, init/1, handle_call/3, handle_cast/2, terminate/2]).
 
--record(state, {encoders}).
+-record(state, {encoders :: [encoder()]}).
+-type state() :: #state{}.
+
+-type encoder() :: fun((dns:rr()) -> not_implemented | json:encode_value()).
+-callback encode_record(dns:rr()) -> not_implemented | json:encode_value().
 
 % Public API
 
-%% @doc Start the encoder process.
--spec start_link() -> any().
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
-
-%% @doc Encode a Zone meta data into JSON.
+-doc "Encode a Zone meta data into JSON.".
 -spec zone_meta_to_json(erldns:zone()) -> binary().
 zone_meta_to_json(Zone) ->
     json_encode_kw_list([
-        {<<"erldns">>, [
-            {<<"zone">>, [
-                {<<"name">>, Zone#zone.name},
-                {<<"version">>, Zone#zone.version},
+        {~"erldns", [
+            {~"zone", [
+                {~"name", Zone#zone.name},
+                {~"version", Zone#zone.version},
                 % Note: Private key material is purposely omitted
-                {<<"records_count">>, length(erldns_zone_cache:get_zone_records(Zone#zone.name))}
+                {~"records_count", length(erldns_zone_cache:get_zone_records(Zone#zone.name))}
             ]}
         ]}
     ]).
 
-%% @doc Encode a Zone meta data plus all of its records into JSON.
+-doc "Encode a Zone meta data plus all of its records into JSON.".
 -spec zone_to_json(erldns:zone()) -> binary().
 zone_to_json(Zone) ->
-    gen_server:call(?SERVER, {encode_zone, Zone}).
+    Encoders = list_encoders(),
+    encode_zone_to_json(Zone, Encoders).
 
-%% @doc Encode the records in the zone with the given RRSet name and type into JSON
+-doc "Encode the records in the zone with the given RRSet name and type into JSON".
 -spec zone_records_to_json(dns:dname(), dns:dname()) -> binary().
-zone_records_to_json(ZoneName, RecordSetName) ->
-    gen_server:call(?SERVER, {encode_zone_records, ZoneName, RecordSetName}).
+zone_records_to_json(ZoneName, RecordName) ->
+    Encoders = list_encoders(),
+    encode_zone_records_to_json(ZoneName, RecordName, Encoders).
 
-%% @doc Encode the records in the zone with the given RRSet name and type into JSON
+-doc "Encode the records in the zone with the given RRSet name and type into JSON".
 -spec zone_records_to_json(dns:dname(), dns:dname(), binary()) -> binary().
-zone_records_to_json(ZoneName, RecordSetName, RecordSetType) ->
-    gen_server:call(?SERVER, {encode_zone_records, ZoneName, RecordSetName, RecordSetType}).
+zone_records_to_json(ZoneName, RecordName, RecordType) ->
+    Encoders = list_encoders(),
+    encode_zone_records_to_json(ZoneName, RecordName, RecordType, Encoders).
 
-%% @doc Register a list of encoder modules.
--spec register_encoders([module()]) -> ok.
-register_encoders(Modules) ->
-    ?LOG_INFO("Registering custom encoders (modules: ~p)", [Modules]),
-    gen_server:call(?SERVER, {register_encoders, Modules}).
-
-%% @doc Register a single encoder module.
+-doc "Register a single encoder module.".
 -spec register_encoder(module()) -> ok.
 register_encoder(Module) ->
-    ?LOG_INFO("Registering custom encoder (module: ~p)", [Module]),
-    gen_server:call(?SERVER, {register_encoder, Module}).
+    register_encoders([Module]).
+
+-doc "Register a list of encoder modules.".
+-spec register_encoders([module()]) -> ok.
+register_encoders(Modules) ->
+    ?LOG_NOTICE(#{what => registering_custom_encoders, encoders => Modules}),
+    gen_server:call(?MODULE, {register_encoders, Modules}).
+
+-doc "Get the list of registered zone parsers.".
+-spec list_encoders() -> [encoder()].
+list_encoders() ->
+    persistent_term:get(?MODULE, []).
 
 % Gen server hooks
-
-init([]) ->
-    Encoders =
-        case application:get_env(erldns, custom_zone_encoders) of
-            {ok, L} ->
-                lists:reverse(L);
-            _ ->
-                []
-        end,
-    {ok, #state{encoders = Encoders}}.
-
-handle_call({encode_zone, Zone}, _From, State) ->
-    {reply, encode_zone_to_json(Zone, State#state.encoders), State};
-handle_call({encode_zone_records, ZoneName, RecordName}, _From, State) ->
-    {reply, encode_zone_records_to_json(ZoneName, RecordName, State#state.encoders), State};
-handle_call({encode_zone_records, ZoneName, RecordName, RecordType}, _From, State) ->
-    {reply, encode_zone_records_to_json(ZoneName, RecordName, RecordType, State#state.encoders),
-        State};
-handle_call({register_encoders, Modules}, _From, State) ->
-    {reply, ok, State#state{encoders = State#state.encoders ++ Modules}};
-handle_call({register_encoder, Module}, _From, State) ->
-    {reply, ok, State#state{encoders = State#state.encoders ++ [Module]}}.
-
-handle_cast(_, State) ->
-    {noreply, State}.
-
-handle_info(_, State) ->
-    {noreply, State}.
-
-terminate(_, _State) ->
-    ok.
-
-code_change(_, State, _) ->
-    {ok, State}.
 
 % Internal API
 
@@ -136,13 +87,13 @@ encode_zone_to_json(Zone, Encoders) ->
     Records = records_to_json(Zone, Encoders),
     FilteredRecords = lists:filter(record_filter(), Records),
     json_encode_kw_list([
-        {<<"erldns">>, [
-            {<<"zone">>, [
-                {<<"name">>, Zone#zone.name},
-                {<<"version">>, Zone#zone.version},
-                {<<"records_count">>, length(FilteredRecords)},
+        {~"erldns", [
+            {~"zone", [
+                {~"name", Zone#zone.name},
+                {~"version", Zone#zone.version},
+                {~"records_count", length(FilteredRecords)},
                 % Note: Private key material is purposely omitted
-                {<<"records">>, FilteredRecords}
+                {~"records", FilteredRecords}
             ]}
         ]}
     ]).
@@ -224,17 +175,17 @@ encode_record(Record) ->
 
 encode_record(Name, Type, Ttl, Data) ->
     #{
-        <<"name">> => erlang:iolist_to_binary(io_lib:format("~s.", [Name])),
-        <<"type">> => dns_names:type_name(Type),
-        <<"ttl">> => Ttl,
-        <<"content">> => encode_data(Data)
+        ~"name" => erlang:iolist_to_binary(io_lib:format("~s.", [Name])),
+        ~"type" => dns_names:type_name(Type),
+        ~"ttl" => Ttl,
+        ~"content" => encode_data(Data)
     }.
 
 try_custom_encoders(_Record, []) ->
     {};
 try_custom_encoders(Record, [Encoder | Rest]) ->
     % ?LOG_DEBUG("Trying custom encoder (encoder: ~p)", [Encoder]),
-    case Encoder:encode_record(Record) of
+    case Encoder(Record) of
         [] ->
             try_custom_encoders(Record, Rest);
         EncodedData ->
@@ -325,3 +276,39 @@ json_encode_kw_list(KwList) when is_list(KwList) ->
 
 json_encode_term([{_, _} | _] = Value, Encode) -> json:encode_key_value_list(Value, Encode);
 json_encode_term(Other, Encode) -> json:encode_value(Other, Encode).
+
+-doc false.
+-spec start_link() -> gen_server:start_ret().
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, noargs, []).
+
+-doc false.
+-spec init(noargs) -> {ok, state()}.
+init(noargs) ->
+    process_flag(trap_exit, true),
+    CustomEncoders = application:get_env(erldns, custom_zone_encoders, []),
+    Encoders = [fun Module:encode_record/1 || Module <- CustomEncoders],
+    persistent_term:put(?MODULE, Encoders),
+    {ok, #state{encoders = Encoders}}.
+
+-doc false.
+-spec handle_call(dynamic(), gen_server:from(), state()) ->
+    {reply, dynamic(), state()}.
+handle_call({register_encoders, Modules}, _From, State) ->
+    Encoders = [fun Module:encode_record/1 || Module <- Modules],
+    NewEncoders = State#state.encoders ++ Encoders,
+    persistent_term:put(?MODULE, NewEncoders),
+    {reply, ok, State#state{encoders = NewEncoders}};
+handle_call(Call, From, State) ->
+    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}),
+    {reply, not_implemented, State}.
+
+-doc false.
+-spec handle_cast(dynamic(), state()) -> {noreply, state()}.
+handle_cast(Cast, State) ->
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
+    {noreply, State}.
+
+-spec terminate(term(), state()) -> any().
+terminate(_, _) ->
+    persistent_term:erase(?MODULE).

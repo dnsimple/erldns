@@ -16,8 +16,7 @@ json_to_erlang_txt_spf_records_test() ->
         {
           "context": [],
           "data": {
-            "txt": "this is a test",
-            "txts": null
+            "txts": ["this is a test"]
           },
           "name": "example.com",
           "ttl": 3600,
@@ -26,8 +25,7 @@ json_to_erlang_txt_spf_records_test() ->
         {
           "context": [],
           "data": {
-            "spf": "v=spf1 a mx ~all",
-            "txts": null
+            "txts": ["v=spf1 a mx ~all"]
           },
           "name": "example.com",
           "ttl": 3600,
@@ -41,32 +39,35 @@ json_to_erlang_txt_spf_records_test() ->
     R = erldns_zone_parser:json_to_erlang(Json, []),
     Expected = [
         #dns_rr{
-            name = <<"example.com">>,
+            name = ~"example.com",
             type = 16,
             class = 1,
             ttl = 3600,
-            data = #dns_rrdata_txt{txt = [<<"this is a test">>]}
+            data = #dns_rrdata_txt{txt = [~"this is a test"]}
         },
         #dns_rr{
-            name = <<"example.com">>,
+            name = ~"example.com",
             type = 99,
             class = 1,
             ttl = 3600,
-            data = #dns_rrdata_spf{spf = [<<"v=spf1 a mx ~all">>]}
+            data = #dns_rrdata_spf{spf = [~"v=spf1 a mx ~all"]}
         }
     ],
-    ?assertMatch({<<"example.com">>, Sha, Expected, []} when is_binary(Sha), R).
+    ?assertMatch({~"example.com", Sha, Expected, []} when is_binary(Sha), R).
 
 json_to_erlang_ensure_sorting_and_defaults_test() ->
     ?assertEqual(
-        {<<"foo.org">>, <<>>, [], []},
-        erldns_zone_parser:json_to_erlang(#{<<"name">> => <<"foo.org">>, <<"records">> => []}, [])
+        {~"foo.org", <<>>, [], []},
+        erldns_zone_parser:json_to_erlang(#{~"name" => ~"foo.org", ~"records" => []}, [])
     ).
 
 json_record_to_erlang_test() ->
-    ?assertEqual({}, erldns_zone_parser:json_record_to_erlang([])),
-    Name = <<"example.com">>,
-    ?assertEqual({}, erldns_zone_parser:json_record_to_erlang([Name, <<"SOA">>, 3600, null, null])).
+    ?assertEqual(not_implemented, erldns_zone_parser:json_record_to_erlang(#{})),
+    Name = ~"example.com",
+    Data = #{
+        ~"name" => Name, ~"type" => ~"SOA", ~"ttl" => 3600, ~"data" => null, ~"context" => null
+    },
+    ?assertEqual(not_implemented, erldns_zone_parser:json_record_to_erlang(Data)).
 
 json_record_soa_to_erlang_test() ->
     Name = <<"example.com">>,
@@ -86,21 +87,21 @@ json_record_soa_to_erlang_test() ->
                 },
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang([
-            Name,
-            <<"SOA">>,
-            3600,
-            [
-                {<<"mname">>, <<"ns1.example.com">>},
-                {<<"rname">>, <<"admin.example.com">>},
-                {<<"serial">>, 12345},
-                {<<"refresh">>, 555},
-                {<<"retry">>, 666},
-                {<<"expire">>, 777},
-                {<<"minimum">>, 888}
-            ],
-            undefined
-        ])
+        erldns_zone_parser:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SOA",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"mname" => ~"ns1.example.com",
+                ~"rname" => ~"admin.example.com",
+                ~"serial" => 12345,
+                ~"refresh" => 555,
+                ~"retry" => 666,
+                ~"expire" => 777,
+                ~"minimum" => 888
+            },
+            ~"context" => null
+        })
     ).
 
 json_record_ns_to_erlang_test() ->
@@ -112,9 +113,13 @@ json_record_ns_to_erlang_test() ->
             data = #dns_rrdata_ns{dname = <<"ns1.example.com">>},
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang([
-            Name, <<"NS">>, 3600, [{<<"dname">>, <<"ns1.example.com">>}], undefined
-        ])
+        erldns_zone_parser:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"NS",
+            ~"ttl" => 3600,
+            ~"data" => #{~"dname" => ~"ns1.example.com"},
+            ~"context" => null
+        })
     ).
 
 json_record_a_to_erlang_test() ->
@@ -126,9 +131,13 @@ json_record_a_to_erlang_test() ->
             data = #dns_rrdata_a{ip = {1, 2, 3, 4}},
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang([
-            Name, <<"A">>, 3600, [{<<"ip">>, <<"1.2.3.4">>}], undefined
-        ])
+        erldns_zone_parser:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"A",
+            ~"ttl" => 3600,
+            ~"data" => #{~"ip" => ~"1.2.3.4"},
+            ~"context" => null
+        })
     ).
 
 json_record_aaaa_to_erlang_test() ->
@@ -140,13 +149,17 @@ json_record_aaaa_to_erlang_test() ->
             data = #dns_rrdata_aaaa{ip = {0, 0, 0, 0, 0, 0, 0, 1}},
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang([
-            Name, <<"AAAA">>, 3600, [{<<"ip">>, <<"::1">>}], undefined
-        ])
+        erldns_zone_parser:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"AAAA",
+            ~"ttl" => 3600,
+            ~"data" => #{~"ip" => ~"::1"},
+            ~"context" => null
+        })
     ).
 
 json_record_cds_to_erlang_test() ->
-    Name = <<"example-dnssec.com">>,
+    Name = ~"example-dnssec.com",
     ?assertEqual(
         #dns_rr{
             name = Name,
@@ -157,24 +170,24 @@ json_record_cds_to_erlang_test() ->
                     digest_type = 2,
                     alg = 8,
                     digest = binary:decode_hex(
-                        <<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>
+                        ~"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA"
                     )
                 },
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang([
-            Name,
-            <<"CDS">>,
-            3600,
-            [
-                {<<"keytag">>, 0},
-                {<<"digest_type">>, 2},
-                {<<"alg">>, 8},
-                {<<"digest">>,
-                    <<"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA">>}
-            ],
-            undefined
-        ])
+        erldns_zone_parser:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"CDS",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"keytag" => 0,
+                ~"digest_type" => 2,
+                ~"alg" => 8,
+                ~"digest" =>
+                    ~"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA"
+            },
+            ~"context" => null
+        })
     ).
 
 parse_json_keys_unsorted_proplists_test() ->
@@ -354,8 +367,7 @@ input() ->
         {
           "context": [],
           "data": {
-            "txt": "this is a test",
-            "txts": null
+            "txts": ["this is a test"]
           },
           "name": "example.com",
           "ttl": 3600,
@@ -364,8 +376,7 @@ input() ->
         {
           "context": [],
           "data": {
-            "spf": "v=spf1 a mx ~all",
-            "txts": null
+            "txts": ["v=spf1 a mx ~all"]
           },
           "name": "example.com",
           "ttl": 3600,
@@ -373,7 +384,7 @@ input() ->
         },
         {
           "context": [],
-          "data": { "txt": "v=spf1 a mx ~all" },
+          "data": { "txts": ["v=spf1 a mx ~all"] },
           "name": "example.com",
           "ttl": 3600,
           "type": "TXT"
