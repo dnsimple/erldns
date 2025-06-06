@@ -46,11 +46,11 @@ only the first question will be resolved.
 -doc "Creates a new table.".
 -spec create(atom()) -> ok | {error, Reason :: term()}.
 create(zones) ->
-    create_ets_table(zones, set, [{keypos, #zone.name}]);
+    create_ets_table(zones, set, #zone.name);
 create(zone_records_typed) ->
-    create_ets_table(zone_records_typed, ordered_set, []);
+    create_ets_table(zone_records_typed, ordered_set);
 create(sync_counters) ->
-    create_ets_table(sync_counters, set, []).
+    create_ets_table(sync_counters, set).
 
 -doc "Find a zone for a given qname.".
 -spec find_zone(dns:dname()) ->
@@ -659,11 +659,24 @@ handle_cast(Cast, State) ->
     ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
     {noreply, State}.
 
--spec create_ets_table(atom(), ets:table_type(), [dynamic()]) -> ok | {error, term()}.
-create_ets_table(TableName, Type, OtherOpts) ->
+-spec create_ets_table(atom(), ets:table_type()) -> ok | {error, term()}.
+create_ets_table(TableName, Type) ->
+    create_ets_table(TableName, Type, 1).
+
+-spec create_ets_table(atom(), ets:table_type(), non_neg_integer()) -> ok | {error, term()}.
+create_ets_table(TableName, Type, Pos) ->
     case ets:info(TableName) of
         undefined ->
-            TableName = ets:new(TableName, [Type, public, named_table | OtherOpts]),
+            Opts = [
+                Type,
+                public,
+                named_table,
+                {keypos, Pos},
+                {read_concurrency, true},
+                {write_concurrency, auto},
+                {decentralized_counters, true}
+            ],
+            TableName = ets:new(TableName, Opts),
             ok;
         _InfoList ->
             ok
