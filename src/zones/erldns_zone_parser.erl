@@ -73,12 +73,7 @@ to_crypto_key(RsaKeyBin) ->
     [E, M, N].
 
 record_filter() ->
-    fun(R) ->
-        case R of
-            not_implemented -> false;
-            _ -> true
-        end
-    end.
+    fun(R) -> R =/= not_implemented end.
 
 -spec apply_context_list_check(sets:set(), sets:set()) -> [fail] | [pass].
 apply_context_list_check(ContextAllowSet, ContextSet) ->

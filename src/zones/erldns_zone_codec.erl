@@ -1,6 +1,53 @@
 -module(erldns_zone_codec).
 -moduledoc """
 Encoding and decoding of zone data in JSON format.
+
+To write custom codecs, you need to implement the callbacks exposed by this module,
+and register the codec in the configuration.
+
+## Configuration
+
+```erlang
+{erldns, [
+    {custom_zone_codecs, [
+        sample_custom_zone_codec
+    ]},
+]}
+```
+
+## Custom codecs
+
+```erlang
+-module(sample_custom_zone_codec).
+-behaviour(erldns_zone_codec).
+
+-include_lib("dns_erlang/include/dns.hrl").
+-include_lib("erldns/include/erldns.hrl").
+
+-export([decode/1, encode/1]).
+
+-define(DNS_TYPE_SAMPLE, 40000).
+
+decode(#{~"name" := Name, ~"type" := ~"SAMPLE", ~"ttl" := Ttl, ~"data" := Data}) ->
+    #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_SAMPLE,
+        data = maps:get(~"dname", Data),
+        ttl = Ttl
+    };
+decode(_) ->
+    not_implemented.
+
+encode(#dns_rr{name = Name, type = ?DNS_TYPE_SAMPLE, ttl = Ttl, data = Data}) ->
+    #{
+        ~"name" => Name,
+        ~"type" => ~"SAMPLE",
+        ~"ttl" => Ttl,
+        ~"content" => erlang:iolist_to_binary(io_lib:format("~s", [Data]))
+    };
+encode(_) ->
+    not_implemented.
+```
 """.
 
 -behaviour(gen_server).
@@ -46,18 +93,18 @@ build_zone(Name, Version, Records, Keys) ->
         keysets = Keys
     }.
 
--doc #{equiv => encode(Zone, #{})}.
--spec encode(dynamic() | erldns:zone()) -> json:encode_value().
+-doc #{equiv => encode(Zone, #{mode => zone_to_json})}.
+-spec encode(erldns:zone()) -> json:encode_value().
 encode(Zone) ->
-    encode(Zone, #{}).
+    encode(Zone, #{mode => zone_to_json}).
 
 -doc "Takes a zone and turns it into a map.".
--spec encode(dynamic() | erldns:zone(), map()) -> json:encode_value().
+-spec encode(erldns:zone(), #{atom() => dynamic()}) -> json:encode_value().
 encode(Zone, Opts) ->
     {Encoders, _} = list_codecs(),
     erldns_zone_encoder:encode(Zone, Opts, Encoders).
 
--doc "Takes a JSON zone and turns it into `{Name, Sha, Records, KeySet}` tuples.".
+-doc "Takes a JSON map and turns it into a zone.".
 -spec decode(json:decode_value()) -> erldns:zone().
 decode(Zone) ->
     {_, Decoders} = list_codecs(),
@@ -89,7 +136,7 @@ start_link() ->
 -spec init(noargs) -> {ok, state()}.
 init(noargs) ->
     process_flag(trap_exit, true),
-    CustomCodecs = application:get_env(erldns, custom_zone_json_codecs, []),
+    CustomCodecs = application:get_env(erldns, custom_zone_codecs, []),
     Encoders = [fun Module:encode/1 || Module <- CustomCodecs],
     Decoders = [fun Module:decode/1 || Module <- CustomCodecs],
     persistent_term:put(?MODULE, {Encoders, Decoders}),
@@ -115,6 +162,7 @@ handle_cast(Cast, State) ->
     ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
     {noreply, State}.
 
+-doc false.
 -spec terminate(term(), state()) -> any().
 terminate(_, _) ->
     persistent_term:erase(?MODULE).

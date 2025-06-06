@@ -7,7 +7,7 @@
 
 -export([encode/3]).
 
--spec encode(erldns:zone(), map(), [erldns_zone_codec:encoder()]) ->
+-spec encode(erldns:zone(), #{atom() => dynamic()}, [erldns_zone_codec:encoder()]) ->
     not_implemented | json:encode_value().
 encode(Zone, #{mode := zone_meta_to_json}, _) ->
     zone_meta_to_json(Zone);
