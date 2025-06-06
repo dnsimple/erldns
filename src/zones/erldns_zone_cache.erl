@@ -2,9 +2,6 @@
 -moduledoc """
 A cache holding all of the zone data.
 
-Write operations occur through the cache process mailbox, whereas read
-operations occur directly through the underlying data store.
-
 Supports only a single question per request: if a request contains multiple questions,
 only the first question will be resolved.
 """.
