@@ -57,7 +57,7 @@ See `dnsperf -h` for an explanation of the flags.
 
 ### Latest Benchmark
 
-The latest benchmark was run on 2024/10/06 by @whatyouhide, on an 2023 Apple MacBook Pro, 16-inch, M3 Pro CPU, 36GB of memory.
+The latest benchmark was run on 2024/10/06 by @nelsonvides, on an 2023 Apple MacBook Pro, 16-inch, M3 Pro CPU, 36GB of memory.
 
 In these conditions, `erldns` can serve around 68k queries per second. The details of the benchmark are below.
 
