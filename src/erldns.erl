@@ -21,10 +21,9 @@ Convenience API to start erldns directly.
 
 -export([start/0]).
 
--export_type([keyset/0, authorities/0, zone/0]).
+-export_type([keyset/0, zone/0]).
 
 -type keyset() :: #keyset{}.
--type authorities() :: #authorities{}.
 -type zone() :: #zone{}.
 
 -spec start() -> any().

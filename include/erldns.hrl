@@ -1,3 +1,5 @@
+-ifndef('ERLDNS_H').
+-define('ERLDNS_H', ok).
 -include_lib("dns_erlang/include/dns_records.hrl").
 
 -record(keyset, {
@@ -10,6 +12,7 @@
     inception :: integer(),
     valid_until :: integer()
 }).
+
 -record(zone, {
     %% We're assuming zones were stored with names already normalised,
     %% hence removing the need to re-normalize them on every fetch
@@ -18,34 +21,10 @@
     authority = [] :: dns:authority(),
     record_count = 0 :: non_neg_integer(),
     records = [] :: [dns:rr()] | trimmed,
-    keysets :: [erldns:keyset()]
-}).
--record(authorities, {
-    owner_name,
-    ttl,
-    class,
-    name_server,
-    email_addr,
-    serial_num,
-    refresh,
-    retry,
-    expiry,
-    nxdomain
-}).
--record(zone_records, {
-    zone_name,
-    fqdn,
-    records
-}).
--record(zone_records_typed, {
-    zone_name,
-    fqdn,
-    type,
-    records
-}).
--record(sync_counters, {
-    counter :: integer()
+    keysets = [] :: [erldns:keyset()]
 }).
 
 -define(DNSKEY_ZSK_TYPE, 256).
 -define(DNSKEY_KSK_TYPE, 257).
+
+-endif.
