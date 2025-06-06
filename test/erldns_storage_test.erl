@@ -13,7 +13,7 @@ load_zones_with_existing_file_test() ->
         <<"[{\"name\": \"example.com\", \"records\": [{\"name\": \"example.com\", \"type\": \"SOA\", \"data\": {\"mname\": \"ns1.example.com\", \"rname\": \"ahu.example.com\", \"serial\": 2000081501, \"refresh\": 28800, \"retry\": 7200, \"expire\": 604800, \"minimum\": 86400}, \"ttl\": 100000}]}]">>
     ),
 
-    ?assertMatch({ok, 1}, erldns_zone_loader:load_zones(#{path => Filename, strict => true})),
+    ?assertMatch(1, erldns_zone_loader:load_zones(#{path => Filename, strict => true})),
     gen_server:stop(Pid).
 
 %% Helpers

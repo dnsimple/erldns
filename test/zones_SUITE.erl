@@ -72,13 +72,13 @@ strict_true(_) ->
 
 strict_false(_) ->
     application:set_env(erldns, zones, #{strict => false}),
-    ?assertMatch({ok, 0}, erldns_zone_loader:load_zones()).
+    ?assertMatch(0, erldns_zone_loader:load_zones()).
 
 strict_passes(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "good.json"),
     application:set_env(erldns, zones, #{path => Path}),
-    ?assertMatch({ok, 0}, erldns_zone_loader:load_zones()).
+    ?assertMatch(0, erldns_zone_loader:load_zones()).
 
 bad_json(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
@@ -95,10 +95,10 @@ bad_json_not_list(Config) ->
 wildcard_loose(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     application:set_env(erldns, zones, #{strict => false, path => DataDir}),
-    ?assertMatch({ok, 2}, erldns_zone_loader:load_zones()).
+    ?assertMatch(2, erldns_zone_loader:load_zones()).
 
 valid_zones(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "standard.json"),
     application:set_env(erldns, zones, #{path => Path}),
-    ?assertMatch({ok, 1}, erldns_zone_loader:load_zones()).
+    ?assertMatch(1, erldns_zone_loader:load_zones()).
