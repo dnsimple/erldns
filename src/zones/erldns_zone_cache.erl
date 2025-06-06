@@ -182,11 +182,11 @@ get_records_by_name(Name) ->
 -spec in_zone(binary()) -> boolean().
 in_zone(Name) ->
     NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, zone) of
-        #zone{} = Zone ->
-            is_name_in_zone(NormalizedName, Zone);
+    case find_zone_in_cache(NormalizedName, #zone.name) of
         zone_not_found ->
-            false
+            false;
+        ZoneName ->
+            is_name_in_zone(NormalizedName, ZoneName)
     end.
 
 -doc """
@@ -198,17 +198,17 @@ Will also return true if a wildcard is present at the node.
 record_name_in_zone(ZoneName, Name) ->
     NormalizedName = dns:dname_to_lower(Name),
     NormalizedZoneName = dns:dname_to_lower(ZoneName),
-    case find_zone_in_cache(NormalizedName, zone) of
-        #zone{} = Zone ->
+    case find_zone_in_cache(NormalizedName, #zone.name) of
+        zone_not_found ->
+            false;
+        ZoneName ->
             Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '_'}, [], [true]},
             case ets:select_count(zone_records_typed, [Pattern]) of
                 0 ->
-                    is_name_in_zone_with_wildcard(NormalizedName, Zone);
+                    is_name_in_zone_with_wildcard(NormalizedName, ZoneName);
                 _ ->
                     true
-            end;
-        zone_not_found ->
-            false
+            end
     end.
 
 -doc "Return a list of tuples with each tuple as a name and the version SHA for the zone.".
@@ -270,7 +270,7 @@ erldns_zone_cache:put_zone({
   ]}).
 ```
 """.
--spec put_zone(Zone | {Name, Sha, Records, Keys} | {Name, Sha, Records}) -> ok when
+-spec put_zone(Zone | {Name, Sha, Records} | {Name, Sha, Records, Keys}) -> ok when
     Zone :: erldns:zone(),
     Name :: dns:dname(),
     Sha :: binary(),
@@ -473,8 +473,7 @@ do_put_zone_records_typed_entry(NormalizedName, NormalizedFqdn, Type, Record) ->
     ets:insert(zone_records_typed, {{NormalizedName, NormalizedFqdn, Type}, Record}).
 
 %% expects name to be already normalized
-is_name_in_zone(NormalizedName, Zone) ->
-    NormalizedZoneName = dns:dname_to_lower(Zone#zone.name),
+is_name_in_zone(NormalizedName, NormalizedZoneName) ->
     Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '$1'}, [], ['$1']},
     case lists:append(ets:select(zone_records_typed, [Pattern])) of
         [] ->
@@ -484,15 +483,14 @@ is_name_in_zone(NormalizedName, Zone) ->
                 [_] ->
                     false;
                 [_ | Labels] ->
-                    is_name_in_zone(dns:labels_to_dname(Labels), Zone)
+                    is_name_in_zone(dns:labels_to_dname(Labels), NormalizedZoneName)
             end;
         _ ->
             true
     end.
 
 %% expects name to be already normalized
-is_name_in_zone_with_wildcard(NormalizedName, Zone) ->
-    NormalizedZoneName = dns:dname_to_lower(Zone#zone.name),
+is_name_in_zone_with_wildcard(NormalizedName, NormalizedZoneName) ->
     WildcardName = dns:dname_to_lower(erldns_records:wildcard_qname(NormalizedName)),
     Pattern = {{{NormalizedZoneName, WildcardName, '_'}, '_'}, [], [true]},
     case ets:select_count(zone_records_typed, [Pattern]) of
@@ -503,7 +501,7 @@ is_name_in_zone_with_wildcard(NormalizedName, Zone) ->
                 [_] ->
                     false;
                 [_ | Labels] ->
-                    is_name_in_zone_with_wildcard(dns:labels_to_dname(Labels), Zone)
+                    is_name_in_zone_with_wildcard(dns:labels_to_dname(Labels), NormalizedZoneName)
             end;
         _ ->
             true
