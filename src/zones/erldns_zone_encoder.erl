@@ -1,112 +1,70 @@
 -module(erldns_zone_encoder).
--moduledoc """
-A process that maintains a collection of encoders in its state
-for encoding zones from their Erlang representation to JSON.
-""".
-
--behaviour(gen_server).
+-moduledoc false.
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("erldns/include/erldns.hrl").
 
--include("erldns.hrl").
+-export([encode/3]).
 
--export([
-    zone_meta_to_json/1,
-    zone_to_json/1,
-    zone_records_to_json/2,
-    zone_records_to_json/3,
-    register_encoders/1,
-    register_encoder/1,
-    list_encoders/0
-]).
-
--export([start_link/0, init/1, handle_call/3, handle_cast/2, terminate/2]).
-
--record(state, {encoders :: [encoder()]}).
--type state() :: #state{}.
-
--type encoder() :: fun((dns:rr()) -> not_implemented | json:encode_value()).
--callback encode_record(dns:rr()) -> not_implemented | json:encode_value().
-
-% Public API
+-spec encode(erldns:zone(), map(), [erldns_zone_codec:encoder()]) ->
+    not_implemented | json:encode_value().
+encode(Zone, #{mode := zone_meta_to_json}, _) ->
+    zone_meta_to_json(Zone);
+encode(Zone, #{mode := {zone_records_to_json, RecordName}}, Encoders) ->
+    zone_records_to_json(Zone, RecordName, Encoders);
+encode(Zone, #{mode := {zone_records_to_json, RecordName, RecordType}}, Encoders) ->
+    zone_records_to_json(Zone, RecordName, RecordType, Encoders);
+encode(Zone, #{mode := zone_to_json}, Encoders) ->
+    Records = records_to_json(Zone, Encoders),
+    FilteredRecords = lists:filter(record_filter(), Records),
+    #{
+        ~"erldns" =>
+            #{
+                ~"zone" => #{
+                    ~"name" => Zone#zone.name,
+                    ~"version" => Zone#zone.version,
+                    ~"records_count" => length(FilteredRecords),
+                    % Note: Private key material is purposely omitted
+                    ~"records" => FilteredRecords
+                }
+            }
+    }.
 
 -doc "Encode a Zone meta data into JSON.".
--spec zone_meta_to_json(erldns:zone()) -> binary().
+-spec zone_meta_to_json(erldns:zone()) -> json:encode_value().
 zone_meta_to_json(Zone) ->
-    json_encode_kw_list([
-        {~"erldns", [
-            {~"zone", [
-                {~"name", Zone#zone.name},
-                {~"version", Zone#zone.version},
-                % Note: Private key material is purposely omitted
-                {~"records_count", length(erldns_zone_cache:get_zone_records(Zone#zone.name))}
-            ]}
-        ]}
-    ]).
+    #{
+        ~"erldns" =>
+            #{
+                ~"zone" => #{
+                    ~"name" => Zone#zone.name,
+                    ~"version" => Zone#zone.version,
+                    % Note: Private key material is purposely omitted
+                    ~"records_count" => length(erldns_zone_cache:get_zone_records(Zone#zone.name))
+                }
+            }
+    }.
 
--doc "Encode a Zone meta data plus all of its records into JSON.".
--spec zone_to_json(erldns:zone()) -> binary().
-zone_to_json(Zone) ->
-    Encoders = list_encoders(),
-    encode_zone_to_json(Zone, Encoders).
-
--doc "Encode the records in the zone with the given RRSet name and type into JSON".
--spec zone_records_to_json(dns:dname(), dns:dname()) -> binary().
-zone_records_to_json(ZoneName, RecordName) ->
-    Encoders = list_encoders(),
+zone_records_to_json(ZoneName, RecordName, Encoders) ->
     encode_zone_records_to_json(ZoneName, RecordName, Encoders).
 
--doc "Encode the records in the zone with the given RRSet name and type into JSON".
--spec zone_records_to_json(dns:dname(), dns:dname(), binary()) -> binary().
-zone_records_to_json(ZoneName, RecordName, RecordType) ->
-    Encoders = list_encoders(),
+zone_records_to_json(ZoneName, RecordName, RecordType, Encoders) ->
     encode_zone_records_to_json(ZoneName, RecordName, RecordType, Encoders).
-
--doc "Register a single encoder module.".
--spec register_encoder(module()) -> ok.
-register_encoder(Module) ->
-    register_encoders([Module]).
-
--doc "Register a list of encoder modules.".
--spec register_encoders([module()]) -> ok.
-register_encoders(Modules) ->
-    ?LOG_NOTICE(#{what => registering_custom_encoders, encoders => Modules}),
-    gen_server:call(?MODULE, {register_encoders, Modules}).
-
--doc "Get the list of registered zone parsers.".
--spec list_encoders() -> [encoder()].
-list_encoders() ->
-    persistent_term:get(?MODULE, []).
 
 % Gen server hooks
 
 % Internal API
 
-encode_zone_to_json(Zone, Encoders) ->
-    Records = records_to_json(Zone, Encoders),
-    FilteredRecords = lists:filter(record_filter(), Records),
-    json_encode_kw_list([
-        {~"erldns", [
-            {~"zone", [
-                {~"name", Zone#zone.name},
-                {~"version", Zone#zone.version},
-                {~"records_count", length(FilteredRecords)},
-                % Note: Private key material is purposely omitted
-                {~"records", FilteredRecords}
-            ]}
-        ]}
-    ]).
-
 encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
     Records = erldns_zone_cache:get_records_by_name(RecordName),
-    json_encode_kw_list(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
+    lists:filter(record_filter(), lists:map(encode(Encoders), Records)).
 
 encode_zone_records_to_json(_ZoneName, RecordName, RecordType, Encoders) ->
     Records = erldns_zone_cache:get_records_by_name_and_type(
         RecordName, erldns_records:name_type(RecordType)
     ),
-    json_encode_kw_list(lists:filter(record_filter(), lists:map(encode(Encoders), Records))).
+    lists:filter(record_filter(), lists:map(encode(Encoders), Records)).
 
 record_filter() ->
     fun(R) ->
@@ -270,45 +228,3 @@ encode_data(Data) ->
         ?MODULE, unsupported_rrdata_type, Data
     ]),
     {}.
-
-json_encode_kw_list(KwList) when is_list(KwList) ->
-    iolist_to_binary(json:encode(KwList, fun json_encode_term/2)).
-
-json_encode_term([{_, _} | _] = Value, Encode) -> json:encode_key_value_list(Value, Encode);
-json_encode_term(Other, Encode) -> json:encode_value(Other, Encode).
-
--doc false.
--spec start_link() -> gen_server:start_ret().
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, noargs, []).
-
--doc false.
--spec init(noargs) -> {ok, state()}.
-init(noargs) ->
-    process_flag(trap_exit, true),
-    CustomEncoders = application:get_env(erldns, custom_zone_encoders, []),
-    Encoders = [fun Module:encode_record/1 || Module <- CustomEncoders],
-    persistent_term:put(?MODULE, Encoders),
-    {ok, #state{encoders = Encoders}}.
-
--doc false.
--spec handle_call(dynamic(), gen_server:from(), state()) ->
-    {reply, dynamic(), state()}.
-handle_call({register_encoders, Modules}, _From, State) ->
-    Encoders = [fun Module:encode_record/1 || Module <- Modules],
-    NewEncoders = State#state.encoders ++ Encoders,
-    persistent_term:put(?MODULE, NewEncoders),
-    {reply, ok, State#state{encoders = NewEncoders}};
-handle_call(Call, From, State) ->
-    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}),
-    {reply, not_implemented, State}.
-
--doc false.
--spec handle_cast(dynamic(), state()) -> {noreply, state()}.
-handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
-    {noreply, State}.
-
--spec terminate(term(), state()) -> any().
-terminate(_, _) ->
-    persistent_term:erase(?MODULE).

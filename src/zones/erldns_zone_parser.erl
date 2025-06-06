@@ -1,59 +1,18 @@
 -module(erldns_zone_parser).
--moduledoc """
-Process for parsing zone data from JSON to Erlang representations.
-""".
-
--behaviour(gen_server).
+-moduledoc false.
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("erldns/include/erldns.hrl").
 
--include("erldns.hrl").
-
--export([
-    zone_to_erlang/1,
-    register_parsers/1,
-    register_parser/1,
-    list_parsers/0
-]).
-
--export([start_link/0, init/1, handle_call/3, handle_cast/2, terminate/2]).
+-export([decode/2]).
 
 -ifdef(TEST).
--export([json_to_erlang/2, json_record_to_erlang/1, parse_json_keys_as_maps/1]).
+-export([json_record_to_erlang/1, parse_json_keys_as_maps/1]).
 -endif.
 
--type decoder() :: fun((dynamic()) -> not_implemented | dns:rr()).
--callback json_record_to_erlang(dynamic()) -> not_implemented | dns:rr().
-
--type record() :: dynamic().
--record(state, {decoders :: [decoder()]}).
--type state() :: #state{}.
-
--doc "Takes a JSON zone and turns it into `{Name, Sha, Records, KeySet}` tuples.".
--spec zone_to_erlang(map()) -> {binary(), binary(), [dns:rr()], [erldns:keyset()]}.
-zone_to_erlang(Zone) ->
-    Parsers = list_parsers(),
-    json_to_erlang(Zone, Parsers).
-
--doc "Register a custom parser module.".
--spec register_parser(module()) -> ok.
-register_parser(Module) ->
-    register_parsers([Module]).
-
--doc "Register a list of custom parser modules.".
--spec register_parsers([module()]) -> ok.
-register_parsers(Modules) ->
-    ?LOG_NOTICE(#{what => registering_custom_parsers, parsers => Modules}),
-    gen_server:call(?MODULE, {register_parsers, Modules}).
-
--doc "Get the list of registered zone parsers.".
--spec list_parsers() -> [decoder()].
-list_parsers() ->
-    persistent_term:get(?MODULE, []).
-
-% Internal API
-json_to_erlang(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Parsers) ->
+-spec decode(json:decode_value(), [erldns_zone_codec:decoder()]) -> erldns:zone().
+decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Decoders) ->
     Sha = maps:get(~"sha", Zone, ~""),
     JsonKeys = maps:get(~"keys", Zone, []),
     Records =
@@ -62,7 +21,7 @@ json_to_erlang(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Parsers) ->
                 maybe
                     pass ?= apply_context_options(JsonRecord),
                     not_implemented ?= json_record_to_erlang(JsonRecord),
-                    not_implemented ?= try_custom_parsers(JsonRecord, Parsers),
+                    not_implemented ?= try_custom_decoders(JsonRecord, Decoders),
                     ?LOG_WARNING(
                         "Unsupported record (module: ~p, event: ~p, data: ~p)",
                         [?MODULE, unsupported_record, JsonRecord]
@@ -79,7 +38,7 @@ json_to_erlang(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Parsers) ->
         ),
     FilteredRecords = lists:filter(record_filter(), Records),
     DistinctRecords = lists:usort(FilteredRecords),
-    {Name, Sha, DistinctRecords, parse_json_keys_as_maps(JsonKeys)}.
+    erldns_zone_codec:build_zone(Name, Sha, DistinctRecords, parse_json_keys_as_maps(JsonKeys)).
 
 parse_json_keys_as_maps([]) ->
     [];
@@ -143,7 +102,7 @@ apply_context_match_empty_check(_, _) ->
 %% If the context is a list and has at least one condition that passes
 %% then it will be included in the zone
 % Filter by context
--spec apply_context_options(record()) -> pass | fail.
+-spec apply_context_options(dynamic()) -> pass | fail.
 apply_context_options(#{~"context" := Context}) ->
     case application:get_env(erldns, context_options) of
         {ok, ContextOptions} ->
@@ -169,18 +128,18 @@ apply_context_options(#{~"context" := Context}) ->
 apply_context_options(#{}) ->
     pass.
 
-try_custom_parsers(_, []) ->
+try_custom_decoders(_, []) ->
     not_implemented;
-try_custom_parsers(Data, [Parser | Rest]) ->
-    case Parser(Data) of
+try_custom_decoders(Data, [Decoder | Rest]) ->
+    case Decoder(Data) of
         not_implemented ->
-            try_custom_parsers(Data, Rest);
+            try_custom_decoders(Data, Rest);
         Record ->
             Record
     end.
 
 % Internal converters
--spec json_record_to_erlang(record()) -> not_implemented | dns:rr().
+-spec json_record_to_erlang(dynamic()) -> not_implemented | dns:rr().
 json_record_to_erlang(#{~"data" := null} = Record) ->
     ?LOG_WARNING(#{what => error_parsing_record, record => Record}),
     not_implemented;
@@ -447,39 +406,3 @@ json_record_to_erlang(#{
     end;
 json_record_to_erlang(#{}) ->
     not_implemented.
-
--doc false.
--spec start_link() -> gen_server:start_ret().
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, noargs, [{hibernate_after, 0}]).
-
--doc false.
--spec init(noargs) -> {ok, state()}.
-init(noargs) ->
-    process_flag(trap_exit, true),
-    CustomParsers = application:get_env(erldns, custom_zone_parsers, []),
-    Parsers = [fun Module:json_record_to_erlang/1 || Module <- CustomParsers],
-    persistent_term:put(?MODULE, Parsers),
-    {ok, #state{decoders = Parsers}}.
-
--doc false.
--spec handle_call(dynamic(), gen_server:from(), state()) ->
-    {reply, dynamic(), state()}.
-handle_call({register_parsers, Modules}, _From, State) ->
-    Parsers = [fun Module:json_record_to_erlang/1 || Module <- Modules],
-    NewParsers = State#state.decoders ++ Parsers,
-    persistent_term:put(?MODULE, NewParsers),
-    {reply, ok, State#state{decoders = NewParsers}};
-handle_call(Call, From, State) ->
-    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}),
-    {reply, not_implemented, State}.
-
--doc false.
--spec handle_cast(dynamic(), state()) -> {noreply, state()}.
-handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
-    {noreply, State}.
-
--spec terminate(term(), state()) -> any().
-terminate(_, _) ->
-    persistent_term:erase(?MODULE).

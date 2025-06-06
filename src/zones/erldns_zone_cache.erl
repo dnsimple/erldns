@@ -270,7 +270,8 @@ erldns_zone_cache:put_zone({
   ]}).
 ```
 """.
--spec put_zone({Name, Sha, Records, Keys} | {Name, Sha, Records}) -> ok when
+-spec put_zone(Zone | {Name, Sha, Records, Keys} | {Name, Sha, Records}) -> ok when
+    Zone :: erldns:zone(),
     Name :: dns:dname(),
     Sha :: binary(),
     Records :: [dns:rr()],
@@ -279,7 +280,10 @@ put_zone({Name, Sha, Records}) ->
     put_zone({Name, Sha, Records, []});
 put_zone({Name, Sha, Records, Keys}) ->
     NormalizedName = dns:dname_to_lower(Name),
-    SignedZone = sign_zone(build_zone(NormalizedName, Sha, Records, Keys)),
+    put_zone(build_zone(NormalizedName, Sha, Records, Keys));
+put_zone(#zone{name = Name} = Zone) ->
+    NormalizedName = dns:dname_to_lower(Name),
+    SignedZone = sign_zone(Zone#zone{name = NormalizedName}),
     NamedRecords = build_named_index(SignedZone#zone.records),
     delete_zone_records(NormalizedName),
     true = insert_zone(SignedZone#zone{records = trimmed}),

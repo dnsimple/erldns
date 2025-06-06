@@ -20,9 +20,10 @@ See the type `t:config/0` for details.
 Zone loader configuration.
 
 Path can be a directory, and `strict` declares whether load failure should crash or be ignored.
+If a path is configured and `strict` is true, and the path is not resolvable, it will fail.
 """.
 -type config() :: #{
-    path => file:name(),
+    path => undefined | file:name(),
     strict => boolean()
 }.
 
@@ -30,30 +31,33 @@ Path can be a directory, and `strict` declares whether load failure should crash
 -export([load_zones/0, load_zones/1]).
 -export([start_link/0, init/1, handle_call/3, handle_cast/2]).
 
--define(PATH, "zones.json").
-
 -doc "Load zones.".
 -spec load_zones() -> non_neg_integer().
 load_zones() ->
     ?LOG_INFO(#{what => loading_zones_from_local_file}),
-    Config = get_config(),
-    load_zones(Config).
+    case get_config() of
+        #{path := Path, strict := Strict} ->
+            load_zones(Strict, Path);
+        _ ->
+            0
+    end.
 
 -doc """
 Load zones from a file in strict or loose mode.
 """.
--spec load_zones(config()) -> non_neg_integer().
-load_zones(#{path := Path, strict := Strictness}) ->
-    load_zones(Strictness, Path).
+-spec load_zones(file:name()) -> non_neg_integer().
+load_zones(Path) ->
+    fail_if_strict_and_path_not_found(true, Path, #{}),
+    load_zones(true, Path).
 
 -spec load_zones(boolean(), file:name()) -> non_neg_integer().
-load_zones(Strictness, Path) when is_boolean(Strictness), is_list(Path) ->
+load_zones(Strict, Path) when is_boolean(Strict), is_list(Path) ->
     case filelib:is_dir(Path) of
         true ->
             ZoneFiles = filelib:wildcard(filename:join([Path, "*.json"])),
-            load_zone_files_parallel(Strictness, ZoneFiles, length(ZoneFiles));
+            load_zone_files_parallel(Strict, ZoneFiles, length(ZoneFiles));
         false ->
-            load_zone_files_parallel(Strictness, [Path], 1)
+            load_zone_files_parallel(Strict, [Path], 1)
     end.
 
 load_zone_files_parallel(Strict, ZoneFileNames, _ZoneFilesCount) ->
@@ -168,31 +172,38 @@ zone_loader(Ref, ParentPid) ->
     end.
 
 load_zone(JsonZone) ->
-    Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
+    Zone = erldns_zone_codec:decode(JsonZone),
     erldns_zone_cache:put_zone(Zone).
 
 % Internal API
+-spec get_config() -> config().
 get_config() ->
-    case application:get_env(erldns, zones, default_config()) of
-        #{path := Path, strict := Strictness} = Config when
-            is_list(Path), is_boolean(Strictness)
-        ->
+    case application:get_env(erldns, zones, #{}) of
+        #{strict := Strict} when not is_boolean(Strict) ->
+            erlang:error({badconfig, invalid_strict_value});
+        #{path := Path, strict := false} = Config when is_list(Path) ->
+            fail_if_strict_and_path_not_found(false, Path, Config);
+        #{path := Path, strict := true} = Config when is_list(Path) ->
+            fail_if_strict_and_path_not_found(true, Path, Config);
+        #{path := Path} = Config ->
+            fail_if_strict_and_path_not_found(true, Path, Config#{strict => true});
+        #{strict := true} ->
+            erlang:error({badconfig, enoent});
+        #{strict := false} = Config ->
             Config;
-        #{strict := Strictness} = Config when
-            is_boolean(Strictness)
-        ->
-            Config#{path => ?PATH};
-        #{path := Path} = Config when
-            is_list(Path)
-        ->
-            Config#{strict => true};
         Other ->
-            erlang:error({badconfig, Other})
+            Other
     end.
 
--spec default_config() -> config().
-default_config() ->
-    #{path => ?PATH, strict => true}.
+fail_if_strict_and_path_not_found(true, Path, Config) ->
+    case filelib:is_dir(Path) orelse filelib:is_file(Path) of
+        true ->
+            Config;
+        false ->
+            erlang:error({badconfig, enoent})
+    end;
+fail_if_strict_and_path_not_found(false, _, Config) ->
+    Config.
 
 safe_json_decode(Binary) ->
     try json:decode(Binary) of

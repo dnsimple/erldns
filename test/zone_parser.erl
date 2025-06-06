@@ -2,11 +2,12 @@
 -compile([export_all, nowarn_export_all]).
 
 -include_lib("dns_erlang/include/dns.hrl").
+-include_lib("erldns/include/erldns.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 json_to_erlang_test() ->
-    R = erldns_zone_parser:json_to_erlang(json:decode(input()), []),
-    ?assertMatch({_, _, _, _}, R).
+    R = erldns_zone_parser:decode(json:decode(input()), []),
+    ?assertMatch(#zone{}, R).
 
 json_to_erlang_txt_spf_records_test() ->
     I = ~"""
@@ -36,7 +37,7 @@ json_to_erlang_txt_spf_records_test() ->
     }
     """,
     Json = json:decode(I),
-    R = erldns_zone_parser:json_to_erlang(Json, []),
+    R = erldns_zone_parser:decode(Json, []),
     Expected = [
         #dns_rr{
             name = ~"example.com",
@@ -53,12 +54,20 @@ json_to_erlang_txt_spf_records_test() ->
             data = #dns_rrdata_spf{spf = [~"v=spf1 a mx ~all"]}
         }
     ],
-    ?assertMatch({~"example.com", Sha, Expected, []} when is_binary(Sha), R).
+    ?assertMatch(
+        #zone{
+            name = ~"example.com",
+            version = Sha,
+            records = Expected,
+            keysets = []
+        } when is_binary(Sha),
+        R
+    ).
 
 json_to_erlang_ensure_sorting_and_defaults_test() ->
     ?assertEqual(
-        {~"foo.org", <<>>, [], []},
-        erldns_zone_parser:json_to_erlang(#{~"name" => ~"foo.org", ~"records" => []}, [])
+        #zone{name = ~"foo.org", version = <<>>, records = [], keysets = []},
+        erldns_zone_parser:decode(#{~"name" => ~"foo.org", ~"records" => []}, [])
     ).
 
 json_record_to_erlang_test() ->
@@ -191,6 +200,7 @@ json_record_cds_to_erlang_test() ->
     ).
 
 parse_json_keys_unsorted_proplists_test() ->
+    %% TODO use record well
     ?assertEqual(
         [
             {keyset,
