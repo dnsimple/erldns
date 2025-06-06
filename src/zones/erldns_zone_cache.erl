@@ -285,9 +285,10 @@ put_zone(#zone{name = Name} = Zone) ->
     NormalizedName = dns:dname_to_lower(Name),
     SignedZone = sign_zone(Zone#zone{name = NormalizedName}),
     NamedRecords = build_named_index(SignedZone#zone.records),
+    ZoneRecords = prepare_zone_records(NormalizedName, NamedRecords),
     delete_zone_records(NormalizedName),
     true = insert_zone(SignedZone#zone{records = trimmed}),
-    put_zone_records(NormalizedName, NamedRecords).
+    put_zone_records(ZoneRecords).
 
 -doc "Put zone RRSet".
 -spec put_zone_rrset(RRSet, RRFqdn, Type, Counter) -> ok | {error, term()} when
@@ -449,11 +450,33 @@ insert_zone(#zone{} = Zone) ->
     ets:insert(zones, Zone).
 
 %% expects name to be already normalized
--spec put_zone_records(dns:dname(), map()) -> ok.
-put_zone_records(NormalizedName, RecordsByName) ->
-    maps:foreach(
-        fun(Name, Record) ->
-            put_zone_records_typed_entry(NormalizedName, Name, Record)
+-spec prepare_zone_records(dns:dname(), map()) -> list().
+prepare_zone_records(NormalizedName, RecordsByName) ->
+    lists:flatmap(
+        fun({Fqdn, Records}) ->
+            NormalizedFqdn = dns:dname_to_lower(Fqdn),
+            TypedRecords = build_typed_index(Records),
+            ListTypedRecords = maps:to_list(TypedRecords),
+            prepare_zone_records_typed_entry(NormalizedName, NormalizedFqdn, ListTypedRecords)
+        end,
+        maps:to_list(RecordsByName)
+    ).
+
+%% expects name to be already normalized
+prepare_zone_records_typed_entry(NormalizedName, NormalizedFqdn, ListTypedRecords) ->
+    lists:map(
+        fun({Type, Record}) ->
+            {{NormalizedName, NormalizedFqdn, Type}, Record}
+        end,
+        ListTypedRecords
+    ).
+
+%% expects name to be already normalized
+-spec put_zone_records(list()) -> ok.
+put_zone_records(RecordsByName) ->
+    lists:foreach(
+        fun(Entry) ->
+            ets:insert(zone_records_typed, Entry)
         end,
         RecordsByName
     ).
