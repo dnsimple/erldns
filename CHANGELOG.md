@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
-- Rework zones [no-pr-yet](https://github.com/dnsimple/erldns/pulls)
+- Rework zones [#228](https://github.com/dnsimple/erldns/pull/228)
 
 ## 7.0.0-rc3
 
