@@ -39,8 +39,8 @@ end_per_testcase(_, Config) ->
 %% Tests
 terminate_removes_pt(_) ->
     application:set_env(erldns, packet_pipeline, []),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
-    erlang:exit(whereis(erldns_pipeline), normal),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
+    erlang:exit(whereis(erldns_pipeline_worker), normal),
     receive
         {'EXIT', _, normal} ->
             ok
@@ -50,29 +50,29 @@ terminate_removes_pt(_) ->
 
 sync(_) ->
     application:set_env(erldns, packet_pipeline, []),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({[], #{}}, persistent_term:get(erldns_pipeline, undefined)),
     application:set_env(erldns, packet_pipeline, [fun(A, _) -> A end]),
-    ?assertEqual(ok, gen_server:call(erldns_pipeline, sync)),
+    ?assertEqual(ok, gen_server:call(erldns_pipeline_worker, sync)),
     ?assertMatch({[_], #{}}, persistent_term:get(erldns_pipeline, undefined)).
 
 survives_cast_and_calls(_) ->
     application:set_env(erldns, packet_pipeline, []),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
-    ?assertEqual(ok, gen_server:cast(erldns_pipeline, whatever)),
-    ?assertEqual(not_implemented, gen_server:call(erldns_pipeline, whatever)),
-    ?assert(is_pid(whereis(erldns_pipeline))).
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
+    ?assertEqual(ok, gen_server:cast(erldns_pipeline_worker, whatever)),
+    ?assertEqual(not_implemented, gen_server:call(erldns_pipeline_worker, whatever)),
+    ?assert(is_pid(whereis(erldns_pipeline_worker))).
 
 configure_function_pipes(_) ->
     application:set_env(erldns, packet_pipeline, [fun(A, _) -> A end]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({[_], #{}}, persistent_term:get(erldns_pipeline, undefined)).
 
 fail_to_configure_bad_function_pipes(_) ->
     application:set_env(erldns, packet_pipeline, [fun(A, _, _) -> A end]),
     ?assertMatch(
         {error, {{badpipe, {function_pipe_has_wrong_arity, _}}, _}},
-        erldns_pipeline:start_link()
+        erldns_pipeline_worker:start_link()
     ).
 
 configure_module_pipes_with_prepare_returns_disable(_) ->
@@ -80,7 +80,7 @@ configure_module_pipes_with_prepare_returns_disable(_) ->
     meck:expect(?FUNCTION_NAME, call, fun(Msg, _) -> Msg end),
     meck:expect(?FUNCTION_NAME, prepare, fun(_) -> disabled end),
     application:set_env(erldns, packet_pipeline, [?FUNCTION_NAME]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({[], #{}}, persistent_term:get(erldns_pipeline, undefined)).
 
 configure_module_pipes_with_prepare(_) ->
@@ -88,7 +88,7 @@ configure_module_pipes_with_prepare(_) ->
     meck:expect(?FUNCTION_NAME, call, fun(Msg, _) -> Msg end),
     meck:expect(?FUNCTION_NAME, prepare, fun(Opts) -> Opts end),
     application:set_env(erldns, packet_pipeline, [?FUNCTION_NAME]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({[_], #{}}, persistent_term:get(erldns_pipeline, undefined)).
 
 configure_module_pipes_with_bad_prepare(_) ->
@@ -98,26 +98,26 @@ configure_module_pipes_with_bad_prepare(_) ->
     application:set_env(erldns, packet_pipeline, [?FUNCTION_NAME]),
     ?assertMatch(
         {error, {{badpipe, {module_init_returned_non_map, ?FUNCTION_NAME}}, _}},
-        erldns_pipeline:start_link()
+        erldns_pipeline_worker:start_link()
     ).
 
 configure_module_pipes_without_prepare(_) ->
     meck:new(?FUNCTION_NAME, [non_strict]),
     meck:expect(?FUNCTION_NAME, call, fun(Msg, _) -> Msg end),
     application:set_env(erldns, packet_pipeline, [?FUNCTION_NAME]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({[_], #{}}, persistent_term:get(erldns_pipeline, undefined)).
 
 fail_to_configure_non_existing_module_pipe(_) ->
     application:set_env(erldns, packet_pipeline, [?FUNCTION_NAME]),
-    ?assertMatch({error, {{badpipe, {module, nofile}}, _}}, erldns_pipeline:start_link()).
+    ?assertMatch({error, {{badpipe, {module, nofile}}, _}}, erldns_pipeline_worker:start_link()).
 
 configure_module_pipe_without_call(_) ->
     meck:new(?FUNCTION_NAME, [non_strict]),
     application:set_env(erldns, packet_pipeline, [?FUNCTION_NAME]),
     ?assertMatch(
         {error, {{badpipe, module_does_not_export_call}, _}},
-        erldns_pipeline:start_link()
+        erldns_pipeline_worker:start_link()
     ).
 
 pipe_returns_stop(_) ->
@@ -125,7 +125,7 @@ pipe_returns_stop(_) ->
     Msg = #dns_message{qc = 1, questions = Qs},
     Fun = fun(M, _) -> {stop, M#dns_message{tc = true}} end,
     application:set_env(erldns, packet_pipeline, [Fun]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({[_], #{}}, persistent_term:get(erldns_pipeline, undefined)),
     ?assertMatch(#dns_message{tc = true}, erldns_pipeline:call(Msg, def_opts())).
 
@@ -134,7 +134,7 @@ pipe_returns_new_msg(_) ->
     Msg = #dns_message{qc = 1, questions = Qs},
     Fun = fun(M, _) -> M#dns_message{tc = true} end,
     application:set_env(erldns, packet_pipeline, [Fun]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({[_], #{}}, persistent_term:get(erldns_pipeline, undefined)),
     ?assertMatch(#dns_message{tc = true}, erldns_pipeline:call(Msg, def_opts())).
 
@@ -143,7 +143,7 @@ pipe_returns_msg_and_opts(_) ->
     Msg = #dns_message{qc = 1, questions = Qs},
     Fun = fun(M, O) -> {M#dns_message{tc = true}, O#{a => b}} end,
     application:set_env(erldns, packet_pipeline, [Fun]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({[_], #{}}, persistent_term:get(erldns_pipeline, undefined)),
     ?assertMatch(#dns_message{tc = true}, erldns_pipeline:call(Msg, def_opts())).
 
@@ -152,7 +152,7 @@ pipe_returns_unexpected_value(_) ->
     Msg = #dns_message{qc = 1, questions = Qs},
     Fun = fun(_, _) -> #{} end,
     application:set_env(erldns, packet_pipeline, [Fun]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({[_], #{}}, persistent_term:get(erldns_pipeline, undefined)),
     ?assertMatch(#dns_message{tc = false}, erldns_pipeline:call(Msg, def_opts())).
 
@@ -161,7 +161,7 @@ pipe_raises(_) ->
     Msg = #dns_message{qc = 1, questions = Qs},
     Fun = fun(_, _) -> erlang:error(an_error) end,
     application:set_env(erldns, packet_pipeline, [Fun]),
-    ?assertMatch({ok, _}, erldns_pipeline:start_link()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({[_], #{}}, persistent_term:get(erldns_pipeline, undefined)),
     ?assertMatch(#dns_message{tc = false}, erldns_pipeline:call(Msg, def_opts())).
 

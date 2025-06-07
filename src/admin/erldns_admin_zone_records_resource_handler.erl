@@ -86,7 +86,10 @@ to_json(Req, State) ->
     case lists:keyfind(<<"type">>, 1, Params) of
         false ->
             ?LOG_DEBUG(#{what => get_zone_resource_call, zone => ZoneName, record => RecordName}),
-            {erldns_zone_encoder:zone_records_to_json(ZoneName, RecordName), Req, State};
+            Opts = #{mode => {zone_records_to_json, RecordName}},
+            Json = erldns_zone_codec:encode(ZoneName, Opts),
+            Response = iolist_to_binary(json:encode(Json)),
+            {Response, Req, State};
         {<<"type">>, RecordType} ->
             ?LOG_DEBUG(#{
                 what => get_zone_resource_call,
@@ -94,5 +97,8 @@ to_json(Req, State) ->
                 record => RecordName,
                 type => RecordType
             }),
-            {erldns_zone_encoder:zone_records_to_json(ZoneName, RecordName, RecordType), Req, State}
+            Opts = #{mode => {zone_records_to_json, RecordName, RecordType}},
+            Json = erldns_zone_codec:encode(ZoneName, Opts),
+            Response = iolist_to_binary(json:encode(Json)),
+            {Response, Req, State}
     end.

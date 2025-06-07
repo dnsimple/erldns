@@ -81,7 +81,7 @@ init(noargs) ->
 -spec handle_call
     ({register_handler, [dns:type()], module(), integer()}, gen_server:from(), state()) ->
         {reply, ok, state()};
-    (term(), gen_server:from(), state()) ->
+    (dynamic(), gen_server:from(), state()) ->
         {reply, not_implemented, state()}.
 handle_call({register_handler, RecordTypes, Module, Version}, _, State) ->
     ?LOG_INFO("Registered handler (module: ~p, types: ~p, version: ~p)", [

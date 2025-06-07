@@ -12,30 +12,20 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Convenience API to start erl-dns directly.
 -module(erldns).
+-moduledoc """
+Convenience API to start erldns directly.
+""".
 
 -include("erldns.hrl").
 
 -export([start/0]).
--export([normalize_name/1]).
 
--export_type([
-    keyset/0,
-    authorities/0,
-    zone/0
-]).
+-export_type([keyset/0, zone/0]).
 
 -type keyset() :: #keyset{}.
--type authorities() :: #authorities{}.
 -type zone() :: #zone{}.
 
 -spec start() -> any().
 start() ->
     application:ensure_all_started(erldns).
-
-%% @doc Converts a domain name to lower case.
-normalize_name(Name) when is_list(Name) ->
-    string:to_lower(Name);
-normalize_name(Name) when is_binary(Name) ->
-    list_to_binary(string:to_lower(binary_to_list(Name))).

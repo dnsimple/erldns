@@ -16,6 +16,9 @@
 -moduledoc """
 Resolve a DNS query.
 
+Supports only a single question per request: if a request contains multiple questions,
+only the first question will be resolved.
+
 Emits the following telemetry events:
 - `[erldns, resolver, dnssec]`
 """.
@@ -29,8 +32,6 @@ Emits the following telemetry events:
 
 -ifdef(TEST).
 -export([resolve_authoritative/6, resolve_qname_and_qtype/5]).
--include_lib("proper/include/proper.hrl").
--include_lib("eunit/include/eunit.hrl").
 -endif.
 
 -behaviour(erldns_pipeline).
@@ -96,8 +97,6 @@ resolve(Message, AuthorityRecords, Host) ->
     case Message#dns_message.questions of
         [] ->
             Message;
-        [Question] ->
-            resolve_question(Message, AuthorityRecords, Host, Question);
         [Question | _] ->
             resolve_question(Message, AuthorityRecords, Host, Question)
     end.
@@ -150,7 +149,7 @@ resolve_qname_and_qtype(Message, AuthorityRecords, Qname, Qtype, Host) ->
             Message#dns_message{rc = ?DNS_RCODE_REFUSED};
         _ ->
             % Authority records present, continue resolution
-            Zone = erldns_zone_cache:find_zone(Qname, lists:last(AuthorityRecords)),
+            Zone = erldns_zone_cache:find_zone(Qname, AuthorityRecords),
             Message1 = resolve_authoritative(Message, Qname, Qtype, Zone, Host, []),
             Message2 = erldns_records:rewrite_soa_ttl(Message1),
             Message3 = additional_processing(Message2, Host, Zone),
@@ -963,78 +962,3 @@ detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
                     ZonecutNSRecords
             end
     end.
-
--ifdef(TEST).
-resolve_no_question_returns_message_test() ->
-    Q = #dns_message{questions = []},
-    ?assertEqual(Q, erldns_resolver:resolve(Q, [], {1, 1, 1, 1})).
-
-resolve_rrsig_refused_test() ->
-    Q = #dns_message{questions = [#dns_query{type = ?DNS_TYPE_RRSIG}]},
-    A = erldns_resolver:resolve(Q, [], {1, 1, 1, 1}),
-    ?assertEqual(?DNS_RCODE_REFUSED, A#dns_message.rc).
-
-resolve_no_authority_refused_test() ->
-    Q = #dns_message{
-        questions = [#dns_query{type = Qtype = ?DNS_TYPE_A, name = Qname = <<"example.com">>}]
-    },
-    A = erldns_resolver:resolve_qname_and_qtype(Q, [], Qname, Qtype, {1, 1, 1, 1}),
-    ?assertEqual(?DNS_RCODE_REFUSED, A#dns_message.rc).
-
-resolve_authoritative_host_not_found_test() ->
-    erldns_zone_cache:start_link(),
-    Qname = <<"example.com">>,
-    Z = #zone{
-        name = <<"example.com">>,
-        authority = Authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_SOA}]
-    },
-    Q = #dns_message{questions = [#dns_query{name = Qname, type = Qtype = ?DNS_TYPE_A}]},
-    A = erldns_resolver:resolve_authoritative(Q, Qname, Qtype, Z, {}, _CnameChain = []),
-    ?assertEqual(true, A#dns_message.aa),
-    ?assertEqual(?DNS_RCODE_NXDOMAIN, A#dns_message.rc),
-    ?assertEqual(Authority, A#dns_message.authority).
-
-resolve_authoritative_zone_cut_test() ->
-    erldns_zone_cache:start_link(),
-    erldns_handler:start_link(),
-    Qname = <<"delegated.example.com">>,
-    NSRecord = [#dns_rr{name = Qname, type = ?DNS_TYPE_NS}],
-    Z = #zone{
-        name = ZoneName = <<"example.com">>,
-        authority = Authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_SOA}]
-    },
-    Q = #dns_message{questions = [#dns_query{name = Qname, type = Qtype = ?DNS_TYPE_A}]},
-    erldns_zone_cache:put_zone({ZoneName, <<"_">>, Authority ++ NSRecord}),
-    A = erldns_resolver:resolve_authoritative(Q, Qname, Qtype, Z, {}, []),
-    ?assertEqual(false, A#dns_message.aa),
-    ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
-    ?assertEqual(NSRecord, A#dns_message.authority),
-    ?assertEqual([], A#dns_message.answers),
-    erldns_zone_cache:delete_zone(ZoneName).
-
-resolve_authoritative_zone_cut_with_cnames_test() ->
-    erldns_zone_cache:start_link(),
-    erldns_handler:start_link(),
-    Qname = <<"delegated.example.com">>,
-    CnameRecords =
-        [
-            #dns_rr{
-                name = Qname,
-                type = ?DNS_TYPE_CNAME,
-                data = #dns_rrdata_cname{dname = <<"delegated-ns.example.com">>}
-            }
-        ],
-    NSRecord = [#dns_rr{name = <<"delegated-ns.example.com">>, type = ?DNS_TYPE_NS}],
-    Z = #zone{
-        name = ZoneName = <<"example.com">>,
-        authority = Authority = [#dns_rr{name = <<"example.com">>, type = ?DNS_TYPE_SOA}]
-    },
-    Q = #dns_message{questions = [#dns_query{name = Qname, type = Qtype = ?DNS_TYPE_A}]},
-    erldns_zone_cache:put_zone({ZoneName, <<"_">>, Authority ++ NSRecord ++ CnameRecords}),
-    A = erldns_resolver:resolve_authoritative(Q, Qname, Qtype, Z, {}, _CnameChain = []),
-    ?assertEqual(false, A#dns_message.aa),
-    ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
-    ?assertEqual(NSRecord, A#dns_message.authority),
-    ?assertEqual(CnameRecords, A#dns_message.answers),
-    erldns_zone_cache:delete_zone(ZoneName).
--endif.

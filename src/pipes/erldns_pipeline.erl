@@ -115,10 +115,11 @@ This callback can return
     dns:message() | {dns:message(), opts()} | {stop, dns:message()}.
 -optional_callbacks([prepare/1]).
 
--behaviour(gen_server).
+-behaviour(supervisor).
 
 -export([call/2]).
--export([start_link/0, init/1, handle_call/3, handle_cast/2, terminate/2]).
+-export([start_link/0, init/1]).
+-export([store_pipeline/0]).
 -ifdef(TEST).
 -export([def_opts/0]).
 -else.
@@ -175,37 +176,33 @@ do_call(Msg, [], _) ->
 -doc false.
 -spec start_link() -> gen_server:start_ret().
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, noargs, [{hibernate_after, 0}]).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, noargs).
 
 -doc false.
--spec init(noargs) -> {ok, nostate}.
+-spec init(noargs) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init(noargs) ->
-    process_flag(trap_exit, true),
-    ok = store_pipeline(),
-    {ok, nostate}.
+    SupFlags = #{strategy => one_for_one, intensity => 20, period => 10},
+    Children =
+        [
+            worker(erldns_pg, pg, [erldns]),
+            worker(erldns_packet_cache),
+            worker(erldns_query_throttle),
+            worker(erldns_handler),
+            worker(erldns_pipeline_worker)
+        ],
+    {ok, {SupFlags, Children}}.
 
--doc false.
--spec handle_call(sync, gen_server:from(), nostate) ->
-    {reply, ok | not_implemented, nostate}.
-handle_call(sync, _, nostate) ->
-    {reply, store_pipeline(), nostate};
-handle_call(_, _, nostate) ->
-    {reply, not_implemented, nostate}.
+worker(Module) ->
+    worker(Module, Module, []).
 
--doc false.
--spec handle_cast(term(), nostate) -> {noreply, nostate}.
-handle_cast(_, nostate) ->
-    {noreply, nostate}.
-
--doc false.
--spec terminate(term(), nostate) -> any().
-terminate(_, nostate) ->
-    persistent_term:erase(?MODULE).
+worker(Name, Module, Args) ->
+    #{id => Name, start => {Module, start_link, Args}, type => worker}.
 
 -spec get_pipeline() -> {pipeline(), opts()}.
 get_pipeline() ->
     persistent_term:get(?MODULE).
 
+-doc false.
 -spec store_pipeline() -> ok.
 store_pipeline() ->
     Pipes = application:get_env(erldns, packet_pipeline, ?DEFAULT_PACKET_PIPELINE),

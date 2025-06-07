@@ -80,7 +80,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "\"Hi, this is some text\""
+          "txts": ["\"Hi, this is some text\""]
         }
       },
       {

@@ -48,7 +48,7 @@ key_rrset_signer(ZoneName, RRs) ->
         PrivateKey = Keyset#keyset.key_signing_key,
         Inception = Keyset#keyset.inception,
         Expiration = Keyset#keyset.valid_until,
-        dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, #{
+        dnssec:sign_rr(RRs, dns:dname_to_lower(ZoneName), Keytag, Alg, PrivateKey, #{
             inception => Inception, expiration => Expiration
         })
     end.
@@ -64,7 +64,7 @@ zone_rrset_signer(ZoneName, RRs) ->
         PrivateKey = Keyset#keyset.zone_signing_key,
         Inception = Keyset#keyset.inception,
         Expiration = Keyset#keyset.valid_until,
-        dnssec:sign_rr(RRs, erldns:normalize_name(ZoneName), Keytag, Alg, PrivateKey, #{
+        dnssec:sign_rr(RRs, dns:dname_to_lower(ZoneName), Keytag, Alg, PrivateKey, #{
             inception => Inception, expiration => Expiration
         })
     end.
@@ -117,7 +117,7 @@ handle(#dns_message{answers = []} = Msg, Zone, Qname, QType, true, true) ->
         erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords
     ),
     NameToNormalise = dns:labels_to_dname([?NEXT_DNAME_PART | dns:dname_to_labels(Qname)]),
-    NextDname = erldns:normalize_name(NameToNormalise),
+    NextDname = dns:dname_to_lower(NameToNormalise),
     RecordTypesForQname = record_types_for_name(Qname, Zone),
     NsecRrTypes = map_nsec_rr_types(QType, RecordTypesForQname),
     NsecRecords =

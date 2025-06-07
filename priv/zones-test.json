@@ -496,7 +496,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "\"Hi, this is some text\""
+          "txts": ["\"Hi, this is some text\""]
         }
       },
       {
@@ -504,7 +504,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "\"text part one\" \"text part two\" \"text part three\""
+          "txts": ["text part one", "text part two", "text part three"]
         }
       },
       {
@@ -512,7 +512,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "\"begin\" \"the \\\"middle\\\" p\\\\art\" \"the end\""
+          "txts": ["begin", "the \"middle\" p\\art", "the end"]
         }
       },
       {
@@ -520,7 +520,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "k=rsa; p=one"
+          "txts": ["k=rsa; p=one"]
         }
       },
       {
@@ -528,7 +528,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "k=rsa\\; p=one"
+          "txts": ["k=rsa\\; p=one"]
         }
       },
       {
@@ -536,7 +536,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "k=rsa\\\\; p=one"
+          "txts": ["k=rsa\\\\; p=one"]
         }
       },
       {
@@ -544,7 +544,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "k=rsa\\\\\\; p=one"
+          "txts": ["k=rsa\\\\\\; p=one"]
         }
       },
       {
@@ -1853,7 +1853,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "\"Hi, this is some text\""
+          "txts": ["\"Hi, this is some text\""]
         }
       },
       {
@@ -1861,7 +1861,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "\"text part one\" \"text part two\" \"text part three\""
+          "txts": ["text part one", "text part two", "text part three"]
         }
       },
       {
@@ -1869,7 +1869,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "\"begin\" \"the \\\"middle\\\" p\\\\art\" \"the end\""
+          "txts": ["begin", "the \"middle\" p\\art", "the end"]
         }
       },
       {
@@ -1877,7 +1877,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "k=rsa; p=one"
+          "txts": ["k=rsa; p=one"]
         }
       },
       {
@@ -1885,7 +1885,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "k=rsa\\; p=one"
+          "txts": ["k=rsa\\; p=one"]
         }
       },
       {
@@ -1893,7 +1893,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "k=rsa\\\\; p=one"
+          "txts": ["k=rsa\\\\; p=one"]
         }
       },
       {
@@ -1901,7 +1901,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "k=rsa\\\\\\; p=one"
+          "txts": ["k=rsa\\\\\\; p=one"]
         }
       },
       {
@@ -2718,7 +2718,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "string one"
+          "txts": ["string one"]
         }
       },
       {
@@ -2726,10 +2726,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "string one",
-          "txts": [
-            "string one"
-          ]
+          "txts": ["string one"]
         }
       },
       {
@@ -2737,7 +2734,7 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "\"string one\" \"string two\""
+          "txts": ["string one", "string two"]
         }
       },
       {
@@ -2745,7 +2742,6 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "\"string one\" \"string two\"",
           "txts": [
             "string one",
             "string two"
@@ -2768,7 +2764,6 @@
         "type": "TXT",
         "ttl": 120,
         "data": {
-          "txt": "\"string a\" \"string b\"",
           "txts": [
             "string c",
             "string d"
@@ -2780,7 +2775,7 @@
         "type": "SPF",
         "ttl": 120,
         "data": {
-          "spf": "v=spf1 include:_spf.spf.example.com ~all"
+          "txts": ["v=spf1 include:_spf.spf.example.com ~all"]
         }
       },
       {
@@ -2788,7 +2783,6 @@
         "type": "SPF",
         "ttl": 120,
         "data": {
-          "spf": "v=spf1 include:_spf.spf.example.com ~all",
           "txts": [
             "v=spf1 include:_spf.txts.example.com ~all"
           ]
@@ -3014,7 +3008,8 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long!"
+          "txts": ["A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you",
+                   " won't believe how long!"]
         }
       },
       {
@@ -3030,7 +3025,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "underscores are terrible"
+          "txts": ["underscores are terrible"]
         }
       },
       {
@@ -3054,7 +3049,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "ÅLAND ISLANDS"
+          "txts": ["ÅLAND ISLANDS"]
         }
       }
     ]
@@ -3277,7 +3272,8 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long!"
+          "txts": ["A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you won't believe how long. A very long TXT record! boy you",
+                   " won't believe how long!"]
         }
       },
       {
@@ -3293,7 +3289,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "underscores are terrible"
+          "txts": ["underscores are terrible"]
         }
       },
       {
@@ -3317,7 +3313,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "ÅLAND ISLANDS"
+          "txts": ["ÅLAND ISLANDS"]
         }
       }
     ],
@@ -3439,7 +3435,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "make the empty non-terminal non-empty"
+          "txts": ["make the empty non-terminal non-empty"]
         }
       },
       {
@@ -3463,7 +3459,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "non-empty"
+          "txts": ["non-empty"]
         }
       },
       {
@@ -3471,7 +3467,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "non-empty"
+          "txts": ["non-empty"]
         }
       },
       {
@@ -3479,7 +3475,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "non-empty"
+          "txts": ["non-empty"]
         }
       },
       {
@@ -3487,7 +3483,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "non-empty"
+          "txts": ["non-empty"]
         }
       },
       {
@@ -3495,7 +3491,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "non-empty"
+          "txts": ["non-empty"]
         }
       },
       {
@@ -3629,7 +3625,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "make the empty non-terminal non-empty"
+          "txts": ["make the empty non-terminal non-empty"]
         }
       },
       {
@@ -3653,7 +3649,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "non-empty"
+          "txts": ["non-empty"]
         }
       },
       {
@@ -3661,7 +3657,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "non-empty"
+          "txts": ["non-empty"]
         }
       },
       {
@@ -3669,7 +3665,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "non-empty"
+          "txts": ["non-empty"]
         }
       },
       {
@@ -3677,7 +3673,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "non-empty"
+          "txts": ["non-empty"]
         }
       },
       {
@@ -3685,7 +3681,7 @@
         "type": "TXT",
         "ttl": 3600,
         "data": {
-          "txt": "non-empty"
+          "txts": ["non-empty"]
         }
       },
       {
