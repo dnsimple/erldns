@@ -63,7 +63,7 @@ In these conditions, `erldns` can serve around 85k QPS, in a mix of resolvable a
 non-authoritative cases; and around 71k QPS when all queries are resolvable
 The details of the benchmark are below.
 
-### A mix of resolvable and non-authoritative:
+### A mix of resolvable and non-authoritative
 
 With this query file:
 
