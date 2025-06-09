@@ -44,7 +44,7 @@ test_requires_key_signing_key_function(_Config) ->
             digest = <<"abcdef1234567890">>
         }
     },
-    
+
     % Test CDNSKEY record
     CDNSKEYRecord = #dns_rr{
         name = <<"example.com">>,
@@ -57,7 +57,7 @@ test_requires_key_signing_key_function(_Config) ->
             public_key = <<"test_public_key">>
         }
     },
-    
+
     % Test A record
     ARecord = #dns_rr{
         name = <<"example.com">>,
@@ -65,20 +65,20 @@ test_requires_key_signing_key_function(_Config) ->
         ttl = 300,
         data = #dns_rrdata_a{ip = {192, 168, 1, 1}}
     },
-    
+
     % Test that CDS requires key-signing-key
     ?assert(erldns_dnssec:requires_key_signing_key([CDSRecord])),
-    
+
     % Test that CDNSKEY requires key-signing-key
     ?assert(erldns_dnssec:requires_key_signing_key([CDNSKEYRecord])),
-    
+
     % Test that mixed records with CDS/CDNSKEY require key-signing-key
     ?assert(erldns_dnssec:requires_key_signing_key([ARecord, CDSRecord])),
     ?assert(erldns_dnssec:requires_key_signing_key([CDNSKEYRecord, ARecord])),
-    
+
     % Test that other records don't require key-signing-key
     ?assertNot(erldns_dnssec:requires_key_signing_key([ARecord])),
-    
+
     % Test empty list
     ?assertNot(erldns_dnssec:requires_key_signing_key([])).
 
@@ -96,7 +96,7 @@ test_signer_selection_logic(_Config) ->
             digest = <<"abcdef1234567890">>
         }
     },
-    
+
     % Test CDNSKEY record should use key signer
     CDNSKEYRecord = #dns_rr{
         name = <<"example.com">>,
@@ -109,7 +109,7 @@ test_signer_selection_logic(_Config) ->
             public_key = <<"test_public_key">>
         }
     },
-    
+
     % Test A record should use zone signer
     ARecord = #dns_rr{
         name = <<"example.com">>,
@@ -117,19 +117,19 @@ test_signer_selection_logic(_Config) ->
         ttl = 300,
         data = #dns_rrdata_a{ip = {192, 168, 1, 1}}
     },
-    
+
     ZoneName = <<"example.com">>,
-    
+
     % Get signers for different record types
     CDSSigner = erldns_dnssec:choose_signer_for_rrset(ZoneName, [CDSRecord]),
     CDNSKEYSigner = erldns_dnssec:choose_signer_for_rrset(ZoneName, [CDNSKEYRecord]),
     ASigner = erldns_dnssec:choose_signer_for_rrset(ZoneName, [ARecord]),
-    
+
     % Verify they are functions
     ?assert(is_function(CDSSigner)),
     ?assert(is_function(CDNSKEYSigner)),
     ?assert(is_function(ASigner)),
-    
+
     % These are internal tests - we can't easily verify which signer is returned
     % without exposing more internals, but the function should work without error
     ok.

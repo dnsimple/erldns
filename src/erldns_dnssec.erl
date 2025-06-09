@@ -113,9 +113,12 @@ handle(Message, Zone, Qname, QType) ->
 %% CDS and CDNSKEY records should be signed with key-signing-key.
 -spec requires_key_signing_key([dns:rr()]) -> boolean().
 requires_key_signing_key(RRs) ->
-    lists:any(fun(RR) ->
-        (RR#dns_rr.type =:= ?DNS_TYPE_CDS) orelse (RR#dns_rr.type =:= ?DNS_TYPE_CDNSKEY)
-    end, RRs).
+    lists:any(
+        fun(RR) ->
+            (RR#dns_rr.type =:= ?DNS_TYPE_CDS) orelse (RR#dns_rr.type =:= ?DNS_TYPE_CDNSKEY)
+        end,
+        RRs
+    ).
 
 %%% Internal functions
 -spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type(), boolean(), boolean()) ->
