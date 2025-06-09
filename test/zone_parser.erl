@@ -3,6 +3,7 @@
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("erldns/include/erldns.hrl").
 
 json_to_erlang_test() ->
     R = erldns_zone_parser:json_to_erlang(json:decode(input()), []),
@@ -177,6 +178,58 @@ json_record_cds_to_erlang_test() ->
         ])
     ).
 
+parse_json_keys_unsorted_proplists_time_unit_test_() ->
+    Base = #{
+        <<"ksk">> => ksk_private_key(),
+        <<"ksk_alg">> => 8,
+        <<"ksk_keytag">> => 37440,
+        <<"zsk">> => zsk_private_key(),
+        <<"zsk_alg">> => 8,
+        <<"zsk_keytag">> => 49016
+    },
+    [
+        %% nanoseconds
+        ?_assertMatch(
+            [#keyset{inception = 1749478020, valid_until = 1781014020}],
+            erldns_zone_parser:parse_json_keys_as_maps([
+                Base#{
+                    <<"inception">> => <<"2025-06-09T14:07:00.916361083Z">>,
+                    <<"until">> => <<"2026-06-09T14:07:00.916361083Z">>
+                }
+            ])
+        ),
+        %% microseconds
+        ?_assertMatch(
+            [#keyset{inception = 1749478020, valid_until = 1781014020}],
+            erldns_zone_parser:parse_json_keys_as_maps([
+                Base#{
+                    <<"inception">> => <<"2025-06-09T14:07:00.916361Z">>,
+                    <<"until">> => <<"2026-06-09T14:07:00.916361Z">>
+                }
+            ])
+        ),
+        %% milliseconds
+        ?_assertMatch(
+            [#keyset{inception = 1749478020, valid_until = 1781014020}],
+            erldns_zone_parser:parse_json_keys_as_maps([
+                Base#{
+                    <<"inception">> => <<"2025-06-09T14:07:00.916Z">>,
+                    <<"until">> => <<"2026-06-09T14:07:00.916Z">>
+                }
+            ])
+        ),
+        %% seconds
+        ?_assertMatch(
+            [#keyset{inception = 1749478020, valid_until = 1781014020}],
+            erldns_zone_parser:parse_json_keys_as_maps([
+                Base#{
+                    <<"inception">> => <<"2025-06-09T14:07:00Z">>,
+                    <<"until">> => <<"2026-06-09T14:07:00Z">>
+                }
+            ])
+        )
+    ].
+
 parse_json_keys_unsorted_proplists_test() ->
     ?assertEqual(
         [
@@ -192,30 +245,14 @@ parse_json_keys_unsorted_proplists_test() ->
                     9170529505818457214552347052832728824507861128011245996056627438339703762731346681703094163316286362641501571794424157931806097889892946273849538579240359,
                     5130491166023191463112131781994138738077497356216817935415696052248528225933414267440640871636073852185344964288812312263453467652493907737029964715172561
                 ],
-                49016, 8, 1479123418852, 1486899418849}
+                49016, 8, 1479123418, 1486899418}
         ],
         erldns_zone_parser:parse_json_keys_as_maps([
             #{
-                <<"ksk">> => <<
-                    "-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USCh\nEW0fLYT/Q"
-                    "kAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+C\nfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHS"
-                    "U8htjdwICBAEC\ngYEAlpYTHWYrcd0HQXO3F9lPqwwfHUt7VBaSEUYrk3N3ZYCWvmV1qyKbB/kb1SBs\n4GfW1vP966HXCffnX92LDXYxi7I"
-                    "t3TJaKmo8aF/leN7w8WLNJXUayEoQKUfKLprj\nN14Jx/tgMu7I/BOoHId8b7e57pBKtDiSF6WWn3K7tNPbfmkCQQDST41m62mC4MAa\nDsU"
-                    "dyM0Vg/tjduGqnygryCDEXDabdg95a3wMk0SQCQzZFHGNYnsXcffTqGs/y+5w\nQWxyOGSNAkEAzHFkDJla30NiiKvhu7dY+0+dGrfMA7pNU"
-                    "h+LGdXe5QFdjwwxqPbF\n7NMGXKMdB8agSCxGZC3bxdvYNF9LULzhEwJABpDYNSoQx+UMvaEN5XTpLmCHuS1r\nsmhfKZPcDx8Z7mAYda3wZ"
-                    "EuHQq+cf6i5XhOO9P5QKpKeslHLAMHa7NaNgQJBAI03\nGGacYLwui32fbzb8BYRg82Kga/OW6btY+O6hNs6iSR2gBlQ9j3Tgrzo+N4R/NQS"
-                    "l\nc05wGO2RnBUwlu0XUckCQHfHsWHVrrADTpalbv+FTDyWd0ouHXBmDecVZh3e7/ue\ncdMoblzeasvgp8CjFa9U+uDozY+aL6TNIpG++nn"
-                    "4lNw=\n-----END RSA PRIVATE KEY-----\n"
-                >>,
+                <<"ksk">> => ksk_private_key(),
                 <<"ksk_alg">> => 8,
                 <<"ksk_keytag">> => 37440,
-                <<"zsk">> => <<
-                    "-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jT\nCaEwnpE74"
-                    "YHCLegKAAn+efeZrT/EBBrzlacCAgIBAkBh9VGFW2SJk1I9SBQaDIA9\nchdrrx+PHibSyozwT4eAPmd6OFoLausc7ls6v9evPeb+Yj3g0JX"
-                    "vTGp6BgNhFqLR\nAiEA1+ievAEBVM6IlOmpiTwlaWe/HV6MokBBq1G/tvJS0M8CIQDPm/DUsoTEv/Jj\n6O3U9hNcPLbvKMMGld2wbf7nrQm"
-                    "zqQIhAJrhwTaFdjnXhmfUB9a33vRIbSaIsLxA\nDyuM+03XP+YhAiEAmJIJz7WX9uPkCIy8wO655Hh4dt4UkBFRE98OqkHIwGkCIFFv\nN8r"
-                    "JojI+oEiJyNjEjWZD4qoUMUp3+YBl0htAJUE2\n-----END RSA PRIVATE KEY-----\n"
-                >>,
+                <<"zsk">> => zsk_private_key(),
                 <<"zsk_alg">> => 8,
                 <<"zsk_keytag">> => 49016,
                 <<"inception">> => <<"2016-11-14T11:36:58.851612Z">>,
@@ -243,6 +280,28 @@ base64_to_bin_test() ->
             "GE+xeUuseSoHh/aTpA8Z9SPubb01mduqqaUEN5Juz2Q4hF0dSUSJYlJPKhp6NrOgoeyj"
         >>)
     ).
+
+ksk_private_key() ->
+    <<
+        "-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAKBgQCn9Iv82vkFiv8ts8K9jzUzfp3UEZx+76r+X9A4GOFfYbx3USCh\nEW0fLYT/Q"
+        "kAM8/SiTkEXzZPqhrV083mp5VLYNLxic2ii6DrwvyGpENVPJnDQMu+C\nfKMyb9IWcm9MkeHh8t/ovsCQAEJWIPTnzv8rlQcDU44c3qgTpHS"
+        "U8htjdwICBAEC\ngYEAlpYTHWYrcd0HQXO3F9lPqwwfHUt7VBaSEUYrk3N3ZYCWvmV1qyKbB/kb1SBs\n4GfW1vP966HXCffnX92LDXYxi7I"
+        "t3TJaKmo8aF/leN7w8WLNJXUayEoQKUfKLprj\nN14Jx/tgMu7I/BOoHId8b7e57pBKtDiSF6WWn3K7tNPbfmkCQQDST41m62mC4MAa\nDsU"
+        "dyM0Vg/tjduGqnygryCDEXDabdg95a3wMk0SQCQzZFHGNYnsXcffTqGs/y+5w\nQWxyOGSNAkEAzHFkDJla30NiiKvhu7dY+0+dGrfMA7pNU"
+        "h+LGdXe5QFdjwwxqPbF\n7NMGXKMdB8agSCxGZC3bxdvYNF9LULzhEwJABpDYNSoQx+UMvaEN5XTpLmCHuS1r\nsmhfKZPcDx8Z7mAYda3wZ"
+        "EuHQq+cf6i5XhOO9P5QKpKeslHLAMHa7NaNgQJBAI03\nGGacYLwui32fbzb8BYRg82Kga/OW6btY+O6hNs6iSR2gBlQ9j3Tgrzo+N4R/NQS"
+        "l\nc05wGO2RnBUwlu0XUckCQHfHsWHVrrADTpalbv+FTDyWd0ouHXBmDecVZh3e7/ue\ncdMoblzeasvgp8CjFa9U+uDozY+aL6TNIpG++nn"
+        "4lNw=\n-----END RSA PRIVATE KEY-----\n"
+    >>.
+
+zsk_private_key() ->
+    <<
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK8YnU+YqBxD/EDwVeHZsJillAJ80PCnLU+/rlGrlzgw+eabF8jT\nCaEwnpE74"
+        "YHCLegKAAn+efeZrT/EBBrzlacCAgIBAkBh9VGFW2SJk1I9SBQaDIA9\nchdrrx+PHibSyozwT4eAPmd6OFoLausc7ls6v9evPeb+Yj3g0JX"
+        "vTGp6BgNhFqLR\nAiEA1+ievAEBVM6IlOmpiTwlaWe/HV6MokBBq1G/tvJS0M8CIQDPm/DUsoTEv/Jj\n6O3U9hNcPLbvKMMGld2wbf7nrQm"
+        "zqQIhAJrhwTaFdjnXhmfUB9a33vRIbSaIsLxA\nDyuM+03XP+YhAiEAmJIJz7WX9uPkCIy8wO655Hh4dt4UkBFRE98OqkHIwGkCIFFv\nN8r"
+        "JojI+oEiJyNjEjWZD4qoUMUp3+YBl0htAJUE2\n-----END RSA PRIVATE KEY-----\n"
+    >>.
 
 input() ->
     ~"""
