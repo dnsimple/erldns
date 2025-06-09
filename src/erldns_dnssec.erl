@@ -22,7 +22,9 @@
 -export([handle/4]).
 -export([
     key_rrset_signer/2,
-    zone_rrset_signer/2
+    zone_rrset_signer/2,
+    choose_signer_for_rrset/2,
+    requires_key_signing_key/1
 ]).
 -export([rrsig_for_zone_rrset/2]).
 -export([maybe_sign_rrset/3]).
@@ -35,7 +37,7 @@
 %% @doc Given a zone and a set of records, return the RRSIG records.
 -spec rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()].
 rrsig_for_zone_rrset(Zone, RRs) ->
-    lists:flatmap(zone_rrset_signer(Zone#zone.name, RRs), Zone#zone.keysets).
+    lists:flatmap(choose_signer_for_rrset(Zone#zone.name, RRs), Zone#zone.keysets).
 
 %% @doc Return a function that can be used to sign the given records using the key signing key.
 %% The function accepts a keyset, allowing the zone signing mechanism to iterate through available
@@ -69,6 +71,17 @@ zone_rrset_signer(ZoneName, RRs) ->
         })
     end.
 
+%% @doc Choose the appropriate signer function based on record types.
+%% CDS and CDNSKEY records should be signed with key-signing-key, others with zone-signing-key.
+-spec choose_signer_for_rrset(dns:dname(), [dns:rr()]) -> fun((erldns:keyset()) -> [dns:rr()]).
+choose_signer_for_rrset(ZoneName, RRs) ->
+    case requires_key_signing_key(RRs) of
+        true ->
+            key_rrset_signer(ZoneName, RRs);
+        false ->
+            zone_rrset_signer(ZoneName, RRs)
+    end.
+
 %% @doc This function will potentially sign the given RR set if the following
 %% conditions are true:
 %%
@@ -95,6 +108,14 @@ handle(Message, Zone, Qname, QType) ->
     HasKeySets = [] =/= Zone#zone.keysets,
     RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Message)),
     handle(Message, Zone, Qname, QType, HasKeySets, RequestDnssec).
+
+%% @doc Check if any record in the set requires key-signing-key for RRSIG.
+%% CDS and CDNSKEY records should be signed with key-signing-key.
+-spec requires_key_signing_key([dns:rr()]) -> boolean().
+requires_key_signing_key(RRs) ->
+    lists:any(fun(RR) ->
+        (RR#dns_rr.type =:= ?DNS_TYPE_CDS) orelse (RR#dns_rr.type =:= ?DNS_TYPE_CDNSKEY)
+    end, RRs).
 
 %%% Internal functions
 -spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type(), boolean(), boolean()) ->
