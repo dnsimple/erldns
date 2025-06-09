@@ -146,6 +146,11 @@ parse_json_keys_as_maps([]) ->
 parse_json_keys_as_maps(JsonKeys) ->
     parse_json_keys_as_maps(JsonKeys, []).
 
+% RFC4034: §3.1.5.  Signature Expiration and Inception Fields
+%    The Signature Expiration and Inception field values specify a date
+%    and time in the form of a 32-bit unsigned number of seconds elapsed
+%    since 1 January 1970 00:00:00 UTC, ignoring leap seconds, in network
+%    byte order.
 parse_json_keys_as_maps([], Keys) ->
     Keys;
 parse_json_keys_as_maps([Key | Rest], Keys) ->
@@ -158,10 +163,10 @@ parse_json_keys_as_maps([Key | Rest], Keys) ->
             zone_signing_key_tag = maps:get(<<"zsk_keytag">>, Key),
             zone_signing_alg = maps:get(<<"zsk_alg">>, Key),
             inception = calendar:rfc3339_to_system_time(
-                binary_to_list(maps:get(<<"inception">>, Key)), [{unit, millisecond}]
+                binary_to_list(maps:get(<<"inception">>, Key)), [{unit, second}]
             ),
             valid_until = calendar:rfc3339_to_system_time(
-                binary_to_list(maps:get(<<"until">>, Key)), [{unit, millisecond}]
+                binary_to_list(maps:get(<<"until">>, Key)), [{unit, second}]
             )
         },
     parse_json_keys_as_maps(Rest, [KeySet | Keys]).
