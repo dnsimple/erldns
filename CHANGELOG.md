@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rework zones loader [#230](https://github.com/dnsimple/erldns/pull/230)
 - Rework zones codecs [#231](https://github.com/dnsimple/erldns/pull/231)
 - Rework zones cache [#232](https://github.com/dnsimple/erldns/pull/232)
+- Rework documentation and internals [#233](https://github.com/dnsimple/erldns/pull/233)
+- Fix (C)DNS/(C)DNSKEY signing [#235](https://github.com/dnsimple/erldns/pull/235)
 
 ## 7.0.0-rc4
 
