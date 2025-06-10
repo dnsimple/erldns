@@ -36,7 +36,6 @@ do_start_erldns(Config, Env) ->
     ok = erpc:call(Node, logger, update_primary_config, [#{level => info}]),
     ok = erpc:call(Node, logger, add_handler, [dnstest, logger_std_h, #{config => #{file => File}}]),
     {ok, _} = erpc:call(Node, application, ensure_all_started, [erldns]),
-    {ok, _} = erpc:call(Node, erldns_storage, load_zones, []),
     Config.
 
 get_node(Config) ->

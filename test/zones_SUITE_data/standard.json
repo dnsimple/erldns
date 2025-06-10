@@ -1,0 +1,61 @@
+[
+  {
+    "name": "example.com",
+    "records": [
+      {
+        "name": "example.com",
+        "type": "SOA",
+        "data": {
+          "mname": "ns1.example.com",
+          "rname": "ahu.example.com",
+          "serial": 2000081501,
+          "refresh": 28800,
+          "retry": 7200,
+          "expire": 604800,
+          "minimum": 86400
+        },
+        "ttl": 100000
+      },
+      {
+        "name": "example.com",
+        "type": "NS",
+        "ttl": 120,
+        "data": {
+          "dname": "ns1.example.com"
+        }
+      },
+      {
+        "name": "example.com",
+        "type": "NS",
+        "ttl": 120,
+        "data": {
+          "dname": "ns2.example.com"
+        }
+      },
+      {
+        "name": "*.a-wild.example.com",
+        "type": "A",
+        "ttl": 120,
+        "data": {
+          "ip": "2.2.2.2"
+        }
+      },
+      {
+        "name": "a1.example.com",
+        "type": "A",
+        "ttl": 120,
+        "data": {
+          "ip": "1.2.3.4"
+        }
+      },
+      {
+        "name": "cname.example.com",
+        "type": "CNAME",
+        "ttl": 120,
+        "data": {
+          "dname": "google.com"
+        }
+      }
+    ]
+  }
+]

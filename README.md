@@ -26,9 +26,7 @@ make
 
 ## Zones
 
-Zones are loaded from JSON. Example JSON files are in the `priv/` directory.
-
-You can also write new systems to load zones by writing the zones directly to the zone cache using `erldns_zone_cache:put_zone/1`.
+Zones are loaded from JSON files in the `priv/zones/` directory. The path is configured in `erldns.config` using the `zones.path` setting. For more details about zone file format and configuration, see [`priv/zones/README`](priv/zones/README.md).
 
 ## Configuration
 
