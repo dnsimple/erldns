@@ -14,7 +14,7 @@ You can place your custom zones files inside the `priv/zones/local` directory. T
 
 A JSON zone file contains an array of 1 or more zones. Each zone has a name and an array of records. Each record has a name, type, ttl and data field. The data field contains a JSON object with one or more attributes that are appropriate for the specific record type.
 
-#### Example
+### Example
 
 The follow is an example of a collection of zones with a single zone in the collection:
 
