@@ -22,15 +22,15 @@
 -export([handle/4]).
 -export([
     key_rrset_signer/2,
-    zone_rrset_signer/2,
-    choose_signer_for_rrset/2,
-    requires_key_signing_key/1
+    zone_rrset_signer/2
 ]).
--export([rrsig_for_zone_rrset/2]).
 -export([maybe_sign_rrset/3]).
-
 -export([map_nsec_rr_types/1]).
 -export([map_nsec_rr_types/2]).
+
+-ifdef(TEST).
+-export([requires_key_signing_key/1, choose_signer_for_rrset/2]).
+-endif.
 
 -define(NEXT_DNAME_PART, <<"\000">>).
 
@@ -114,8 +114,8 @@ handle(Message, Zone, Qname, QType) ->
 -spec requires_key_signing_key([dns:rr()]) -> boolean().
 requires_key_signing_key(RRs) ->
     lists:any(
-        fun(RR) ->
-            (RR#dns_rr.type =:= ?DNS_TYPE_CDS) orelse (RR#dns_rr.type =:= ?DNS_TYPE_CDNSKEY)
+        fun(#dns_rr{type = Type}) ->
+            (Type =:= ?DNS_TYPE_CDS) orelse (Type =:= ?DNS_TYPE_CDNSKEY)
         end,
         RRs
     ).
