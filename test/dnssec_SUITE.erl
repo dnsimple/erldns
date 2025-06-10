@@ -10,25 +10,105 @@
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
     [
+        verify_ksk_signed,
+        verify_zsk_signed,
         test_signer_selection_logic,
         test_requires_key_signing_key_function
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_suite(Config) ->
+    application:unset_env(erldns, zones),
     Config.
 
 -spec end_per_suite(ct_suite:ct_config()) -> term().
 end_per_suite(_Config) ->
+    application:unset_env(erldns, zones),
     ok.
 
 -spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_testcase(_, Config) ->
+    FileName = filename:join([code:priv_dir(erldns), "zones/example.com.json"]),
+    application:set_env(erldns, zones, #{path => FileName, strict => true}),
+    erldns_zone_cache:start_link(),
+    erldns_zone_parser:start_link(),
+    erldns_zone_loader:start_link(),
+    erldns_handler:start_link(),
     Config.
 
 -spec end_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> term().
 end_per_testcase(_, _Config) ->
     ok.
+
+verify_ksk_signed(_) ->
+    Name = <<"example-dnssec0.com">>,
+    QType = ?DNS_TYPE_A,
+    Q = #dns_query{name = Name, type = QType},
+    A = #dns_rr{name = Name, type = QType, data = #dns_rrdata_a{ip = {1, 2, 3, 4}}},
+    Ad = #dns_optrr{dnssec = true},
+    Msg0 = #dns_message{
+        qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
+    },
+    Zone = erldns_zone_cache:find_zone(Name),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    ?assertMatch(
+        #dns_message{
+            answers =
+                [
+                    A,
+                    #dns_rr{
+                        name = Name,
+                        type = ?DNS_TYPE_RRSIG,
+                        data = #dns_rrdata_rrsig{
+                            keytag = 49016,
+                            signers_name = Name
+                        }
+                    }
+                ]
+        },
+        Msg1
+    ).
+
+verify_zsk_signed(_) ->
+    Name = <<"example-dnssec0.com">>,
+    QType = ?DNS_TYPE_CDNSKEY,
+    CDSRecord = #dns_rr{
+        name = <<"example.com">>,
+        type = ?DNS_TYPE_CDNSKEY,
+        ttl = 120,
+        data = #dns_rrdata_cds{
+            keytag = 0,
+            alg = 0,
+            digest_type = 0,
+            digest = <<"00">>
+        }
+    },
+
+    Q = #dns_query{name = Name, type = QType},
+    A = #dns_rr{name = Name, type = QType, data = CDSRecord},
+    Ad = #dns_optrr{dnssec = true},
+    Msg0 = #dns_message{
+        qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
+    },
+    Zone = erldns_zone_cache:find_zone(Name),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    ?assertMatch(
+        #dns_message{
+            answers =
+                [
+                    A,
+                    #dns_rr{
+                        name = Name,
+                        type = ?DNS_TYPE_RRSIG,
+                        data = #dns_rrdata_rrsig{
+                            keytag = 37440,
+                            signers_name = Name
+                        }
+                    }
+                ]
+        },
+        Msg1
+    ).
 
 %% Test the requires_key_signing_key helper function
 test_requires_key_signing_key_function(_Config) ->

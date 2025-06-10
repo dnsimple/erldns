@@ -36,6 +36,7 @@
     match_name_and_type/2,
     match_types/1,
     match_wildcard/0,
+    match_not_wildcard/0,
     match_delegation/1,
     match_type_covered/1,
     match_wildcard_label/0
@@ -128,6 +129,12 @@ match_types(Types) ->
 match_wildcard() ->
     fun(R) when is_record(R, dns_rr) ->
         lists:any(match_wildcard_label(), dns:dname_to_labels(R#dns_rr.name))
+    end.
+
+-spec match_not_wildcard() -> fun((dns:rr()) -> boolean()).
+match_not_wildcard() ->
+    fun(R) when is_record(R, dns_rr) ->
+        lists:any(fun(L) -> L =/= <<"*">> end, dns:dname_to_labels(R#dns_rr.name))
     end.
 
 -spec match_wildcard_label() -> fun((binary()) -> boolean()).

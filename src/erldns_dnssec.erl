@@ -21,18 +21,47 @@
 
 -export([handle/4]).
 -export([
-    key_rrset_signer/2,
-    zone_rrset_signer/2
+    get_key_rrset_signed_records/1,
+    get_zone_rrset_signed_records/1
 ]).
 -export([maybe_sign_rrset/3]).
--export([map_nsec_rr_types/1]).
--export([map_nsec_rr_types/2]).
+-export([
+    map_nsec_rr_types/1,
+    map_nsec_rr_types/2
+]).
 
 -ifdef(TEST).
 -export([requires_key_signing_key/1, choose_signer_for_rrset/2]).
 -endif.
 
 -define(NEXT_DNAME_PART, <<"\000">>).
+
+-doc "Get signed records from a zone that require KSK signatures".
+-spec get_key_rrset_signed_records(erldns:zone()) -> [dns:rr()].
+get_key_rrset_signed_records(Zone) ->
+    Filter = fun(#dns_rr{type = Type}) ->
+        (Type =:= ?DNS_TYPE_DS) orelse
+            (Type =:= ?DNS_TYPE_CDS) orelse
+            (Type =:= ?DNS_TYPE_DNSKEY) orelse
+            (Type =:= ?DNS_TYPE_CDNSKEY)
+    end,
+    DnskeyRRs = lists:filter(Filter, Zone#zone.records),
+    lists:flatmap(key_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets).
+
+-doc "Get signed records from a zone that require ZSK signatures".
+-spec get_zone_rrset_signed_records(erldns:zone()) -> [dns:rr()].
+get_zone_rrset_signed_records(Zone) ->
+    Filter = fun(#dns_rr{type = Type}) ->
+        (Type =/= ?DNS_TYPE_DS) andalso
+            (Type =/= ?DNS_TYPE_DNSKEY) andalso
+            (Type =/= ?DNS_TYPE_CDS) andalso
+            (Type =/= ?DNS_TYPE_CDNSKEY)
+    end,
+    DnskeyRRs = lists:filter(Filter, Zone#zone.records),
+    ZoneRRSigRecords = lists:flatmap(
+        zone_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets
+    ),
+    lists:filter(erldns_records:match_not_wildcard(), ZoneRRSigRecords).
 
 %% @doc Given a zone and a set of records, return the RRSIG records.
 -spec rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()].
