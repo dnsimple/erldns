@@ -1,7 +1,6 @@
 *.beam
 *.dump
 log/
-priv/zones/local/
 db/
 Mnesia.nonode@nohost/
 *.DCD
@@ -12,6 +11,7 @@ Mnesia.nonode@nohost/
 # local setup
 .tool-versions
 erldns.config
+priv/zones/local/*.json
 
 # rebar 3
 .rebar3
