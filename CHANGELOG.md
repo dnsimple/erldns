@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+- Rework zones loader [#230](https://github.com/dnsimple/erldns/pull/230)
+- Rework zones codecs [#231](https://github.com/dnsimple/erldns/pull/231)
+
+## 7.0.0-rc4
+
+- Fix DNSSEC timestamps [#234](https://github.com/dnsimple/erldns/pull/234)
+
+## 7.0.0-rc3
+
+- Add statistic functionality to listeners [#227](https://github.com/dnsimple/erldns/pull/227)
+
+## 7.0.0-rc2
+
+- Refactor the query processing pipeline [#224](https://github.com/dnsimple/erldns/pull/224)
+- Reimplement the network stack [#225](https://github.com/dnsimple/erldns/pull/225)
+
 ## 7.0.0-rc1
 
 - Upgrade `dns_erlang` to v4.

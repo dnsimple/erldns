@@ -177,7 +177,7 @@ zone_loader(Ref, ParentPid) ->
     end.
 
 load_zone(JsonZone) ->
-    Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
+    Zone = erldns_zone_codec:decode(JsonZone),
     erldns_zone_cache:put_zone(Zone).
 
 % Internal API

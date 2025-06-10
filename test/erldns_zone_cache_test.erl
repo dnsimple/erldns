@@ -12,7 +12,7 @@
 setup_cache() ->
     logger:set_application_level(erldns, debug),
     meck:new(telemetry, [passthrough]),
-    {_, Pid} = erldns_zone_parser:start_link(),
+    {_, Pid} = erldns_zone_codec:start_link(),
     erldns_storage:create(schema),
     erldns_storage:create(zones),
     erldns_storage:create(zone_records_typed),

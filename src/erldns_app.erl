@@ -1,58 +1,25 @@
-%% Copyright (c) 2012-2020, DNSimple Corporation
-%%
-%% Permission to use, copy, modify, and/or distribute this software for any
-%% purpose with or without fee is hereby granted, provided that the above
-%% copyright notice and this permission notice appear in all copies.
-%%
-%% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-%% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-%% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-%% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-%% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-%% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-%% @doc The erldns OTP application.
 -module(erldns_app).
+-moduledoc false.
 
 -include_lib("kernel/include/logger.hrl").
 
 -behaviour(application).
 
-% Application hooks
--export([
-    start/2,
-    start_phase/3,
-    stop/1
-]).
+-export([start/2, stop/1]).
 
+-spec start(application:start_type(), term()) -> {ok, pid()} | {error, term()}.
 start(_Type, _Args) ->
-    ?LOG_INFO("Starting erldns application"),
+    ?LOG_INFO(#{what => starting_erldns_application}),
     nodefinder:multicast_start(),
-    Ret = erldns_sup:start_link(),
-    erldns_admin:maybe_start(),
-    Ret.
+    case erldns_sup:start_link() of
+        {ok, Pid} when is_pid(Pid) ->
+            erldns_admin:maybe_start(),
+            {ok, Pid};
+        {error, Reason} ->
+            ?LOG_ERROR(#{what => erldns_start_failed, reason => Reason}),
+            {error, Reason}
+    end.
 
-start_phase(post_start, _StartType, _PhaseArgs) ->
-    case application:get_env(erldns, custom_zone_parsers) of
-        {ok, Parsers} ->
-            erldns_zone_parser:register_parsers(Parsers);
-        _ ->
-            ok
-    end,
-
-    case application:get_env(erldns, custom_zone_encoders) of
-        {ok, Encoders} ->
-            erldns_zone_encoder:register_encoders(Encoders);
-        _ ->
-            ok
-    end,
-
-    ?LOG_INFO("Loading zones from local file"),
-    erldns_zone_loader:load_zones(),
-
-    ok.
-
+-spec stop(term()) -> term().
 stop(_State) ->
-    ?LOG_INFO("Stop erldns application"),
-    ok.
+    ?LOG_INFO(#{what => stop_erldns_application}).
