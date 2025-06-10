@@ -1,11 +1,11 @@
--module(dnssec_cds_cdnskey_SUITE).
+-module(dnssec_SUITE).
 -compile([export_all, nowarn_export_all]).
 
 -behaviour(ct_suite).
 
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
--include("erldns.hrl").
+-include_lib("erldns/include/erldns.hrl").
 
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
@@ -84,9 +84,11 @@ test_requires_key_signing_key_function(_Config) ->
 
 %% Test the signer selection logic in choose_signer_for_rrset
 test_signer_selection_logic(_Config) ->
+    ZoneName = <<"example.com">>,
+
     % Test CDS record should use key signer
     CDSRecord = #dns_rr{
-        name = <<"example.com">>,
+        name = ZoneName,
         type = ?DNS_TYPE_CDS,
         ttl = 120,
         data = #dns_rrdata_cds{
@@ -99,7 +101,7 @@ test_signer_selection_logic(_Config) ->
 
     % Test CDNSKEY record should use key signer
     CDNSKEYRecord = #dns_rr{
-        name = <<"example.com">>,
+        name = ZoneName,
         type = ?DNS_TYPE_CDNSKEY,
         ttl = 120,
         data = #dns_rrdata_dnskey{
@@ -112,13 +114,11 @@ test_signer_selection_logic(_Config) ->
 
     % Test A record should use zone signer
     ARecord = #dns_rr{
-        name = <<"example.com">>,
+        name = ZoneName,
         type = ?DNS_TYPE_A,
         ttl = 300,
         data = #dns_rrdata_a{ip = {192, 168, 1, 1}}
     },
-
-    ZoneName = <<"example.com">>,
 
     % Get signers for different record types
     CDSSigner = erldns_dnssec:choose_signer_for_rrset(ZoneName, [CDSRecord]),
