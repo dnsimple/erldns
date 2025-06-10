@@ -1,7 +1,7 @@
 *.beam
 *.dump
 log/
-priv/_*.json
+priv/zones/local/
 db/
 Mnesia.nonode@nohost/
 *.DCD

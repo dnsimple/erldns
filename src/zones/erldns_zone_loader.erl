@@ -27,6 +27,8 @@ If a path is configured and `strict` is true, and the path is not resolvable, it
     strict => boolean()
 }.
 
+-define(WILDCARD, "**/*.json").
+
 -behaviour(gen_server).
 -export([load_zones/0, load_zones/1]).
 -export([start_link/0, init/1, handle_call/3, handle_cast/2]).
@@ -34,13 +36,16 @@ If a path is configured and `strict` is true, and the path is not resolvable, it
 -doc "Load zones.".
 -spec load_zones() -> non_neg_integer().
 load_zones() ->
-    ?LOG_INFO(#{what => loading_zones_from_local_file}),
-    case get_config() of
-        #{path := Path, strict := Strict} ->
-            load_zones(Strict, Path);
-        _ ->
-            0
-    end.
+    ?LOG_INFO(#{what => loading_zones_from_local_files}),
+    Count =
+        case get_config() of
+            #{path := Path, strict := Strict} ->
+                load_zones(Strict, Path);
+            _ ->
+                0
+        end,
+    ?LOG_INFO(#{what => loaded_zones_from_local_files, zone_count => Count}),
+    Count.
 
 -doc """
 Load zones from a file in strict or loose mode.
@@ -54,7 +59,7 @@ load_zones(Path) ->
 load_zones(Strict, Path) when is_boolean(Strict), is_list(Path) ->
     case filelib:is_dir(Path) of
         true ->
-            ZoneFiles = filelib:wildcard(filename:join([Path, "*.json"])),
+            ZoneFiles = filelib:wildcard(filename:join([Path, ?WILDCARD])),
             load_zone_files_parallel(Strict, ZoneFiles, length(ZoneFiles));
         false ->
             load_zone_files_parallel(Strict, [Path], 1)

@@ -1,6 +1,6 @@
 # Zone Files
 
-erl-dns reads JSON zone files.
+erldns reads JSON zone files.
 
 A JSON zone file contains an array of 1 or more zones. Each zone has a name and an array of records. Each record has a name, type, ttl and data field. The data field contains a JSON object with one or more attributes that are appropriate for the specific record type.
 

@@ -1,0 +1,37 @@
+[
+  {
+    "name": "nested.com",
+    "records": [
+      {
+        "name": "nested.com",
+        "type": "SOA",
+        "ttl": 3600,
+        "data": {
+          "mname": "ns1.nested.com",
+          "rname": "admin.nested.com",
+          "serial": 2013022001,
+          "refresh": 86400,
+          "retry": 7200,
+          "expire": 604800,
+          "minimum": 300
+        }
+      },
+      {
+        "name": "nested.com",
+        "type": "A",
+        "ttl": 3600,
+        "data": {
+          "ip": "1.2.3.4"
+        }
+      },
+      {
+        "name": "nested.com",
+        "type": "AAAA",
+        "ttl": 3600,
+        "data": {
+          "ip": "2001:6A8:0:1:210:4BFF:FE4B:4C61"
+        }
+      }
+    ]
+  }
+]

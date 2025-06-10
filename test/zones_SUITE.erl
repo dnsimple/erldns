@@ -111,4 +111,4 @@ load_dnssec_zone(Config) ->
 wildcard_loose(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     application:set_env(erldns, zones, #{strict => false, path => DataDir}),
-    ?assertMatch(3, erldns_zone_loader:load_zones()).
+    ?assertMatch(4, erldns_zone_loader:load_zones()).
