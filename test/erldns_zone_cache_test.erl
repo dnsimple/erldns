@@ -12,7 +12,7 @@
 setup_cache() ->
     logger:set_application_level(erldns, debug),
     meck:new(telemetry, [passthrough]),
-    {ok, Pid} = erldns_zone_parser:start_link(),
+    {_, Pid} = erldns_zone_parser:start_link(),
     erldns_storage:create(schema),
     erldns_storage:create(zones),
     erldns_storage:create(zone_records_typed),
@@ -20,10 +20,10 @@ setup_cache() ->
     Pid.
 
 load_dnssec_zone() ->
-    erldns_storage:load_zones("test/dnssec-zone.json").
+    erldns_zone_loader:load_zones("test/dnssec-zone.json").
 
 load_standard_zone() ->
-    erldns_storage:load_zones("test/standard-zone.json").
+    erldns_zone_loader:load_zones("test/standard-zone.json").
 
 teardown_cache(Pid) ->
     ?assert(meck:validate(telemetry)),

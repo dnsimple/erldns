@@ -38,9 +38,7 @@
     select/3,
     foldl/3,
     empty_table/1,
-    list_table/1,
-    load_zones/0,
-    load_zones/1
+    list_table/1
 ]).
 %% gen_server callbacks
 -export([
@@ -159,64 +157,6 @@ empty_table(Table) ->
 list_table(TableName) ->
     Module = mod(TableName),
     Module:list_table(TableName).
-
-%% @doc Load zones from a file. The default file name is "zones.json".(copied from erldns_zone_loader.erl)
--spec load_zones() -> {ok, integer()} | {err, atom()}.
-load_zones() ->
-    load_zones(filename()).
-
-%% @doc Load zones from a file. The default file name is "zones.json".(copied from erldns_zone_loader.erl)
--spec load_zones(list()) -> {ok, integer()} | {err, atom()}.
-load_zones(Path) when is_list(Path) ->
-    IsDir = filelib:is_dir(Path),
-    load_zones(Path, IsDir).
-
--spec load_zones(list(), boolean()) -> {ok, integer()} | {err, atom()}.
-load_zones(Path, true) when is_list(Path) ->
-    Filenames = filelib:wildcard(filename:join([Path, "*.json"])),
-    Result = lists:foldl(
-        fun(Filename, Acc) ->
-            case load_zones(Filename, false) of
-                {ok, N} -> Acc + N;
-                _ -> Acc
-            end
-        end,
-        0,
-        Filenames
-    ),
-    {ok, Result};
-load_zones(Filename, false) when is_list(Filename) ->
-    case file:read_file(Filename) of
-        {ok, Binary} ->
-            ?LOG_DEBUG("Parsing zones JSON"),
-            JsonZones = json:decode(Binary),
-            ?LOG_DEBUG("Putting zones into cache"),
-            lists:foreach(
-                fun(JsonZone) ->
-                    Zone = erldns_zone_parser:zone_to_erlang(JsonZone),
-                    ok = erldns_zone_cache:put_zone(Zone)
-                end,
-                JsonZones
-            ),
-            ?LOG_DEBUG("Loaded zones (count: ~p)", [length(JsonZones)]),
-            {ok, length(JsonZones)};
-        {error, Reason} ->
-            ?LOG_ERROR(
-                "Failed to load zones (module: ~p, event: ~p, reason: ~p)",
-                [?MODULE, failed_zones_load, Reason]
-            ),
-            {err, Reason}
-    end.
-
-%% Internal API
-%% @doc Get file name from env, or return default (copied from erldns_zone_loader.erl)
-filename() ->
-    case application:get_env(erldns, zones) of
-        {ok, Filename} ->
-            Filename;
-        _ ->
-            ?FILENAME
-    end.
 
 %% @doc This function retrieves the module name to be used for a given application or table
 %% (ex. erldns_storage_json...). Matched tables are always going to use ets because they are either
