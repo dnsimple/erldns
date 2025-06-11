@@ -21,10 +21,10 @@
         "type": "CDS",
         "ttl": 120,
         "data": {
-          "alg": 0,
-          "digest": "00",
-          "digest_type": 0,
-          "keytag": 0
+          "keytag": 7709,
+          "alg": 8,
+          "digest_type": 2,
+          "digest": "264E1FE0259DEABCFDDE6F3FC8BF2C04E6EC584E99824F9D37D730A722E3E191"
         }
       },
       {

@@ -50,9 +50,8 @@ init(_Args) ->
         [
             worker(erldns_pg, pg, [erldns]),
             worker(erldns_zone_cache),
-            worker(erldns_zone_parser),
+            worker(erldns_zone_codec),
             worker(erldns_zone_loader),
-            worker(erldns_zone_encoder),
             worker(erldns_packet_cache),
             worker(erldns_query_throttle),
             worker(erldns_handler),

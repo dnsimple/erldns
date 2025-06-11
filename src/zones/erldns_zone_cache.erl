@@ -357,7 +357,7 @@ write_rrset_sync_counter({ZoneName, RRFqdn, Type, Counter}) ->
 %% used to determine if the zone requires updating.
 %%
 %% This function will build the necessary Zone record before inserting.
--spec put_zone({Name, Sha, Records, Keys} | {Name, Sha, Records}) ->
+-spec put_zone({Name, Sha, Records, Keys} | {Name, Sha, Records} | erldns:zone()) ->
     ok | {error, Reason :: term()}
 when
     Name :: binary(),
@@ -367,7 +367,10 @@ when
 put_zone({Name, Sha, Records}) ->
     put_zone({Name, Sha, Records, []});
 put_zone({Name, Sha, Records, Keys}) ->
-    SignedZone = sign_zone(build_zone(Name, Sha, Records, Keys)),
+    NormalizedName = dns:dname_to_lower(Name),
+    put_zone(build_zone(NormalizedName, Sha, Records, Keys));
+put_zone(#zone{name = Name} = Zone) ->
+    SignedZone = sign_zone(Zone),
     NamedRecords = build_named_index(SignedZone#zone.records),
     delete_zone_records(erldns:normalize_name(Name)),
     case put_zone(erldns:normalize_name(Name), SignedZone#zone{records = trimmed}) of
