@@ -26,7 +26,7 @@ DNSSEC implementation.
     get_signed_records/1,
     get_signed_zone_records/1
 ]).
--export([maybe_sign_rrset/3]).
+-export([maybe_sign_rrset/3, rrsig_for_zone_rrset/2]).
 -export([
     map_nsec_rr_types/1,
     map_nsec_rr_types/2
