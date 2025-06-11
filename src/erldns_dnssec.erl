@@ -12,8 +12,10 @@
 %% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 %% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-%% @doc Placeholder for eventual DNSSEC implementation.
 -module(erldns_dnssec).
+-moduledoc """
+DNSSEC implementation.
+""".
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -21,25 +23,52 @@
 
 -export([handle/4]).
 -export([
-    key_rrset_signer/2,
-    zone_rrset_signer/2
+    get_signed_records/1,
+    get_signed_zone_records/1
 ]).
--export([rrsig_for_zone_rrset/2]).
 -export([maybe_sign_rrset/3]).
+-export([
+    map_nsec_rr_types/1,
+    map_nsec_rr_types/2
+]).
 
--export([map_nsec_rr_types/1]).
--export([map_nsec_rr_types/2]).
+-ifdef(TEST).
+-export([requires_key_signing_key/1, choose_signer_for_rrset/2]).
+-endif.
 
 -define(NEXT_DNAME_PART, <<"\000">>).
 
-%% @doc Given a zone and a set of records, return the RRSIG records.
+-doc "Get signed records from a zone".
+-spec get_signed_records(erldns:zone()) -> #{atom() => [dns:rr()]}.
+get_signed_records(#zone{name = ZoneName, records = Records, keysets = Keysets}) ->
+    {ZoneRecords, KeyRecords} = lists:partition(fun filter_cds_cdnskey/1, Records),
+    KeyRRSigRecords = lists:flatmap(key_rrset_signer(ZoneName, KeyRecords), Keysets),
+    ZoneRRSigRecords = lists:flatmap(zone_rrset_signer(ZoneName, ZoneRecords), Keysets),
+    #{key_rrsig_rrs => KeyRRSigRecords, zone_rrsig_rrs => ZoneRRSigRecords}.
+
+-doc "Get signed records from a zone".
+-spec get_signed_zone_records(erldns:zone()) -> [dns:rr()].
+get_signed_zone_records(#zone{name = ZoneName, records = Records, keysets = Keysets}) ->
+    ZoneRecords = lists:filter(fun filter_cds_cdnskey/1, Records),
+    lists:flatmap(zone_rrset_signer(ZoneName, ZoneRecords), Keysets).
+
+filter_cds_cdnskey(#dns_rr{type = Type}) ->
+    (Type =/= ?DNS_TYPE_DS) andalso
+        (Type =/= ?DNS_TYPE_CDS) andalso
+        (Type =/= ?DNS_TYPE_DNSKEY) andalso
+        (Type =/= ?DNS_TYPE_CDNSKEY).
+
+-doc " Given a zone and a set of records, return the RRSIG records.".
 -spec rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()].
 rrsig_for_zone_rrset(Zone, RRs) ->
-    lists:flatmap(zone_rrset_signer(Zone#zone.name, RRs), Zone#zone.keysets).
+    lists:flatmap(choose_signer_for_rrset(Zone#zone.name, RRs), Zone#zone.keysets).
 
-%% @doc Return a function that can be used to sign the given records using the key signing key.
-%% The function accepts a keyset, allowing the zone signing mechanism to iterate through available
-%% keysets, applying the key signing key from each keyset.
+-doc """
+Return a function that can be used to sign the given records using the key signing key.
+
+The function accepts a keyset, allowing the zone signing mechanism to iterate through available
+keysets, applying the key signing key from each keyset.
+""".
 -spec key_rrset_signer(dns:dname(), [dns:rr()]) -> fun((erldns:keyset()) -> [dns:rr()]).
 key_rrset_signer(ZoneName, RRs) ->
     fun(Keyset) ->
@@ -53,9 +82,12 @@ key_rrset_signer(ZoneName, RRs) ->
         })
     end.
 
-%% @doc Return a function that can be used to sign the given records using the zone signing key.
-%% The function accepts a keyset, allowing the zone signing mechanism to iterate through available
-%% keysets, applying the zone signing key from each keyset.
+-doc """
+Return a function that can be used to sign the given records using the zone signing key.
+
+The function accepts a keyset, allowing the zone signing mechanism to iterate through available
+keysets, applying the zone signing key from each keyset.
+""".
 -spec zone_rrset_signer(dns:dname(), [dns:rr()]) -> fun((erldns:keyset()) -> [dns:rr()]).
 zone_rrset_signer(ZoneName, RRs) ->
     fun(Keyset) ->
@@ -69,11 +101,26 @@ zone_rrset_signer(ZoneName, RRs) ->
         })
     end.
 
-%% @doc This function will potentially sign the given RR set if the following
-%% conditions are true:
-%%
-%% - DNSSEC is requested
-%% - The zone is signed
+-doc """
+Choose the appropriate signer function based on record types.
+
+CDS and CDNSKEY records should be signed with key-signing-key, others with zone-signing-key.
+""".
+-spec choose_signer_for_rrset(dns:dname(), [dns:rr()]) -> fun((erldns:keyset()) -> [dns:rr()]).
+choose_signer_for_rrset(ZoneName, RRs) ->
+    case requires_key_signing_key(RRs) of
+        true ->
+            key_rrset_signer(ZoneName, RRs);
+        false ->
+            zone_rrset_signer(ZoneName, RRs)
+    end.
+
+-doc """
+This function will potentially sign the given RR set if the following conditions are true:
+
+- DNSSEC is requested
+- The zone is signed
+""".
 -spec maybe_sign_rrset(dns:message(), [dns:rr()], erldns:zone()) -> [dns:rr()].
 maybe_sign_rrset(Message, Records, Zone) ->
     case {proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets} of
@@ -88,13 +135,28 @@ maybe_sign_rrset(Message, Records, Zone) ->
             Records
     end.
 
-%% @doc Apply DNSSEC records to the given message if the zone is signed
-%% and DNSSEC is requested.
+-doc """
+Apply DNSSEC records to the given message if the zone is signed and DNSSEC is requested.
+""".
 -spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type()) -> dns:message().
 handle(Message, Zone, Qname, QType) ->
     HasKeySets = [] =/= Zone#zone.keysets,
     RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Message)),
     handle(Message, Zone, Qname, QType, HasKeySets, RequestDnssec).
+
+-doc """
+Check if any record in the set requires key-signing-key for RRSIG.
+
+CDS and CDNSKEY records should be signed with key-signing-key.
+""".
+-spec requires_key_signing_key([dns:rr()]) -> boolean().
+requires_key_signing_key(RRs) ->
+    lists:any(
+        fun(#dns_rr{type = Type}) ->
+            (Type =:= ?DNS_TYPE_CDS) orelse (Type =:= ?DNS_TYPE_CDNSKEY)
+        end,
+        RRs
+    ).
 
 %%% Internal functions
 -spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type(), boolean(), boolean()) ->
@@ -153,7 +215,7 @@ handle(Msg, Zone, _, _, true, true) ->
     Msg2 = sign_unsigned(Msg1, Zone),
     erldns_records:rewrite_soa_ttl(Msg2).
 
-% @doc Find all RRSIG records that cover the records in the provided record list.
+% Find all RRSIG records that cover the records in the provided record list.
 -spec find_rrsigs([dns:rr()]) -> [dns:rr()].
 find_rrsigs(MessageRecords) ->
     NamesAndTypes = lists:usort(

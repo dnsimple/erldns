@@ -307,7 +307,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
                 records => Records
             }),
             KeySets = Zone#zone.keysets,
-            SignedRRSet = sign_rrset(NormalizedZoneName, Records, KeySets),
+            SignedRRSet = sign_rrset(Zone#zone{records = Records, keysets = KeySets}),
             {RRSigRecsCovering, RRSigRecsNotCovering} = filter_rrsig_records_with_type_covered(
                 RRFqdn, Type
             ),
@@ -589,57 +589,29 @@ build_typed_index(Records) ->
 sign_zone(Zone = #zone{keysets = []}) ->
     Zone;
 sign_zone(Zone) ->
-    DnskeyRRs = lists:filter(erldns_records:match_type(?DNS_TYPE_DNSKEY), Zone#zone.records),
-    KeyRRSigRecords = lists:flatmap(
-        erldns_dnssec:key_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets
-    ),
-    % TODO: remove wildcard signatures as they will not be used but are taking up space
-    ZoneRRSigRecords =
-        lists:flatmap(
-            erldns_dnssec:zone_rrset_signer(
-                Zone#zone.name,
-                lists:filter(
-                    fun(RR) -> RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY end, Zone#zone.records
-                )
-            ),
-            Zone#zone.keysets
-        ),
+    #{
+        key_rrsig_rrs := KeyRRSigRecords,
+        zone_rrsig_rrs := ZoneRRSigRecords
+    } = erldns_dnssec:get_signed_records(Zone),
     Records =
         Zone#zone.records ++
             KeyRRSigRecords ++
-            rewrite_soa_rrsig_ttl(
-                Zone#zone.records,
-                ZoneRRSigRecords -- lists:filter(erldns_records:match_wildcard(), ZoneRRSigRecords)
-            ),
+            rewrite_soa_rrsig_ttl(Zone#zone.records, ZoneRRSigRecords),
     Zone#zone{
         record_count = length(Records),
         records = Records
     }.
 
 % Sign RRSet
-%% Expects normalized names
--spec sign_rrset(binary(), [dns:rr()], [erldns:keyset()]) -> [dns:rr()].
-sign_rrset(NormalizedZoneName, Records, KeySets) ->
-    ZoneRecords = get_records_by_name_and_type(NormalizedZoneName, ?DNS_TYPE_SOA),
-    RRSigRecords =
-        rewrite_soa_rrsig_ttl(
-            ZoneRecords,
-            lists:flatmap(
-                erldns_dnssec:zone_rrset_signer(
-                    NormalizedZoneName,
-                    lists:filter(
-                        fun(RR) -> RR#dns_rr.type =/= ?DNS_TYPE_DNSKEY end,
-                        Records
-                    )
-                ),
-                KeySets
-            )
-        ),
-    RRSigRecords.
+-spec sign_rrset(erldns:zone()) -> [dns:rr()].
+sign_rrset(#zone{name = Name} = Zone) ->
+    ZoneRecords = get_records_by_name_and_type(Name, ?DNS_TYPE_SOA),
+    ZoneRRSigRecords = erldns_dnssec:get_signed_zone_records(Zone),
+    rewrite_soa_rrsig_ttl(ZoneRecords, ZoneRRSigRecords).
 
 % Rewrite the RRSIG TTL so it follows the same rewrite rules as the SOA TTL.
 rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
-    SoaRR = lists:last(lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), ZoneRecords)),
+    SoaRR = lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, ZoneRecords),
     lists:map(
         fun(RR) ->
             case RR#dns_rr.type of
