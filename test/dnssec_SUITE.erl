@@ -31,7 +31,7 @@ init_per_testcase(_, Config) ->
     FileName = filename:join([code:priv_dir(erldns), "zones/example.com.json"]),
     application:set_env(erldns, zones, #{path => FileName, strict => true}),
     erldns_zone_cache:start_link(),
-    erldns_zone_parser:start_link(),
+    erldns_zone_codec:start_link(),
     erldns_zone_loader:start_link(),
     erldns_handler:start_link(),
     Config.

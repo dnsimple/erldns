@@ -710,8 +710,10 @@ build_typed_index(Records) ->
 sign_zone(Zone = #zone{keysets = []}) ->
     Zone;
 sign_zone(Zone) ->
-    KeyRRSigRecords = erldns_dnssec:get_key_rrset_signed_records(Zone),
-    ZoneRRSigRecords = erldns_dnssec:get_zone_rrset_signed_records(Zone),
+    #{
+        key_rrsig_rrs := KeyRRSigRecords,
+        zone_rrsig_rrs := ZoneRRSigRecords
+    } = erldns_dnssec:get_signed_records(Zone),
     Records =
         Zone#zone.records ++
             KeyRRSigRecords ++
@@ -730,12 +732,12 @@ sign_zone(Zone) ->
 -spec sign_rrset(erldns:zone()) -> [dns:rr()].
 sign_rrset(#zone{name = Name} = Zone) ->
     ZoneRecords = get_records_by_name_and_type(Name, ?DNS_TYPE_SOA),
-    ZoneRRSigRecords = erldns_dnssec:get_zone_rrset_signed_records(Zone),
+    ZoneRRSigRecords = erldns_dnssec:get_signed_zone_records(Zone),
     rewrite_soa_rrsig_ttl(ZoneRecords, ZoneRRSigRecords).
 
 % Rewrite the RRSIG TTL so it follows the same rewrite rules as the SOA TTL.
 rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
-    SoaRR = lists:last(lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), ZoneRecords)),
+    SoaRR = lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, ZoneRecords),
     lists:map(
         fun(RR) ->
             case RR#dns_rr.type of

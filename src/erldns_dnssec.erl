@@ -23,8 +23,8 @@ DNSSEC implementation.
 
 -export([handle/4]).
 -export([
-    get_key_rrset_signed_records/1,
-    get_zone_rrset_signed_records/1
+    get_signed_records/1,
+    get_signed_zone_records/1
 ]).
 -export([maybe_sign_rrset/3]).
 -export([
@@ -38,31 +38,25 @@ DNSSEC implementation.
 
 -define(NEXT_DNAME_PART, <<"\000">>).
 
--doc "Get signed records from a zone that require KSK signatures".
--spec get_key_rrset_signed_records(erldns:zone()) -> [dns:rr()].
-get_key_rrset_signed_records(Zone) ->
-    Filter = fun(#dns_rr{type = Type}) ->
-        (Type =:= ?DNS_TYPE_DS) orelse
-            (Type =:= ?DNS_TYPE_CDS) orelse
-            (Type =:= ?DNS_TYPE_DNSKEY) orelse
-            (Type =:= ?DNS_TYPE_CDNSKEY)
-    end,
-    DnskeyRRs = lists:filter(Filter, Zone#zone.records),
-    lists:flatmap(key_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets).
+-doc "Get signed records from a zone".
+-spec get_signed_records(erldns:zone()) -> #{atom() => [dns:rr()]}.
+get_signed_records(#zone{name = ZoneName, records = Records, keysets = Keysets}) ->
+    {ZoneRecords, KeyRecords} = lists:partition(fun filter_cds_cdnskey/1, Records),
+    KeyRRSigRecords = lists:flatmap(key_rrset_signer(ZoneName, KeyRecords), Keysets),
+    ZoneRRSigRecords = lists:flatmap(zone_rrset_signer(ZoneName, ZoneRecords), Keysets),
+    #{key_rrsig_rrs => KeyRRSigRecords, zone_rrsig_rrs => ZoneRRSigRecords}.
 
--doc "Get signed records from a zone that require ZSK signatures".
--spec get_zone_rrset_signed_records(erldns:zone()) -> [dns:rr()].
-get_zone_rrset_signed_records(Zone) ->
-    Filter = fun(#dns_rr{type = Type}) ->
-        (Type =/= ?DNS_TYPE_DS) andalso
-            (Type =/= ?DNS_TYPE_DNSKEY) andalso
-            (Type =/= ?DNS_TYPE_CDS) andalso
-            (Type =/= ?DNS_TYPE_CDNSKEY)
-    end,
-    DnskeyRRs = lists:filter(Filter, Zone#zone.records),
-    lists:flatmap(
-        zone_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets
-    ).
+-doc "Get signed records from a zone".
+-spec get_signed_zone_records(erldns:zone()) -> [dns:rr()].
+get_signed_zone_records(#zone{name = ZoneName, records = Records, keysets = Keysets}) ->
+    ZoneRecords = lists:filter(fun filter_cds_cdnskey/1, Records),
+    lists:flatmap(zone_rrset_signer(ZoneName, ZoneRecords), Keysets).
+
+filter_cds_cdnskey(#dns_rr{type = Type}) ->
+    (Type =/= ?DNS_TYPE_DS) andalso
+        (Type =/= ?DNS_TYPE_CDS) andalso
+        (Type =/= ?DNS_TYPE_DNSKEY) andalso
+        (Type =/= ?DNS_TYPE_CDNSKEY).
 
 -doc " Given a zone and a set of records, return the RRSIG records.".
 -spec rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()].
