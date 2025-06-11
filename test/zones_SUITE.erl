@@ -30,8 +30,10 @@ groups() ->
             wildcard_loose
         ]},
         {codec, [], [
-            encode_meta_to_json,
+            bad_custom_codecs_module_does_not_exist,
+            bad_custom_codecs_module_does_not_export_callbacks,
             custom_decode,
+            encode_meta_to_json,
             json_to_erlang,
             json_to_erlang_txt_spf_records,
             json_to_erlang_ensure_sorting_and_defaults,
@@ -79,10 +81,47 @@ init_per_testcase(_, Config) ->
     Config.
 
 -spec end_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> term().
-end_per_testcase(_, Config) ->
-    Config.
+end_per_testcase(_, _) ->
+    application:unset_env(erldns, zones).
 
 %% Tests
+bad_custom_codecs_module_does_not_exist(_) ->
+    erlang:process_flag(trap_exit, true),
+    application:set_env(erldns, zones, #{codecs => [this_module_does_not_exist]}),
+    ?assertMatch({error, {{badcodec, {module, _}}, _}}, erldns_zone_codec:start_link()).
+
+bad_custom_codecs_module_does_not_export_callbacks(_) ->
+    erlang:process_flag(trap_exit, true),
+    application:set_env(erldns, zones, #{codecs => [?MODULE]}),
+    ?assertMatch(
+        {error, {{badcodec, {module_does_not_export_call, ?MODULE}}, _}},
+        erldns_zone_codec:start_link()
+    ).
+
+custom_decode(_) ->
+    application:set_env(erldns, zones, #{codecs => [sample_custom_zone_codec]}),
+    {ok, _} = erldns_zone_codec:start_link(),
+    Input = #{
+        ~"name" => ~"example.com",
+        ~"records" => [
+            #{
+                ~"name" => ~"example.com",
+                ~"type" => ~"SAMPLE",
+                ~"ttl" => 60,
+                ~"data" => #{~"dname" => ~"example.net"},
+                ~"context" => null
+            }
+        ]
+    },
+    Zone = erldns_zone_codec:decode(Input),
+    ?assertMatch(#zone{records = [_]}, Zone),
+    #zone{records = [Record]} = Zone,
+    ?assertEqual(~"example.com", Record#dns_rr.name),
+    ?assertEqual(40000, Record#dns_rr.type),
+    ?assertEqual(60, Record#dns_rr.ttl),
+    ?assertEqual(~"example.net", Record#dns_rr.data),
+    ?assertEqual(not_implemented, sample_custom_zone_codec:decode(#{})).
+
 encode_meta_to_json(_) ->
     {ok, _} = erldns_zone_cache:start_link(),
     {ok, _} = erldns_zone_codec:start_link(),
@@ -105,20 +144,6 @@ encode_meta_to_json(_) ->
         },
         json:decode(JSON)
     ).
-
-custom_decode(_) ->
-    Record = sample_custom_zone_codec:decode(#{
-        ~"name" => ~"example.com",
-        ~"type" => ~"SAMPLE",
-        ~"ttl" => 60,
-        ~"data" => #{~"dname" => ~"example.net"},
-        ~"context" => null
-    }),
-    ?assertEqual(~"example.com", Record#dns_rr.name),
-    ?assertEqual(40000, Record#dns_rr.type),
-    ?assertEqual(60, Record#dns_rr.ttl),
-    ?assertEqual(~"example.net", Record#dns_rr.data),
-    ?assertEqual(not_implemented, sample_custom_zone_codec:decode(#{})).
 
 json_to_erlang(_) ->
     R = erldns_zone_parser:decode(json:decode(input()), []),

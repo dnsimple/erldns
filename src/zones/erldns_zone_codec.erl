@@ -9,9 +9,9 @@ and register the codec in the configuration.
 
 ```erlang
 {erldns, [
-    {custom_zone_codecs, [
-        sample_custom_zone_codec
-    ]},
+    {zones, #{
+        codecs => [sample_custom_zone_codec]
+    }},
 ]}
 ```
 
@@ -124,7 +124,7 @@ register_codecs(Modules) when is_list(Modules) ->
 -doc "Get the list of registered zone parsers.".
 -spec list_codecs() -> {[encoder()], [decoder()]}.
 list_codecs() ->
-    persistent_term:get(?MODULE, []).
+    persistent_term:get(?MODULE, {[], []}).
 
 % Internal API
 -doc false.
@@ -136,9 +136,7 @@ start_link() ->
 -spec init(noargs) -> {ok, state()}.
 init(noargs) ->
     process_flag(trap_exit, true),
-    CustomCodecs = application:get_env(erldns, custom_zone_codecs, []),
-    Encoders = [fun Module:encode/1 || Module <- CustomCodecs],
-    Decoders = [fun Module:decode/1 || Module <- CustomCodecs],
+    {Encoders, Decoders} = prepare_codecs(),
     persistent_term:put(?MODULE, {Encoders, Decoders}),
     {ok, #state{encoders = Encoders, decoders = Decoders}}.
 
@@ -146,12 +144,11 @@ init(noargs) ->
 -spec handle_call(dynamic(), gen_server:from(), state()) ->
     {reply, dynamic(), state()}.
 handle_call({register_codecs, Modules}, _From, State) ->
-    Encoders = [fun Module:encode/1 || Module <- Modules],
-    NewEncoders = State#state.encoders ++ Encoders,
-    Decoders = [fun Module:decode/1 || Module <- Modules],
-    NewDecoders = State#state.decoders ++ Decoders,
-    persistent_term:put(?MODULE, {NewEncoders, NewDecoders}),
-    {reply, ok, #state{encoders = NewEncoders, decoders = NewDecoders}};
+    {NewEncoders, NewDecoders} = prepare_codecs(Modules),
+    Encoders = State#state.encoders ++ NewEncoders,
+    Decoders = State#state.decoders ++ NewDecoders,
+    persistent_term:put(?MODULE, {Encoders, Decoders}),
+    {reply, ok, #state{encoders = Encoders, decoders = Decoders}};
 handle_call(Call, From, State) ->
     ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}),
     {reply, not_implemented, State}.
@@ -166,3 +163,31 @@ handle_cast(Cast, State) ->
 -spec terminate(term(), state()) -> any().
 terminate(_, _) ->
     persistent_term:erase(?MODULE).
+
+-spec prepare_codecs() -> {[encoder()], [decoder()]}.
+prepare_codecs() ->
+    ZonesConfig = application:get_env(erldns, zones, #{}),
+    Modules = maps:get(codecs, ZonesConfig, []),
+    prepare_codecs(Modules).
+
+-spec prepare_codecs([module()]) -> {[encoder()], [decoder()]}.
+prepare_codecs(Modules) ->
+    lists:foldr(
+        fun(Module, {AccEncoders, AccDecoders}) ->
+            maybe
+                {module, Module} ?= code:ensure_loaded(Module),
+                true ?= erlang:function_exported(Module, encode, 1),
+                true ?= erlang:function_exported(Module, decode, 1),
+                Encoders = [fun Module:encode/1 | AccEncoders],
+                Decoders = [fun Module:decode/1 | AccDecoders],
+                {Encoders, Decoders}
+            else
+                {error, Reason} ->
+                    erlang:error({badcodec, {module, Reason}});
+                false ->
+                    erlang:error({badcodec, {module_does_not_export_call, Module}})
+            end
+        end,
+        {[], []},
+        Modules
+    ).

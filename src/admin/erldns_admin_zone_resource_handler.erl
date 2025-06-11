@@ -109,8 +109,7 @@ to_json(Req, State) ->
     end.
 
 get_body(ZoneName, false) ->
-    Opts = #{mode => zone_to_json},
-    Json = erldns_zone_codec:encode(ZoneName, Opts),
+    Json = erldns_zone_codec:encode(ZoneName),
     iolist_to_binary(json:encode(Json));
 get_body(ZoneName, true) ->
     Opts = #{mode => zone_meta_to_json},
