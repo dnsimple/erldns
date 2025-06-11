@@ -176,45 +176,46 @@ encode_data({dns_rrdata_naptr, Order, Preference, Flags, Services, Regexp, Repla
         ])
     );
 encode_data({dns_rrdata_ds, KeyTag, Alg, DigestType, Digest}) ->
-    erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest]));
+    escape_chars(
+        io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest])
+    );
 encode_data({dns_rrdata_cds, KeyTag, Alg, DigestType, Digest}) ->
-    erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest]));
+    escape_chars(
+        io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest])
+    );
 encode_data({dns_rrdata_dnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
-    binary:encode_hex(
-        erlang:iolist_to_binary(
-            io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])
-        )
+    escape_chars(
+        io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])
     );
 encode_data({dns_rrdata_cdnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
-    binary:encode_hex(
-        erlang:iolist_to_binary(
-            io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])
-        )
+    escape_chars(
+        io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])
     );
 encode_data(
     {dns_rrdata_rrsig, TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag,
         SignersName, Signature}
 ) ->
-    binary:encode_hex(
-        erlang:iolist_to_binary(
-            io_lib:format(
-                "~w ~w ~w ~w ~w ~w ~w ~w ~s",
-                [
-                    TypeCovered,
-                    Alg,
-                    Labels,
-                    OriginalTtl,
-                    Expiration,
-                    Inception,
-                    KeyTag,
-                    SignersName,
-                    Signature
-                ]
-            )
+    escape_chars(
+        io_lib:format(
+            "~w ~w ~w ~w ~w ~w ~w ~w ~s",
+            [
+                TypeCovered,
+                Alg,
+                Labels,
+                OriginalTtl,
+                Expiration,
+                Inception,
+                KeyTag,
+                SignersName,
+                Signature
+            ]
         )
     );
 encode_data(Data) ->
     ?LOG_INFO("Unable to encode rrdata (module: ~p, event: ~p, data: ~p)", [
         ?MODULE, unsupported_rrdata_type, Data
     ]),
-    {}.
+    not_implemented.
+
+escape_chars(IoList) ->
+    binary:encode_hex(erlang:iolist_to_binary(IoList)).
