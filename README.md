@@ -12,10 +12,10 @@ Serve DNS authoritative responses... with Erlang.
 This application consists of three main subsystems:
 
 - `m:erldns_zones`
-The system responsible for loading and caching zone data. Zones are loaded from JSON, example files are in the `priv/` directory. You can also write new systems to load zones by writing the zones directly to the zone cache using `erldns_zone_cache:put_zone/1`.
+The system responsible for loading and caching zone data.
 
 - `m:erldns_pipeline`
-The system responsible for processing incoming DNS queries. It declares a pipeline of sequential transformations to apply to the incoming query until a response is constructed.
+The system responsible for processing incoming DNS queries.
 
 - `m:erldns_listeners`
 The system responsible for listening for incoming DNS queries. The system is designed to be able to listen on multiple ports and interfaces and supports both UDP and TCP, Unix network stack optimisations, and high parallelism.
@@ -27,9 +27,26 @@ You can read more about it at `m:erldns_admin`.
 
 [Telemetry](https://hex.pm/packages/telemetry) is used to instrument the code.
 
-## Configuration
+All events are divided in the following namespaces:
 
-An example configuration file can be found in `erldns.example.config`.
+- `[erldns, pipeline | _]` are triggered by the `m:erldns_pipeline` subsystem.
+- `[erldns, request | _]` are triggered by the `m:erldns_listeners` subsystem.
+
+## Getting started
+
+You can use this application as a standalone service or embedded into your OTP application. In both
+cases, you'll need to: configure it, and load zones.
+
+### Zones
+
+Zones are loaded from JSON files in the `priv/zones/` directory. The path is configured in `erldns.config` using the `zones.path` setting. For more details about zone file format and configuration, see [`priv/zones/README`](priv/zones/README.md).
+
+### Configuration
+
+An example configuration file can be found in `erldns.example.config`. For more details, see the
+subsystems and the admin API documentation.
+
+To get started, copy it into your own `erldns.config` and modify as needed.
 
 ## Building
 
@@ -46,14 +63,6 @@ make fresh
 make
 ```
 
-## Zones
-
-Zones are loaded from JSON files in the `priv/zones/` directory. The path is configured in `erldns.config` using the `zones.path` setting. For more details about zone file format and configuration, see [`priv/zones/README`](priv/zones/README.md).
-
-## Configuration
-
-An example configuration file can be found in `erldns.example.config`. Copy it to `erldns.config` and modify as needed.
-
 ## Running
 
 ### Launch directly
@@ -65,7 +74,7 @@ overmind start
 ### To get an interactive Erlang REPL
 
 ```sh
-rebar3 sh
+rebar3 shell
 ```
 
 ### Build a distribution with and run the release

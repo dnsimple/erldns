@@ -2,11 +2,23 @@
 -moduledoc """
 The pipeline specification.
 
+It declares a pipeline of sequential transformations to apply to the
+incoming query until a response is constructed.
+
 This module is responsible for handling the pipeline of pipes that will be
 executed when a DNS message is received. Handlers in this pipeline will be
 executed sequentially, accumulating the result of each handler and passing
 it to the next. This designs a pluggable framework where new behaviour can
 be injected as a new pipe handler in the right order.
+
+## Default pipes
+
+The following are enabled by default, see their documentation for details:
+
+- `m:erldns_query_throttle`
+- `m:erldns_packet_cache`
+- `m:erldns_resolver`
+- `m:erldns_empty_verification`
 
 ## Types of pipelines
 
@@ -149,6 +161,7 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
         {stop, #dns_message{} = Msg1} ->
             Msg1;
         Other ->
+            telemetry:execute([erldns, pipeline, error], #{count => 1}, #{}),
             ?LOG_ERROR(#{
                 what => pipe_failed,
                 pipe => Pipe,
@@ -159,6 +172,7 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
             do_call(Msg, Pipes, Opts)
     catch
         C:E:S ->
+            telemetry:execute([erldns, pipeline, error], #{count => 1}, #{}),
             ?LOG_ERROR(#{
                 what => pipe_failed,
                 pipe => Pipe,

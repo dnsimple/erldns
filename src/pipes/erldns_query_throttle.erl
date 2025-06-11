@@ -2,7 +2,7 @@
 -moduledoc """
 Stateful query throttling. Currently only throttles `ANY` queries.
 
-We should_throttle ANY queries to discourage use of our authoritative name servers
+We should throttle `ANY` queries to discourage use of our authoritative name servers
 for reflection/amplification attacks.
 
 ## Configuration
@@ -19,9 +19,8 @@ for reflection/amplification attacks.
 
 ## Telemetry events
 
-See `m:segmented_cache` for telemetry events under this module name.
-
-Also emits the following telemetry events:
+- `[erldns, pipeline, throttle]` spans with `host` in the metadata
+    as triggered by `m:segmented_cache`.
 - `[erldns, pipeline, throttle]` with `host` in the metadata.
 """.
 
@@ -37,6 +36,7 @@ Also emits the following telemetry events:
 -define(DEFAULT_BUCKETS, 2).
 -define(DEFAULT_CACHE_TTL, 60).
 
+-doc "`c:erldns_pipeline:prepare/1` callback.".
 -spec prepare(erldns_pipeline:opts()) -> disabled | erldns_pipeline:opts().
 prepare(Opts) ->
     case enabled() of
@@ -44,6 +44,7 @@ prepare(Opts) ->
         true -> Opts#{packet_throttle_limit => default_limit()}
     end.
 
+-doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
 call(Msg, #{transport := udp, host := Host, packet_throttle_limit := Limit}) ->
     case should_throttle(Msg, Host, Limit) of
@@ -69,6 +70,7 @@ start_link() ->
             ignore;
         true ->
             Config = #{
+                prefix => [erldns, pipeline, throttle],
                 scope => erldns,
                 strategy => lru,
                 merger_fun => fun ?MODULE:merger/2,

@@ -11,21 +11,10 @@ Functions for loading zones from local or remote sources.
     }
 ]}
 ```
-See the type `t:config/0` for details.
+See the type `t:erldns_zones:config/0` for details.
 """.
 
 -include_lib("kernel/include/logger.hrl").
-
--doc """
-Zone loader configuration.
-
-Path can be a directory, and `strict` declares whether load failure should crash or be ignored.
-If a path is configured and `strict` is true, and the path is not resolvable, it will fail.
-""".
--type config() :: #{
-    path => undefined | file:name(),
-    strict => boolean()
-}.
 
 -define(WILDCARD, "**/*.json").
 
@@ -181,7 +170,7 @@ load_zone(JsonZone) ->
     erldns_zone_cache:put_zone(Zone).
 
 % Internal API
--spec get_config() -> config().
+-spec get_config() -> erldns_zones:config().
 get_config() ->
     case application:get_env(erldns, zones, #{}) of
         #{strict := Strict} when not is_boolean(Strict) ->

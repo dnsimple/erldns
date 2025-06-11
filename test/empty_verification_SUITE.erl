@@ -18,8 +18,8 @@ groups() ->
 init_per_suite(Config) ->
     application:ensure_all_started([telemetry]),
     Events = [
-        [erldns, handler, refused],
-        [erldns, handler, empty]
+        [erldns, pipeline, refused],
+        [erldns, pipeline, empty]
     ],
     ok = telemetry:attach_many(?MODULE, Events, fun ?MODULE:telemetry_handler/4, []),
     Config.
@@ -69,7 +69,7 @@ telemetry_handler(EventName, _, _, _) ->
 
 assert_telemetry_event(Name) ->
     receive
-        [erldns, handler, Name] ->
+        [erldns, pipeline, Name] ->
             ok
     after 1000 ->
         ct:fail("Telemetry event not triggered: ~p", [Name])
@@ -77,6 +77,6 @@ assert_telemetry_event(Name) ->
 
 assert_no_telemetry_event(Name) ->
     receive
-        [erldns, handler, Name] -> ct:fail("Telemetry event not triggered: ~p", [Name])
+        [erldns, pipeline, Name] -> ct:fail("Telemetry event not triggered: ~p", [Name])
     after 100 -> ok
     end.

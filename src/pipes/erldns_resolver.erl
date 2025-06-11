@@ -1,17 +1,3 @@
-%% Copyright (c) 2012-2020, DNSimple Corporation
-%%
-%% Permission to use, copy, modify, and/or distribute this software for any
-%% purpose with or without fee is hereby granted, provided that the above
-%% copyright notice and this permission notice appear in all copies.
-%%
-%% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-%% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-%% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-%% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-%% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-%% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
 -module(erldns_resolver).
 -moduledoc """
 Resolve a DNS query.
@@ -20,7 +6,7 @@ Supports only a single question per request: if a request contains multiple ques
 only the first question will be resolved.
 
 Emits the following telemetry events:
-- `[erldns, resolver, dnssec]`
+- `[erldns, pipeline, resolver, error]` with `#{rc := dns:rcode/0}` metadata.
 """.
 
 -include_lib("dns_erlang/include/dns.hrl").
@@ -38,6 +24,7 @@ Emits the following telemetry events:
 
 -export([call/2]).
 
+-doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
 call(Msg, #{resolved := false} = Opts) ->
     case erldns_zone_cache:get_authority(Msg) of
@@ -67,7 +54,7 @@ call(Msg, #{host := Host}, AuthorityRecords) ->
         resolve(Msg, AuthorityRecords, Host)
     catch
         throw:{error, rcode, RC} ->
-            telemetry:execute([erldns, handler, error], #{count => 1}, #{rc => RC}),
+            telemetry:execute([erldns, pipeline, resolver, error], #{count => 1}, #{rc => RC}),
             Msg#dns_message{aa = false, rc = RC};
         Class:Reason:Stacktrace ->
             ?LOG_ERROR(#{
@@ -77,7 +64,9 @@ call(Msg, #{host := Host}, AuthorityRecords) ->
                 reason => Reason,
                 stacktrace => Stacktrace
             }),
-            telemetry:execute([erldns, handler, error], #{count => 1}, #{rc => ?DNS_RCODE_SERVFAIL}),
+            telemetry:execute([erldns, pipeline, resolver, error], #{count => 1}, #{
+                rc => ?DNS_RCODE_SERVFAIL
+            }),
             Msg#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
     end.
 
@@ -121,7 +110,6 @@ resolve_question(Message, AuthorityRecords, Host, Question) when is_record(Quest
                 rc = ?DNS_RCODE_REFUSED
             };
         Qtype ->
-            check_dnssec(Message, Host, Question),
             resolve_qname_and_qtype(
                 Message#dns_message{
                     ra = false,
@@ -904,18 +892,6 @@ requires_additional_processing([_ | Rest], Acc) ->
     requires_additional_processing(Rest, Acc);
 requires_additional_processing([], Acc) ->
     lists:reverse(Acc).
-
-%% Return true if DNSSEC is requested and enabled.
--spec check_dnssec(Message :: dns:message(), Host :: dns:ip(), Question :: dns:query()) ->
-    boolean().
-check_dnssec(Message, _Host, _Question) ->
-    case proplists:get_bool(dnssec, erldns_edns:get_opts(Message)) of
-        true ->
-            telemetry:execute([erldns, resolver, dnssec], #{count => 1}, #{}),
-            true;
-        false ->
-            false
-    end.
 
 %% Sort the answers in the given message.
 -spec sort_answers(dns:message()) -> dns:message().
