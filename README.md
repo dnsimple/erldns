@@ -39,7 +39,7 @@ cases, you'll need to: configure it, and load zones.
 
 ### Zones
 
-Zones are loaded from JSON files in the `priv/zones/` directory. The path is configured in `erldns.config` using the `zones.path` setting. For more details about zone file format and configuration, see [`priv/zones/README`](priv/zones/README.md).
+Zones are loaded from JSON files in the `priv/zones/` directory. The path is configured in `erldns.config` using the `zones.path` setting. For more details about zone file format and configuration, see [`priv/zones/ZONES`](priv/zones/ZONES.md).
 
 ### Configuration
 
