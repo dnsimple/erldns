@@ -103,7 +103,7 @@ to_json(Req, State) ->
             ?LOG_ERROR(#{what => get_zone_error, error => Reason}),
             Resp = io_lib:format("Error getting zone: ~p", [Reason]),
             {stop, cowboy_req:reply(400, #{}, Resp, Req), State};
-        {ok, Zone} ->
+        Zone ->
             Body = get_body(Zone, lists:keymember(<<"metaonly">>, 1, Params)),
             {Body, Req, State}
     end.

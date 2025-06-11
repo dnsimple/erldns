@@ -11,7 +11,8 @@
 all() ->
     [
         {group, loader},
-        {group, codec}
+        {group, codec},
+        {group, cache}
     ].
 
 -spec groups() -> [ct_suite:ct_group_def()].
@@ -46,6 +47,15 @@ groups() ->
             json_record_cds_to_erlang,
             parse_json_keys_unsorted_proplists_time_unit,
             parse_json_keys_unsorted_proplists
+        ]},
+        {cache, [], [
+            put_zone_rrset_records_count_with_existing_rrset,
+            put_zone_rrset_records_count_with_new_rrset,
+            put_zone_rrset_records_count_matches_cache,
+            put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset,
+            delete_zone_rrset_records_count_width_existing_rrset,
+            delete_zone_rrset_records_count_width_dnssec_zone_and_existing_rrset,
+            delete_zone_rrset_records_count_matches_cache
         ]}
     ].
 
@@ -59,6 +69,9 @@ end_per_suite(_) ->
     application:unset_env(erldns, zones).
 
 -spec init_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> ct_suite:ct_config().
+init_per_group(cache, Config) ->
+    meck:new(telemetry, [passthrough, no_link]),
+    Config;
 init_per_group(codec, Config) ->
     Config;
 init_per_group(loader, Config) ->
@@ -74,6 +87,9 @@ init_per_group(loader, Config) ->
 -spec end_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> term().
 end_per_group(codec, _Config) ->
     ok;
+end_per_group(cache, _Config) ->
+    ?assert(meck:validate(telemetry)),
+    meck:unload();
 end_per_group(loader, _Config) ->
     meck:unload().
 
@@ -496,6 +512,154 @@ wildcard_loose(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     application:set_env(erldns, zones, #{strict => false, path => DataDir}),
     ?assertMatch(4, erldns_zone_loader:load_zones()).
+
+put_zone_rrset_records_count_with_existing_rrset(Config) ->
+    setup_test(Config, ?FUNCTION_NAME),
+    ZoneName = ~"example.com",
+    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    erldns_zone_cache:put_zone_rrset(
+        {ZoneName, ~"irrelevantDigest",
+            [
+                #dns_rr{
+                    data = #dns_rrdata_cname{dname = ~"google.com"},
+                    name = ~"cname.example.com",
+                    ttl = 5,
+                    type = 5
+                }
+            ],
+            []},
+        ~"cname.example.com",
+        5,
+        1
+    ),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    % There should be no change in record count
+    ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count).
+
+put_zone_rrset_records_count_with_new_rrset(Config) ->
+    setup_test(Config, ?FUNCTION_NAME),
+    ZoneName = ~"example.com",
+    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    erldns_zone_cache:put_zone_rrset(
+        {ZoneName, ~"irrelevantDigest",
+            [
+                #dns_rr{
+                    data = #dns_rrdata_a{ip = ~"5,5,5,5"},
+                    name = ~"a2.example.com",
+                    ttl = 5,
+                    type = 1
+                }
+            ],
+            []},
+        ~"a2.example.com",
+        5,
+        1
+    ),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    % New RRSet is being added with one record we should see an increase by 1
+    ?assertEqual(ZoneBase#zone.record_count + 1, ZoneModified#zone.record_count).
+
+put_zone_rrset_records_count_matches_cache(Config) ->
+    setup_test(Config, ?FUNCTION_NAME),
+    ZoneName = ~"example.com",
+    erldns_zone_cache:put_zone_rrset(
+        {ZoneName, ~"irrelevantDigest",
+            [
+                #dns_rr{
+                    data = #dns_rrdata_a{ip = ~"5,5,5,5"},
+                    name = ~"a2.example.com",
+                    ttl = 5,
+                    type = 1
+                }
+            ],
+            []},
+        ~"a2.example.com",
+        5,
+        1
+    ),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    % New RRSet is being added with one record we should see an increase by 1
+    ?assertEqual(
+        length(erldns_zone_cache:get_zone_records(ZoneName)), ZoneModified#zone.record_count
+    ).
+
+put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset(Config) ->
+    setup_test(Config, ?FUNCTION_NAME),
+    ZoneName = ~"example-dnssec.com",
+    Zone = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    erldns_zone_cache:put_zone_rrset(
+        {ZoneName, ~"irrelevantDigest",
+            [
+                #dns_rr{
+                    data = #dns_rrdata_cname{dname = ~"google.com"},
+                    name = ~"cname.example-dnssec.com",
+                    ttl = 60,
+                    type = 5
+                }
+            ],
+            []},
+        ~"cname.example-dnssec.com",
+        5,
+        1
+    ),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    % New RRSet entry for the CNAME + 1 RRSig record
+    ?assertEqual(Zone#zone.record_count + 2, ZoneModified#zone.record_count).
+
+delete_zone_rrset_records_count_width_existing_rrset(Config) ->
+    setup_test(Config, ?FUNCTION_NAME),
+    ZoneName = ~"example.com",
+    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    erldns_zone_cache:delete_zone_rrset(
+        ZoneName,
+        ~"irrelevantDigest",
+        dns:dname_to_lower(~"cname.example.com"),
+        5,
+        1
+    ),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    % Deletes a CNAME RRSet with one record
+    ?assertEqual(ZoneBase#zone.record_count - 1, ZoneModified#zone.record_count).
+
+delete_zone_rrset_records_count_width_dnssec_zone_and_existing_rrset(Config) ->
+    setup_test(Config, ?FUNCTION_NAME),
+    ZoneName = ~"example-dnssec.com",
+    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    erldns_zone_cache:delete_zone_rrset(
+        ZoneName,
+        ~"irrelevantDigest",
+        dns:dname_to_lower(~"cname2.example-dnssec.com"),
+        5,
+        2
+    ),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    % Deletes a CNAME RRSet with one record + RRSig
+    ?assertEqual(ZoneBase#zone.record_count - 2, ZoneModified#zone.record_count).
+
+delete_zone_rrset_records_count_matches_cache(Config) ->
+    setup_test(Config, ?FUNCTION_NAME),
+    ZoneName = ~"example-dnssec.com",
+    erldns_zone_cache:delete_zone_rrset(
+        ZoneName,
+        ~"irrelevantDigest",
+        dns:dname_to_lower(~"cname2.example-dnssec.com"),
+        5,
+        2
+    ),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    % Deletes a CNAME RRSet with one record + RRSig
+    ?assertEqual(
+        length(erldns_zone_cache:get_zone_records(ZoneName)), ZoneModified#zone.record_count
+    ).
+
+setup_test(Config, _) ->
+    {ok, _} = erldns_zone_codec:start_link(),
+    {ok, _} = erldns_zone_cache:start_link(),
+    DataDir = proplists:get_value(data_dir, Config),
+    application:set_env(erldns, zones, #{path => filename:join(DataDir, "standard.json")}),
+    ?assertMatch(1, erldns_zone_loader:load_zones()),
+    application:set_env(erldns, zones, #{path => filename:join(DataDir, "dnssec-zone.json")}),
+    ?assertMatch(1, erldns_zone_loader:load_zones()).
 
 ksk_private_key() ->
     <<
