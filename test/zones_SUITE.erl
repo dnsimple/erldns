@@ -34,6 +34,7 @@ groups() ->
             bad_custom_codecs_module_does_not_export_callbacks,
             custom_decode,
             encode_meta_to_json,
+            encode_meta_to_json_dnssec,
             json_to_erlang,
             json_to_erlang_txt_spf_records,
             json_to_erlang_ensure_sorting_and_defaults,
@@ -144,6 +145,27 @@ encode_meta_to_json(_) ->
         },
         json:decode(JSON)
     ).
+
+encode_meta_to_json_dnssec(Config) ->
+    DataDir = proplists:get_value(data_dir, Config),
+    Path = filename:join(DataDir, "dnssec-zone.json"),
+    application:set_env(erldns, zones, #{
+        path => Path,
+        codecs => [sample_custom_zone_codec]
+    }),
+    {ok, _} = erldns_zone_cache:start_link(),
+    {ok, _} = erldns_zone_codec:start_link(),
+    {ok, _} = erldns_zone_loader:start_link(),
+    ZoneName = ~"example-dnssec.com",
+    RecordName = ~"example-dnssec.com",
+    Z = #zone{
+        name = ZoneName,
+        authority = [#dns_rr{name = ~"example-dnssec.com", type = ?DNS_TYPE_SOA}]
+    },
+    Data = erldns_zone_codec:encode(Z, #{mode => {zone_records_to_json, RecordName}}),
+    JSON = iolist_to_binary(json:encode(Data)),
+    ?assert(is_binary(JSON)),
+    ?assertMatch(L when 8 =:= length(L), json:decode(JSON)).
 
 json_to_erlang(_) ->
     R = erldns_zone_parser:decode(json:decode(input()), []),
