@@ -12,9 +12,9 @@
 encode(Zone, #{mode := zone_meta_to_json}, _) ->
     zone_meta_to_json(Zone);
 encode(Zone, #{mode := {zone_records_to_json, RecordName}}, Encoders) ->
-    zone_records_to_json(Zone, RecordName, Encoders);
+    encode_zone_records_to_json(Zone, RecordName, Encoders);
 encode(Zone, #{mode := {zone_records_to_json, RecordName, RecordType}}, Encoders) ->
-    zone_records_to_json(Zone, RecordName, RecordType, Encoders);
+    encode_zone_records_to_json(Zone, RecordName, RecordType, Encoders);
 encode(Zone, #{mode := zone_to_json}, Encoders) ->
     Records = records_to_json(Zone, Encoders),
     FilteredRecords = lists:filter(record_filter(), Records),
@@ -46,16 +46,7 @@ zone_meta_to_json(Zone) ->
             }
     }.
 
-zone_records_to_json(ZoneName, RecordName, Encoders) ->
-    encode_zone_records_to_json(ZoneName, RecordName, Encoders).
-
-zone_records_to_json(ZoneName, RecordName, RecordType, Encoders) ->
-    encode_zone_records_to_json(ZoneName, RecordName, RecordType, Encoders).
-
-% Gen server hooks
-
 % Internal API
-
 encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
     Records = erldns_zone_cache:get_records_by_name(RecordName),
     lists:filter(record_filter(), lists:map(encode(Encoders), Records)).
@@ -69,8 +60,7 @@ encode_zone_records_to_json(_ZoneName, RecordName, RecordType, Encoders) ->
 record_filter() ->
     fun(R) ->
         case R of
-            [] -> false;
-            {} -> false;
+            not_implemented -> false;
             _ -> true
         end
     end.
