@@ -10,7 +10,6 @@
 -spec start(application:start_type(), term()) -> {ok, pid()} | {error, term()}.
 start(_Type, _Args) ->
     ?LOG_INFO(#{what => starting_erldns_application}),
-    nodefinder:multicast_start(),
     case erldns_sup:start_link() of
         {ok, Pid} when is_pid(Pid) ->
             erldns_admin:maybe_start(),
