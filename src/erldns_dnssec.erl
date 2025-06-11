@@ -60,10 +60,9 @@ get_zone_rrset_signed_records(Zone) ->
             (Type =/= ?DNS_TYPE_CDNSKEY)
     end,
     DnskeyRRs = lists:filter(Filter, Zone#zone.records),
-    ZoneRRSigRecords = lists:flatmap(
+    lists:flatmap(
         zone_rrset_signer(Zone#zone.name, DnskeyRRs), Zone#zone.keysets
-    ),
-    lists:filter(erldns_records:match_not_wildcard(), ZoneRRSigRecords).
+    ).
 
 -doc " Given a zone and a set of records, return the RRSIG records.".
 -spec rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()].
