@@ -34,7 +34,7 @@ Also emits the following telemetry events:
 -type host() :: inet:ip_address() | inet:hostname().
 
 -define(DEFAULT_LIMIT, 1).
--define(DEFAULT_BUCKETS, 3).
+-define(DEFAULT_BUCKETS, 2).
 -define(DEFAULT_CACHE_TTL, 60).
 
 -spec prepare(erldns_pipeline:opts()) -> disabled | erldns_pipeline:opts().

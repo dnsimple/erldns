@@ -42,7 +42,7 @@ See `m:segmented_cache` for telemetry events under this module name.
 -export([prepare/1, call/2]).
 -export([start_link/0, clear/0]).
 
--define(DEFAULT_CACHE_BUCKETS, 3).
+-define(DEFAULT_BUCKETS, 3).
 -define(DEFAULT_CACHE_TTL, 30).
 
 -spec prepare(erldns_pipeline:opts()) -> disabled | erldns_pipeline:opts().
@@ -80,8 +80,8 @@ start_link() ->
         true ->
             Config = #{
                 scope => erldns,
-                segment_num => ?DEFAULT_CACHE_BUCKETS,
-                ttl => {seconds, default_ttl() div ?DEFAULT_CACHE_BUCKETS}
+                segment_num => ?DEFAULT_BUCKETS,
+                ttl => {seconds, default_ttl() div ?DEFAULT_BUCKETS}
             },
             segmented_cache:start_link(?MODULE, Config)
     end.
