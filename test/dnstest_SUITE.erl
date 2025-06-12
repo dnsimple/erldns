@@ -25,8 +25,7 @@ init_per_suite(Config0) ->
     AppConfig = [
         {erldns, [
             {listeners, [#{name => inet_1, ip => {127, 0, 0, 1}, port => 8053}]},
-            {zones, #{path => code:priv_dir(dnstest)}},
-            {ff_use_txts_field, true}
+            {zones, #{path => code:priv_dir(dnstest)}}
         ]}
     ],
     Config = app_helper:start_erldns(Config0, AppConfig),
