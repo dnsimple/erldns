@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## 7.0.0-rc5
+
 - Rework zones loader [#230](https://github.com/dnsimple/erldns/pull/230)
 - Rework zones codecs [#231](https://github.com/dnsimple/erldns/pull/231)
 - Rework zones cache [#232](https://github.com/dnsimple/erldns/pull/232)
