@@ -1,24 +1,10 @@
-%% Copyright (c) 2012-2020, DNSimple Corporation
-%%
-%% Permission to use, copy, modify, and/or distribute this software for any
-%% purpose with or without fee is hereby granted, provided that the above
-%% copyright notice and this permission notice appear in all copies.
-%%
-%% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-%% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-%% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-%% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-%% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-%% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
 -module(erldns_packet_cache).
 -moduledoc """
 A basic packet cache that is used to avoid multiple lookups for the
 same question received within the cache TTL.
 
 In order to work correctly, it should be added to the packet pipeline twice,
-once early in the processing pipeline, and once _after_
+once early in the processing pipeline, and once _after_ the resolver.
 
 ## Configuration
 
@@ -33,7 +19,7 @@ once early in the processing pipeline, and once _after_
 
 ## Telemetry events
 
-See `m:segmented_cache` for telemetry events under this module name.
+- `[erldns, pipeline, cache]` spans as triggered by `m:segmented_cache`.
 """.
 
 -include_lib("dns_erlang/include/dns.hrl").
@@ -42,9 +28,10 @@ See `m:segmented_cache` for telemetry events under this module name.
 -export([prepare/1, call/2]).
 -export([start_link/0, clear/0]).
 
--define(DEFAULT_CACHE_BUCKETS, 3).
+-define(DEFAULT_BUCKETS, 3).
 -define(DEFAULT_CACHE_TTL, 30).
 
+-doc "`c:erldns_pipeline:prepare/1` callback.".
 -spec prepare(erldns_pipeline:opts()) -> disabled | erldns_pipeline:opts().
 prepare(Opts) ->
     case enabled() of
@@ -52,6 +39,7 @@ prepare(Opts) ->
         true -> Opts#{?MODULE => false}
     end.
 
+-doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
 %% We are authoritative so cache the packet and return the message.
 call(#dns_message{aa = true} = Msg, #{?MODULE := miss} = Opts) ->
@@ -79,9 +67,10 @@ start_link() ->
             ignore;
         true ->
             Config = #{
+                prefix => [erldns, pipeline, cache],
                 scope => erldns,
-                segment_num => ?DEFAULT_CACHE_BUCKETS,
-                ttl => {seconds, default_ttl() div ?DEFAULT_CACHE_BUCKETS}
+                segment_num => ?DEFAULT_BUCKETS,
+                ttl => {seconds, default_ttl() div ?DEFAULT_BUCKETS}
             },
             segmented_cache:start_link(?MODULE, Config)
     end.

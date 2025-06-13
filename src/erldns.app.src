@@ -15,8 +15,7 @@
         segmented_cache,
         worker_pool,
         ranch,
-        cowboy,
-        nodefinder
+        cowboy
     ]},
     {licenses, ["Apache-2.0"]},
     {links, [{"GitHub", "https://github.com/dnsimple/erldns"}]}

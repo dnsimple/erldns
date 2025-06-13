@@ -167,11 +167,10 @@ terminate(_, _) ->
 -spec prepare_codecs() -> {[encoder()], [decoder()]}.
 prepare_codecs() ->
     ZonesConfig = application:get_env(erldns, zones, #{}),
-    Modules = maps:get(codecs, ZonesConfig, []),
-    prepare_codecs(Modules).
+    prepare_codecs(ZonesConfig).
 
--spec prepare_codecs([module()]) -> {[encoder()], [decoder()]}.
-prepare_codecs(Modules) ->
+-spec prepare_codecs(erldns_zones:config()) -> {[encoder()], [decoder()]}.
+prepare_codecs(#{codecs := Modules}) ->
     lists:foldr(
         fun(Module, {AccEncoders, AccDecoders}) ->
             maybe
@@ -190,4 +189,6 @@ prepare_codecs(Modules) ->
         end,
         {[], []},
         Modules
-    ).
+    );
+prepare_codecs(#{}) ->
+    {[], []}.

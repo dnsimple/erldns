@@ -22,10 +22,9 @@
 
 -export([init/1]).
 
-%% Public API
 -spec start_link() -> supervisor:startlink_ret().
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, noargs).
 
 %% Garbage collect all processes.
 -spec gc() -> integer().
@@ -44,29 +43,16 @@ gc_registered(ProcessName) ->
     erlang:garbage_collect(Pid),
     ok.
 
-%% Callbacks
+-spec init(noargs) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init(_Args) ->
+    SupFlags = #{strategy => rest_for_one, intensity => 20, period => 10},
     Children =
         [
-            worker(erldns_pg, pg, [erldns]),
-            worker(erldns_zone_cache),
-            worker(erldns_zone_codec),
-            worker(erldns_zone_loader),
-            worker(erldns_packet_cache),
-            worker(erldns_query_throttle),
-            worker(erldns_handler),
-            worker(erldns_pipeline),
+            supervisor(erldns_zones),
+            supervisor(erldns_pipeline),
             supervisor(erldns_listeners)
         ],
-    {ok, {#{strategy => one_for_one, intensity => 20, period => 10}, Children}}.
+    {ok, {SupFlags, Children}}.
 
-worker(Name) ->
-    worker(Name, Name, []).
-worker(Name, Module, Args) ->
-    child(worker, Name, Module, Args).
-
-supervisor(Name) ->
-    child(supervisor, Name, Name, []).
-
-child(Type, Name, Module, Args) ->
-    #{id => Name, start => {Module, start_link, Args}, type => Type}.
+supervisor(Module) ->
+    #{id => Module, start => {Module, start_link, []}, type => supervisor}.

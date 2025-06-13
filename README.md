@@ -2,62 +2,93 @@
 
 Serve DNS authoritative responses... with Erlang.
 
+[![Erlang/OTP Versions](https://img.shields.io/badge/erlang%2Fotp-27%7C28-blue)](https://www.erlang.org)
 [![Build Status](https://github.com/dnsimple/erldns/actions/workflows/ci.yml/badge.svg)](https://github.com/dnsimple/erldns/actions/workflows/ci.yml)
 [![Module Version](https://img.shields.io/hexpm/v/erldns.svg)](https://hex.pm/packages/erldns)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/erldns/)
+[![Hex Downloads](https://img.shields.io/hexpm/dt/erldns.svg)](https://hex.pm/packages/erldns)
+[![Coverage Status](https://coveralls.io/repos/github/dnsimple/erldns/badge.svg?branch=main)](https://coveralls.io/github/dnsimple/erldns?branch=main)
 
-## Requirements
+This application consists of three main subsystems:
 
-Erlang/OTP 27+
+- `m:erldns_zones`
+The system responsible for loading and caching zone data.
+
+- `m:erldns_pipeline`
+The system responsible for processing incoming DNS queries.
+
+- `m:erldns_listeners`
+The system responsible for listening for incoming DNS queries. The system is designed to be able to listen on multiple ports and interfaces and supports both UDP and TCP, Unix network stack optimisations, and high parallelism.
+
+There is also an administrative API for querying the current zone cache and for basic control.
+You can read more about it at `m:erldns_admin`.
+
+## Instrumentation
+
+[Telemetry](https://hex.pm/packages/telemetry) is used to instrument the code.
+
+All events are divided in the following namespaces:
+
+- `[erldns, pipeline | _]` are triggered by the `m:erldns_pipeline` subsystem.
+- `[erldns, request | _]` are triggered by the `m:erldns_listeners` subsystem.
+
+## Getting started
+
+You can use this application as a standalone service or embedded into your OTP application. In both
+cases, you'll need to: configure it, and load zones.
+
+### Zones
+
+Zones are loaded from JSON files in the `priv/zones/` directory. The path is configured in `erldns.config` using the `zones.path` setting. For more details about zone file format and configuration, see [`priv/zones/ZONES`](priv/zones/ZONES.md).
+
+### Configuration
+
+An example configuration file can be found in `erldns.example.config`. For more details, see the
+subsystems and the admin API documentation.
+
+To get started, copy it into your own `erldns.config` and modify as needed.
 
 ## Building
 
 To build:
 
-```shell
+```sh
 make
 ```
 
 To start fresh:
 
-```shell
+```sh
 make fresh
 make
 ```
-
-## Zones
-
-Zones are loaded from JSON files in the `priv/zones/` directory. The path is configured in `erldns.config` using the `zones.path` setting. For more details about zone file format and configuration, see [`priv/zones/README`](priv/zones/README.md).
-
-## Configuration
-
-An example configuration file can be found in `erldns.example.config`. Copy it to `erldns.config` and modify as needed.
 
 ## Running
 
 ### Launch directly
 
-```shell
+```sh
 overmind start
 ```
 
 ### To get an interactive Erlang REPL
 
-```shell
-./rebar3 shell
+```sh
+rebar3 shell
 ```
 
 ### Build a distribution with and run the release
 
-```shell
-./rebar3 release
-./_build/default/rel/erldns/bin/erldns foreground
+```sh
+rebar3 release
+_build/default/rel/erldns/bin/erldns foreground
 ```
 
 ## Querying
 
 Here are some queries to try:
 
-```bash
+```sh
 dig -p 8053 @127.0.0.1 example.com a
 dig -p 8053 @127.0.0.1 example.com cname
 dig -p 8053 @127.0.0.1 example.com ns
@@ -67,61 +98,32 @@ dig -p 8053 @127.0.0.1 example.com txt
 dig -p 8053 @127.0.0.1 example.com sshfp
 dig -p 8053 @127.0.0.1 example.com soa
 dig -p 8053 @127.0.0.1 example.com naptr
-
 dig -p 8053 @127.0.0.1 -x 127.0.0.1 ptr
 ```
 
 ## Performance
 
-In our environment (DNSimple) we are seeing 30 to 65 µs handoff times to retrieve a packet from the UDP port and give it to a worker for processing. Your performance may vary, but given those measurements erl-dns is capable of handling between 15k and 30k questions per second. Please note: You may need to configure the number of workers available to handle traffic at higher volumes.
-
-If you want to perform some benchmarks, see [`BENCHMARKING.md`](./BENCHMARKING.md).
-
-## Design
-
-The `erldns_resolver` module will attempt to find zone data in the zone cache. If you're embedding erl-dns in your application the easiest thing to do is to load the zone cache once the zone cache `gen_server` starts push an updated zone into the cache each time data changes.
-
-To insert a zone, use `erldns_zone_cache:put_zone({Name, Records})` where Name is a binary term such as <<"example.com">> and Records is a list of `dns_rr` records (whose definitions can be found in `deps/dns/include/dns_records.hrl`). The name of each record must be the fully qualified domain name (including the zone part).
-
-Here's an example:
-
-```erlang
-erldns_zone_cache:put_zone({
-  <<"example.com">>, [
-    #dns_rr{
-      name = <<"example.com">>,
-      type = ?DNS_TYPE_A,
-      ttl = 3600,
-      data = #dns_rrdata_a{ip = {1,2,3,4}}
-    },
-    #dns_rr{
-      name = <<"www.example.com">>,
-      type = ?DNS_TYPE_CNAME,
-      ttl = 3600,
-      data = #dns_rrdata_cname{dname = <<"example.com">>}
-    }
-  ]}).
-```
+If you want to perform some benchmarks, see [`benchmarking`](./BENCHMARKING.md).
 
 ### AXFR Support
 
 AXFR zone transfers are not currently implemented. The current "implementation" is just a stub.
 
-## Instrumentation
-
-[Telemetry](https://hex.pm/packages/telemetry) is used to instrument the code.
-
-## Admin
-
-There is an administrative API for querying the current zone cache and for basic control.
-You can read more about it at `m:erldns_admin`.
-
 ## Tests
 
 To run automated tests:
 
-```shell
+```sh
 make test
 ```
 
-This runs both [EUnit](https://www.erlang.org/doc/apps/eunit/chapter.html) tests and [dialyzer](https://www.erlang.org/docs/23/man/dialyzer.html).
+This runs the following:
+
+- [erlfmt](https://hex.pm/packages/erlfmt)
+- [Elvis linter](https://hex.pm/packages/elvis_core)
+- [xref](https://www.erlang.org/doc/apps/tools/xref.html)
+- [dialyzer](https://www.erlang.org/doc/apps/dialyzer/dialyzer.html)
+- [ExDoc](https://hexdocs.pm/ex_doc/readme.html)
+- [EUnit](https://www.erlang.org/doc/apps/eunit/chapter.html)
+- [Common Tests](https://www.erlang.org/doc/apps/common_test/ct.html)
+- [Coverage](https://www.erlang.org/doc/apps/tools/cover.html)
