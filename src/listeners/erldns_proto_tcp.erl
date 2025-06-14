@@ -6,40 +6,39 @@
 
 -behaviour(ranch_protocol).
 -export([start_link/3]).
--export([init/1]).
+-export([init/2]).
 -export([init_timer/2]).
 
--spec start_link(ranch:ref(), module(), any()) -> dynamic().
-start_link(Ref, _Transport, _Opts) ->
+-spec start_link(ranch:ref(), module(), non_neg_integer()) -> dynamic().
+start_link(Ref, _Transport, IngressTimeoutMs) ->
     SpawnOpts = [{min_heap_size, 500}],
-    proc_lib:start_link(?MODULE, init, [Ref], 5000, SpawnOpts).
+    proc_lib:start_link(?MODULE, init, [Ref, IngressTimeoutMs], 5000, SpawnOpts).
 
--spec init(ranch:ref()) -> dynamic().
-init(Ref) ->
+-spec init(ranch:ref(), non_neg_integer()) -> dynamic().
+init(Ref, IngressTimeoutMs) ->
     Self = self(),
     proc_lib:init_ack({ok, Self}),
     proc_lib:set_label(?MODULE),
     TS = erlang:monotonic_time(),
-    Timeout = erldns_config:ingress_tcp_request_timeout(),
-    {TimerPid, _Ref} = proc_lib:spawn_opt(?MODULE, init_timer, [Timeout, Self], [monitor]),
+    {TimerPid, _Ref} = proc_lib:spawn_opt(?MODULE, init_timer, [IngressTimeoutMs, Self], [monitor]),
     {ok, Socket} = ranch:handshake(Ref),
-    loop(Socket, TimerPid, TS, Timeout).
+    loop(Socket, TimerPid, TS, IngressTimeoutMs).
 
 -spec init_timer(integer(), pid()) -> any().
-init_timer(Timeout, Parent) ->
+init_timer(IngressTimeoutMs, Parent) ->
     receive
-    after Timeout ->
+    after IngressTimeoutMs ->
         exit(Parent, kill),
         ?LOG_WARNING(#{what => request_timeout, transport => tcp}),
         telemetry:execute([erldns, request, timeout], #{count => 1}, #{transport => tcp})
     end.
 
 -spec loop(dynamic(), pid(), integer(), integer()) -> dynamic().
-loop(Socket, TimerPid, TS, Timeout) ->
+loop(Socket, TimerPid, TS, IngressTimeoutMs) ->
     inet:setopts(Socket, [{active, once}]),
     receive
         {tcp, Socket, <<Len:16, Bin/binary>>} ->
-            loop(Socket, TimerPid, TS, Timeout, Len, Bin);
+            loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, Bin);
         {tcp_error, Socket, Reason} ->
             ?LOG_INFO(#{what => tcp_error, reason => Reason});
         {tcp_closed, Socket} ->
@@ -47,17 +46,27 @@ loop(Socket, TimerPid, TS, Timeout) ->
     end.
 
 -spec loop(inet:socket(), pid(), integer(), integer(), non_neg_integer(), binary()) -> dynamic().
-loop(Socket, TimerPid, TS, _, Len, Acc) when Len =:= byte_size(Acc) ->
-    handle(Socket, TimerPid, TS, Acc);
-loop(Socket, TimerPid, TS, Timeout, Len, Acc) ->
+loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, Acc) when Len =:= byte_size(Acc) ->
+    handle_if_within_time(Socket, TimerPid, TS, IngressTimeoutMs, Acc);
+loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, Acc) ->
     inet:setopts(Socket, [{active, once}]),
     receive
         {tcp, Socket, Bin} ->
-            loop(Socket, TimerPid, TS, Timeout, Len, <<Acc/binary, Bin/binary>>);
+            loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, <<Acc/binary, Bin/binary>>);
         {tcp_error, Socket, Reason} ->
             ?LOG_INFO(#{what => tcp_error, reason => Reason});
         {tcp_closed, Socket} ->
             ok
+    end.
+
+handle_if_within_time(Socket, TimerPid, TS, IngressTimeoutMs, Bin) ->
+    IngressTimeoutNative = erlang:convert_time_unit(IngressTimeoutMs, millisecond, native),
+    case IngressTimeoutNative =< erlang:monotonic_time() - TS of
+        false ->
+            handle(Socket, TimerPid, TS, Bin);
+        true ->
+            ?LOG_WARNING(#{what => request_timeout, transport => tcp}),
+            telemetry:execute([erldns, request, dropped], #{count => 1}, #{transport => tcp})
     end.
 
 -spec handle(inet:socket(), pid(), integer(), binary()) -> dynamic().

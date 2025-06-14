@@ -16,6 +16,8 @@ all() ->
         ip_must_be_inet_parseable,
         tcp_overrun,
         udp_overrun,
+        udp_drop_packets,
+        tcp_drop_packets,
         udp_reactivate,
         udp_coverage,
         udp_encoder_failure,
@@ -33,11 +35,18 @@ end_per_suite(_) ->
     [application:stop(App) || App <- [ranch, worker_pool, telemetry]].
 
 -spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> ct_suite:ct_config().
+init_per_testcase(Drops, Config) when Drops =:= udp_drop_packets; Drops =:= tcp_drop_packets ->
+    erlang:process_flag(trap_exit, true),
+    erlang:system_flag(schedulers_online, 1),
+    Config;
 init_per_testcase(_, Config) ->
     erlang:process_flag(trap_exit, true),
     Config.
 
 -spec end_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> term().
+end_per_testcase(Drops, Config) when Drops =:= udp_drop_packets; Drops =:= tcp_drop_packets ->
+    erlang:system_flag(schedulers_online, erlang:system_info(schedulers)),
+    Config;
 end_per_testcase(_, Config) ->
     Config.
 
@@ -156,7 +165,7 @@ tcp_overrun(_) ->
         {127, 0, 0, 1}, 8053, [binary, {packet, 2}, {active, false}], 1000
     ),
     ok = gen_tcp:send(Socket1, Packet),
-    assert_telemetry_event().
+    assert_telemetry_event(timeout).
 
 udp_overrun(_) ->
     TelemetryEventName = [erldns, request, timeout],
@@ -175,8 +184,50 @@ udp_overrun(_) ->
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
     ok = gen_udp:send(Socket, {127, 0, 0, 1}, 8053, Packet),
-    assert_telemetry_event(),
+    assert_telemetry_event(timeout),
     ok.
+
+tcp_drop_packets(_) ->
+    Iterations = 500,
+    TelemetryEventName = [erldns, request, timeout],
+    ok = telemetry:attach(
+        ?FUNCTION_NAME, TelemetryEventName, fun ?MODULE:telemetry_handler/4, self()
+    ),
+    Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A},
+    Msg = #dns_message{qc = 1, questions = [Q]},
+    Packet = dns:encode_message(Msg),
+    application:set_env(erldns, ingress_tcp_request_timeout, 50),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, transport => tcp, port => 8053}
+    ]),
+    application:set_env(erldns, packet_pipeline, [fun pause_pipe/2]),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    {ok, Socket1} = gen_tcp:connect(
+        {127, 0, 0, 1}, 8053, [binary, {packet, 2}, {active, false}], 1000
+    ),
+    [ok = gen_tcp:send(Socket1, Packet) || _ <- lists:seq(1, Iterations)],
+    assert_telemetry_event(timeout).
+
+udp_drop_packets(_) ->
+    Iterations = 500,
+    TelemetryEventName = [erldns, request, dropped],
+    ok = telemetry:attach(
+        ?FUNCTION_NAME, TelemetryEventName, fun ?MODULE:telemetry_handler/4, self()
+    ),
+    Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A},
+    Msg = #dns_message{qc = 1, questions = [Q]},
+    Packet = dns:encode_message(Msg),
+    application:set_env(erldns, ingress_udp_request_timeout, 50),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
+    ]),
+    application:set_env(erldns, packet_pipeline, [fun pause_pipe/2]),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    [ok = gen_udp:send(Socket, {127, 0, 0, 1}, 8053, Packet) || _ <- lists:seq(1, Iterations)],
+    assert_telemetry_event(dropped).
 
 udp_reactivate(_) ->
     Iterations = 5000,
@@ -277,9 +328,9 @@ telemetry_handler(EventName, Measurements, Metadata, Pid) ->
     ct:pal("EventName ~p~n", [EventName]),
     Pid ! {EventName, Measurements, Metadata}.
 
-assert_telemetry_event() ->
+assert_telemetry_event(Type) ->
     receive
-        {[erldns, request, timeout], _, _} ->
+        {[erldns, request, Type], _, _} ->
             ok;
         M ->
             ct:pal("Unexpected message ~p~n", [M]),
@@ -287,6 +338,10 @@ assert_telemetry_event() ->
     after 5000 ->
         ct:fail("Telemetry event not triggered")
     end.
+
+pause_pipe(A, _) ->
+    ct:sleep(35),
+    A.
 
 sleeping_pipe(A, _) ->
     ct:sleep(3000),

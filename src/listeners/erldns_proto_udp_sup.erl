@@ -29,9 +29,10 @@ child_specs(Name, PFactor, SocketOpts) ->
     [WorkersPool, AcceptorsPool].
 
 workers(WorkersName, NumWorkers, Timeout) ->
+    IngressTimeoutNative = erlang:convert_time_unit(Timeout, millisecond, native),
     WorkerOpts = #{
         workers => NumWorkers,
-        worker => {erldns_proto_udp, noargs},
+        worker => {erldns_proto_udp, IngressTimeoutNative},
         worker_opt => [],
         worker_shutdown => timer:seconds(1) + Timeout,
         pool_sup_shutdown => infinity,

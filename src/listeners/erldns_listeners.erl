@@ -63,6 +63,16 @@ count := non_neg_integer()
 ```erlang
 transport := udp | tcp
 ```
+
+### `[erldns, request, dropped]`
+- Measurements:
+```erlang
+count := non_neg_integer()
+```
+- Metadata:
+```erlang
+transport := udp | tcp
+```
 """.
 
 -behaviour(supervisor).
@@ -180,7 +190,7 @@ child_spec(Name, PFactor, tcp, SocketOpts0) ->
         handshake_timeout => Timeout,
         socket_opts => TcpSocketOpts
     },
-    [ranch:child_spec({?MODULE, Name}, ranch_tcp, TransOpts, erldns_proto_tcp, [])];
+    [ranch:child_spec({?MODULE, Name}, ranch_tcp, TransOpts, erldns_proto_tcp, Timeout)];
 child_spec(Name, PFactor, udp, SocketOpts) ->
     UdpSocketOpts = udp_opts(SocketOpts),
     [

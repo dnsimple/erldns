@@ -4,7 +4,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 
--compile({inline, [handle/5]}).
+-compile({inline, [handle_if_within_time/6, handle/5]}).
 
 -behaviour(gen_server).
 
@@ -15,16 +15,16 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -type task() :: {gen_udp:socket(), inet:ip_address(), inet:port_number(), integer(), binary()}.
--type state() :: nostate.
+-type state() :: non_neg_integer().
 
 -spec overrun_handler([{atom(), term()}, ...]) -> any().
 overrun_handler(Args) ->
     ?LOG_WARNING(maps:from_list([{what, request_timeout}, {transport, udp} | Args])),
     telemetry:execute([erldns, request, timeout], #{count => 1}, #{transport => udp}).
 
--spec init(noargs) -> {ok, state()}.
-init(noargs) ->
-    {ok, nostate}.
+-spec init(non_neg_integer()) -> {ok, state()}.
+init(IngressTimeoutNative) ->
+    {ok, IngressTimeoutNative}.
 
 -spec handle_call(term(), gen_server:from(), state()) -> {reply, not_implemented, state()}.
 handle_call(Call, From, State) ->
@@ -32,9 +32,9 @@ handle_call(Call, From, State) ->
     {reply, not_implemented, State}.
 
 -spec handle_cast(task(), state()) -> {noreply, state()}.
-handle_cast({Socket, IpAddr, Port, TS, Bin}, State) ->
-    handle(Socket, IpAddr, Port, TS, Bin),
-    {noreply, State};
+handle_cast({Socket, IpAddr, Port, TS, Bin}, IngressTimeoutNative) ->
+    handle_if_within_time(Socket, IpAddr, Port, TS, Bin, IngressTimeoutNative),
+    {noreply, IngressTimeoutNative};
 handle_cast(Cast, State) ->
     ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
     {noreply, State}.
@@ -43,6 +43,15 @@ handle_cast(Cast, State) ->
 handle_info(Info, State) ->
     ?LOG_INFO(#{what => unexpected_info, info => Info}),
     {noreply, State}.
+
+handle_if_within_time(Socket, IpAddr, Port, TS, Bin, IngressTimeoutNative) ->
+    case IngressTimeoutNative =< erlang:monotonic_time() - TS of
+        false ->
+            handle(Socket, IpAddr, Port, TS, Bin);
+        true ->
+            ?LOG_WARNING(#{what => request_timeout, transport => udp}),
+            telemetry:execute([erldns, request, dropped], #{count => 1}, #{transport => udp})
+    end.
 
 -spec handle(inet:socket(), inet:ip_address(), inet:port_number(), integer(), binary()) ->
     dynamic().
@@ -69,9 +78,13 @@ handle(Socket, IpAddr, Port, TS, Bin) ->
             telemetry:execute([erldns, request, error], #{count => 1}, MetaData)
     end.
 
--spec handle_decoded(
-    inet:socket(), inet:ip_address(), inet:port_number(), dns:message(), dynamic()
-) -> dynamic().
+-spec handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS0) -> Result when
+    Socket :: inet:socket(),
+    IpAddr :: inet:ip_address(),
+    Port :: inet:port_number(),
+    DecodedMessage :: dns:message(),
+    TS0 :: integer(),
+    Result :: dynamic().
 handle_decoded(_, _, _, #dns_message{qr = true}, _) ->
     {error, not_a_question};
 handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS0) ->
