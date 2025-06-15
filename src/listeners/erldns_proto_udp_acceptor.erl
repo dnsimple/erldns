@@ -7,13 +7,17 @@
 
 -behaviour(gen_server).
 
--export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
+-export([start_link/2, init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -record(udp_acceptor, {
     name :: atom(),
     socket :: gen_udp:socket()
 }).
 -type state() :: #udp_acceptor{}.
+
+-spec start_link(erldns_listeners:name(), [gen_udp:option()]) -> gen_server:start_ret().
+start_link(Name, SocketOpts) ->
+    gen_server:start_link(?MODULE, {Name, SocketOpts}, []).
 
 -spec init({atom(), [gen_udp:open_option()]}) -> {ok, state()}.
 init({Name, SocketOpts}) ->

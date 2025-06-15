@@ -138,13 +138,19 @@ get_stats({{ranch_embedded_sup, {?MODULE, Name}}, _, _, _}, #{} = Stats) ->
     Stats#{{Name, tcp} => #{queue_length => ActiveConns}};
 get_stats({Name, Sup, _, [erldns_proto_udp_sup]}, Stats) ->
     [
-        {Pool1, _, _, [wpool]},
+        {_, AccSup, _, [erldns_proto_udp_acceptor_sup]},
         {Pool2, _, _, [wpool]}
     ] = supervisor:which_children(Sup),
-    StatsPool1 = wpool:stats(Pool1),
-    StatsPool2 = wpool:stats(Pool2),
-    {_, TotalPool1} = lists:keyfind(total_message_queue_len, 1, StatsPool1),
-    {_, TotalPool2} = lists:keyfind(total_message_queue_len, 1, StatsPool2),
+    TotalPool1 = lists:foldl(
+        fun({_, Worker, _, _}, Acc) ->
+            {_, Count} = erlang:process_info(Worker, message_queue_len),
+            Acc + Count
+        end,
+        0,
+        supervisor:which_children(AccSup)
+    ),
+    StatsPool = wpool:stats(Pool2),
+    {_, TotalPool2} = lists:keyfind(total_message_queue_len, 1, StatsPool),
     Stats#{{Name, udp} => #{queue_length => TotalPool1 + TotalPool2}}.
 
 -spec child_specs() -> [supervisor:child_spec()].
