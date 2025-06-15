@@ -73,6 +73,16 @@ count := non_neg_integer()
 ```erlang
 transport := udp | tcp
 ```
+
+### `[erldns, request, delayed]`
+- Measurements:
+```erlang
+count := non_neg_integer()
+```
+- Metadata:
+```erlang
+transport := udp | tcp
+```
 """.
 
 -behaviour(supervisor).
@@ -143,6 +153,8 @@ get_stats() ->
     Children = supervisor:which_children(?MODULE),
     lists:foldl(fun get_stats/2, #{}, Children).
 
+get_stats({erldns_sch_mon, _, _, _}, #{} = Stats) ->
+    Stats;
 get_stats({{ranch_embedded_sup, {?MODULE, Name}}, _, _, _}, #{} = Stats) ->
     #{active_connections := ActiveConns} = ranch:info({?MODULE, Name}),
     Stats#{{Name, tcp} => #{queue_length => ActiveConns}};
@@ -166,7 +178,8 @@ get_stats({Name, Sup, _, [erldns_proto_udp_sup]}, Stats) ->
 -spec child_specs() -> [supervisor:child_spec()].
 child_specs() ->
     Listeners = application:get_env(erldns, listeners, []),
-    lists:flatmap(fun child_spec/1, Listeners).
+    SchedMon = #{id => erldns_sch_mon, start => {erldns_sch_mon, start_link, []}, type => worker},
+    [SchedMon | lists:flatmap(fun child_spec/1, Listeners)].
 
 -spec child_spec(config()) -> [supervisor:child_spec()].
 child_spec(Config) ->

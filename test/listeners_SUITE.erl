@@ -6,6 +6,12 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 
+-define(IS_PARALLEL(CT),
+    CT =:= udp_drop_packets;
+    CT =:= tcp_drop_packets;
+    CT =:= udp_load_shedding
+).
+
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
     [
@@ -17,9 +23,11 @@ all() ->
         tcp_overrun,
         udp_overrun,
         udp_drop_packets,
+        udp_load_shedding,
         tcp_drop_packets,
         udp_reactivate,
         udp_coverage,
+        sched_mon_coverage,
         udp_encoder_failure,
         tcp_encoder_failure,
         stats
@@ -35,7 +43,7 @@ end_per_suite(_) ->
     [application:stop(App) || App <- [ranch, worker_pool, telemetry]].
 
 -spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> ct_suite:ct_config().
-init_per_testcase(Drops, Config) when Drops =:= udp_drop_packets; Drops =:= tcp_drop_packets ->
+init_per_testcase(CT, Config) when ?IS_PARALLEL(CT) ->
     erlang:process_flag(trap_exit, true),
     erlang:system_flag(schedulers_online, 1),
     Config;
@@ -44,7 +52,7 @@ init_per_testcase(_, Config) ->
     Config.
 
 -spec end_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> term().
-end_per_testcase(Drops, Config) when Drops =:= udp_drop_packets; Drops =:= tcp_drop_packets ->
+end_per_testcase(CT, Config) when ?IS_PARALLEL(CT) ->
     erlang:system_flag(schedulers_online, erlang:system_info(schedulers)),
     Config;
 end_per_testcase(_, Config) ->
@@ -196,11 +204,14 @@ tcp_drop_packets(_) ->
     Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A},
     Msg = #dns_message{qc = 1, questions = [Q]},
     Packet = dns:encode_message(Msg),
-    application:set_env(erldns, ingress_tcp_request_timeout, 50),
-    application:set_env(erldns, listeners, [
-        #{name => ?FUNCTION_NAME, transport => tcp, port => 8053}
-    ]),
-    application:set_env(erldns, packet_pipeline, [fun pause_pipe/2]),
+    AppConfig = [
+        {erldns, [
+            {listeners, [#{name => ?FUNCTION_NAME, transport => tcp, port => 8053}]},
+            {packet_pipeline, [fun pause_pipe/2]},
+            {ingress_tcp_request_timeout, 50}
+        ]}
+    ],
+    application:set_env(AppConfig),
     ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     {ok, Socket1} = gen_tcp:connect(
@@ -218,16 +229,47 @@ udp_drop_packets(_) ->
     Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A},
     Msg = #dns_message{qc = 1, questions = [Q]},
     Packet = dns:encode_message(Msg),
-    application:set_env(erldns, ingress_udp_request_timeout, 50),
-    application:set_env(erldns, listeners, [
-        #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
-    ]),
-    application:set_env(erldns, packet_pipeline, [fun pause_pipe/2]),
+    AppConfig = [
+        {erldns, [
+            {listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]},
+            {packet_pipeline, [fun pause_pipe/2]},
+            {ingress_udp_request_timeout, 50}
+        ]}
+    ],
+    application:set_env(AppConfig),
     ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
     [ok = gen_udp:send(Socket, {127, 0, 0, 1}, 8053, Packet) || _ <- lists:seq(1, Iterations)],
     assert_telemetry_event(dropped).
+
+udp_load_shedding(_) ->
+    TelemetryEventName = [erldns, request, delayed],
+    ok = telemetry:attach(
+        ?FUNCTION_NAME, TelemetryEventName, fun ?MODULE:telemetry_handler/4, self()
+    ),
+    Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A},
+    Msg = #dns_message{qc = 1, questions = [Q]},
+    Packet = dns:encode_message(Msg),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    WasteFun = fun F() -> F() end,
+    BombardFun = fun F() ->
+        ok = gen_udp:send(Socket, {127, 0, 0, 1}, 8053, Packet),
+        F()
+    end,
+    AppConfig = [
+        {erldns, [
+            {listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]},
+            {packet_pipeline, []},
+            {ingress_udp_request_timeout, 50}
+        ]}
+    ],
+    application:set_env(AppConfig),
+    _ = [spawn_link(WasteFun) || _ <- lists:seq(1, erlang:system_info(schedulers))],
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    _ = [spawn_link(BombardFun) || _ <- lists:seq(1, erlang:system_info(schedulers))],
+    assert_telemetry_event(delayed).
 
 udp_reactivate(_) ->
     Iterations = 5000,
@@ -259,6 +301,23 @@ udp_coverage(_) ->
     wpool:call(WorkersPool, anything, random_worker),
     wpool:cast(WorkersPool, anything, random_worker),
     wpool_pool:random_worker(WorkersPool) ! anything.
+
+sched_mon_coverage(_) ->
+    AppConfig = [
+        {erldns, [
+            {listeners, []},
+            {packet_pipeline, []},
+            {ingress_udp_request_timeout, 50}
+        ]}
+    ],
+    application:set_env(AppConfig),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    Children = supervisor:which_children(erldns_listeners),
+    {_, Mon, _, _} = lists:keyfind(erldns_sch_mon, 1, Children),
+    Mon ! anything,
+    gen_server:cast(Mon, anything),
+    gen_server:call(Mon, anything),
+    ?assert(erlang:is_process_alive(Mon)).
 
 tcp_encoder_failure(_) ->
     Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A},
