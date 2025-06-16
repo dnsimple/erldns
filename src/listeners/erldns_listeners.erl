@@ -173,8 +173,7 @@ child_spec(Name, PFactor, tcp, SocketOpts0) ->
     TcpSocketOpts = tcp_opts(SocketOpts0, Timeout),
     Parallelism = erlang:system_info(schedulers),
     TransOpts = #{
-        %% Potentially introduce a cap on the concurrent QPS.
-        max_connections => 1024 * PFactor * Parallelism,
+        max_connections => Timeout,
         num_acceptors => PFactor * Parallelism,
         num_conns_sups => PFactor * Parallelism,
         num_listen_sockets => Parallelism,
