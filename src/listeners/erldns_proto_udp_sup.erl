@@ -43,7 +43,8 @@ workers(WorkersName, NumWorkers, Timeout) ->
         },
         overrun_warning => Timeout,
         overrun_handler => [{erldns_proto_udp, overrun_handler}],
-        max_overrun_warnings => 2
+        max_overrun_warnings => 2,
+        enable_queues => false
     },
     wpool:child_spec(WorkersName, WorkerOpts).
 
@@ -58,7 +59,8 @@ acceptors(AceptorsName, WorkersName, NumAcceptors, SocketOpts, Timeout) ->
             strategy => one_for_one,
             intensity => 1 + ceil(math:log2(NumAcceptors)),
             period => 5
-        }
+        },
+        enable_queues => false
     },
     wpool:child_spec(AceptorsName, AcceptorOpts).
 
