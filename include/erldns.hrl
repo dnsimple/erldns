@@ -1,6 +1,5 @@
 -ifndef('ERLDNS_H').
 -define('ERLDNS_H', ok).
--include_lib("dns_erlang/include/dns_records.hrl").
 
 -record(keyset, {
     key_signing_key :: crypto:rsa_private(),
