@@ -215,6 +215,14 @@ child_spec(Name, PFactor, tcp, SocketOpts0) ->
     TcpSocketOpts = tcp_opts(SocketOpts0, Timeout),
     Parallelism = erlang:system_info(schedulers),
     TransOpts = #{
+        alarms => #{
+            first_alarm => #{
+                type => num_connections,
+                threshold => Timeout,
+                cooldown => Timeout,
+                callback => fun trigger_delayed/4
+            }
+        },
         max_connections => Timeout,
         num_acceptors => PFactor * Parallelism,
         num_conns_sups => PFactor * Parallelism,
@@ -307,3 +315,7 @@ get_pfactor(Config) ->
         _ ->
             error({invalid_listener, parallel_factor, Config})
     end.
+
+trigger_delayed(_Ref, _Alarm, _SupPid, _ConnPids) ->
+    ?LOG_WARNING(#{what => tcp_acceptor_delayed, transport => tcp}),
+    telemetry:execute([erldns, request, delayed], #{count => 1}, #{transport => tcp}).
