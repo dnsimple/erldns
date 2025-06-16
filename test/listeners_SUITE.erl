@@ -30,7 +30,8 @@ all() ->
         sched_mon_coverage,
         udp_encoder_failure,
         tcp_encoder_failure,
-        stats
+        stats,
+        reset_queues
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -364,6 +365,36 @@ stats(_) ->
             {stats_1, tcp} := #{queue_length := _},
             {stats_2, tcp} := #{queue_length := _}
         },
+        erldns_listeners:get_stats()
+    ).
+
+reset_queues(_) ->
+    AppConfig = [
+        {erldns, [
+            {listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]},
+            {packet_pipeline, []},
+            {ingress_udp_request_timeout, 5000}
+        ]}
+    ],
+    application:set_env(AppConfig),
+    ?assertMatch({ok, _}, erldns_sup:start_link()),
+    Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A},
+    Msg = #dns_message{qc = 1, questions = [Q]},
+    Packet = dns:encode_message(Msg),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    BombardFun = fun F() ->
+        ok = gen_udp:send(Socket, {127, 0, 0, 1}, 8053, Packet),
+        F()
+    end,
+    Pids = [spawn_link(BombardFun) || _ <- lists:seq(1, 2 * erlang:system_info(schedulers))],
+    ?assertMatch(
+        #{{?FUNCTION_NAME, udp} := #{queue_length := N}} when 0 < N,
+        erldns_listeners:get_stats()
+    ),
+    [exit(Pid, kill) || Pid <- Pids],
+    ?assert(erldns_listeners:reset_queues()),
+    ?assertMatch(
+        #{{?FUNCTION_NAME, udp} := #{queue_length := 0}},
         erldns_listeners:get_stats()
     ).
 

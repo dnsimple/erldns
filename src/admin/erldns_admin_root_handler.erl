@@ -1,22 +1,14 @@
-%% Copyright (c) 2012-2019, DNSimple Corporation
-%%
-%% Permission to use, copy, modify, and/or distribute this software for any
-%% purpose with or without fee is hereby granted, provided that the above
-%% copyright notice and this permission notice appear in all copies.
-%%
-%% THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-%% WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-%% MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-%% ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-%% WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-%% ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-%% OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
 -module(erldns_admin_root_handler).
 -moduledoc false.
+-include_lib("kernel/include/logger.hrl").
 
 -export([init/2]).
--export([content_types_provided/2, is_authorized/2]).
+-export([
+    content_types_provided/2,
+    is_authorized/2,
+    allowed_methods/2,
+    delete_resource/2
+]).
 -export([to_html/2, to_json/2, to_text/2]).
 
 -behaviour(cowboy_rest).
@@ -26,6 +18,12 @@
     {cowboy_rest, cowboy_req:req(), erldns_admin:handler_state()}.
 init(Req, State) ->
     {cowboy_rest, Req, State}.
+
+-doc "Only GET and DELETE methods are allowed".
+-spec allowed_methods(cowboy_req:req(), erldns_admin:handler_state()) ->
+    {[binary()], cowboy_req:req(), erldns_admin:handler_state()}.
+allowed_methods(Req, State) ->
+    {[<<"GET">>, <<"DELETE">>], Req, State}.
 
 -doc false.
 -spec content_types_provided(cowboy_req:req(), erldns_admin:handler_state()) ->
@@ -59,6 +57,15 @@ to_html(Req, State) ->
     {cowboy_req:resp_body(), cowboy_req:req(), erldns_admin:handler_state()}.
 to_text(Req, State) ->
     {<<"erldns admin">>, Req, State}.
+
+-doc """
+Delete query queues
+""".
+-spec delete_resource(cowboy_req:req(), erldns_admin:handler_state()) ->
+    {boolean(), cowboy_req:req(), erldns_admin:handler_state()}.
+delete_resource(Req, State) ->
+    ?LOG_WARNING(#{what => resetting_listener_queues}),
+    {erldns_listeners:reset_queues(), Req, State}.
 
 -doc "Return information about the zones in the cache.".
 -spec to_json(cowboy_req:req(), erldns_admin:handler_state()) ->

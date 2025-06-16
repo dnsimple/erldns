@@ -87,6 +87,8 @@ transport := udp | tcp
 
 -behaviour(supervisor).
 
+-include_lib("kernel/include/logger.hrl").
+
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_IP, any).
 
@@ -133,7 +135,7 @@ Statistics about each listener.
 }.
 -export_type([name/0, transport/0, parallel_factor/0, config/0, stats/0]).
 
--export([start_link/0, init/1, get_stats/0]).
+-export([start_link/0, init/1, get_stats/0, reset_queues/0]).
 
 -doc false.
 -spec start_link() -> supervisor:startlink_ret().
@@ -145,9 +147,26 @@ start_link() ->
 init(noargs) ->
     {ok, {#{strategy => one_for_one}, child_specs()}}.
 
--doc """
-Get statistics about all listeners.
-""".
+-doc "Reset all queues by restarting all listeners.".
+-spec reset_queues() -> boolean().
+reset_queues() ->
+    case supervisor:terminate_child(erldns_sup, ?MODULE) of
+        ok ->
+            case supervisor:restart_child(erldns_sup, ?MODULE) of
+                {ok, _} ->
+                    true;
+                {error, Reason} ->
+                    ?LOG_ERROR(#{
+                        what => failed_to_restart_listeners, step => restart, reason => Reason
+                    }),
+                    false
+            end;
+        {error, Reason} ->
+            ?LOG_ERROR(#{what => failed_to_restart_listeners, step => terminate, reason => Reason}),
+            false
+    end.
+
+-doc "Get statistics about all listeners.".
 -spec get_stats() -> stats().
 get_stats() ->
     Children = supervisor:which_children(?MODULE),
