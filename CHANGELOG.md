@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+- Introduce backpressure and load shedding [#240](https://github.com/dnsimple/erldns/pull/240)
+
 ## 7.0.0-rc5
 
 - Rework zones loader [#230](https://github.com/dnsimple/erldns/pull/230)
