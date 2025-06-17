@@ -195,10 +195,10 @@ Will also return true if a wildcard is present at the node.
 record_name_in_zone(ZoneName, Name) ->
     NormalizedName = dns:dname_to_lower(Name),
     NormalizedZoneName = dns:dname_to_lower(ZoneName),
-    case find_zone_in_cache(NormalizedName, #zone.name) of
+    case find_zone_in_cache(NormalizedName, member) of
         zone_not_found ->
             false;
-        ZoneName ->
+        true ->
             Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '_'}, [], [true]},
             case ets:select_count(zone_records_typed, [Pattern]) of
                 0 ->
