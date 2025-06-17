@@ -74,9 +74,10 @@ handle(Socket, IpAddr, Port, TS, Bin) ->
 ) -> dynamic().
 handle_decoded(_, _, _, #dns_message{qr = true}, _) ->
     {error, not_a_question};
-handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS0) ->
+handle_decoded(Socket, IpAddr, Port, DecodedMessage0, TS0) ->
+    DecodedMessage = normalize_edns_max_payload_size(DecodedMessage0),
     Response = erldns_pipeline:call(DecodedMessage, #{transport => udp, host => IpAddr}),
-    Result = erldns_encoder:encode_message(Response, #{max_size => max_payload_size(Response)}),
+    Result = erldns_encoder:encode_message(Response, #{}),
     EncodedResponse =
         case Result of
             {false, Enc} -> Enc;
@@ -88,16 +89,19 @@ handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS0) ->
     ?LOG_DEBUG(#{what => tcp_request, request => DecodedMessage, response => Response}),
     measure_time(DecodedMessage, EncodedResponse, TS0).
 
--spec max_payload_size(dns:message()) -> pos_integer().
-max_payload_size(Message) ->
+-spec normalize_edns_max_payload_size(dns:message()) -> dns:message().
+normalize_edns_max_payload_size(Message) ->
     case Message#dns_message.additional of
-        [#dns_optrr{udp_payload_size = Size} | _] ->
+        [#dns_optrr{udp_payload_size = Size} = OptRR | RestAdditional] ->
             case ?MIN_PACKET_SIZE =< Size andalso Size =< ?MAX_PACKET_SIZE of
-                true -> Size;
-                false -> ?MAX_PACKET_SIZE
+                true ->
+                    Message;
+                false ->
+                    OptRR1 = OptRR#dns_optrr{udp_payload_size = ?MAX_PACKET_SIZE},
+                    Message#dns_message{additional = [OptRR1 | RestAdditional]}
             end;
         _ ->
-            ?MIN_PACKET_SIZE
+            Message
     end.
 
 measure_time(DecodedMessage, EncodedResponse, TS0) ->

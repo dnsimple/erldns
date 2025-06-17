@@ -15,6 +15,7 @@ all() ->
         p_factor_must_be_positive,
         ip_must_be_inet_parseable,
         tcp_overrun,
+        udp_payload_size,
         udp_overrun,
         udp_reactivate,
         udp_coverage,
@@ -157,6 +158,23 @@ tcp_overrun(_) ->
     ),
     ok = gen_tcp:send(Socket1, Packet),
     assert_telemetry_event().
+
+udp_payload_size(_) ->
+    AppConfig = [
+        {erldns, [
+            {listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]},
+            {packet_pipeline, []}
+        ]}
+    ],
+    application:set_env(AppConfig),
+    Q = #dns_query{name = ~"example.com", type = ?DNS_TYPE_A},
+    Msg = #dns_message{qc = 1, questions = [Q]},
+    Packet = dns:encode_message(Msg),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    Response = request_response(udp, Socket, Packet),
+    ?assertMatch(Msg, Response).
 
 udp_overrun(_) ->
     TelemetryEventName = [erldns, request, timeout],
