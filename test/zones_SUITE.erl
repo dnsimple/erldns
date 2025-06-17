@@ -49,6 +49,7 @@ groups() ->
             parse_json_keys_unsorted_proplists
         ]},
         {cache, [], [
+            record_name_in_zone,
             put_zone_rrset_records_count_with_existing_rrset,
             put_zone_rrset_records_count_with_new_rrset,
             put_zone_rrset_records_count_matches_cache,
@@ -95,6 +96,12 @@ end_per_group(loader, _Config) ->
 
 -spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_testcase(_, Config) ->
+    case proplists:get_value(name, proplists:get_value(tc_group_properties, Config, [])) of
+        cache ->
+            setup_test(Config, ?FUNCTION_NAME);
+        _ ->
+            ok
+    end,
     Config.
 
 -spec end_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> term().
@@ -513,8 +520,36 @@ wildcard_loose(Config) ->
     application:set_env(erldns, zones, #{strict => false, path => DataDir}),
     ?assertMatch(4, erldns_zone_loader:load_zones()).
 
-put_zone_rrset_records_count_with_existing_rrset(Config) ->
-    setup_test(Config, ?FUNCTION_NAME),
+record_name_in_zone(_) ->
+    ZoneName = ~"EXAMPLE.COM",
+    Qname = ~"FRESH-ACADEMY.EXAMPLE.COM",
+    NormalizedName = dns:dname_to_lower(Qname),
+    NormalizedZoneName = dns:dname_to_lower(ZoneName),
+    NS = #dns_rr{
+        name = NormalizedName,
+        type = ?DNS_TYPE_NS,
+        data = #dns_rrdata_ns{dname = ~"ns1.dnsimple.com"},
+        ttl = 3600
+    },
+    SOA = #dns_rr{
+        name = NormalizedZoneName,
+        type = ?DNS_TYPE_SOA,
+        data =
+            #dns_rrdata_soa{
+                mname = ~"ns1.dnsimple.com",
+                rname = ~"admin.dnsimple.com",
+                serial = 12345,
+                refresh = 555,
+                retry = 666,
+                expire = 777,
+                minimum = 888
+            },
+        ttl = 3600
+    },
+    erldns_zone_cache:put_zone({NormalizedZoneName, ~"_", [NS, SOA]}),
+    ?assertMatch(true, erldns_zone_cache:record_name_in_zone(ZoneName, Qname)).
+
+put_zone_rrset_records_count_with_existing_rrset(_) ->
     ZoneName = ~"example.com",
     ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     erldns_zone_cache:put_zone_rrset(
@@ -536,8 +571,7 @@ put_zone_rrset_records_count_with_existing_rrset(Config) ->
     % There should be no change in record count
     ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count).
 
-put_zone_rrset_records_count_with_new_rrset(Config) ->
-    setup_test(Config, ?FUNCTION_NAME),
+put_zone_rrset_records_count_with_new_rrset(_) ->
     ZoneName = ~"example.com",
     ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     erldns_zone_cache:put_zone_rrset(
@@ -559,8 +593,7 @@ put_zone_rrset_records_count_with_new_rrset(Config) ->
     % New RRSet is being added with one record we should see an increase by 1
     ?assertEqual(ZoneBase#zone.record_count + 1, ZoneModified#zone.record_count).
 
-put_zone_rrset_records_count_matches_cache(Config) ->
-    setup_test(Config, ?FUNCTION_NAME),
+put_zone_rrset_records_count_matches_cache(_) ->
     ZoneName = ~"example.com",
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, ~"irrelevantDigest",
@@ -583,8 +616,7 @@ put_zone_rrset_records_count_matches_cache(Config) ->
         length(erldns_zone_cache:get_zone_records(ZoneName)), ZoneModified#zone.record_count
     ).
 
-put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset(Config) ->
-    setup_test(Config, ?FUNCTION_NAME),
+put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset(_) ->
     ZoneName = ~"example-dnssec.com",
     Zone = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     erldns_zone_cache:put_zone_rrset(
@@ -606,8 +638,7 @@ put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset(Config) ->
     % New RRSet entry for the CNAME + 1 RRSig record
     ?assertEqual(Zone#zone.record_count + 2, ZoneModified#zone.record_count).
 
-delete_zone_rrset_records_count_width_existing_rrset(Config) ->
-    setup_test(Config, ?FUNCTION_NAME),
+delete_zone_rrset_records_count_width_existing_rrset(_) ->
     ZoneName = ~"example.com",
     ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     erldns_zone_cache:delete_zone_rrset(
@@ -621,8 +652,7 @@ delete_zone_rrset_records_count_width_existing_rrset(Config) ->
     % Deletes a CNAME RRSet with one record
     ?assertEqual(ZoneBase#zone.record_count - 1, ZoneModified#zone.record_count).
 
-delete_zone_rrset_records_count_width_dnssec_zone_and_existing_rrset(Config) ->
-    setup_test(Config, ?FUNCTION_NAME),
+delete_zone_rrset_records_count_width_dnssec_zone_and_existing_rrset(_) ->
     ZoneName = ~"example-dnssec.com",
     ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
     erldns_zone_cache:delete_zone_rrset(
@@ -636,8 +666,7 @@ delete_zone_rrset_records_count_width_dnssec_zone_and_existing_rrset(Config) ->
     % Deletes a CNAME RRSet with one record + RRSig
     ?assertEqual(ZoneBase#zone.record_count - 2, ZoneModified#zone.record_count).
 
-delete_zone_rrset_records_count_matches_cache(Config) ->
-    setup_test(Config, ?FUNCTION_NAME),
+delete_zone_rrset_records_count_matches_cache(_) ->
     ZoneName = ~"example-dnssec.com",
     erldns_zone_cache:delete_zone_rrset(
         ZoneName,
