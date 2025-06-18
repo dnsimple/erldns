@@ -289,10 +289,20 @@ put_zone(#zone{name = Name} = Zone) ->
 
 -doc "Put zone RRSet".
 -spec put_zone_rrset(RRSet, RRFqdn, Type, Counter) -> ok | {error, term()} when
-    RRSet :: {dns:dname(), binary(), [dns:rr()]} | {dns:dname(), binary(), [dns:rr()], [term()]},
+    RRSet ::
+        erldns:zone()
+        | {dns:dname(), binary(), [dns:rr()]}
+        | {dns:dname(), binary(), [dns:rr()], [term()]},
     RRFqdn :: dns:dname(),
     Type :: dns:type(),
     Counter :: integer().
+put_zone_rrset(
+    #zone{name = ZoneName, version = Digest, records = Records, keysets = KeySets},
+    RRFqdn,
+    Type,
+    Counter
+) ->
+    put_zone_rrset({ZoneName, Digest, Records, KeySets}, RRFqdn, Type, Counter);
 put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter) ->
     put_zone_rrset({ZoneName, Digest, Records, []}, RRFqdn, Type, Counter);
 put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
