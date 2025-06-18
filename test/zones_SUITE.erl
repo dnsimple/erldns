@@ -50,6 +50,7 @@ groups() ->
         ]},
         {cache, [], [
             record_name_in_zone,
+            put_zone_rrset_zone,
             put_zone_rrset_records_count_with_existing_rrset,
             put_zone_rrset_records_count_with_new_rrset,
             put_zone_rrset_records_count_matches_cache,
@@ -548,6 +549,31 @@ record_name_in_zone(_) ->
     },
     erldns_zone_cache:put_zone({NormalizedZoneName, ~"_", [NS, SOA]}),
     ?assertMatch(true, erldns_zone_cache:record_name_in_zone(ZoneName, Qname)).
+
+put_zone_rrset_zone(_) ->
+    ZoneName = ~"example.com",
+    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    Zone = #zone{
+        name = ZoneName,
+        version = ~"irrelevantDigest",
+        records = [
+            #dns_rr{
+                data = #dns_rrdata_cname{dname = ~"google.com"},
+                name = ~"cname.example.com",
+                ttl = 5,
+                type = 5
+            }
+        ]
+    },
+    erldns_zone_cache:put_zone_rrset(
+        Zone,
+        ~"cname.example.com",
+        5,
+        1
+    ),
+    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    % There should be no change in record count
+    ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count).
 
 put_zone_rrset_records_count_with_existing_rrset(_) ->
     ZoneName = ~"example.com",
