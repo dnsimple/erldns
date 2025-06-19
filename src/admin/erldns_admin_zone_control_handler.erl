@@ -70,5 +70,8 @@ to_text(Req, State) ->
 to_json(Req, State) ->
     Name = cowboy_req:binding(zone_name, Req),
     Action = cowboy_req:binding(action, Req),
-    ?LOG_DEBUG(#{what => get_zone_control_call, zone => Name, action => Action}),
+    ?LOG_DEBUG(
+        #{what => get_zone_control_call, zone => Name, action => Action},
+        #{domain => [erldns, admin]}
+    ),
     {<<>>, Req, State}.

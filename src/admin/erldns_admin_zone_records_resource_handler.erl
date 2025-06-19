@@ -85,18 +85,24 @@ to_json(Req, State) ->
     Params = cowboy_req:parse_qs(Req),
     case lists:keyfind(<<"type">>, 1, Params) of
         false ->
-            ?LOG_DEBUG(#{what => get_zone_resource_call, zone => ZoneName, record => RecordName}),
+            ?LOG_DEBUG(
+                #{what => get_zone_resource_call, zone => ZoneName, record => RecordName},
+                #{domain => [erldns, admin]}
+            ),
             Opts = #{mode => {zone_records_to_json, RecordName}},
             Json = erldns_zone_codec:encode(ZoneName, Opts),
             Response = iolist_to_binary(json:encode(Json)),
             {Response, Req, State};
         {<<"type">>, RecordType} ->
-            ?LOG_DEBUG(#{
-                what => get_zone_resource_call,
-                zone => ZoneName,
-                record => RecordName,
-                type => RecordType
-            }),
+            ?LOG_DEBUG(
+                #{
+                    what => get_zone_resource_call,
+                    zone => ZoneName,
+                    record => RecordName,
+                    type => RecordType
+                },
+                #{domain => [erldns, admin]}
+            ),
             Opts = #{mode => {zone_records_to_json, RecordName, RecordType}},
             Json = erldns_zone_codec:encode(ZoneName, Opts),
             Response = iolist_to_binary(json:encode(Json)),

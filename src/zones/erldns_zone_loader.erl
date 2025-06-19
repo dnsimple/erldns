@@ -25,7 +25,7 @@ See the type `t:erldns_zones:config/0` for details.
 -doc "Load zones.".
 -spec load_zones() -> non_neg_integer().
 load_zones() ->
-    ?LOG_INFO(#{what => loading_zones_from_local_files}),
+    ?LOG_INFO(#{what => loading_zones_from_local_files}, #{domain => [erldns, zones]}),
     Count =
         case get_config() of
             #{path := Path, strict := Strict} ->
@@ -33,7 +33,10 @@ load_zones() ->
             _ ->
                 0
         end,
-    ?LOG_INFO(#{what => loaded_zones_from_local_files, zone_count => Count}),
+    ?LOG_INFO(
+        #{what => loaded_zones_from_local_files, zone_count => Count},
+        #{domain => [erldns, zones]}
+    ),
     Count.
 
 -doc """
@@ -224,11 +227,11 @@ init(noargs) ->
 -spec handle_call(dynamic(), gen_server:from(), nostate) ->
     {reply, not_implemented, nostate}.
 handle_call(Call, From, State) ->
-    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}),
+    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, #{domain => [erldns, zones]}),
     {reply, not_implemented, State}.
 
 -doc false.
 -spec handle_cast(dynamic(), nostate) -> {noreply, nostate}.
 handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, #{domain => [erldns, zones]}),
     {noreply, State}.

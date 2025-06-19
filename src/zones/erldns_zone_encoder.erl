@@ -31,7 +31,6 @@ encode(Zone, #{mode := zone_to_json}, Encoders) ->
             }
     }.
 
--doc "Encode a Zone meta data into JSON.".
 -spec zone_meta_to_json(erldns:zone()) -> json:encode_value().
 zone_meta_to_json(Zone) ->
     #{
@@ -72,10 +71,8 @@ encode(Encoders) ->
     fun(Record) -> encode_record(Record, Encoders) end.
 
 encode_record(Record, Encoders) ->
-    % ?LOG_DEBUG("Encoding record (record: ~p)", [Record]),
     case encode_record(Record) of
-        [] ->
-            % ?LOG_DEBUG("Trying custom encoders (encoders: ~p)", [Encoders]),
+        not_implemented ->
             try_custom_encoders(Record, Encoders);
         EncodedRecord ->
             EncodedRecord
@@ -118,8 +115,8 @@ encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_CDNSKEY, ttl = Ttl, d
 encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_RRSIG, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
-    ?LOG_WARNING("Unable to encode record (record: ~p)", [Record]),
-    [].
+    ?LOG_WARNING(#{what => unable_to_encode_record, record => Record}, #{domain => [erldns, zones]}),
+    not_implemented.
 
 encode_record(Name, Type, Ttl, Data) ->
     #{
@@ -129,71 +126,97 @@ encode_record(Name, Type, Ttl, Data) ->
         ~"content" => encode_data(Data)
     }.
 
-try_custom_encoders(_Record, []) ->
-    {};
+try_custom_encoders(_, []) ->
+    not_implemented;
 try_custom_encoders(Record, [Encoder | Rest]) ->
-    % ?LOG_DEBUG("Trying custom encoder (encoder: ~p)", [Encoder]),
     case Encoder(Record) of
-        [] ->
+        not_implemented ->
             try_custom_encoders(Record, Rest);
         EncodedData ->
             EncodedData
     end.
 
-encode_data({dns_rrdata_soa, Mname, Rname, Serial, Refresh, Retry, Expire, Minimum}) ->
+encode_data(#dns_rrdata_soa{
+    mname = Mname,
+    rname = Rname,
+    serial = Serial,
+    refresh = Refresh,
+    retry = Retry,
+    expire = Expire,
+    minimum = Minimum
+}) ->
     erlang:iolist_to_binary(
         io_lib:format("~s. ~s. (~w ~w ~w ~w ~w)", [
             Mname, Rname, Serial, Refresh, Retry, Expire, Minimum
         ])
     );
-encode_data({dns_rrdata_ns, Dname}) ->
+encode_data(#dns_rrdata_ns{dname = Dname}) ->
     erlang:iolist_to_binary(io_lib:format("~s.", [Dname]));
-encode_data({dns_rrdata_a, Address}) ->
+encode_data(#dns_rrdata_a{ip = Address}) ->
     list_to_binary(inet_parse:ntoa(Address));
-encode_data({dns_rrdata_aaaa, Address}) ->
+encode_data(#dns_rrdata_aaaa{ip = Address}) ->
     list_to_binary(inet_parse:ntoa(Address));
-encode_data({dns_rrdata_caa, Flags, Tag, Value}) ->
+encode_data(#dns_rrdata_caa{flags = Flags, tag = Tag, value = Value}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~s \"~s\"", [Flags, Tag, Value]));
-encode_data({dns_rrdata_cname, Dname}) ->
+encode_data(#dns_rrdata_cname{dname = Dname}) ->
     erlang:iolist_to_binary(io_lib:format("~s.", [Dname]));
-encode_data({dns_rrdata_mx, Preference, Dname}) ->
+encode_data(#dns_rrdata_mx{preference = Preference, exchange = Dname}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~s.", [Preference, Dname]));
-encode_data({dns_rrdata_hinfo, Cpu, Os}) ->
+encode_data(#dns_rrdata_hinfo{cpu = Cpu, os = Os}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~w", [Cpu, Os]));
-% RP
-encode_data({dns_rrdata_txt, Text}) ->
+encode_data(#dns_rrdata_txt{txt = Text}) ->
     erlang:iolist_to_binary(io_lib:format("~s", [Text]));
-encode_data({dns_rrdata_spf, [Data]}) ->
+encode_data(#dns_rrdata_spf{spf = Data}) ->
     erlang:iolist_to_binary(io_lib:format("~s", [Data]));
-encode_data({dns_rrdata_sshfp, Alg, Fptype, Fp}) ->
+encode_data(#dns_rrdata_sshfp{alg = Alg, fp_type = Fptype, fp = Fp}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~w ~s", [Alg, Fptype, Fp]));
-encode_data({dns_rrdata_srv, Priority, Weight, Port, Dname}) ->
+encode_data(#dns_rrdata_srv{priority = Priority, weight = Weight, port = Port, target = Dname}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~w ~w ~s.", [Priority, Weight, Port, Dname]));
-encode_data({dns_rrdata_naptr, Order, Preference, Flags, Services, Regexp, Replacements}) ->
+encode_data(#dns_rrdata_naptr{
+    order = Order,
+    preference = Preference,
+    flags = Flags,
+    services = Services,
+    regexp = Regexp,
+    replacement = Replacements
+}) ->
     erlang:iolist_to_binary(
         io_lib:format("~w ~w ~s ~s ~s ~s", [
             Order, Preference, Flags, Services, Regexp, Replacements
         ])
     );
-encode_data({dns_rrdata_ds, KeyTag, Alg, DigestType, Digest}) ->
+encode_data(#dns_rrdata_ds{keytag = KeyTag, alg = Alg, digest_type = DigestType, digest = Digest}) ->
     escape_chars(
         io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest])
     );
-encode_data({dns_rrdata_cds, KeyTag, Alg, DigestType, Digest}) ->
+encode_data(#dns_rrdata_cds{keytag = KeyTag, alg = Alg, digest_type = DigestType, digest = Digest}) ->
     escape_chars(
         io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest])
     );
-encode_data({dns_rrdata_dnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
+encode_data(#dns_rrdata_dnskey{
+    flags = Flags, protocol = Protocol, alg = Alg, public_key = Key, keytag = KeyTag
+}) ->
     escape_chars(
         io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])
     );
-encode_data({dns_rrdata_cdnskey, Flags, Protocol, Alg, Key, KeyTag}) ->
+encode_data(#dns_rrdata_cdnskey{
+    flags = Flags, protocol = Protocol, alg = Alg, public_key = Key, keytag = KeyTag
+}) ->
     escape_chars(
         io_lib:format("~w ~w ~w ~w ~w", [Flags, Protocol, Alg, Key, KeyTag])
     );
 encode_data(
-    {dns_rrdata_rrsig, TypeCovered, Alg, Labels, OriginalTtl, Expiration, Inception, KeyTag,
-        SignersName, Signature}
+    #dns_rrdata_rrsig{
+        type_covered = TypeCovered,
+        alg = Alg,
+        labels = Labels,
+        original_ttl = OriginalTtl,
+        expiration = Expiration,
+        inception = Inception,
+        keytag = KeyTag,
+        signers_name = SignersName,
+        signature = Signature
+    }
 ) ->
     escape_chars(
         io_lib:format(
@@ -212,9 +235,10 @@ encode_data(
         )
     );
 encode_data(Data) ->
-    ?LOG_INFO("Unable to encode rrdata (module: ~p, event: ~p, data: ~p)", [
-        ?MODULE, unsupported_rrdata_type, Data
-    ]),
+    ?LOG_INFO(
+        #{what => unable_to_encode_rrdata, data => Data},
+        #{domain => [erldns, zones]}
+    ),
     not_implemented.
 
 escape_chars(IoList) ->

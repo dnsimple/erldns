@@ -57,13 +57,16 @@ call(Msg, #{host := Host}, AuthorityRecords) ->
             telemetry:execute([erldns, pipeline, resolver, error], #{count => 1}, #{rc => RC}),
             Msg#dns_message{aa = false, rc = RC};
         Class:Reason:Stacktrace ->
-            ?LOG_ERROR(#{
-                what => resolve_error,
-                dns_message => Msg,
-                class => Class,
-                reason => Reason,
-                stacktrace => Stacktrace
-            }),
+            ?LOG_ERROR(
+                #{
+                    what => resolve_error,
+                    dns_message => Msg,
+                    class => Class,
+                    reason => Reason,
+                    stacktrace => Stacktrace
+                },
+                #{domain => [erldns, pipeline]}
+            ),
             telemetry:execute([erldns, pipeline, resolver, error], #{count => 1}, #{
                 rc => ?DNS_RCODE_SERVFAIL
             }),
@@ -287,7 +290,10 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
     dns:message().
 resolve_exact_type_match(Message, Qname, ?DNS_TYPE_NS, Host, CnameChain, MatchedRecords, Zone, []) ->
     % There was an exact type match for an NS query, however there is no SOA record for the zone.
-    ?LOG_INFO("Exact match for NS with no SOA in the zone (qname: ~p)", [Qname]),
+    ?LOG_INFO(
+        #{what => exact_match_for_ns_with_no_soa, qname => Qname},
+        #{domain => [erldns, pipeline]}
+    ),
     Answer = lists:last(MatchedRecords),
     Name = Answer#dns_rr.name,
     % It isn't clear what the QTYPE should be on a delegated restart. I assume an A record.

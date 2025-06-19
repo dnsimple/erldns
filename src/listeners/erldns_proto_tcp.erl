@@ -29,7 +29,7 @@ init_timer(IngressTimeoutMs, Parent) ->
     receive
     after IngressTimeoutMs ->
         exit(Parent, kill),
-        ?LOG_WARNING(#{what => request_timeout, transport => tcp}),
+        ?LOG_WARNING(#{what => request_timeout, transport => tcp}, #{domain => [erldns, listeners]}),
         telemetry:execute([erldns, request, timeout], #{count => 1}, #{transport => tcp})
     end.
 
@@ -40,7 +40,7 @@ loop(Socket, TimerPid, TS, IngressTimeoutMs) ->
         {tcp, Socket, <<Len:16, Bin/binary>>} ->
             loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, Bin);
         {tcp_error, Socket, Reason} ->
-            ?LOG_INFO(#{what => tcp_error, reason => Reason});
+            ?LOG_INFO(#{what => tcp_error, reason => Reason}, #{domain => [erldns, listeners]});
         {tcp_closed, Socket} ->
             ok
     end.
@@ -54,7 +54,7 @@ loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, Acc) ->
         {tcp, Socket, Bin} ->
             loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, <<Acc/binary, Bin/binary>>);
         {tcp_error, Socket, Reason} ->
-            ?LOG_INFO(#{what => tcp_error, reason => Reason});
+            ?LOG_INFO(#{what => tcp_error, reason => Reason}, #{domain => [erldns, listeners]});
         {tcp_closed, Socket} ->
             ok
     end.
@@ -78,7 +78,10 @@ handle(Socket, TimerPid, TS, Bin) ->
         {ok, {IpAddr, _Port}} = inet:peername(Socket),
         case dns:decode_message(Bin) of
             {trailing_garbage, #dns_message{} = DecodedMessage, TrailingGarbage} ->
-                ?LOG_INFO(#{what => trailing_garbage, trailing_garbage => TrailingGarbage}),
+                ?LOG_INFO(
+                    #{what => trailing_garbage, trailing_garbage => TrailingGarbage},
+                    #{domain => [erldns, listeners]}
+                ),
                 handle_decoded(Socket, TimerPid, TS, DecodedMessage, IpAddr);
             {Error, Message, _} ->
                 ErrorMetadata = #{transport => tcp, reason => Error, message => Message},
@@ -102,7 +105,10 @@ handle_decoded(Socket, TimerPid, TS0, DecodedMessage, IpAddr) ->
     EncodedResponse = erldns_encoder:encode_message(Response),
     exit(TimerPid, kill),
     ok = gen_tcp:send(Socket, [<<(byte_size(EncodedResponse)):16>>, EncodedResponse]),
-    ?LOG_DEBUG(#{what => tcp_request, request => DecodedMessage, response => Response}),
+    ?LOG_DEBUG(
+        #{what => tcp_request, request => DecodedMessage, response => Response},
+        #{domain => [erldns, listeners]}
+    ),
     measure_time(DecodedMessage, EncodedResponse, TS0),
     gen_tcp:close(Socket).
 
