@@ -19,7 +19,10 @@
 
 -spec overrun_handler([{atom(), term()}, ...]) -> any().
 overrun_handler(Args) ->
-    ?LOG_WARNING(maps:from_list([{what, request_timeout}, {transport, udp} | Args])),
+    ?LOG_WARNING(
+        maps:from_list([{what, request_timeout}, {transport, udp} | Args]),
+        #{domain => [erldns, listeners]}
+    ),
     telemetry:execute([erldns, request, timeout], #{count => 1}, #{transport => udp}).
 
 -spec init(noargs) -> {ok, state()}.
@@ -28,7 +31,10 @@ init(noargs) ->
 
 -spec handle_call(term(), gen_server:from(), state()) -> {reply, not_implemented, state()}.
 handle_call(Call, From, State) ->
-    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}),
+    ?LOG_INFO(
+        #{what => unexpected_call, from => From, call => Call},
+        #{domain => [erldns, listeners]}
+    ),
     {reply, not_implemented, State}.
 
 -spec handle_cast(task(), state()) -> {noreply, state()}.
@@ -36,12 +42,12 @@ handle_cast({Socket, IpAddr, Port, TS, Bin}, State) ->
     handle(Socket, IpAddr, Port, TS, Bin),
     {noreply, State};
 handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, #{domain => [erldns, listeners]}),
     {noreply, State}.
 
 -spec handle_info(term(), state()) -> {noreply, state()}.
 handle_info(Info, State) ->
-    ?LOG_INFO(#{what => unexpected_info, info => Info}),
+    ?LOG_INFO(#{what => unexpected_info, info => Info}, #{domain => [erldns, listeners]}),
     {noreply, State}.
 
 -spec handle(inet:socket(), inet:ip_address(), inet:port_number(), integer(), binary()) ->
@@ -53,7 +59,10 @@ handle(Socket, IpAddr, Port, TS, Bin) ->
     try
         case dns:decode_message(Bin) of
             {trailing_garbage, DecodedMessage, TrailingGarbage} ->
-                ?LOG_INFO(#{what => trailing_garbage, trailing_garbage => TrailingGarbage}),
+                ?LOG_INFO(
+                    #{what => trailing_garbage, trailing_garbage => TrailingGarbage},
+                    #{domain => [erldns, listeners]}
+                ),
                 handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS);
             {Error, Message, _} ->
                 ErrorMetadata = #{transport => udp, reason => Error, message => Message},
@@ -86,7 +95,10 @@ handle_decoded(Socket, IpAddr, Port, DecodedMessage0, TS0) ->
             {true, Enc, _TsigMac, #dns_message{} = _Message} -> Enc
         end,
     gen_udp:send(Socket, IpAddr, Port, EncodedResponse),
-    ?LOG_DEBUG(#{what => tcp_request, request => DecodedMessage, response => Response}),
+    ?LOG_DEBUG(
+        #{what => tcp_request, request => DecodedMessage, response => Response},
+        #{domain => [erldns, listeners]}
+    ),
     measure_time(DecodedMessage, EncodedResponse, TS0).
 
 -spec normalize_edns_max_payload_size(dns:message()) -> dns:message().

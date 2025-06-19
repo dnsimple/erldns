@@ -135,7 +135,10 @@ port(Env) ->
         Port when is_integer(Port), 0 < Port, Port =< 65535 ->
             {true, Port};
         OtherPort ->
-            ?LOG_ERROR(#{what => erldns_admin_bad_config, port => OtherPort}),
+            ?LOG_ERROR(
+                #{what => erldns_admin_bad_config, port => OtherPort},
+                #{domain => [erldns, admin]}
+            ),
             false
     end.
 
@@ -147,7 +150,10 @@ credentials(Env) ->
         {credentials, {Username, Password}} when is_binary(Username), is_binary(Password) ->
             {true, Username, Password};
         OtherValue ->
-            ?LOG_ERROR(#{what => erldns_admin_bad_config, credentials => OtherValue}),
+            ?LOG_ERROR(
+                #{what => erldns_admin_bad_config, credentials => OtherValue},
+                #{domain => [erldns, admin]}
+            ),
             false
     end.
 
@@ -159,13 +165,19 @@ middleware(Env) ->
                 true ->
                     {true, Modules};
                 false ->
-                    ?LOG_ERROR(#{what => erldns_admin_bad_config, middleware => Modules}),
+                    ?LOG_ERROR(
+                        #{what => erldns_admin_bad_config, middleware => Modules},
+                        #{domain => [erldns, admin]}
+                    ),
                     {true, []}
             end;
         false ->
             {true, []};
         OtherValue ->
-            ?LOG_ERROR(#{what => erldns_admin_bad_config, middleware => OtherValue}),
+            ?LOG_ERROR(
+                #{what => erldns_admin_bad_config, middleware => OtherValue},
+                #{domain => [erldns, admin]}
+            ),
             {true, []}
     end.
 

@@ -118,7 +118,10 @@ register_codec(Module) when is_atom(Module) ->
 -doc "Register a list of custom parser modules.".
 -spec register_codecs([module()]) -> ok.
 register_codecs(Modules) when is_list(Modules) ->
-    ?LOG_NOTICE(#{what => registering_custom_parsers, parsers => Modules}),
+    ?LOG_NOTICE(
+        #{what => registering_custom_parsers, parsers => Modules},
+        #{domain => [erldns, zones]}
+    ),
     gen_server:call(?MODULE, {register_codecs, Modules}).
 
 -doc "Get the list of registered zone parsers.".
@@ -150,13 +153,13 @@ handle_call({register_codecs, Modules}, _From, State) ->
     persistent_term:put(?MODULE, {Encoders, Decoders}),
     {reply, ok, #state{encoders = Encoders, decoders = Decoders}};
 handle_call(Call, From, State) ->
-    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}),
+    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, #{domain => [erldns, zones]}),
     {reply, not_implemented, State}.
 
 -doc false.
 -spec handle_cast(dynamic(), state()) -> {noreply, state()}.
 handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, #{domain => [erldns, zones]}),
     {noreply, State}.
 
 -doc false.

@@ -31,7 +31,6 @@ encode(Zone, #{mode := zone_to_json}, Encoders) ->
             }
     }.
 
--doc "Encode a Zone meta data into JSON.".
 -spec zone_meta_to_json(erldns:zone()) -> json:encode_value().
 zone_meta_to_json(Zone) ->
     #{
@@ -72,10 +71,8 @@ encode(Encoders) ->
     fun(Record) -> encode_record(Record, Encoders) end.
 
 encode_record(Record, Encoders) ->
-    % ?LOG_DEBUG("Encoding record (record: ~p)", [Record]),
     case encode_record(Record) of
-        [] ->
-            % ?LOG_DEBUG("Trying custom encoders (encoders: ~p)", [Encoders]),
+        not_implemented ->
             try_custom_encoders(Record, Encoders);
         EncodedRecord ->
             EncodedRecord
@@ -118,8 +115,8 @@ encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_CDNSKEY, ttl = Ttl, d
 encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_RRSIG, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
-    ?LOG_WARNING("Unable to encode record (record: ~p)", [Record]),
-    [].
+    ?LOG_WARNING(#{what => unable_to_encode_record, record => Record}, #{domain => [erldns, zones]}),
+    not_implemented.
 
 encode_record(Name, Type, Ttl, Data) ->
     #{
@@ -212,9 +209,10 @@ encode_data(
         )
     );
 encode_data(Data) ->
-    ?LOG_INFO("Unable to encode rrdata (module: ~p, event: ~p, data: ~p)", [
-        ?MODULE, unsupported_rrdata_type, Data
-    ]),
+    ?LOG_INFO(
+        #{what => unable_to_encode_rrdata, data => Data},
+        #{domain => [erldns, zones]}
+    ),
     not_implemented.
 
 escape_chars(IoList) ->

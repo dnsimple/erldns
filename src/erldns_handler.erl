@@ -84,9 +84,10 @@ init(noargs) ->
     (dynamic(), gen_server:from(), state()) ->
         {reply, not_implemented, state()}.
 handle_call({register_handler, RecordTypes, Module, Version}, _, State) ->
-    ?LOG_INFO("Registered handler (module: ~p, types: ~p, version: ~p)", [
-        Module, RecordTypes, Version
-    ]),
+    ?LOG_INFO(
+        #{what => registered_handler, module => Module, types => RecordTypes, version => Version},
+        #{domain => [erldns, pipeline]}
+    ),
     NewHandlers = [{Module, RecordTypes, Version} | State#handlers_state.handlers],
     ets:insert(?MODULE, {handlers, NewHandlers}),
     {reply, ok, State#handlers_state{handlers = NewHandlers}};

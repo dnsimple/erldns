@@ -23,8 +23,8 @@ decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Decoders) ->
                     not_implemented ?= json_record_to_erlang(JsonRecord),
                     not_implemented ?= try_custom_decoders(JsonRecord, Decoders),
                     ?LOG_WARNING(
-                        "Unsupported record (module: ~p, event: ~p, data: ~p)",
-                        [?MODULE, unsupported_record, JsonRecord]
+                        #{what => unsupported_record, record => JsonRecord},
+                        #{domain => [erldns, zones]}
                     ),
                     not_implemented
                 else
@@ -141,7 +141,7 @@ try_custom_decoders(Data, [Decoder | Rest]) ->
 % Internal converters
 -spec json_record_to_erlang(dynamic()) -> not_implemented | dns:rr().
 json_record_to_erlang(#{~"data" := null} = Record) ->
-    ?LOG_WARNING(#{what => error_parsing_record, record => Record}),
+    ?LOG_WARNING(#{what => error_parsing_record, record => Record}, #{domain => [erldns, zones]}),
     not_implemented;
 json_record_to_erlang(#{~"name" := Name, ~"type" := ~"SOA", ~"ttl" := Ttl, ~"data" := Data}) ->
     #dns_rr{
@@ -177,8 +177,14 @@ json_record_to_erlang(#{~"name" := Name, ~"type" := ~"A", ~"ttl" := Ttl, ~"data"
             };
         {error, Reason} ->
             ?LOG_ERROR(
-                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, reason:~p)",
-                [?MODULE, error, Name, ~"A", Data, Reason]
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => ~"A",
+                    data => Data,
+                    reason => Reason
+                },
+                #{domain => [erldns, zones]}
             ),
             not_implemented
     end;
@@ -193,8 +199,14 @@ json_record_to_erlang(#{~"name" := Name, ~"type" := ~"AAAA", ~"ttl" := Ttl, ~"da
             };
         {error, Reason} ->
             ?LOG_ERROR(
-                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, reason:~p)",
-                [?MODULE, error, Name, ~"AAAA", Data, Reason]
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => ~"AAAA",
+                    data => Data,
+                    reason => Reason
+                },
+                #{domain => [erldns, zones]}
             ),
             not_implemented
     end;
@@ -271,10 +283,17 @@ json_record_to_erlang(#{~"name" := Name, ~"type" := Type = ~"SSHFP", ~"ttl" := T
                 ttl = Ttl
             }
     catch
-        Exception:Reason ->
+        Class:Reason ->
             ?LOG_ERROR(
-                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
-                [?MODULE, error, Name, Type, Data, Exception, Reason]
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => Type,
+                    data => Data,
+                    class => Class,
+                    reason => Reason
+                },
+                #{domain => [erldns, zones]}
             ),
             not_implemented
     end;
@@ -322,10 +341,17 @@ json_record_to_erlang(#{~"name" := Name, ~"type" := Type = ~"DS", ~"ttl" := Ttl,
                 ttl = Ttl
             }
     catch
-        Exception:Reason ->
+        Class:Reason ->
             ?LOG_ERROR(
-                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
-                [?MODULE, error, Name, Type, Data, Exception, Reason]
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => Type,
+                    data => Data,
+                    class => Class,
+                    reason => Reason
+                },
+                #{domain => [erldns, zones]}
             ),
             not_implemented
     end;
@@ -345,10 +371,17 @@ json_record_to_erlang(#{~"name" := Name, ~"type" := Type = ~"CDS", ~"ttl" := Ttl
                 ttl = Ttl
             }
     catch
-        Exception:Reason ->
+        Class:Reason ->
             ?LOG_ERROR(
-                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
-                [?MODULE, error, Name, Type, Data, Exception, Reason]
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => Type,
+                    data => Data,
+                    class => Class,
+                    reason => Reason
+                },
+                #{domain => [erldns, zones]}
             ),
             not_implemented
     end;
@@ -371,10 +404,17 @@ json_record_to_erlang(#{
                 ttl = Ttl
             })
     catch
-        Exception:Reason ->
+        Class:Reason ->
             ?LOG_ERROR(
-                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
-                [?MODULE, error, Name, Type, Data, Exception, Reason]
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => Type,
+                    data => Data,
+                    class => Class,
+                    reason => Reason
+                },
+                #{domain => [erldns, zones]}
             ),
             not_implemented
     end;
@@ -397,10 +437,17 @@ json_record_to_erlang(#{
                 ttl = Ttl
             })
     catch
-        Exception:Reason ->
+        Class:Reason ->
             ?LOG_ERROR(
-                "Error parsing record (module: ~p, event: ~p, name: ~p, type: ~p, data: ~p, exception: ~p, reason: ~p)",
-                [?MODULE, error, Name, Type, Data, Exception, Reason]
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => Type,
+                    data => Data,
+                    class => Class,
+                    reason => Reason
+                },
+                #{domain => [erldns, zones]}
             ),
             not_implemented
     end;

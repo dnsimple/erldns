@@ -75,7 +75,7 @@ resource_exists(Req, State) ->
     {boolean(), cowboy_req:req(), erldns_admin:handler_state()}.
 delete_resource(Req, State) ->
     Name = cowboy_req:binding(zone_name, Req),
-    ?LOG_DEBUG(#{what => received_delete_resource, resource => Name}),
+    ?LOG_DEBUG(#{what => received_delete_resource, resource => Name}, #{domain => [erldns, admin]}),
     erldns_zone_cache:delete_zone(Name),
     {true, Req, State}.
 
@@ -97,10 +97,13 @@ to_text(Req, State) ->
 to_json(Req, State) ->
     Name = cowboy_req:binding(zone_name, Req),
     Params = cowboy_req:parse_qs(Req),
-    ?LOG_DEBUG(#{what => received_get, resource => Name, params => Params}),
+    ?LOG_DEBUG(
+        #{what => received_get, resource => Name, params => Params},
+        #{domain => [erldns, admin]}
+    ),
     case erldns_zone_cache:get_zone(Name) of
         {error, Reason} ->
-            ?LOG_ERROR(#{what => get_zone_error, error => Reason}),
+            ?LOG_ERROR(#{what => get_zone_error, error => Reason}, #{domain => [erldns, admin]}),
             Resp = io_lib:format("Error getting zone: ~p", [Reason]),
             {stop, cowboy_req:reply(400, #{}, Resp, Req), State};
         Zone ->
