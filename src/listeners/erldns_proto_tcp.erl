@@ -65,7 +65,10 @@ handle_if_within_time(Socket, TimerPid, TS, IngressTimeoutMs, Bin) ->
         false ->
             handle(Socket, TimerPid, TS, Bin);
         true ->
-            ?LOG_WARNING(#{what => request_timeout, transport => tcp}),
+            ?LOG_WARNING(
+                #{what => request_timeout, transport => tcp},
+                #{domain => [erldns, listeners]}
+            ),
             telemetry:execute([erldns, request, dropped], #{count => 1}, #{transport => tcp})
     end.
 

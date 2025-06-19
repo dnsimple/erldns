@@ -48,12 +48,15 @@ init(noargs) ->
 -spec handle_call(sync, gen_server:from(), state()) ->
     {reply, ok | not_implemented, state()}.
 handle_call(Call, From, State) ->
-    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}),
+    ?LOG_INFO(
+        #{what => unexpected_call, from => From, call => Call},
+        #{domain => [erldns, listeners]}
+    ),
     {reply, not_implemented, State}.
 
 -spec handle_cast(dynamic(), state()) -> {noreply, state()}.
 handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, #{domain => [erldns, listeners]}),
     {noreply, State}.
 
 -spec handle_info(dynamic(), state()) -> {noreply, state()}.
@@ -63,7 +66,7 @@ handle_info({timeout, TimerRef, check_schedulers}, {TimerRef, S0, AtomicsRef}) -
     utilization(AtomicsRef, S0, S1),
     {noreply, {NewTimerRef, S1, AtomicsRef}};
 handle_info(Info, State) ->
-    ?LOG_INFO(#{what => unexpected_info, info => Info}),
+    ?LOG_INFO(#{what => unexpected_info, info => Info}, #{domain => [erldns, listeners]}),
     {noreply, State}.
 
 -spec terminate(term(), state()) -> any().

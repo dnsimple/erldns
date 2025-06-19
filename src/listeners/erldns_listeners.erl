@@ -156,13 +156,17 @@ reset_queues() ->
                 {ok, _} ->
                     true;
                 {error, Reason} ->
-                    ?LOG_ERROR(#{
-                        what => failed_to_restart_listeners, step => restart, reason => Reason
-                    }),
+                    ?LOG_ERROR(
+                        #{what => failed_to_restart_listeners, step => restart, reason => Reason},
+                        #{domain => [erldns, listeners]}
+                    ),
                     false
             end;
         {error, Reason} ->
-            ?LOG_ERROR(#{what => failed_to_restart_listeners, step => terminate, reason => Reason}),
+            ?LOG_ERROR(
+                #{what => failed_to_restart_listeners, step => terminate, reason => Reason},
+                #{domain => [erldns, listeners]}
+            ),
             false
     end.
 
@@ -317,5 +321,5 @@ get_pfactor(Config) ->
     end.
 
 trigger_delayed(_Ref, _Alarm, _SupPid, _ConnPids) ->
-    ?LOG_WARNING(#{what => tcp_acceptor_delayed, transport => tcp}),
+    ?LOG_WARNING(#{what => tcp_acceptor_delayed, transport => tcp}, #{domain => [erldns, listeners]}),
     telemetry:execute([erldns, request, delayed], #{count => 1}, #{transport => tcp}).

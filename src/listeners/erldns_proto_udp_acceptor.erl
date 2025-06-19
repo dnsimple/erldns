@@ -50,7 +50,7 @@ handle_info({udp_passive, Socket}, #udp_acceptor{socket = Socket} = State) ->
 handle_info({udp_error, Socket, Reason}, #udp_acceptor{socket = Socket} = State) ->
     {stop, {udp_error, Reason}, State};
 handle_info(Info, State) ->
-    ?LOG_INFO(#{what => unexpected_info, info => Info}),
+    ?LOG_INFO(#{what => unexpected_info, info => Info}, #{domain => [erldns, listeners]}),
     {noreply, State}.
 
 -spec create_socket([gen_udp:open_option()]) -> inet:socket().
@@ -84,7 +84,10 @@ maybe_shed_load(Socket, State) ->
         Utilization = erldns_sch_mon:get_total_scheduler_utilization(),
         false ?= Utilization =< 9000,
         false ?= maybe_continue(Utilization),
-        ?LOG_WARNING(#{what => udp_acceptor_delayed, transport => udp}),
+        ?LOG_WARNING(
+            #{what => udp_acceptor_delayed, transport => udp},
+            #{domain => [erldns, listeners]}
+        ),
         telemetry:execute([erldns, request, delayed], #{count => 1}, #{transport => udp}),
         start_timer(Socket),
         {noreply, State}
