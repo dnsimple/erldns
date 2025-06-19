@@ -309,13 +309,16 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
     NormalizedZoneName = dns:dname_to_lower(ZoneName),
     case find_zone_in_cache(NormalizedZoneName, zone) of
         #zone{} = Zone ->
-            ?LOG_DEBUG(#{
-                what => putting_rrset,
-                rrset => RRFqdn,
-                type => Type,
-                zone => NormalizedZoneName,
-                records => Records
-            }),
+            ?LOG_DEBUG(
+                #{
+                    what => putting_rrset,
+                    rrset => RRFqdn,
+                    type => Type,
+                    zone => NormalizedZoneName,
+                    records => Records
+                },
+                #{domain => [erldns, zones]}
+            ),
             KeySets = Zone#zone.keysets,
             SignedRRSet = sign_rrset(Zone#zone{records = Records, keysets = KeySets}),
             {RRSigRecsCovering, RRSigRecsNotCovering} = filter_rrsig_records_with_type_covered(
@@ -333,11 +336,14 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
                     (length(SignedRRSet) - length(RRSigRecsCovering)),
             update_zone_records_and_digest(ZoneName, UpdatedZoneRecordsCount, Digest),
             write_rrset_sync_counter(NormalizedZoneName, RRFqdn, Type, Counter),
-            ?LOG_DEBUG(#{
-                what => rrset_update_completed,
-                rrset => RRFqdn,
-                type => Type
-            });
+            ?LOG_DEBUG(
+                #{
+                    what => rrset_update_completed,
+                    rrset => RRFqdn,
+                    type => Type
+                },
+                #{domain => [erldns, zones]}
+            );
         % if zone is not in cache, return error
         zone_not_found ->
             {error, zone_not_found}
@@ -365,11 +371,14 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
             CurrentCounter = get_rrset_sync_counter(ZoneName, RRFqdn, Type),
             case Counter of
                 N when N =:= 0; CurrentCounter < N ->
-                    ?LOG_DEBUG(#{
-                        what => removing_rrset,
-                        rrset => RRFqdn,
-                        type => Type
-                    }),
+                    ?LOG_DEBUG(
+                        #{
+                            what => removing_rrset,
+                            rrset => RRFqdn,
+                            type => Type
+                        },
+                        #{domain => [erldns, zones]}
+                    ),
                     ZoneRecordsCount = Zone#zone.record_count,
                     CurrentRRSetRecords = get_records_by_name_and_type(RRFqdn, Type),
                     NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
@@ -404,12 +413,15 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                             ok
                     end;
                 N when CurrentCounter > N ->
-                    ?LOG_DEBUG(#{
-                        what => not_processing_delete_rrset,
-                        reason => counter_lower_than_system,
-                        rrset => RRFqdn,
-                        counter => Counter
-                    })
+                    ?LOG_DEBUG(
+                        #{
+                            what => not_processing_delete_rrset,
+                            reason => counter_lower_than_system,
+                            rrset => RRFqdn,
+                            counter => Counter
+                        },
+                        #{domain => [erldns, zones]}
+                    )
             end;
         zone_not_found ->
             {error, zone_not_found}
@@ -654,13 +666,13 @@ init(noargs) ->
 -spec handle_call(dynamic(), gen_server:from(), nostate) ->
     {reply, not_implemented, nostate}.
 handle_call(Call, From, State) ->
-    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}),
+    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, #{domain => [erldns, zones]}),
     {reply, not_implemented, State}.
 
 -doc false.
 -spec handle_cast(dynamic(), nostate) -> {noreply, nostate}.
 handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, #{domain => [erldns, zones]}),
     {noreply, State}.
 
 -spec create_ets_table(atom(), ets:table_type()) -> ok | {error, term()}.

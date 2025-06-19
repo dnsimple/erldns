@@ -162,26 +162,32 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
             Msg1;
         Other ->
             telemetry:execute([erldns, pipeline, error], #{count => 1}, #{}),
-            ?LOG_ERROR(#{
-                what => pipe_failed,
-                pipe => Pipe,
-                msg => Msg,
-                opts => Opts,
-                unexpected_return => Other
-            }),
+            ?LOG_ERROR(
+                #{
+                    what => pipe_failed,
+                    pipe => Pipe,
+                    msg => Msg,
+                    opts => Opts,
+                    unexpected_return => Other
+                },
+                #{domain => [erldns, pipeline]}
+            ),
             do_call(Msg, Pipes, Opts)
     catch
         C:E:S ->
             telemetry:execute([erldns, pipeline, error], #{count => 1}, #{}),
-            ?LOG_ERROR(#{
-                what => pipe_failed,
-                pipe => Pipe,
-                msg => Msg,
-                opts => Opts,
-                class => C,
-                error => E,
-                stacktrace => S
-            }),
+            ?LOG_ERROR(
+                #{
+                    what => pipe_failed,
+                    pipe => Pipe,
+                    msg => Msg,
+                    opts => Opts,
+                    class => C,
+                    error => E,
+                    stacktrace => S
+                },
+                #{domain => [erldns, pipeline]}
+            ),
             do_call(Msg, Pipes, Opts)
     end;
 do_call(Msg, [], _) ->
@@ -238,7 +244,10 @@ prepare_pipe(Module, {Pipeline, Opts}) when is_atom(Module) ->
         true ->
             case Module:prepare(Opts) of
                 disabled ->
-                    ?LOG_WARNING(#{what => pipe_disabled, module => Module}),
+                    ?LOG_WARNING(
+                        #{what => pipe_disabled, module => Module},
+                        #{domain => [erldns, pipeline]}
+                    ),
                     {Pipeline, Opts};
                 Opts1 when is_map(Opts1) ->
                     {[fun Module:call/2 | Pipeline], Opts1};

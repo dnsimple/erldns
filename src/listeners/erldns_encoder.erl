@@ -30,13 +30,16 @@ encode_message(Message) ->
             M
     catch
         Class:Reason:Stacktrace ->
-            ?LOG_ERROR(#{
-                what => encoding_message_failed,
-                class => Class,
-                reason => Reason,
-                stacktrace => Stacktrace,
-                message => Message
-            }),
+            ?LOG_ERROR(
+                #{
+                    what => encoding_message_failed,
+                    class => Class,
+                    reason => Reason,
+                    stacktrace => Stacktrace,
+                    message => Message
+                },
+                #{domain => [erldns, listeners]}
+            ),
             encode_message(build_error_response(Message))
     end.
 
@@ -56,14 +59,17 @@ encode_message(Message, Opts) ->
             M
     catch
         Class:Reason:Stacktrace ->
-            ?LOG_ERROR(#{
-                what => encoding_message_failed,
-                class => Class,
-                reason => Reason,
-                stacktrace => Stacktrace,
-                message => Message,
-                opts => Opts
-            }),
+            ?LOG_ERROR(
+                #{
+                    what => encoding_message_failed,
+                    class => Class,
+                    reason => Reason,
+                    stacktrace => Stacktrace,
+                    message => Message,
+                    opts => Opts
+                },
+                #{domain => [erldns, listeners]}
+            ),
             {false, encode_message(build_error_response(Message))}
     end.
 

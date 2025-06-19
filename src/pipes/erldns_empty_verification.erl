@@ -22,7 +22,7 @@ call(#dns_message{rc = RC, anc = ANC, auc = AUC, adc = ADC} = Msg, #{resolved :=
             telemetry:execute([erldns, pipeline, refused], #{count => 1}, #{}),
             Msg;
         {_, 0, 0, 0} ->
-            ?LOG_INFO(#{what => empty_response, message => Msg}),
+            ?LOG_INFO(#{what => empty_response, message => Msg}, #{domain => [erldns, pipeline]}),
             telemetry:execute([erldns, pipeline, empty], #{count => 1}, #{}),
             Msg;
         _ ->

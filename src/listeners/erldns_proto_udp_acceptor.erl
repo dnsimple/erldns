@@ -24,12 +24,15 @@ init({Name, SocketOpts}) ->
 
 -spec handle_call(term(), gen_server:from(), state()) -> {reply, not_implemented, state()}.
 handle_call(Call, From, State) ->
-    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}),
+    ?LOG_INFO(
+        #{what => unexpected_call, from => From, call => Call},
+        #{domain => [erldns, listeners]}
+    ),
     {reply, not_implemented, State}.
 
 -spec handle_cast(term(), state()) -> {noreply, state()}.
 handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}),
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, #{domain => [erldns, listeners]}),
     {noreply, State}.
 
 -spec handle_info(term(), state()) -> {noreply, state()} | {stop, term(), state()}.

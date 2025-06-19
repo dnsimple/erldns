@@ -204,7 +204,7 @@ handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, Qname, QTyp
     Msg2 = sign_unsigned(Msg1, Zone),
     erldns_records:rewrite_soa_ttl(Msg2);
 handle(Msg, Zone, _, _, true, true) ->
-    ?LOG_DEBUG("DNSSEC requested (name: ~p)", [Zone#zone.name]),
+    ?LOG_DEBUG(#{what => dnssec_requested, name => Zone#zone.name}, #{domain => [erldns]}),
     AnswerSignatures = find_rrsigs(Msg#dns_message.answers),
     AuthoritySignatures = find_rrsigs(Msg#dns_message.authority),
     Msg1 = Msg#dns_message{
