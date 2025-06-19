@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+- Remove support for the `erldns_txt` parser. [#247](https://github.com/dnsimple/erldns/pull/247)
+
 ## 7.0.0-rc5
 
 - Rework zones loader [#230](https://github.com/dnsimple/erldns/pull/230)
