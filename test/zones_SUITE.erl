@@ -397,7 +397,7 @@ parse_json_keys_unsorted_proplists_time_unit(_) ->
     %% nanoseconds
     ?assertMatch(
         [#keyset{inception = 1749478020, valid_until = 1781014020}],
-        erldns_zone_parser:parse_json_keys_as_maps([
+        erldns_zone_parser:parse_keysets([
             Base#{
                 ~"inception" => ~"2025-06-09T14:07:00.916361083Z",
                 ~"until" => ~"2026-06-09T14:07:00.916361083Z"
@@ -407,7 +407,7 @@ parse_json_keys_unsorted_proplists_time_unit(_) ->
     %% microseconds
     ?assertMatch(
         [#keyset{inception = 1749478020, valid_until = 1781014020}],
-        erldns_zone_parser:parse_json_keys_as_maps([
+        erldns_zone_parser:parse_keysets([
             Base#{
                 ~"inception" => ~"2025-06-09T14:07:00.916361Z",
                 ~"until" => ~"2026-06-09T14:07:00.916361Z"
@@ -417,7 +417,7 @@ parse_json_keys_unsorted_proplists_time_unit(_) ->
     %% milliseconds
     ?assertMatch(
         [#keyset{inception = 1749478020, valid_until = 1781014020}],
-        erldns_zone_parser:parse_json_keys_as_maps([
+        erldns_zone_parser:parse_keysets([
             Base#{
                 ~"inception" => ~"2025-06-09T14:07:00.916Z",
                 ~"until" => ~"2026-06-09T14:07:00.916Z"
@@ -427,7 +427,7 @@ parse_json_keys_unsorted_proplists_time_unit(_) ->
     %% seconds
     ?assertMatch(
         [#keyset{inception = 1749478020, valid_until = 1781014020}],
-        erldns_zone_parser:parse_json_keys_as_maps([
+        erldns_zone_parser:parse_keysets([
             Base#{
                 ~"inception" => ~"2025-06-09T14:07:00Z",
                 ~"until" => ~"2026-06-09T14:07:00Z"
@@ -457,7 +457,7 @@ parse_json_keys_unsorted_proplists(_) ->
                 valid_until = 1486899418
             }
         ],
-        erldns_zone_parser:parse_json_keys_as_maps([
+        erldns_zone_parser:parse_keysets([
             #{
                 ~"ksk" => ksk_private_key(),
                 ~"ksk_alg" => 8,

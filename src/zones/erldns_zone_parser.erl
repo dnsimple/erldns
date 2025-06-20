@@ -8,7 +8,7 @@
 -export([decode/2]).
 
 -ifdef(TEST).
--export([json_record_to_erlang/1, parse_json_keys_as_maps/1]).
+-export([json_record_to_erlang/1, parse_keysets/1]).
 -endif.
 
 -spec decode(json:decode_value(), [erldns_zone_codec:decoder()]) -> erldns:zone().
@@ -19,7 +19,7 @@ decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Decoders) ->
         lists:map(
             fun(JsonRecord) ->
                 maybe
-                    pass ?= apply_context_options(JsonRecord),
+                    true ?= apply_context_options(JsonRecord),
                     not_implemented ?= json_record_to_erlang(JsonRecord),
                     not_implemented ?= try_custom_decoders(JsonRecord, Decoders),
                     ?LOG_WARNING(
@@ -28,7 +28,7 @@ decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Decoders) ->
                     ),
                     not_implemented
                 else
-                    fail ->
+                    false ->
                         not_implemented;
                     Value ->
                         Value
@@ -38,21 +38,21 @@ decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Decoders) ->
         ),
     FilteredRecords = lists:filter(record_filter(), Records),
     DistinctRecords = lists:usort(FilteredRecords),
-    erldns_zone_codec:build_zone(Name, Sha, DistinctRecords, parse_json_keys_as_maps(JsonKeys)).
+    erldns_zone_codec:build_zone(Name, Sha, DistinctRecords, parse_keysets(JsonKeys)).
 
-parse_json_keys_as_maps([]) ->
+parse_keysets([]) ->
     [];
-parse_json_keys_as_maps(JsonKeys) ->
-    parse_json_keys_as_maps(JsonKeys, []).
+parse_keysets(JsonKeys) ->
+    parse_keysets(JsonKeys, []).
 
 % RFC4034: §3.1.5.  Signature Expiration and Inception Fields
 %    The Signature Expiration and Inception field values specify a date
 %    and time in the form of a 32-bit unsigned number of seconds elapsed
 %    since 1 January 1970 00:00:00 UTC, ignoring leap seconds, in network
 %    byte order.
-parse_json_keys_as_maps([], Keys) ->
+parse_keysets([], Keys) ->
     Keys;
-parse_json_keys_as_maps([Key | Rest], Keys) ->
+parse_keysets([Key | Rest], Keys) ->
     KeySet =
         #keyset{
             key_signing_key = to_crypto_key(maps:get(~"ksk", Key)),
@@ -68,7 +68,7 @@ parse_json_keys_as_maps([Key | Rest], Keys) ->
                 binary_to_list(maps:get(~"until", Key)), [{unit, second}]
             )
         },
-    parse_json_keys_as_maps(Rest, [KeySet | Keys]).
+    parse_keysets(Rest, [KeySet | Keys]).
 
 to_crypto_key(RsaKeyBin) ->
     % Where E is the public exponent, N is public modulus and D is the private exponent
@@ -80,53 +80,39 @@ to_crypto_key(RsaKeyBin) ->
 record_filter() ->
     fun(R) -> R =/= not_implemented end.
 
--spec apply_context_list_check(sets:set(), sets:set()) -> [fail] | [pass].
-apply_context_list_check(ContextAllowSet, ContextSet) ->
-    case sets:size(sets:intersection(ContextAllowSet, ContextSet)) of
-        0 ->
-            [fail];
-        _ ->
-            [pass]
-    end.
-
--spec apply_context_match_empty_check(boolean(), [any()]) -> [fail] | [pass].
-apply_context_match_empty_check(true, []) ->
-    [pass];
-apply_context_match_empty_check(_, _) ->
-    [fail].
-
 %% Determine if a record should be used in this name server's context.
 %%
 %% If the context is undefined then the record will always be used.
 %%
 %% If the context is a list and has at least one condition that passes
 %% then it will be included in the zone
-% Filter by context
--spec apply_context_options(dynamic()) -> pass | fail.
+-spec apply_context_options(dynamic()) -> boolean().
 apply_context_options(#{~"context" := Context}) ->
     case application:get_env(erldns, context_options) of
-        {ok, ContextOptions} ->
-            ContextSet = sets:from_list(Context),
-            Result =
-                lists:append([
-                    apply_context_match_empty_check(
-                        erldns_config:keyget(match_empty, ContextOptions), Context
-                    ),
-                    apply_context_list_check(
-                        sets:from_list(erldns_config:keyget(allow, ContextOptions)), ContextSet
-                    )
-                ]),
-            case lists:any(fun(I) -> I =:= pass end, Result) of
-                true ->
-                    pass;
-                _ ->
-                    fail
-            end;
+        {ok, ContextOptions} when is_map(ContextOptions) ->
+            apply_context_match_empty_check(
+                maps:get(match_empty, ContextOptions, false), Context
+            ) orelse
+                apply_context_list_check(
+                    maps:get(allow, ContextOptions, []), Context
+                );
         _ ->
-            pass
+            true
     end;
 apply_context_options(#{}) ->
-    pass.
+    true.
+
+-spec apply_context_list_check(list(), list()) -> boolean().
+apply_context_list_check(ContextAllow, Context) ->
+    ContextSet = sets:from_list(Context, [{version, 2}]),
+    ContextAllowSet = sets:from_list(ContextAllow, [{version, 2}]),
+    0 =/= sets:size(sets:intersection(ContextAllowSet, ContextSet)).
+
+-spec apply_context_match_empty_check(true | dynamic(), [any()]) -> boolean().
+apply_context_match_empty_check(true, []) ->
+    true;
+apply_context_match_empty_check(_, _) ->
+    false.
 
 try_custom_decoders(_, []) ->
     not_implemented;
