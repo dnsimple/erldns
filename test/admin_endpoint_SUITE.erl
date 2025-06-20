@@ -14,6 +14,7 @@ groups() ->
     [
         {all, [parallel], [
             bad_auth,
+            delete_queues,
             get_zones,
             get_not_found_resource,
             get_zone_resources,
@@ -89,6 +90,15 @@ get_zones(CtConfig) ->
                 },
                 Body
             );
+        {_, Other} ->
+            ct:fail(Other)
+    end.
+
+delete_queues(CtConfig) ->
+    Request = {endpoint(CtConfig, ""), headers(good)},
+    case httpc:request(delete, Request, [], []) of
+        {ok, {{_Version, 204, "No Content"}, _Headers, _Payload}} ->
+            ok;
         {_, Other} ->
             ct:fail(Other)
     end.

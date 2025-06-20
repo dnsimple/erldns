@@ -7,7 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
-- Remove support for the `erldns_txt` parser. [#247](https://github.com/dnsimple/erldns/pull/247)
+- Remove support for the `erldns_txt` parser. [#248](https://github.com/dnsimple/erldns/pull/248)
+- Introduce backpressure and load shedding [#240](https://github.com/dnsimple/erldns/pull/240)
 
 ## 7.0.0-rc5
 

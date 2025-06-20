@@ -63,9 +63,31 @@ count := non_neg_integer()
 ```erlang
 transport := udp | tcp
 ```
+
+### `[erldns, request, dropped]`
+- Measurements:
+```erlang
+count := non_neg_integer()
+```
+- Metadata:
+```erlang
+transport := udp | tcp
+```
+
+### `[erldns, request, delayed]`
+- Measurements:
+```erlang
+count := non_neg_integer()
+```
+- Metadata:
+```erlang
+transport := udp | tcp
+```
 """.
 
 -behaviour(supervisor).
+
+-include_lib("kernel/include/logger.hrl").
 
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_IP, any).
@@ -113,7 +135,7 @@ Statistics about each listener.
 }.
 -export_type([name/0, transport/0, parallel_factor/0, config/0, stats/0]).
 
--export([start_link/0, init/1, get_stats/0]).
+-export([start_link/0, init/1, get_stats/0, reset_queues/0]).
 
 -doc false.
 -spec start_link() -> supervisor:startlink_ret().
@@ -125,32 +147,62 @@ start_link() ->
 init(noargs) ->
     {ok, {#{strategy => one_for_one}, child_specs()}}.
 
--doc """
-Get statistics about all listeners.
-""".
+-doc "Reset all queues by restarting all listeners.".
+-spec reset_queues() -> boolean().
+reset_queues() ->
+    case supervisor:terminate_child(erldns_sup, ?MODULE) of
+        ok ->
+            case supervisor:restart_child(erldns_sup, ?MODULE) of
+                {ok, _} ->
+                    true;
+                {error, Reason} ->
+                    ?LOG_ERROR(
+                        #{what => failed_to_restart_listeners, step => restart, reason => Reason},
+                        #{domain => [erldns, listeners]}
+                    ),
+                    false
+            end;
+        {error, Reason} ->
+            ?LOG_ERROR(
+                #{what => failed_to_restart_listeners, step => terminate, reason => Reason},
+                #{domain => [erldns, listeners]}
+            ),
+            false
+    end.
+
+-doc "Get statistics about all listeners.".
 -spec get_stats() -> stats().
 get_stats() ->
     Children = supervisor:which_children(?MODULE),
     lists:foldl(fun get_stats/2, #{}, Children).
 
+get_stats({erldns_sch_mon, _, _, _}, #{} = Stats) ->
+    Stats;
 get_stats({{ranch_embedded_sup, {?MODULE, Name}}, _, _, _}, #{} = Stats) ->
     #{active_connections := ActiveConns} = ranch:info({?MODULE, Name}),
     Stats#{{Name, tcp} => #{queue_length => ActiveConns}};
 get_stats({Name, Sup, _, [erldns_proto_udp_sup]}, Stats) ->
     [
-        {Pool1, _, _, [wpool]},
+        {_, AccSup, _, [erldns_proto_udp_acceptor_sup]},
         {Pool2, _, _, [wpool]}
     ] = supervisor:which_children(Sup),
-    StatsPool1 = wpool:stats(Pool1),
-    StatsPool2 = wpool:stats(Pool2),
-    {_, TotalPool1} = lists:keyfind(total_message_queue_len, 1, StatsPool1),
-    {_, TotalPool2} = lists:keyfind(total_message_queue_len, 1, StatsPool2),
+    TotalPool1 = lists:foldl(
+        fun({_, Worker, _, _}, Acc) ->
+            {_, Count} = erlang:process_info(Worker, message_queue_len),
+            Acc + Count
+        end,
+        0,
+        supervisor:which_children(AccSup)
+    ),
+    StatsPool = wpool:stats(Pool2),
+    {_, TotalPool2} = lists:keyfind(total_message_queue_len, 1, StatsPool),
     Stats#{{Name, udp} => #{queue_length => TotalPool1 + TotalPool2}}.
 
 -spec child_specs() -> [supervisor:child_spec()].
 child_specs() ->
     Listeners = application:get_env(erldns, listeners, []),
-    lists:flatmap(fun child_spec/1, Listeners).
+    SchedMon = #{id => erldns_sch_mon, start => {erldns_sch_mon, start_link, []}, type => worker},
+    [SchedMon | lists:flatmap(fun child_spec/1, Listeners)].
 
 -spec child_spec(config()) -> [supervisor:child_spec()].
 child_spec(Config) ->
@@ -167,15 +219,22 @@ child_spec(Name, PFactor, tcp, SocketOpts0) ->
     TcpSocketOpts = tcp_opts(SocketOpts0, Timeout),
     Parallelism = erlang:system_info(schedulers),
     TransOpts = #{
-        %% Potentially introduce a cap on the concurrent QPS.
-        max_connections => 1024 * PFactor * Parallelism,
+        alarms => #{
+            first_alarm => #{
+                type => num_connections,
+                threshold => Timeout,
+                cooldown => Timeout,
+                callback => fun trigger_delayed/4
+            }
+        },
+        max_connections => Timeout,
         num_acceptors => PFactor * Parallelism,
         num_conns_sups => PFactor * Parallelism,
         num_listen_sockets => Parallelism,
         handshake_timeout => Timeout,
         socket_opts => TcpSocketOpts
     },
-    [ranch:child_spec({?MODULE, Name}, ranch_tcp, TransOpts, erldns_proto_tcp, [])];
+    [ranch:child_spec({?MODULE, Name}, ranch_tcp, TransOpts, erldns_proto_tcp, Timeout)];
 child_spec(Name, PFactor, udp, SocketOpts) ->
     UdpSocketOpts = udp_opts(SocketOpts),
     [
@@ -260,3 +319,7 @@ get_pfactor(Config) ->
         _ ->
             error({invalid_listener, parallel_factor, Config})
     end.
+
+trigger_delayed(_Ref, _Alarm, _SupPid, _ConnPids) ->
+    ?LOG_WARNING(#{what => tcp_acceptor_delayed, transport => tcp}, #{domain => [erldns, listeners]}),
+    telemetry:execute([erldns, request, delayed], #{count => 1}, #{transport => tcp}).
