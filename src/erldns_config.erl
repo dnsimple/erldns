@@ -50,6 +50,7 @@ keyget(Key, Data, Default) ->
             Value
     end.
 
+%% in milliseconds
 -spec ingress_udp_request_timeout() -> non_neg_integer().
 ingress_udp_request_timeout() ->
     case application:get_env(erldns, ingress_udp_request_timeout) of
@@ -59,6 +60,7 @@ ingress_udp_request_timeout() ->
             ?DEFAULT_UDP_PROCESS_TIMEOUT
     end.
 
+%% in milliseconds
 -spec ingress_tcp_request_timeout() -> non_neg_integer().
 ingress_tcp_request_timeout() ->
     case application:get_env(erldns, ingress_tcp_request_timeout) of
