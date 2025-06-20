@@ -97,8 +97,8 @@ utilization(AtomicsRef, S0, S1) ->
     PercentageTotal = round(10000 * Total),
     atomics:put(AtomicsRef, ?TOTAL_POS, PercentageTotal).
 
--spec safe_div(number(), float()) -> float().
-safe_div(_, +0.0) ->
+-spec safe_div(number(), number()) -> float().
+safe_div(_, Zero) when 0 == Zero ->
     +0.0;
 safe_div(A, B) ->
     A / B.
