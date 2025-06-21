@@ -17,14 +17,6 @@
 The module that handles the resolution of a single DNS question.
 
 The meat of the resolution occurs in erldns_resolver:resolve/3
-
-## Telemetry events
-Emits the following telemetry events:
-- `[erldns, handler, handoff]` (span)
-- `[erldns, handler, throttle]`
-- `[erldns, handler, error]`
-- `[erldns, handler, refused]`
-- `[erldns, handler, emtpy]`
 """.
 
 -behaviour(gen_server).
