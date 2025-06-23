@@ -192,12 +192,14 @@ A warning will be logged for each invalid record, but they will be skipped, and 
 
 ## 3.0.0
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Changed
 
 - Bumps to OTP/27
 - Replaced "jsx" with "json"
 - Bumps to [dns_erlang/v2.0.0](https://hex.pm/packages/dns_erlang/2.0.0)
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Added
 
 - erlfmt
