@@ -26,7 +26,10 @@ init(Ref, IngressTimeoutMs) ->
 
 -spec init_timer(integer(), pid()) -> any().
 init_timer(IngressTimeoutMs, Parent) ->
+    Ref = erlang:monitor(process, Parent),
     receive
+        {'DOWN', Parent, process, Ref, _} ->
+            ok
     after IngressTimeoutMs ->
         exit(Parent, kill),
         ?LOG_WARNING(#{what => request_timeout, transport => tcp}, #{domain => [erldns, listeners]}),
