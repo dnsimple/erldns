@@ -11,3 +11,7 @@ MD012:
 
 # line-length
 MD013: false
+
+# no-duplicate-heading
+MD024:
+  siblings_only: true
