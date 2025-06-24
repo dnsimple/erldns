@@ -148,6 +148,10 @@ This callback can return
 
 -spec call(dns:message(), #{atom() => dynamic()}) -> dns:message().
 call(Msg, Opts) ->
+    ?LOG_DEBUG(
+        #{what => pipeline_triggered, dns_message => Msg, opts => Opts},
+        #{domain => [erldns, pipeline]}
+    ),
     {Pipeline, DefOpts} = get_pipeline(),
     do_call(Msg, Pipeline, maps:merge(DefOpts, Opts)).
 
@@ -164,9 +168,9 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
             telemetry:execute([erldns, pipeline, error], #{count => 1}, #{}),
             ?LOG_ERROR(
                 #{
-                    what => pipe_failed,
+                    what => pipe_failed_with_invalid_return,
                     pipe => Pipe,
-                    msg => Msg,
+                    dns_message => Msg,
                     opts => Opts,
                     unexpected_return => Other
                 },
@@ -174,17 +178,17 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
             ),
             do_call(Msg, Pipes, Opts)
     catch
-        C:E:S ->
+        Class:Error:Stacktrace ->
             telemetry:execute([erldns, pipeline, error], #{count => 1}, #{}),
             ?LOG_ERROR(
                 #{
-                    what => pipe_failed,
+                    what => pipe_failed_with_exception,
                     pipe => Pipe,
-                    msg => Msg,
+                    dns_message => Msg,
                     opts => Opts,
-                    class => C,
-                    error => E,
-                    stacktrace => S
+                    class => Class,
+                    error => Error,
+                    stacktrace => Stacktrace
                 },
                 #{domain => [erldns, pipeline]}
             ),

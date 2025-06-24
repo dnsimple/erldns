@@ -112,7 +112,7 @@ handle_decoded(Socket, TimerPid, TS0, DecodedMessage, IpAddr) ->
     exit(TimerPid, kill),
     ok = gen_tcp:send(Socket, [<<(byte_size(EncodedResponse)):16>>, EncodedResponse]),
     ?LOG_DEBUG(
-        #{what => tcp_request_finished, request => DecodedMessage, response => Response},
+        #{what => tcp_request_finished, request => DecodedMessage, dns_message => Response},
         #{domain => [erldns, listeners]}
     ),
     measure_time(DecodedMessage, EncodedResponse, TS0),

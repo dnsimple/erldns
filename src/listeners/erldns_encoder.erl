@@ -36,7 +36,7 @@ encode_message(Message) ->
                     class => Class,
                     reason => Reason,
                     stacktrace => Stacktrace,
-                    message => Message
+                    dns_message => Message
                 },
                 #{domain => [erldns, listeners]}
             ),
@@ -65,7 +65,7 @@ encode_message(Message, Opts) ->
                     class => Class,
                     reason => Reason,
                     stacktrace => Stacktrace,
-                    message => Message,
+                    dns_message => Message,
                     opts => Opts
                 },
                 #{domain => [erldns, listeners]}
