@@ -111,23 +111,24 @@ handle_decoded(Socket, TimerPid, TS0, DecodedMessage, IpAddr) ->
     EncodedResponse = erldns_encoder:encode_message(Response),
     exit(TimerPid, kill),
     ok = gen_tcp:send(Socket, [<<(byte_size(EncodedResponse)):16>>, EncodedResponse]),
-    ?LOG_DEBUG(
-        #{what => tcp_request_finished, request => DecodedMessage, dns_message => Response},
-        #{domain => [erldns, listeners]}
-    ),
-    measure_time(DecodedMessage, EncodedResponse, TS0),
+    measure_time(Response, EncodedResponse, TS0),
     gen_tcp:close(Socket).
 
-measure_time(DecodedMessage, EncodedResponse, TS0) ->
+measure_time(Response, EncodedResponse, TS0) ->
+    ?LOG_DEBUG(
+        #{what => tcp_request_finished, dns_message => Response},
+        #{domain => [erldns, listeners]}
+    ),
     TS1 = erlang:monotonic_time(),
     Measurements = #{
         monotonic_time => TS1,
         duration => TS1 - TS0,
         response_size => byte_size(EncodedResponse)
     },
-    DnsSec = proplists:get_bool(dnssec, erldns_edns:get_opts(DecodedMessage)),
+    DnsSec = proplists:get_bool(dnssec, erldns_edns:get_opts(Response)),
     Metadata = #{
         transport => tcp,
-        dnssec => DnsSec
+        dnssec => DnsSec,
+        dns_message => Response
     },
     telemetry:execute([erldns, request, stop], Measurements, Metadata).

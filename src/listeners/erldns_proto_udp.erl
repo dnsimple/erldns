@@ -111,11 +111,7 @@ handle_decoded(Socket, IpAddr, Port, DecodedMessage0, TS0) ->
             {true, Enc, _TsigMac, #dns_message{} = _Message} -> Enc
         end,
     gen_udp:send(Socket, IpAddr, Port, EncodedResponse),
-    ?LOG_DEBUG(
-        #{what => udp_request_finished, request => DecodedMessage, dns_message => Response},
-        #{domain => [erldns, listeners]}
-    ),
-    measure_time(DecodedMessage, EncodedResponse, TS0).
+    measure_time(Response, EncodedResponse, TS0).
 
 -spec normalize_edns_max_payload_size(dns:message()) -> dns:message().
 normalize_edns_max_payload_size(Message) ->
@@ -132,16 +128,21 @@ normalize_edns_max_payload_size(Message) ->
             Message
     end.
 
-measure_time(DecodedMessage, EncodedResponse, TS0) ->
+measure_time(Response, EncodedResponse, TS0) ->
+    ?LOG_DEBUG(
+        #{what => udp_request_finished, dns_message => Response},
+        #{domain => [erldns, listeners]}
+    ),
     TS1 = erlang:monotonic_time(),
     Measurements = #{
         monotonic_time => TS1,
         duration => TS1 - TS0,
         response_size => byte_size(EncodedResponse)
     },
-    DnsSec = proplists:get_bool(dnssec, erldns_edns:get_opts(DecodedMessage)),
+    DnsSec = proplists:get_bool(dnssec, erldns_edns:get_opts(Response)),
     Metadata = #{
         transport => udp,
-        dnssec => DnsSec
+        dnssec => DnsSec,
+        dns_message => Response
     },
     telemetry:execute([erldns, request, stop], Measurements, Metadata).
