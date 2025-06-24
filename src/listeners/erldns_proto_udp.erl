@@ -112,7 +112,7 @@ handle_decoded(Socket, IpAddr, Port, DecodedMessage0, TS0) ->
         end,
     gen_udp:send(Socket, IpAddr, Port, EncodedResponse),
     ?LOG_DEBUG(
-        #{what => tcp_request, request => DecodedMessage, response => Response},
+        #{what => udp_request_finished, request => DecodedMessage, response => Response},
         #{domain => [erldns, listeners]}
     ),
     measure_time(DecodedMessage, EncodedResponse, TS0).
