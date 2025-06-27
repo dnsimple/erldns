@@ -28,7 +28,7 @@ init(Ref, IngressTimeoutMs) ->
 init_timer(IngressTimeoutMs, Parent) ->
     Ref = erlang:monitor(process, Parent),
     receive
-        {'DOWN', Parent, process, Ref, _} ->
+        {'DOWN', Ref, process, Parent, _} ->
             ok
     after IngressTimeoutMs ->
         exit(Parent, kill),
