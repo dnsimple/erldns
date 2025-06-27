@@ -4,6 +4,8 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 
+-compile({inline, [maybe_receive_params/0, forward_dp_to_timer/2, get_dnssec/1, get_query/1]}).
+
 -behaviour(ranch_protocol).
 -export([start_link/3]).
 -export([init/2]).
@@ -20,21 +22,11 @@ init(Ref, IngressTimeoutMs) ->
     proc_lib:init_ack({ok, Self}),
     proc_lib:set_label(?MODULE),
     TS = erlang:monotonic_time(),
-    {TimerPid, _Ref} = proc_lib:spawn_opt(?MODULE, init_timer, [IngressTimeoutMs, Self], [monitor]),
+    TimerArgs = [IngressTimeoutMs, Self],
+    TimerOpts = [monitor, {priority, low}],
+    {TimerPid, _Ref} = proc_lib:spawn_opt(?MODULE, init_timer, TimerArgs, TimerOpts),
     {ok, Socket} = ranch:handshake(Ref),
     loop(Socket, TimerPid, TS, IngressTimeoutMs).
-
--spec init_timer(integer(), pid()) -> any().
-init_timer(IngressTimeoutMs, Parent) ->
-    Ref = erlang:monitor(process, Parent),
-    receive
-        {'DOWN', Parent, process, Ref, _} ->
-            ok
-    after IngressTimeoutMs ->
-        exit(Parent, kill),
-        ?LOG_WARNING(#{what => request_timeout, transport => tcp}, #{domain => [erldns, listeners]}),
-        telemetry:execute([erldns, request, timeout], #{count => 1}, #{transport => tcp})
-    end.
 
 -spec loop(dynamic(), pid(), integer(), integer()) -> dynamic().
 loop(Socket, TimerPid, TS, IngressTimeoutMs) ->
@@ -107,6 +99,7 @@ handle(Socket, TimerPid, TS, Bin) ->
 handle_decoded(_, _, _, #dns_message{qr = true}, _) ->
     {error, not_a_question};
 handle_decoded(Socket, TimerPid, TS0, DecodedMessage, IpAddr) ->
+    forward_dp_to_timer(DecodedMessage, TimerPid),
     Response = erldns_pipeline:call(DecodedMessage, #{transport => tcp, host => IpAddr}),
     EncodedResponse = erldns_encoder:encode_message(Response),
     exit(TimerPid, kill),
@@ -132,3 +125,40 @@ measure_time(Response, EncodedResponse, TS0) ->
         dns_message => Response
     },
     telemetry:execute([erldns, request, stop], Measurements, Metadata).
+
+-spec init_timer(integer(), pid()) -> any().
+init_timer(IngressTimeoutMs, Parent) ->
+    Ref = erlang:monitor(process, Parent),
+    receive
+        {'DOWN', Ref, process, Parent, _} ->
+            ok
+    after IngressTimeoutMs ->
+        exit(Parent, kill),
+        Params = maybe_receive_params(),
+        ?LOG_WARNING(
+            Params#{what => request_timeout, transport => tcp, worker => Parent},
+            #{domain => [erldns, listeners]}
+        ),
+        telemetry:execute([erldns, request, timeout], #{count => 1}, #{transport => tcp})
+    end.
+
+maybe_receive_params() ->
+    receive
+        P when is_map(P) ->
+            P
+    after 0 ->
+        #{}
+    end.
+
+forward_dp_to_timer(Msg, TimerPid) ->
+    TimerPid ! #{query => get_query(Msg), dnssec => get_dnssec(Msg)}.
+
+get_query(#dns_message{questions = [#dns_query{name = QName, type = QType} | Rest]}) ->
+    #{name => QName, type => QType, extra_queries => ([] =:= Rest)};
+get_query(#dns_message{questions = []}) ->
+    none.
+
+get_dnssec(#dns_message{additional = [#dns_optrr{dnssec = true} | _]}) ->
+    true;
+get_dnssec(#dns_message{additional = _}) ->
+    false.

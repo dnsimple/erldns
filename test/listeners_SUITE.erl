@@ -14,6 +14,8 @@ all() ->
         transport_must_be_tcp_udp_or_both,
         p_factor_must_be_positive,
         ip_must_be_inet_parseable,
+        tcp_in_pieces,
+        tcp_closed,
         tcp_overrun,
         udp_payload_size,
         udp_overrun,
@@ -144,6 +146,49 @@ ip_must_be_inet_parseable(_) ->
     gen_server:stop(erldns_listeners),
     application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, ip => "0.0.0.0", port => 0}]),
     ?assertMatch({ok, _}, erldns_listeners:start_link()).
+
+tcp_in_pieces(_) ->
+    attach_to_telemetry(?FUNCTION_NAME, timeout, self()),
+    application:set_env(erldns, ingress_tcp_request_timeout, 1000),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, transport => tcp, port => 8053}
+    ]),
+    application:set_env(erldns, packet_pipeline, []),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    Packet = packet(),
+    P1 = binary:part(Packet, 0, 10),
+    P2 = binary:part(Packet, 10, byte_size(Packet) - 10),
+    ?assertMatch(Packet, iolist_to_binary([P1, P2]), Packet),
+    {ok, Socket1} = gen_tcp:connect(
+        {127, 0, 0, 1}, 8053, [binary, {packet, raw}, {active, false}], 1000
+    ),
+    ok = gen_tcp:send(Socket1, [<<(byte_size(Packet)):16>>, P1]),
+    ct:sleep(50),
+    ok = gen_tcp:send(Socket1, P2),
+    {ok, <<_:16, RecvPacket/binary>>} = gen_tcp:recv(Socket1, 0, 2000),
+    Response = dns:decode_message(RecvPacket),
+    ?assertMatch(#dns_message{}, Response).
+
+tcp_closed(_) ->
+    attach_to_telemetry(?FUNCTION_NAME, timeout, self()),
+    application:set_env(erldns, ingress_tcp_request_timeout, 50),
+    application:set_env(erldns, listeners, [
+        #{name => ?FUNCTION_NAME, transport => tcp, port => 8053}
+    ]),
+    application:set_env(erldns, packet_pipeline, [fun sleeping_pipe/2]),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    {ok, Socket1} = gen_tcp:connect(
+        {127, 0, 0, 1}, 8053, [binary, {packet, raw}, {active, false}], 1000
+    ),
+    ok = gen_tcp:send(Socket1, [<<1024:16>>, ~"random_data"]),
+    ok = gen_tcp:close(Socket1),
+    {ok, Socket2} = gen_tcp:connect(
+        {127, 0, 0, 1}, 8053, [binary, {packet, 2}, {active, false}], 1000
+    ),
+    ok = gen_tcp:close(Socket2),
+    assert_no_telemetry_event().
 
 tcp_overrun(_) ->
     attach_to_telemetry(?FUNCTION_NAME, timeout, self()),
@@ -414,6 +459,14 @@ assert_telemetry_event(Type) ->
             assert_telemetry_event(Type)
     after 5000 ->
         ct:fail("Telemetry event not triggered")
+    end.
+
+assert_no_telemetry_event() ->
+    receive
+        {[erldns, pipeline, Name], _, _} ->
+            ct:fail("Telemetry event triggered: ~p", [Name])
+    after 100 ->
+        ok
     end.
 
 pause_pipe(A, _) ->
