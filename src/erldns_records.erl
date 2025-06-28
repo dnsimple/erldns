@@ -83,9 +83,9 @@ The first argument is the Record that is being updated.
 The second argument is the SOA RR Data.
 """.
 -spec minimum_soa_ttl(dns:rr(), dns:rrdata()) -> dns:rr().
-minimum_soa_ttl(Record, Data) when is_record(Data, dns_rrdata_soa) ->
-    Record#dns_rr{ttl = erlang:min(Data#dns_rrdata_soa.minimum, Record#dns_rr.ttl)};
-minimum_soa_ttl(Record, _) ->
+minimum_soa_ttl(#dns_rr{ttl = RecTtl} = Record, #dns_rrdata_soa{minimum = SoaMinimum}) ->
+    Record#dns_rr{ttl = erlang:min(SoaMinimum, RecTtl)};
+minimum_soa_ttl(#dns_rr{} = Record, _) ->
     Record.
 
 -doc """
@@ -97,9 +97,9 @@ rewrite_soa_ttl(Message) ->
     rewrite_soa_ttl(Message, Message#dns_message.authority, []).
 
 rewrite_soa_ttl(Message, [], NewAuthority) ->
-    Message#dns_message{authority = NewAuthority};
+    Message#dns_message{authority = lists:reverse(NewAuthority)};
 rewrite_soa_ttl(Message, [R | Rest], NewAuthority) ->
-    rewrite_soa_ttl(Message, Rest, NewAuthority ++ [minimum_soa_ttl(R, R#dns_rr.data)]).
+    rewrite_soa_ttl(Message, Rest, [minimum_soa_ttl(R, R#dns_rr.data) | NewAuthority]).
 
 %% Various matching functions.
 
