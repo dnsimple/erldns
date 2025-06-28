@@ -133,8 +133,7 @@ resolve_qname_and_qtype(Message, AuthorityRecords, Qname, Qtype, Host) ->
             Message1 = resolve_authoritative(Message, Qname, Qtype, Zone, Host, []),
             Message2 = erldns_records:rewrite_soa_ttl(Message1),
             Message3 = additional_processing(Message2, Host, Zone),
-            Message4 = erldns_dnssec:handle(Message3, Zone, Qname, Qtype),
-            sort_answers(Message4)
+            erldns_dnssec:handle(Message3, Zone, Qname, Qtype)
     end.
 
 %% An SOA was found, thus we are authoritative and have the zone.
@@ -887,27 +886,6 @@ requires_additional_processing([_ | Rest], Acc) ->
     requires_additional_processing(Rest, Acc);
 requires_additional_processing([], Acc) ->
     lists:reverse(Acc).
-
-%% Sort the answers in the given message.
--spec sort_answers(dns:message()) -> dns:message().
-sort_answers(Message) ->
-    Message#dns_message{answers = lists:usort(fun sort_fun/2, Message#dns_message.answers)}.
-
--spec sort_fun(dns:rr(), dns:rr()) -> boolean().
-sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME, data = #dns_rrdata_cname{dname = Name}}, #dns_rr{
-    type = ?DNS_TYPE_CNAME, name = Name
-}) ->
-    true;
-sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME, name = Name}, #dns_rr{
-    type = ?DNS_TYPE_CNAME, data = #dns_rrdata_cname{dname = Name}
-}) ->
-    false;
-sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME}, #dns_rr{}) ->
-    true;
-sort_fun(#dns_rr{}, #dns_rr{type = ?DNS_TYPE_CNAME}) ->
-    false;
-sort_fun(A, B) ->
-    A =< B.
 
 % Extract the name from the first record in the list.
 zone_authority_name([Record | _]) ->

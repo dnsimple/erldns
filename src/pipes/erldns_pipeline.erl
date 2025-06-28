@@ -142,6 +142,7 @@ This callback can return
     erldns_query_throttle,
     erldns_packet_cache,
     erldns_resolver,
+    erldns_sorter,
     erldns_packet_cache,
     erldns_empty_verification
 ]).
