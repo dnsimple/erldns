@@ -141,6 +141,7 @@ This callback can return
 -define(DEFAULT_PACKET_PIPELINE, [
     erldns_query_throttle,
     erldns_packet_cache,
+    erldns_resolver_recursive,
     erldns_resolver,
     erldns_sorter,
     erldns_packet_cache,
