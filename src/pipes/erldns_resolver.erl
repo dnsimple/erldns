@@ -2,8 +2,7 @@
 -moduledoc """
 Resolve a DNS query.
 
-Supports only a single question per request: if a request contains multiple questions,
-only the first question will be resolved.
+Assumes that the DNS message contains exactly one query.
 
 Emits the following telemetry events:
 - `[erldns, pipeline, resolver, error]` with `#{rc := dns:rcode/0}` metadata.

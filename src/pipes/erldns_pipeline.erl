@@ -93,6 +93,7 @@ call(Msg, _Opts) ->
 -type transport() :: tcp | udp.
 -doc "Options that can be passed and accumulated to the pipeline.".
 -type opts() :: #{
+    query_labels := [dns:label()],
     resolved := boolean(),
     transport := transport(),
     host := host(),
@@ -142,6 +143,7 @@ This callback can return
     erldns_query_throttle,
     erldns_packet_cache,
     erldns_resolver_recursive,
+    erldns_questions,
     erldns_resolver,
     erldns_sorter,
     erldns_packet_cache,
@@ -267,4 +269,9 @@ prepare_pipe(Fun, _) when is_function(Fun) ->
     erlang:error({badpipe, {function_pipe_has_wrong_arity, Fun}}).
 
 def_opts() ->
-    #{resolved => false, transport => udp, host => undefined}.
+    #{
+        query_labels => [],
+        resolved => false,
+        transport => udp,
+        host => undefined
+    }.
