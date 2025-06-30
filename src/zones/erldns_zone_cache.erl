@@ -43,7 +43,7 @@ only the first question will be resolved.
 -doc "Creates a new table.".
 -spec create(atom()) -> ok | {error, Reason :: term()}.
 create(zones) ->
-    create_ets_table(zones, set, #zone.name);
+    create_ets_table(zones, set, #zone.labels);
 create(zone_records_typed) ->
     create_ets_table(zone_records_typed, ordered_set);
 create(sync_counters) ->
@@ -94,12 +94,12 @@ it will simply look up the name in the underlying data store.
 """.
 -spec get_zone(dns:dname()) -> erldns:zone() | {error, zone_not_found}.
 get_zone(Name) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    case ets:lookup(zones, NormalizedName) of
+    QLabels = dns:dname_to_labels(dns:dname_to_lower(Name)),
+    case ets:lookup(zones, QLabels) of
         [] ->
             {error, zone_not_found};
         [#zone{} = Zone] ->
-            Zone#zone{records = []}
+            Zone
     end.
 
 -doc "Find the SOA record for the given DNS question or zone.".
@@ -111,7 +111,8 @@ get_authority(#dns_message{questions = [Question | _]}) ->
     get_authority(Question#dns_query.name);
 get_authority(Name) when is_binary(Name) ->
     NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, #zone.authority) of
+    QLabels = dns:dname_to_labels(NormalizedName),
+    case find_zone_in_cache(QLabels, #zone.authority) of
         zone_not_found ->
             {error, not_authoritative};
         Authority ->
@@ -126,11 +127,11 @@ This function will always return a list, even if it is empty.
 -spec get_delegations(dns:dname()) -> [dns:rr()].
 get_delegations(Name) ->
     NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, #zone.name) of
+    QLabels = dns:dname_to_labels(NormalizedName),
+    case find_zone_in_cache(QLabels, #zone.name) of
         zone_not_found ->
             [];
-        ZoneName ->
-            NormalizedZoneName = dns:dname_to_lower(ZoneName),
+        NormalizedZoneName ->
             Pattern = {{{NormalizedZoneName, NormalizedName, ?DNS_TYPE_NS}, '$1'}, [], ['$1']},
             Records = lists:append(ets:select(zone_records_typed, [Pattern])),
             lists:filter(erldns_records:match_delegation(NormalizedName), Records)
@@ -140,11 +141,11 @@ get_delegations(Name) ->
 -spec get_zone_records(dns:dname()) -> [dns:rr()].
 get_zone_records(Name) ->
     NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, #zone.name) of
+    QLabels = dns:dname_to_labels(NormalizedName),
+    case find_zone_in_cache(QLabels, #zone.name) of
         zone_not_found ->
             [];
-        ZoneName ->
-            NormalizedZoneName = dns:dname_to_lower(ZoneName),
+        NormalizedZoneName ->
             Pattern = {{{NormalizedZoneName, '_', '_'}, '$1'}, [], ['$1']},
             lists:append(ets:select(zone_records_typed, [Pattern]))
     end.
@@ -153,7 +154,8 @@ get_zone_records(Name) ->
 -spec get_records_by_name_and_type(dns:dname(), dns:type()) -> [dns:rr()].
 get_records_by_name_and_type(Name, Type) ->
     NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, #zone.name) of
+    QLabels = dns:dname_to_labels(NormalizedName),
+    case find_zone_in_cache(QLabels, #zone.name) of
         zone_not_found ->
             [];
         ZoneName ->
@@ -166,7 +168,8 @@ get_records_by_name_and_type(Name, Type) ->
 -spec get_records_by_name(dns:dname()) -> [dns:rr()].
 get_records_by_name(Name) ->
     NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, #zone.name) of
+    QLabels = dns:dname_to_labels(NormalizedName),
+    case find_zone_in_cache(QLabels, #zone.name) of
         zone_not_found ->
             [];
         ZoneName ->
@@ -179,7 +182,8 @@ get_records_by_name(Name) ->
 -spec in_zone(binary()) -> boolean().
 in_zone(Name) ->
     NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, #zone.name) of
+    QLabels = dns:dname_to_labels(NormalizedName),
+    case find_zone_in_cache(QLabels, #zone.name) of
         zone_not_found ->
             false;
         ZoneName ->
@@ -194,11 +198,12 @@ Will also return true if a wildcard is present at the node.
 -spec record_name_in_zone(binary(), dns:dname()) -> boolean().
 record_name_in_zone(ZoneName, Name) ->
     NormalizedName = dns:dname_to_lower(Name),
-    NormalizedZoneName = dns:dname_to_lower(ZoneName),
-    case find_zone_in_cache(NormalizedName, member) of
+    QLabels = dns:dname_to_labels(NormalizedName),
+    case find_zone_in_cache(QLabels, member) of
         zone_not_found ->
             false;
         true ->
+            NormalizedZoneName = dns:dname_to_lower(ZoneName),
             Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '_'}, [], [true]},
             case ets:select_count(zone_records_typed, [Pattern]) of
                 0 ->
@@ -284,7 +289,7 @@ put_zone(#zone{name = Name} = Zone) ->
     NamedRecords = build_named_index(SignedZone#zone.records),
     ZoneRecords = prepare_zone_records(NormalizedName, NamedRecords),
     delete_zone_records(NormalizedName),
-    true = insert_zone(SignedZone#zone{records = trimmed}),
+    true = insert_zone(SignedZone#zone{records = []}),
     put_zone_records(ZoneRecords).
 
 -doc "Put zone RRSet".
@@ -307,7 +312,8 @@ put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter) ->
     put_zone_rrset({ZoneName, Digest, Records, []}, RRFqdn, Type, Counter);
 put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
     NormalizedZoneName = dns:dname_to_lower(ZoneName),
-    case find_zone_in_cache(NormalizedZoneName, zone) of
+    ZQLabels = dns:dname_to_labels(NormalizedZoneName),
+    case find_zone_in_cache(ZQLabels, zone) of
         #zone{} = Zone ->
             ?LOG_DEBUG(
                 #{
@@ -354,7 +360,8 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
 -spec delete_zone(dns:dname()) -> term().
 delete_zone(Name) ->
     NormalizedName = dns:dname_to_lower(Name),
-    ets:delete(zones, NormalizedName),
+    Labels = dns:dname_to_labels(NormalizedName),
+    ets:delete(zones, Labels),
     delete_zone_records(NormalizedName).
 
 %% Expects normalized names
@@ -367,7 +374,8 @@ delete_zone_records(NormalizedName) ->
 -spec delete_zone_rrset(binary(), binary(), binary(), integer(), integer()) -> term().
 delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
     NormalizedZoneName = dns:dname_to_lower(ZoneName),
-    case find_zone_in_cache(NormalizedZoneName, zone) of
+    ZQLabels = dns:dname_to_labels(NormalizedZoneName),
+    case find_zone_in_cache(ZQLabels, zone) of
         #zone{} = Zone ->
             CurrentCounter = get_rrset_sync_counter(ZoneName, RRFqdn, Type),
             case Counter of
@@ -431,7 +439,8 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
     ok | {error, Reason :: term()}.
 update_zone_records_and_digest(ZoneName, RecordsCount, Digest) ->
     NormalizedZoneName = dns:dname_to_lower(ZoneName),
-    case find_zone_in_cache(NormalizedZoneName, zone) of
+    ZQLabels = dns:dname_to_labels(NormalizedZoneName),
+    case find_zone_in_cache(ZQLabels, zone) of
         #zone{} = Zone ->
             UpdatedZone =
                 Zone#zone{
@@ -451,7 +460,8 @@ update_zone_records_and_digest(ZoneName, RecordsCount, Digest) ->
 filter_rrsig_records_with_type_covered(RRFqdn, TypeCovered) ->
     % guards below do not allow fun calls to prevent side effects
     NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
-    case find_zone_in_cache(NormalizedRRFqdn, member) of
+    QLabels = dns:dname_to_labels(NormalizedRRFqdn),
+    case find_zone_in_cache(QLabels, member) of
         true ->
             % {RRSigsCovering, RRSigsNotCovering} =
             lists:partition(
@@ -551,46 +561,39 @@ is_name_in_zone_with_wildcard(NormalizedZoneName, NormalizedName) ->
 
 %% expects name to be already normalized
 -spec find_zone_in_cache
-    (dns:dname(), zone) -> erldns:zone();
-    (dns:dname(), member) -> boolean();
-    (dns:dname(), dynamic()) -> dynamic().
-find_zone_in_cache(Name, Pos) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    find_zone_in_cache(NormalizedName, dns:dname_to_labels(NormalizedName), Pos).
-
-find_zone_in_cache(_Name, [], _) ->
+    ([dns:label()], zone) -> zone_not_found | erldns:zone();
+    ([dns:label()], member) -> zone_not_found | boolean();
+    ([dns:label()], dynamic()) -> zone_not_found | dynamic().
+find_zone_in_cache([], _) ->
     zone_not_found;
-find_zone_in_cache(Name, [_ | Labels], zone) ->
-    case ets:lookup(zones, Name) of
+find_zone_in_cache([_ | Tail] = Labels, zone) ->
+    case ets:lookup(zones, Labels) of
         [] ->
-            if_labels_find_zone_in_cache(Labels, zone);
+            find_zone_in_cache(Tail, zone);
         [#zone{} = Zone] ->
             Zone
     end;
-find_zone_in_cache(Name, [_ | Labels], member) ->
-    case ets:member(zones, Name) of
+find_zone_in_cache([_ | Tail] = Labels, member) ->
+    case ets:member(zones, Labels) of
         false ->
-            if_labels_find_zone_in_cache(Labels, member);
+            find_zone_in_cache(Tail, member);
         true ->
             true
     end;
-find_zone_in_cache(Name, [_ | Labels], Pos) ->
-    case ets:lookup_element(zones, Name, Pos, zone_not_found) of
+find_zone_in_cache([_ | Tail] = Labels, Pos) when is_number(Pos) ->
+    case ets:lookup_element(zones, Labels, Pos, zone_not_found) of
         zone_not_found ->
-            if_labels_find_zone_in_cache(Labels, Pos);
+            find_zone_in_cache(Tail, Pos);
         Elem ->
             Elem
     end.
 
-if_labels_find_zone_in_cache([], _QueryType) ->
-    zone_not_found;
-if_labels_find_zone_in_cache(Labels, QueryType) ->
-    find_zone_in_cache(dns:labels_to_dname(Labels), QueryType).
-
 %% Expects normalized names
 build_zone(NormalizedName, Version, Records, Keys) ->
+    Labels = dns:dname_to_labels(NormalizedName),
     Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
     #zone{
+        labels = Labels,
         name = NormalizedName,
         version = Version,
         record_count = length(Records),

@@ -16,11 +16,12 @@
 -record(zone, {
     %% We're assuming zones were stored with names already normalised,
     %% hence removing the need to re-normalize them on every fetch
+    labels :: [dns:label()],
     name :: dns:dname(),
     version :: binary(),
     authority = [] :: dns:authority(),
     record_count = 0 :: non_neg_integer(),
-    records = [] :: [dns:rr()] | trimmed,
+    records = [] :: [dns:rr()],
     keysets = [] :: [erldns:keyset()]
 }).
 
