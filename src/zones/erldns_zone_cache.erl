@@ -207,7 +207,7 @@ record_name_in_zone(ZoneName, Name) ->
             Pattern = {{{NormalizedZoneName, QLabels, '_'}, '_'}, [], [true]},
             case ets:select_count(zone_records_typed, [Pattern]) of
                 0 ->
-                    is_name_in_zone_with_wildcard(NormalizedZoneName, NormalizedName);
+                    record_name_in_zone_with_wildcard(NormalizedZoneName, QLabels);
                 _ ->
                     true
             end
@@ -544,21 +544,15 @@ is_name_in_zone(NormalizedZoneName, NormalizedName) ->
             true
     end.
 
-%% expects name to be already normalized
-is_name_in_zone_with_wildcard(NormalizedZoneName, NormalizedName) ->
-    WildcardName = dns:dname_to_lower(erldns_records:wildcard_qname(NormalizedName)),
-    WildcardLabels = dns:dname_to_labels(WildcardName),
-    Pattern = {{{NormalizedZoneName, WildcardLabels, '_'}, '_'}, [], [true]},
+%% Checks if there is a wildcard record matching all the way to the last label.
+record_name_in_zone_with_wildcard(_, []) ->
+    false;
+record_name_in_zone_with_wildcard(NormalizedZoneName, [_ | Parent]) ->
+    WildcardPath = [~"*" | Parent],
+    Pattern = {{{NormalizedZoneName, WildcardPath, '_'}, '_'}, [], [true]},
     case ets:select_count(zone_records_typed, [Pattern]) of
         0 ->
-            case dns:dname_to_labels(NormalizedName) of
-                [] ->
-                    false;
-                [_] ->
-                    false;
-                [_ | Labels] ->
-                    is_name_in_zone_with_wildcard(NormalizedZoneName, dns:labels_to_dname(Labels))
-            end;
+            record_name_in_zone_with_wildcard(NormalizedZoneName, Parent);
         _ ->
             true
     end.
