@@ -320,26 +320,27 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
                 #{domain => [erldns, zones]}
             ),
             KeySets = Zone#zone.keysets,
+            NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
             SignedRRSet = sign_rrset(Zone#zone{records = Records, keysets = KeySets}),
             {RRSigRecsCovering, RRSigRecsNotCovering} = filter_rrsig_records_with_type_covered(
-                RRFqdn, Type
+                NormalizedRRFqdn, Type
             ),
             % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
-            CurrentRRSetRecords = get_records_by_name_and_type(RRFqdn, Type),
+            CurrentRRSetRecords = get_records_by_name_and_type(NormalizedRRFqdn, Type),
             ZoneRecordsCount = Zone#zone.record_count,
             % put zone_records_typed records first then create the records in zone_records
             TypedRecords = Records ++ SignedRRSet ++ RRSigRecsNotCovering,
-            put_zone_records_typed_entry(NormalizedZoneName, RRFqdn, TypedRecords),
+            put_zone_records_typed_entry(NormalizedZoneName, NormalizedRRFqdn, TypedRecords),
             UpdatedZoneRecordsCount =
                 ZoneRecordsCount +
                     (length(Records) - length(CurrentRRSetRecords)) +
                     (length(SignedRRSet) - length(RRSigRecsCovering)),
             update_zone_records_and_digest(ZoneName, UpdatedZoneRecordsCount, Digest),
-            write_rrset_sync_counter(NormalizedZoneName, RRFqdn, Type, Counter),
+            write_rrset_sync_counter(NormalizedZoneName, NormalizedRRFqdn, Type, Counter),
             ?LOG_DEBUG(
                 #{
                     what => rrset_update_completed,
-                    rrset => RRFqdn,
+                    rrset => NormalizedRRFqdn,
                     type => Type
                 },
                 #{domain => [erldns, zones]}
