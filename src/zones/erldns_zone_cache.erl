@@ -183,7 +183,7 @@ in_zone(Name) ->
         zone_not_found ->
             false;
         ZoneName ->
-            is_name_in_zone(NormalizedName, ZoneName)
+            is_name_in_zone(ZoneName, NormalizedName)
     end.
 
 -doc """
@@ -202,7 +202,7 @@ record_name_in_zone(ZoneName, Name) ->
             Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '_'}, [], [true]},
             case ets:select_count(zone_records_typed, [Pattern]) of
                 0 ->
-                    is_name_in_zone_with_wildcard(NormalizedName, ZoneName);
+                    is_name_in_zone_with_wildcard(NormalizedZoneName, NormalizedName);
                 _ ->
                     true
             end
@@ -515,7 +515,7 @@ do_put_zone_records_typed_entry(NormalizedName, NormalizedFqdn, Type, Record) ->
     ets:insert(zone_records_typed, {{NormalizedName, NormalizedFqdn, Type}, Record}).
 
 %% expects name to be already normalized
-is_name_in_zone(NormalizedName, NormalizedZoneName) ->
+is_name_in_zone(NormalizedZoneName, NormalizedName) ->
     Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '$1'}, [], ['$1']},
     case lists:append(ets:select(zone_records_typed, [Pattern])) of
         [] ->
@@ -525,14 +525,14 @@ is_name_in_zone(NormalizedName, NormalizedZoneName) ->
                 [_] ->
                     false;
                 [_ | Labels] ->
-                    is_name_in_zone(dns:labels_to_dname(Labels), NormalizedZoneName)
+                    is_name_in_zone(NormalizedZoneName, dns:labels_to_dname(Labels))
             end;
         _ ->
             true
     end.
 
 %% expects name to be already normalized
-is_name_in_zone_with_wildcard(NormalizedName, NormalizedZoneName) ->
+is_name_in_zone_with_wildcard(NormalizedZoneName, NormalizedName) ->
     WildcardName = dns:dname_to_lower(erldns_records:wildcard_qname(NormalizedName)),
     Pattern = {{{NormalizedZoneName, WildcardName, '_'}, '_'}, [], [true]},
     case ets:select_count(zone_records_typed, [Pattern]) of
@@ -543,7 +543,7 @@ is_name_in_zone_with_wildcard(NormalizedName, NormalizedZoneName) ->
                 [_] ->
                     false;
                 [_ | Labels] ->
-                    is_name_in_zone_with_wildcard(dns:labels_to_dname(Labels), NormalizedZoneName)
+                    is_name_in_zone_with_wildcard(NormalizedZoneName, dns:labels_to_dname(Labels))
             end;
         _ ->
             true
