@@ -132,7 +132,7 @@ get_delegations(Name) ->
         zone_not_found ->
             [];
         NormalizedZoneName ->
-            Pattern = {{{NormalizedZoneName, NormalizedName, ?DNS_TYPE_NS}, '$1'}, [], ['$1']},
+            Pattern = {{{NormalizedZoneName, QLabels, ?DNS_TYPE_NS}, '$1'}, [], ['$1']},
             Records = lists:append(ets:select(zone_records_typed, [Pattern])),
             lists:filter(erldns_records:match_delegation(NormalizedName), Records)
     end.
@@ -160,7 +160,7 @@ get_records_by_name_and_type(Name, Type) ->
             [];
         ZoneName ->
             NormalizedZoneName = dns:dname_to_lower(ZoneName),
-            Pattern = {{{NormalizedZoneName, NormalizedName, Type}, '$1'}, [], ['$1']},
+            Pattern = {{{NormalizedZoneName, QLabels, Type}, '$1'}, [], ['$1']},
             lists:append(ets:select(zone_records_typed, [Pattern]))
     end.
 
@@ -174,7 +174,7 @@ get_records_by_name(Name) ->
             [];
         ZoneName ->
             NormalizedZoneName = dns:dname_to_lower(ZoneName),
-            Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '$1'}, [], ['$1']},
+            Pattern = {{{NormalizedZoneName, QLabels, '_'}, '$1'}, [], ['$1']},
             lists:append(ets:select(zone_records_typed, [Pattern]))
     end.
 
@@ -204,7 +204,7 @@ record_name_in_zone(ZoneName, Name) ->
             false;
         true ->
             NormalizedZoneName = dns:dname_to_lower(ZoneName),
-            Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '_'}, [], [true]},
+            Pattern = {{{NormalizedZoneName, QLabels, '_'}, '_'}, [], [true]},
             case ets:select_count(zone_records_typed, [Pattern]) of
                 0 ->
                     is_name_in_zone_with_wildcard(NormalizedZoneName, NormalizedName);
@@ -391,7 +391,8 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                     ZoneRecordsCount = Zone#zone.record_count,
                     CurrentRRSetRecords = get_records_by_name_and_type(RRFqdn, Type),
                     NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
-                    Pattern = {{{NormalizedZoneName, NormalizedRRFqdn, Type}, '_'}, [], [true]},
+                    QLabels = dns:dname_to_labels(NormalizedRRFqdn),
+                    Pattern = {{{NormalizedZoneName, QLabels, Type}, '_'}, [], [true]},
                     ets:select_delete(zone_records_typed, [Pattern]),
                     % remove the RRSIG for the given record type
                     {RRSigsCovering, RRSigsNotCovering} =
@@ -522,11 +523,13 @@ put_zone_records_typed_entry(NormalizedName, Fqdn, Records) ->
     ).
 
 do_put_zone_records_typed_entry(NormalizedName, NormalizedFqdn, Type, Record) ->
-    ets:insert(zone_records_typed, {{NormalizedName, NormalizedFqdn, Type}, Record}).
+    Labels = dns:dname_to_labels(NormalizedFqdn),
+    ets:insert(zone_records_typed, {{NormalizedName, Labels, Type}, Record}).
 
 %% expects name to be already normalized
 is_name_in_zone(NormalizedZoneName, NormalizedName) ->
-    Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '$1'}, [], ['$1']},
+    Labels = dns:dname_to_labels(NormalizedName),
+    Pattern = {{{NormalizedZoneName, Labels, '_'}, '$1'}, [], ['$1']},
     case lists:append(ets:select(zone_records_typed, [Pattern])) of
         [] ->
             case dns:dname_to_labels(NormalizedName) of
@@ -534,8 +537,8 @@ is_name_in_zone(NormalizedZoneName, NormalizedName) ->
                     false;
                 [_] ->
                     false;
-                [_ | Labels] ->
-                    is_name_in_zone(NormalizedZoneName, dns:labels_to_dname(Labels))
+                [_ | Rest] ->
+                    is_name_in_zone(NormalizedZoneName, dns:labels_to_dname(Rest))
             end;
         _ ->
             true
@@ -544,7 +547,8 @@ is_name_in_zone(NormalizedZoneName, NormalizedName) ->
 %% expects name to be already normalized
 is_name_in_zone_with_wildcard(NormalizedZoneName, NormalizedName) ->
     WildcardName = dns:dname_to_lower(erldns_records:wildcard_qname(NormalizedName)),
-    Pattern = {{{NormalizedZoneName, WildcardName, '_'}, '_'}, [], [true]},
+    WildcardLabels = dns:dname_to_labels(WildcardName),
+    Pattern = {{{NormalizedZoneName, WildcardLabels, '_'}, '_'}, [], [true]},
     case ets:select_count(zone_records_typed, [Pattern]) of
         0 ->
             case dns:dname_to_labels(NormalizedName) of
