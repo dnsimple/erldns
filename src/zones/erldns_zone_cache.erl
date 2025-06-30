@@ -390,11 +390,9 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                             erldns_records:match_type_covered(Type),
                             get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_RRSIG_NUMBER)
                         ),
-                    Value = {
-                        {NormalizedZoneName, NormalizedRRFqdn, ?DNS_TYPE_RRSIG_NUMBER},
-                        RRSigsNotCovering
-                    },
-                    ets:insert(zone_records_typed, Value),
+                    do_put_zone_records_typed_entry(
+                        NormalizedZoneName, NormalizedRRFqdn, ?DNS_TYPE_RRSIG, RRSigsNotCovering
+                    ),
                     % only write counter if called explicitly with Counter value i.e. different than 0.
                     % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
                     case Counter of
@@ -469,7 +467,8 @@ insert_zone(#zone{} = Zone) ->
     ets:insert(zones, Zone).
 
 %% expects name to be already normalized
--spec prepare_zone_records(dns:dname(), map()) -> list().
+-spec prepare_zone_records(dns:dname(), #{dns:dname() => [dns:rr()]}) ->
+    [{dns:dname(), dns:dname(), dns:type(), [dns:rr()]}].
 prepare_zone_records(NormalizedName, RecordsByName) ->
     lists:flatmap(
         fun({Fqdn, Records}) ->
@@ -482,20 +481,20 @@ prepare_zone_records(NormalizedName, RecordsByName) ->
     ).
 
 %% expects name to be already normalized
-prepare_zone_records_typed_entry(NormalizedName, NormalizedFqdn, ListTypedRecords) ->
+prepare_zone_records_typed_entry(NormalizedZoneName, NormalizedRecordName, ListTypedRecords) ->
     lists:map(
-        fun({Type, Record}) ->
-            {{NormalizedName, NormalizedFqdn, Type}, Record}
+        fun({Type, Records}) ->
+            {NormalizedZoneName, NormalizedRecordName, Type, Records}
         end,
         ListTypedRecords
     ).
 
 %% expects name to be already normalized
--spec put_zone_records(list()) -> ok.
+-spec put_zone_records([{dns:dname(), dns:dname(), dns:type(), [dns:rr()]}]) -> ok.
 put_zone_records(RecordsByName) ->
     lists:foreach(
-        fun(Entry) ->
-            ets:insert(zone_records_typed, Entry)
+        fun({NormalizedZoneName, NormalizedRecordName, Type, Records}) ->
+            do_put_zone_records_typed_entry(NormalizedZoneName, NormalizedRecordName, Type, Records)
         end,
         RecordsByName
     ).
