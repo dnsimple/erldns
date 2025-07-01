@@ -24,6 +24,7 @@ only the first question will be resolved.
     get_records_by_name_and_type/2,
     in_zone/1,
     record_name_in_zone/2,
+    record_name_in_zone_strict/2,
     zone_names_and_versions/0,
     get_rrset_sync_counter/3
 ]).
@@ -202,13 +203,25 @@ record_name_in_zone(ZoneName, Name) ->
         ZoneLabels ->
             QLabels = dns:dname_to_labels(dns:dname_to_lower(Name)),
             RecordLabels = reduce_record_labels(ZoneLabels, QLabels),
-            Pattern = {{{ZoneLabels, RecordLabels, '_'}, '_'}, [], [true]},
-            case ets:select_count(zone_records_typed, [Pattern]) of
-                0 ->
-                    record_name_in_zone_with_wildcard(ZoneLabels, RecordLabels);
-                _ ->
-                    true
-            end
+            record_name_in_zone_helper(ZoneLabels, RecordLabels)
+    end.
+
+-doc """
+Check if the record name is in the zone.
+
+Will also return true if a wildcard is present at the node.
+""".
+-spec record_name_in_zone_strict(binary(), dns:dname()) -> boolean().
+record_name_in_zone_strict(ZoneName, Name) ->
+    ZLabels = dns:dname_to_labels(dns:dname_to_lower(ZoneName)),
+    case find_zone_in_cache(ZLabels, #zone.labels) of
+        zone_not_found ->
+            false;
+        ZoneLabels ->
+            QLabels = dns:dname_to_labels(dns:dname_to_lower(Name)),
+            RecordLabels = reduce_record_labels(ZoneLabels, QLabels),
+            record_name_in_zone_helper(ZoneLabels, RecordLabels) orelse
+                record_name_in_zone_with_descendants(ZoneLabels, RecordLabels)
     end.
 
 -doc "Return a list of tuples with each tuple as a name and the version SHA for the zone.".
@@ -283,10 +296,11 @@ put_zone({Name, Sha, Records, Keys}) ->
     put_zone(build_zone(NormalizedName, Sha, Records, Keys));
 put_zone(#zone{name = Name} = Zone) ->
     NormalizedName = dns:dname_to_lower(Name),
+    ZoneLabels = dns:dname_to_labels(NormalizedName),
     SignedZone = sign_zone(Zone#zone{name = NormalizedName}),
     NamedRecords = build_named_index(SignedZone#zone.records),
     ZoneRecords = prepare_zone_records(NormalizedName, NamedRecords),
-    delete_zone_records(NormalizedName),
+    delete_zone_records(ZoneLabels),
     true = insert_zone(SignedZone#zone{records = []}),
     put_zone_records(ZoneRecords).
 
@@ -529,7 +543,7 @@ do_put_zone_records_typed_entry(NZoneName, NRecordName, Type, Record) ->
 %% record paths shall not cross the zone boundary,
 %% hence we can cut the zone labels from the record labels
 reduce_record_labels(ZoneLabels, RecordLabels) when is_list(ZoneLabels), is_list(RecordLabels) ->
-    lists:reverse(match_labels(lists:reverse(ZoneLabels), lists:reverse(RecordLabels))).
+    match_labels(lists:reverse(ZoneLabels), lists:reverse(RecordLabels)).
 
 match_labels([], Rest) ->
     Rest;
@@ -554,8 +568,9 @@ is_name_in_zone(ZoneLabels, RecordLabels) ->
 %% Checks if there is a wildcard record matching all the way to the last label.
 record_name_in_zone_with_wildcard(_, []) ->
     false;
-record_name_in_zone_with_wildcard(ZoneLabels, [_ | Parent]) ->
-    WildcardPath = [~"*" | Parent],
+record_name_in_zone_with_wildcard(ZoneLabels, QLabels) ->
+    Parent = lists:droplast(QLabels),
+    WildcardPath = Parent ++ [~"*"],
     Pattern = {{{ZoneLabels, WildcardPath, '_'}, '_'}, [], [true]},
     case ets:select_count(zone_records_typed, [Pattern]) of
         0 ->
@@ -563,6 +578,12 @@ record_name_in_zone_with_wildcard(ZoneLabels, [_ | Parent]) ->
         _ ->
             true
     end.
+
+record_name_in_zone_with_descendants(ZoneLabels, QLabels) ->
+    % eqwalizer:ignore this needs to be an improper list for tree traversal
+    HasDescendantsPath = QLabels ++ '_',
+    Pattern = {{{ZoneLabels, HasDescendantsPath, '_'}, '_'}, [], [true]},
+    0 =/= ets:select_count(zone_records_typed, [Pattern]).
 
 %% expects name to be already normalized
 -spec find_zone_in_cache
@@ -656,6 +677,15 @@ rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
         end,
         RRSigRecords
     ).
+
+record_name_in_zone_helper(ZoneLabels, RecordLabels) ->
+    Pattern = {{{ZoneLabels, RecordLabels, '_'}, '_'}, [], [true]},
+    case ets:select_count(zone_records_typed, [Pattern]) of
+        0 ->
+            record_name_in_zone_with_wildcard(ZoneLabels, RecordLabels);
+        _ ->
+            true
+    end.
 
 -doc false.
 -spec start_link() -> term().

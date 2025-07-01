@@ -16,7 +16,9 @@ groups() ->
             pdns_definitions,
             pdns_dnssec_definitions,
             erldns_definitions,
-            erldns_dnssec_definitions
+            erldns_dnssec_definitions,
+            wildcard_specs,
+            ent_specs
         ]}
     ].
 
@@ -74,6 +76,14 @@ erldns_definitions(_) ->
 
 erldns_dnssec_definitions(_) ->
     Result = dnstest_harness:run(dnstest_definitions:erldns_dnssec_definitions()),
+    assert(?FUNCTION_NAME, Result).
+
+wildcard_specs(_) ->
+    Result = dnstest_harness:run(wildcard_specs:definitions()),
+    assert(?FUNCTION_NAME, Result).
+
+ent_specs(_) ->
+    Result = dnstest_harness:run(ent_specs:definitions()),
     assert(?FUNCTION_NAME, Result).
 
 assert(_Definitions, Results) ->

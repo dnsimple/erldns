@@ -152,12 +152,7 @@ resolve_authoritative(Message, Qname, Qtype, Zone, Host, CnameChain) ->
     Result =
         case {erldns_zone_cache:record_name_in_zone(Zone#zone.name, Qname), CnameChain} of
             {false, []} ->
-                % No host name with the given record in the zone, return NXDOMAIN and include authority
-                Message#dns_message{
-                    aa = true,
-                    rc = ?DNS_RCODE_NXDOMAIN,
-                    authority = Zone#zone.authority
-                };
+                resolve_ent(Message, Qname, Zone);
             _ ->
                 case erldns_zone_cache:get_records_by_name(Qname) of
                     [] ->
@@ -195,6 +190,30 @@ resolve_authoritative(Message, Qname, Qtype, Zone, Host, CnameChain) ->
                 rc = ?DNS_RCODE_NOERROR,
                 authority = ZonecutRecords,
                 answers = FilteredCnameAnswers
+            }
+    end.
+
+-spec resolve_ent(
+    Message :: dns:message(),
+    Qname :: dns:dname(),
+    Zone :: erldns:zone()
+) ->
+    dns:message().
+resolve_ent(Message, Qname, Zone) ->
+    case erldns_zone_cache:record_name_in_zone_strict(Zone#zone.name, Qname) of
+        false ->
+            % No host name with the given record in the zone, return NXDOMAIN and include authority
+            Message#dns_message{
+                aa = true,
+                rc = ?DNS_RCODE_NXDOMAIN,
+                authority = Zone#zone.authority
+            };
+        true ->
+            % No host name with the given record in the zone, return NXDOMAIN and include authority
+            Message#dns_message{
+                aa = true,
+                rc = ?DNS_RCODE_NOERROR,
+                authority = Zone#zone.authority
             }
     end.
 
