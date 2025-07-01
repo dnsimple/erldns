@@ -37,18 +37,7 @@ call(Msg, _) ->
     Msg.
 
 call(Msg, _, []) ->
-    case erldns_config:use_root_hints() of
-        true ->
-            {Authority, Additional} = erldns_records:root_hints(),
-            Msg#dns_message{
-                aa = false,
-                rc = ?DNS_RCODE_REFUSED,
-                authority = Authority,
-                additional = Additional
-            };
-        _ ->
-            Msg#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED}
-    end;
+    optionally_add_root_hints(Msg#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED});
 call(Msg, #{host := Host}, AuthorityRecords) ->
     try
         resolve(Msg, AuthorityRecords, Host)
