@@ -37,18 +37,7 @@ call(Msg, _) ->
     Msg.
 
 call(Msg, _, []) ->
-    case erldns_config:use_root_hints() of
-        true ->
-            {Authority, Additional} = erldns_records:root_hints(),
-            Msg#dns_message{
-                aa = false,
-                rc = ?DNS_RCODE_REFUSED,
-                authority = Authority,
-                additional = Additional
-            };
-        _ ->
-            Msg#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED}
-    end;
+    optionally_add_root_hints(Msg#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED});
 call(Msg, #{host := Host}, AuthorityRecords) ->
     try
         resolve(Msg, AuthorityRecords, Host)
@@ -156,7 +145,7 @@ resolve_qname_and_qtype(Message, AuthorityRecords, Qname, Qtype, Host) ->
     Qname :: dns:dname(),
     Qtype :: dns:type(),
     Zone :: erldns:zone(),
-    Host :: dns:ip(),
+    Host :: erldns_pipeline:host(),
     CnameChain :: [dns:rr()]
 ) ->
     dns:message().
@@ -231,7 +220,7 @@ exact_match_resolution(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, 
     Message :: dns:message(),
     Qname :: dns:dname(),
     Qtype :: dns:type(),
-    Host :: dns:ip(),
+    Host :: erldns_pipeline:host(),
     CnameChain :: [dns:rr()],
     MatchedRecords :: [dns:rr()],
     Zone :: erldns:zone()
@@ -250,8 +239,8 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
             [] ->
                 % No records matched the qtype, call custom handler
                 Handlers = erldns_handler:get_versioned_handlers(),
-                HandlerRecords = lists:flatten(
-                    lists:map(call_handlers(Qname, Qtype, MatchedRecords, Message), Handlers)
+                HandlerRecords = lists:flatmap(
+                    call_handlers(Qname, Qtype, MatchedRecords, Message), Handlers
                 ),
                 erldns_dnssec:maybe_sign_rrset(Message, HandlerRecords, Zone);
             _ ->
@@ -281,7 +270,7 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
     Message :: dns:message(),
     Qname :: dns:dname(),
     Qtype :: dns:type(),
-    Host :: dns:ip(),
+    Host :: erldns_pipeline:host(),
     CnameChain :: [dns:rr()],
     MatchedRecords :: [dns:rr()],
     Zone :: erldns:zone(),
@@ -358,7 +347,7 @@ resolve_exact_type_match(
     Message :: dns:message(),
     Qname :: dns:dname(),
     Qtype :: dns:type(),
-    Host :: dns:ip(),
+    Host :: erldns_pipeline:host(),
     CnameChain :: [dns:rr()],
     MatchedRecords :: [dns:rr()],
     Zone :: erldns:zone(),
@@ -448,7 +437,7 @@ resolve_exact_match_referral(Message, _, _MatchedRecords, _ReferralRecords, Auth
 -spec resolve_exact_match_with_cname(
     Message :: dns:message(),
     Qtype :: ?DNS_TYPE_CNAME,
-    Host :: dns:ip(),
+    Host :: erldns_pipeline:host(),
     CnameChain :: [dns:rr()],
     MatchedRecords :: [dns:rr()],
     Zone :: erldns:zone(),
@@ -489,7 +478,7 @@ resolve_exact_match_with_cname(
     Message :: dns:message(),
     Qname :: dns:dname(),
     Qtype :: dns:type(),
-    Host :: dns:ip(),
+    Host :: erldns_pipeline:host(),
     CnameChain :: [dns:rr()],
     BestMatchRecords :: [dns:rr()],
     Zone :: erldns:zone()
@@ -521,7 +510,7 @@ best_match_resolution(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords,
     Message :: dns:message(),
     Qname :: dns:dname(),
     Qtype :: dns:type(),
-    Host :: dns:ip(),
+    Host :: erldns_pipeline:host(),
     CnameChain :: [dns:rr()],
     BestMatchRecords :: [dns:rr()],
     Zone :: erldns:zone()
@@ -563,7 +552,7 @@ resolve_best_match(Message, Qname, Qtype, Host, CnameChain, BestMatchRecords, Zo
     Message :: dns:message(),
     Qname :: dns:dname(),
     Qtype :: dns:type(),
-    Host :: dns:ip(),
+    Host :: erldns_pipeline:host(),
     CnameChain :: [dns:rr()],
     BestMatchRecords :: [dns:rr()],
     Zone :: erldns:zone(),
@@ -586,8 +575,8 @@ resolve_best_match_with_wildcard(
         [] ->
             % There is no exact type matches for the original qtype, ask the custom handlers for their records.
             Handlers = erldns_handler:get_versioned_handlers(),
-            HandlerRecords = lists:flatten(
-                lists:map(call_handlers(Qname, Qtype, MatchedRecords, Message), Handlers)
+            HandlerRecords = lists:flatmap(
+                call_handlers(Qname, Qtype, MatchedRecords, Message), Handlers
             ),
             Records = lists:map(erldns_records:replace_name(Qname), HandlerRecords),
             NewRecords = erldns_dnssec:maybe_sign_rrset(Message, Records, Zone),
@@ -619,7 +608,7 @@ resolve_best_match_with_wildcard(
     Message :: dns:message(),
     Qname :: dns:dname(),
     Qtype :: dns:type(),
-    Host :: dns:ip(),
+    Host :: erldns_pipeline:host(),
     CnameChain :: [dns:rr()],
     BestMatchRecords :: [dns:rr()],
     Zone :: erldns:zone(),
@@ -662,7 +651,7 @@ resolve_best_match_with_wildcard_cname(
     Message :: dns:message(),
     Qname :: dns:dname(),
     Qtype :: dns:type(),
-    Host :: dns:ip(),
+    Host :: erldns_pipeline:host(),
     CnameChain :: [dns:rr()],
     BestMatchRecords :: [dns:rr()],
     Zone :: erldns:zone(),
@@ -721,7 +710,7 @@ restart_query(Message, _Name, _Qtype, _Host, _CnameChain, _Zone, false) ->
     Message :: dns:message(),
     Qname :: dns:dname(),
     Qtype :: dns:type(),
-    Host :: dns:ip(),
+    Host :: erldns_pipeline:host(),
     CnameChain :: [dns:rr()],
     Zone :: erldns:zone(),
     InZone :: boolean()
@@ -875,8 +864,8 @@ additional_processing(Message, _Host, _Zone, []) ->
     Message;
 %% There are records with names that require additional processing.
 additional_processing(Message, Host, Zone, Names) ->
-    RRs = lists:flatten(
-        lists:map(fun(Name) -> erldns_zone_cache:get_records_by_name(Name) end, Names)
+    RRs = lists:flatmap(
+        fun(Name) -> erldns_zone_cache:get_records_by_name(Name) end, Names
     ),
     Records = lists:filter(erldns_records:match_types([?DNS_TYPE_A, ?DNS_TYPE_AAAA]), RRs),
     additional_processing(Message, Host, Zone, Names, Records).

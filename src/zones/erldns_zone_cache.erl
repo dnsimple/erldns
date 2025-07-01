@@ -183,7 +183,7 @@ in_zone(Name) ->
         zone_not_found ->
             false;
         ZoneName ->
-            is_name_in_zone(NormalizedName, ZoneName)
+            is_name_in_zone(ZoneName, NormalizedName)
     end.
 
 -doc """
@@ -202,7 +202,7 @@ record_name_in_zone(ZoneName, Name) ->
             Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '_'}, [], [true]},
             case ets:select_count(zone_records_typed, [Pattern]) of
                 0 ->
-                    is_name_in_zone_with_wildcard(NormalizedName, ZoneName);
+                    is_name_in_zone_with_wildcard(NormalizedZoneName, NormalizedName);
                 _ ->
                     true
             end
@@ -320,26 +320,27 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
                 #{domain => [erldns, zones]}
             ),
             KeySets = Zone#zone.keysets,
+            NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
             SignedRRSet = sign_rrset(Zone#zone{records = Records, keysets = KeySets}),
             {RRSigRecsCovering, RRSigRecsNotCovering} = filter_rrsig_records_with_type_covered(
-                RRFqdn, Type
+                NormalizedRRFqdn, Type
             ),
             % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
-            CurrentRRSetRecords = get_records_by_name_and_type(RRFqdn, Type),
+            CurrentRRSetRecords = get_records_by_name_and_type(NormalizedRRFqdn, Type),
             ZoneRecordsCount = Zone#zone.record_count,
             % put zone_records_typed records first then create the records in zone_records
             TypedRecords = Records ++ SignedRRSet ++ RRSigRecsNotCovering,
-            put_zone_records_typed_entry(NormalizedZoneName, RRFqdn, TypedRecords),
+            put_zone_records_typed_entry(NormalizedZoneName, NormalizedRRFqdn, TypedRecords),
             UpdatedZoneRecordsCount =
                 ZoneRecordsCount +
                     (length(Records) - length(CurrentRRSetRecords)) +
                     (length(SignedRRSet) - length(RRSigRecsCovering)),
             update_zone_records_and_digest(ZoneName, UpdatedZoneRecordsCount, Digest),
-            write_rrset_sync_counter(NormalizedZoneName, RRFqdn, Type, Counter),
+            write_rrset_sync_counter(NormalizedZoneName, NormalizedRRFqdn, Type, Counter),
             ?LOG_DEBUG(
                 #{
                     what => rrset_update_completed,
-                    rrset => RRFqdn,
+                    rrset => NormalizedRRFqdn,
                     type => Type
                 },
                 #{domain => [erldns, zones]}
@@ -390,11 +391,9 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                             erldns_records:match_type_covered(Type),
                             get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_RRSIG_NUMBER)
                         ),
-                    Value = {
-                        {NormalizedZoneName, NormalizedRRFqdn, ?DNS_TYPE_RRSIG_NUMBER},
-                        RRSigsNotCovering
-                    },
-                    ets:insert(zone_records_typed, Value),
+                    do_put_zone_records_typed_entry(
+                        NormalizedZoneName, NormalizedRRFqdn, ?DNS_TYPE_RRSIG, RRSigsNotCovering
+                    ),
                     % only write counter if called explicitly with Counter value i.e. different than 0.
                     % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
                     case Counter of
@@ -469,7 +468,8 @@ insert_zone(#zone{} = Zone) ->
     ets:insert(zones, Zone).
 
 %% expects name to be already normalized
--spec prepare_zone_records(dns:dname(), map()) -> list().
+-spec prepare_zone_records(dns:dname(), #{dns:dname() => [dns:rr()]}) ->
+    [{dns:dname(), dns:dname(), dns:type(), [dns:rr()]}].
 prepare_zone_records(NormalizedName, RecordsByName) ->
     lists:flatmap(
         fun({Fqdn, Records}) ->
@@ -482,20 +482,20 @@ prepare_zone_records(NormalizedName, RecordsByName) ->
     ).
 
 %% expects name to be already normalized
-prepare_zone_records_typed_entry(NormalizedName, NormalizedFqdn, ListTypedRecords) ->
+prepare_zone_records_typed_entry(NormalizedZoneName, NormalizedRecordName, ListTypedRecords) ->
     lists:map(
-        fun({Type, Record}) ->
-            {{NormalizedName, NormalizedFqdn, Type}, Record}
+        fun({Type, Records}) ->
+            {NormalizedZoneName, NormalizedRecordName, Type, Records}
         end,
         ListTypedRecords
     ).
 
 %% expects name to be already normalized
--spec put_zone_records(list()) -> ok.
+-spec put_zone_records([{dns:dname(), dns:dname(), dns:type(), [dns:rr()]}]) -> ok.
 put_zone_records(RecordsByName) ->
     lists:foreach(
-        fun(Entry) ->
-            ets:insert(zone_records_typed, Entry)
+        fun({NormalizedZoneName, NormalizedRecordName, Type, Records}) ->
+            do_put_zone_records_typed_entry(NormalizedZoneName, NormalizedRecordName, Type, Records)
         end,
         RecordsByName
     ).
@@ -515,7 +515,7 @@ do_put_zone_records_typed_entry(NormalizedName, NormalizedFqdn, Type, Record) ->
     ets:insert(zone_records_typed, {{NormalizedName, NormalizedFqdn, Type}, Record}).
 
 %% expects name to be already normalized
-is_name_in_zone(NormalizedName, NormalizedZoneName) ->
+is_name_in_zone(NormalizedZoneName, NormalizedName) ->
     Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '$1'}, [], ['$1']},
     case lists:append(ets:select(zone_records_typed, [Pattern])) of
         [] ->
@@ -525,14 +525,14 @@ is_name_in_zone(NormalizedName, NormalizedZoneName) ->
                 [_] ->
                     false;
                 [_ | Labels] ->
-                    is_name_in_zone(dns:labels_to_dname(Labels), NormalizedZoneName)
+                    is_name_in_zone(NormalizedZoneName, dns:labels_to_dname(Labels))
             end;
         _ ->
             true
     end.
 
 %% expects name to be already normalized
-is_name_in_zone_with_wildcard(NormalizedName, NormalizedZoneName) ->
+is_name_in_zone_with_wildcard(NormalizedZoneName, NormalizedName) ->
     WildcardName = dns:dname_to_lower(erldns_records:wildcard_qname(NormalizedName)),
     Pattern = {{{NormalizedZoneName, WildcardName, '_'}, '_'}, [], [true]},
     case ets:select_count(zone_records_typed, [Pattern]) of
@@ -543,7 +543,7 @@ is_name_in_zone_with_wildcard(NormalizedName, NormalizedZoneName) ->
                 [_] ->
                     false;
                 [_ | Labels] ->
-                    is_name_in_zone_with_wildcard(dns:labels_to_dname(Labels), NormalizedZoneName)
+                    is_name_in_zone_with_wildcard(NormalizedZoneName, dns:labels_to_dname(Labels))
             end;
         _ ->
             true

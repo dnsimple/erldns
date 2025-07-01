@@ -49,7 +49,7 @@ optionally_convert_wildcard(Name, Qname) ->
 -doc """
 Get a wildcard variation of a Qname.
 
-Replaces the leading abel with an asterisk for wildcard lookup.
+Replaces the leading label with an asterisk for wildcard lookup.
 """.
 -spec wildcard_qname(dns:dname()) -> dns:dname().
 wildcard_qname(Qname) ->
@@ -137,7 +137,7 @@ match_wildcard_label() ->
 
 -spec match_delegation(dns:dname()) -> fun((dns:rr()) -> boolean()).
 match_delegation(Name) ->
-    fun(R) when is_record(R, dns_rr) -> R#dns_rr.data =:= #dns_rrdata_ns{dname = Name} end.
+    fun(#dns_rr{data = Data}) -> #dns_rrdata_ns{dname = Name} =:= Data end.
 
 -spec match_type_covered(dns:type()) -> fun((dns:rr()) -> boolean()).
 match_type_covered(Qtype) ->

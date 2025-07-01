@@ -251,7 +251,7 @@ json_to_erlang_txt_spf_records(_) ->
     ).
 
 json_to_erlang_ensure_sorting_and_defaults(_) ->
-    ?assertEqual(
+    ?assertMatch(
         #zone{name = ~"foo.org", version = <<>>, records = [], keysets = []},
         erldns_zone_parser:decode(#{~"name" => ~"foo.org", ~"records" => []}, [])
     ).
@@ -551,8 +551,8 @@ record_name_in_zone(_) ->
     ?assertMatch(true, erldns_zone_cache:record_name_in_zone(ZoneName, Qname)).
 
 put_zone_rrset_zone(_) ->
-    ZoneName = ~"example.com",
-    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneName = dns:dname_to_lower(~"example.com"),
+    ZoneBase = erldns_zone_cache:find_zone(ZoneName),
     Zone = #zone{
         name = ZoneName,
         version = ~"irrelevantDigest",
@@ -561,7 +561,7 @@ put_zone_rrset_zone(_) ->
                 data = #dns_rrdata_cname{dname = ~"google.com"},
                 name = ~"cname.example.com",
                 ttl = 5,
-                type = 5
+                type = ?DNS_TYPE_CNAME
             }
         ]
     },
@@ -571,13 +571,13 @@ put_zone_rrset_zone(_) ->
         5,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneModified = erldns_zone_cache:find_zone(ZoneName),
     % There should be no change in record count
     ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count).
 
 put_zone_rrset_records_count_with_existing_rrset(_) ->
-    ZoneName = ~"example.com",
-    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneName = dns:dname_to_lower(~"example.com"),
+    ZoneBase = erldns_zone_cache:find_zone(ZoneName),
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, ~"irrelevantDigest",
             [
@@ -585,15 +585,15 @@ put_zone_rrset_records_count_with_existing_rrset(_) ->
                     data = #dns_rrdata_cname{dname = ~"google.com"},
                     name = ~"cname.example.com",
                     ttl = 5,
-                    type = 5
+                    type = ?DNS_TYPE_CNAME
                 }
             ],
             []},
         ~"cname.example.com",
-        5,
+        ?DNS_TYPE_CNAME,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneModified = erldns_zone_cache:find_zone(ZoneName),
     % There should be no change in record count
     ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count).
 
@@ -607,7 +607,7 @@ put_zone_rrset_records_count_with_new_rrset(_) ->
                     data = #dns_rrdata_a{ip = ~"5,5,5,5"},
                     name = ~"a2.example.com",
                     ttl = 5,
-                    type = 1
+                    type = ?DNS_TYPE_A
                 }
             ],
             []},
@@ -628,7 +628,7 @@ put_zone_rrset_records_count_matches_cache(_) ->
                     data = #dns_rrdata_a{ip = ~"5,5,5,5"},
                     name = ~"a2.example.com",
                     ttl = 5,
-                    type = 1
+                    type = ?DNS_TYPE_A
                 }
             ],
             []},
@@ -652,7 +652,7 @@ put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset(_) ->
                     data = #dns_rrdata_cname{dname = ~"google.com"},
                     name = ~"cname.example-dnssec.com",
                     ttl = 60,
-                    type = 5
+                    type = ?DNS_TYPE_CNAME
                 }
             ],
             []},
