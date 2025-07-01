@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v7.0.0
+
 This is a big release full of massive performance improvements and protocol compliance,
 but also of breaking changes. Read carefully the changelog and the documentation before migrating.
 
@@ -58,11 +60,25 @@ becomes
 
 A warning will be logged for each invalid record, but they will be skipped, and not loaded.
 
+For more important changes, see:
+
+- Refactor the query processing pipeline [#224](https://github.com/dnsimple/erldns/pull/224)
+- Reimplement the network stack [#225](https://github.com/dnsimple/erldns/pull/225)
+- Rework zones loader [#230](https://github.com/dnsimple/erldns/pull/230)
+- Rework zones codecs [#231](https://github.com/dnsimple/erldns/pull/231)
+- Rework zones cache [#232](https://github.com/dnsimple/erldns/pull/232)
+- Rework documentation and internals [#233](https://github.com/dnsimple/erldns/pull/233)
+- Fix overriding packet size in optrr record [#242](https://github.com/dnsimple/erldns/pull/242)
+- Upgrade `dns_erlang` to v4.
+- Use `segmented_cache` for the zone cache and the throttle modules.
+
 ### Added
 
 - Support for OTP28 [#220](https://github.com/dnsimple/erldns/pull/220)
 - Support for `dns_erlang` v4, which enforces strings as binaries and options as maps
 - Introduce domain tag in logger events [#244](https://github.com/dnsimple/erldns/pull/244)
+- zone cache `put_rrset_zone` accepts zone records [#243](https://github.com/dnsimple/erldns/pull/243)
+- Add statistic functionality to listeners [#227](https://github.com/dnsimple/erldns/pull/227)
 
 ### Removed
 
@@ -74,55 +90,11 @@ A warning will be logged for each invalid record, but they will be skipped, and 
 
 - Fix DNSSEC timestamps [#234](https://github.com/dnsimple/erldns/pull/234)
 - Fix (C)DNS/(C)DNSKEY signing [#235](https://github.com/dnsimple/erldns/pull/235)
+- Fix cache non-normalised match bug [#241](https://github.com/dnsimple/erldns/pull/241)
 
 ### Security
 
-- Remove support for the `erldns_txt` parser. [#248](https://github.com/dnsimple/erldns/pull/248)
-- Backpressure mechanisms to survive DDoS attacks [#240](https://github.com/dnsimple/erldns/pull/240)
-
-## 7.0.0-rc9
-
-- Remove support for the `erldns_txt` parser. [#248](https://github.com/dnsimple/erldns/pull/248)
 - Introduce backpressure and load shedding [#240](https://github.com/dnsimple/erldns/pull/240)
-- Introduce domain tag in logger events [#244](https://github.com/dnsimple/erldns/pull/244)
-
-## 7.0.0-rc8
-
-- zone cache `put_rrset_zone` accepts zone records [#243](https://github.com/dnsimple/erldns/pull/243)
-
-## 7.0.0-rc7
-
-- Fix overriding packet size in optrr record [#242](https://github.com/dnsimple/erldns/pull/242)
-
-## 7.0.0-rc6
-
-- Fix cache non-normalised match bug [#241](https://github.com/dnsimple/erldns/pull/241)
-
-## 7.0.0-rc5
-
-- Rework zones loader [#230](https://github.com/dnsimple/erldns/pull/230)
-- Rework zones codecs [#231](https://github.com/dnsimple/erldns/pull/231)
-- Rework zones cache [#232](https://github.com/dnsimple/erldns/pull/232)
-- Rework documentation and internals [#233](https://github.com/dnsimple/erldns/pull/233)
-- Fix (C)DNS/(C)DNSKEY signing [#235](https://github.com/dnsimple/erldns/pull/235)
-
-## 7.0.0-rc4
-
-- Fix DNSSEC timestamps [#234](https://github.com/dnsimple/erldns/pull/234)
-
-## 7.0.0-rc3
-
-- Add statistic functionality to listeners [#227](https://github.com/dnsimple/erldns/pull/227)
-
-## 7.0.0-rc2
-
-- Refactor the query processing pipeline [#224](https://github.com/dnsimple/erldns/pull/224)
-- Reimplement the network stack [#225](https://github.com/dnsimple/erldns/pull/225)
-
-## 7.0.0-rc1
-
-- Upgrade `dns_erlang` to v4.
-- Use `segmented_cache` for the zone cache and the throttle modules.
 
 ## 6.0.2
 
