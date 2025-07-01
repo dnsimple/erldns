@@ -250,8 +250,8 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
             [] ->
                 % No records matched the qtype, call custom handler
                 Handlers = erldns_handler:get_versioned_handlers(),
-                HandlerRecords = lists:flatten(
-                    lists:map(call_handlers(Qname, Qtype, MatchedRecords, Message), Handlers)
+                HandlerRecords = lists:flatmap(
+                    call_handlers(Qname, Qtype, MatchedRecords, Message), Handlers
                 ),
                 erldns_dnssec:maybe_sign_rrset(Message, HandlerRecords, Zone);
             _ ->
@@ -586,8 +586,8 @@ resolve_best_match_with_wildcard(
         [] ->
             % There is no exact type matches for the original qtype, ask the custom handlers for their records.
             Handlers = erldns_handler:get_versioned_handlers(),
-            HandlerRecords = lists:flatten(
-                lists:map(call_handlers(Qname, Qtype, MatchedRecords, Message), Handlers)
+            HandlerRecords = lists:flatmap(
+                call_handlers(Qname, Qtype, MatchedRecords, Message), Handlers
             ),
             Records = lists:map(erldns_records:replace_name(Qname), HandlerRecords),
             NewRecords = erldns_dnssec:maybe_sign_rrset(Message, Records, Zone),
@@ -875,8 +875,8 @@ additional_processing(Message, _Host, _Zone, []) ->
     Message;
 %% There are records with names that require additional processing.
 additional_processing(Message, Host, Zone, Names) ->
-    RRs = lists:flatten(
-        lists:map(fun(Name) -> erldns_zone_cache:get_records_by_name(Name) end, Names)
+    RRs = lists:flatmap(
+        fun(Name) -> erldns_zone_cache:get_records_by_name(Name) end, Names
     ),
     Records = lists:filter(erldns_records:match_types([?DNS_TYPE_A, ?DNS_TYPE_AAAA]), RRs),
     additional_processing(Message, Host, Zone, Names, Records).
