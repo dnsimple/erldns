@@ -132,7 +132,8 @@ get_delegations(Name) ->
         zone_not_found ->
             [];
         ZoneLabels ->
-            Pattern = {{{ZoneLabels, QLabels, ?DNS_TYPE_NS}, '$1'}, [], ['$1']},
+            RecordLabels = reduce_record_labels(ZoneLabels, QLabels),
+            Pattern = {{{ZoneLabels, RecordLabels, ?DNS_TYPE_NS}, '$1'}, [], ['$1']},
             Records = lists:append(ets:select(zone_records_typed, [Pattern])),
             lists:filter(erldns_records:match_delegation(NormalizedName), Records)
     end.
@@ -140,8 +141,7 @@ get_delegations(Name) ->
 -doc "Get all records for the given zone.".
 -spec get_zone_records(dns:dname()) -> [dns:rr()].
 get_zone_records(Name) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    QLabels = dns:dname_to_labels(NormalizedName),
+    QLabels = dns:dname_to_labels(dns:dname_to_lower(Name)),
     case find_zone_in_cache(QLabels, #zone.labels) of
         zone_not_found ->
             [];
@@ -153,39 +153,39 @@ get_zone_records(Name) ->
 -doc "Get all records for the given type and given name.".
 -spec get_records_by_name_and_type(dns:dname(), dns:type()) -> [dns:rr()].
 get_records_by_name_and_type(Name, Type) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    QLabels = dns:dname_to_labels(NormalizedName),
+    QLabels = dns:dname_to_labels(dns:dname_to_lower(Name)),
     case find_zone_in_cache(QLabels, #zone.labels) of
         zone_not_found ->
             [];
         ZoneLabels ->
-            Pattern = {{{ZoneLabels, QLabels, Type}, '$1'}, [], ['$1']},
+            RecordLabels = reduce_record_labels(ZoneLabels, QLabels),
+            Pattern = {{{ZoneLabels, RecordLabels, Type}, '$1'}, [], ['$1']},
             lists:append(ets:select(zone_records_typed, [Pattern]))
     end.
 
 -doc "Return the record set for the given dname.".
 -spec get_records_by_name(dns:dname()) -> [dns:rr()].
 get_records_by_name(Name) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    QLabels = dns:dname_to_labels(NormalizedName),
+    QLabels = dns:dname_to_labels(dns:dname_to_lower(Name)),
     case find_zone_in_cache(QLabels, #zone.labels) of
         zone_not_found ->
             [];
         ZoneLabels ->
-            Pattern = {{{ZoneLabels, QLabels, '_'}, '$1'}, [], ['$1']},
+            RecordLabels = reduce_record_labels(ZoneLabels, QLabels),
+            Pattern = {{{ZoneLabels, RecordLabels, '_'}, '$1'}, [], ['$1']},
             lists:append(ets:select(zone_records_typed, [Pattern]))
     end.
 
 -doc "Check if the name is in a zone.".
 -spec in_zone(binary()) -> boolean().
 in_zone(Name) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    QLabels = dns:dname_to_labels(NormalizedName),
+    QLabels = dns:dname_to_labels(dns:dname_to_lower(Name)),
     case find_zone_in_cache(QLabels, #zone.labels) of
         zone_not_found ->
             false;
         ZoneLabels ->
-            is_name_in_zone(ZoneLabels, NormalizedName)
+            RecordLabels = reduce_record_labels(ZoneLabels, QLabels),
+            is_name_in_zone(ZoneLabels, RecordLabels)
     end.
 
 -doc """
@@ -201,10 +201,11 @@ record_name_in_zone(ZoneName, Name) ->
             false;
         ZoneLabels ->
             QLabels = dns:dname_to_labels(dns:dname_to_lower(Name)),
-            Pattern = {{{ZoneLabels, QLabels, '_'}, '_'}, [], [true]},
+            RecordLabels = reduce_record_labels(ZoneLabels, QLabels),
+            Pattern = {{{ZoneLabels, RecordLabels, '_'}, '_'}, [], [true]},
             case ets:select_count(zone_records_typed, [Pattern]) of
                 0 ->
-                    record_name_in_zone_with_wildcard(ZoneLabels, QLabels);
+                    record_name_in_zone_with_wildcard(ZoneLabels, RecordLabels);
                 _ ->
                     true
             end
@@ -389,7 +390,8 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                     CurrentRRSetRecords = get_records_by_name_and_type(RRFqdn, Type),
                     NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
                     QLabels = dns:dname_to_labels(NormalizedRRFqdn),
-                    Pattern = {{{ZoneLabels, QLabels, Type}, '_'}, [], [true]},
+                    RecordLabels = reduce_record_labels(ZoneLabels, QLabels),
+                    Pattern = {{{ZoneLabels, RecordLabels, Type}, '_'}, [], [true]},
                     ets:select_delete(zone_records_typed, [Pattern]),
                     % remove the RRSIG for the given record type
                     {RRSigsCovering, RRSigsNotCovering} =
@@ -521,22 +523,29 @@ put_zone_records_typed_entry(NormalizedName, Fqdn, Records) ->
 
 do_put_zone_records_typed_entry(NZoneName, NRecordName, Type, Record) ->
     ZoneLabels = dns:dname_to_labels(NZoneName),
-    RecordLabels = dns:dname_to_labels(NRecordName),
+    RecordLabels = reduce_record_labels(ZoneLabels, dns:dname_to_labels(NRecordName)),
     ets:insert(zone_records_typed, {{ZoneLabels, RecordLabels, Type}, Record}).
 
+%% record paths shall not cross the zone boundary,
+%% hence we can cut the zone labels from the record labels
+reduce_record_labels(ZoneLabels, RecordLabels) when is_list(ZoneLabels), is_list(RecordLabels) ->
+    lists:reverse(match_labels(lists:reverse(ZoneLabels), lists:reverse(RecordLabels))).
+
+match_labels([], Rest) ->
+    Rest;
+match_labels([Label | ZoneLabels], [Label | RecordLabels]) ->
+    match_labels(ZoneLabels, RecordLabels).
+
 %% expects name to be already normalized
-is_name_in_zone(ZoneLabels, NormalizedName) ->
-    Labels = dns:dname_to_labels(NormalizedName),
-    Pattern = {{{ZoneLabels, Labels, '_'}, '$1'}, [], ['$1']},
+is_name_in_zone(ZoneLabels, RecordLabels) ->
+    Pattern = {{{ZoneLabels, RecordLabels, '_'}, '$1'}, [], ['$1']},
     case lists:append(ets:select(zone_records_typed, [Pattern])) of
         [] ->
-            case dns:dname_to_labels(NormalizedName) of
+            case RecordLabels of
                 [] ->
                     false;
-                [_] ->
-                    false;
                 [_ | Rest] ->
-                    is_name_in_zone(ZoneLabels, dns:labels_to_dname(Rest))
+                    is_name_in_zone(ZoneLabels, Rest)
             end;
         _ ->
             true
