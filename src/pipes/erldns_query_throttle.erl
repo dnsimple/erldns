@@ -2,7 +2,7 @@
 -moduledoc """
 Stateful query throttling. Currently only throttles `ANY` queries.
 
-We should throttle `ANY` queries to discourage use of our authoritative name servers
+We should throttle `ANY` and `RRSIG` queries to discourage use of our authoritative name servers
 for reflection/amplification attacks.
 
 ## Configuration
@@ -84,7 +84,12 @@ start_link() ->
     false | {true, non_neg_integer()}.
 should_throttle(Msg, Host, Limit) ->
     HasAny = lists:any(
-        fun(#dns_query{type = T}) -> T =:= ?DNS_TYPE_ANY end, Msg#dns_message.questions
+        fun
+            (#dns_query{type = ?DNS_TYPE_ANY}) -> true;
+            (#dns_query{type = ?DNS_TYPE_RRSIG}) -> true;
+            (#dns_query{type = _}) -> false
+        end,
+        Msg#dns_message.questions
     ),
     HasAny andalso should_throttle(Host, Limit).
 
