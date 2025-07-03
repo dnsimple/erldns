@@ -94,6 +94,8 @@ call(Msg, _Opts) ->
 -doc "Options that can be passed and accumulated to the pipeline.".
 -type opts() :: #{
     query_labels := [dns:label()],
+    query_type := dns:type(),
+    monotonic_time := integer(),
     resolved := boolean(),
     transport := transport(),
     host := host(),
@@ -142,9 +144,10 @@ This callback can return
 -define(DEFAULT_PACKET_PIPELINE, [
     erldns_query_throttle,
     erldns_packet_cache,
-    erldns_resolver_recursive,
     erldns_questions,
+    erldns_resolver_recursive,
     erldns_resolver,
+    erldns_dnssec,
     erldns_sorter,
     erldns_packet_cache,
     erldns_empty_verification
@@ -271,6 +274,8 @@ prepare_pipe(Fun, _) when is_function(Fun) ->
 def_opts() ->
     #{
         query_labels => [],
+        query_type => ?DNS_TYPE_A,
+        monotonic_time => 0,
         resolved => false,
         transport => udp,
         host => undefined

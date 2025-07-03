@@ -14,6 +14,7 @@ only the first question will be resolved.
 -include("erldns.hrl").
 
 -export([
+    find_authoritative_zone/1,
     find_zone/1,
     find_zone/2,
     get_zone/1,
@@ -41,14 +42,22 @@ only the first question will be resolved.
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2]).
 
--doc "Creates a new table.".
--spec create(atom()) -> ok | {error, Reason :: term()}.
-create(zones) ->
-    create_ets_table(zones, set, #zone.labels);
-create(zone_records_typed) ->
-    create_ets_table(zone_records_typed, ordered_set);
-create(sync_counters) ->
-    create_ets_table(sync_counters, set).
+-doc "Find an authoritative zone for a given qname.".
+-spec find_authoritative_zone([dns:label()]) -> erldns:zone() | zone_not_found | not_authoritative.
+find_authoritative_zone(Labels) when is_list(Labels) ->
+    find_authoritative_zone_1(Labels).
+
+find_authoritative_zone_1([]) ->
+    zone_not_found;
+find_authoritative_zone_1([_ | Tail] = Labels) ->
+    case ets:lookup(zones, Labels) of
+        [#zone{authority = [_ | _]} = Zone] ->
+            Zone;
+        [#zone{authority = []}] ->
+            not_authoritative;
+        _ ->
+            find_authoritative_zone_1(Tail)
+    end.
 
 -doc "Find a zone for a given qname.".
 -spec find_zone(dns:dname()) ->
@@ -686,6 +695,15 @@ record_name_in_zone_helper(ZoneLabels, RecordLabels) ->
         _ ->
             true
     end.
+
+-doc "Creates a new table.".
+-spec create(atom()) -> ok | {error, Reason :: term()}.
+create(zones) ->
+    create_ets_table(zones, set, #zone.labels);
+create(zone_records_typed) ->
+    create_ets_table(zone_records_typed, ordered_set);
+create(sync_counters) ->
+    create_ets_table(sync_counters, set).
 
 -doc false.
 -spec start_link() -> term().

@@ -7,22 +7,42 @@ DNSSEC implementation.
 -include_lib("kernel/include/logger.hrl").
 -include("erldns.hrl").
 
--export([handle/4]).
--export([
-    get_signed_records/1,
-    get_signed_zone_records/1
-]).
+-behaviour(erldns_pipeline).
+
+-export([prepare/1, call/2]).
+-export([get_signed_records/1, get_signed_zone_records/1]).
 -export([maybe_sign_rrset/3, rrsig_for_zone_rrset/2]).
--export([
-    map_nsec_rr_types/1,
-    map_nsec_rr_types/2
-]).
+-export([map_nsec_rr_types/1, map_nsec_rr_types/2]).
 
 -ifdef(TEST).
 -export([requires_key_signing_key/1, choose_signer_for_rrset/2]).
 -endif.
 
 -define(NEXT_DNAME_PART, <<"\000">>).
+
+-doc "`c:erldns_pipeline:prepare/1` callback.".
+-spec prepare(erldns_pipeline:opts()) -> erldns_pipeline:opts().
+prepare(Opts) ->
+    Opts#{dnssec => false}.
+
+-doc "`c:erldns_pipeline:call/2` callback.".
+-spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
+call(
+    #dns_message{questions = [#dns_query{name = QName, type = QType}]} = Msg,
+    #{resolved := true, auth_zone := #zone{} = Zone} = Opts
+) ->
+    RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Msg)),
+    Msg1 = handle(Msg, Zone, QName, QType),
+    {complete_response(Msg1), Opts#{dnssec => RequestDnssec}};
+call(Msg, _) ->
+    Msg.
+
+complete_response(Msg) ->
+    Msg#dns_message{
+        anc = length(Msg#dns_message.answers),
+        auc = length(Msg#dns_message.authority),
+        adc = length(Msg#dns_message.additional)
+    }.
 
 -doc "Get signed records from a zone".
 -spec get_signed_records(erldns:zone()) -> #{atom() => [dns:rr()]}.
@@ -110,12 +130,12 @@ This function will potentially sign the given RR set if the following conditions
 -spec maybe_sign_rrset(dns:message(), [dns:rr()], erldns:zone()) -> [dns:rr()].
 maybe_sign_rrset(Message, Records, Zone) ->
     case {proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets} of
+        {true, [_ | _]} ->
+            % DNSSEC requested, zone signed
+            Records ++ rrsig_for_zone_rrset(Zone, Records);
         {true, []} ->
             % DNSSEC requested, zone not signed
             Records;
-        {true, _} ->
-            % DNSSEC requested, zone signed
-            Records ++ rrsig_for_zone_rrset(Zone, Records);
         {false, _} ->
             % DNSSEC not requested
             Records
