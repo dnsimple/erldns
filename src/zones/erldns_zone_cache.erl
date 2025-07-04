@@ -671,7 +671,9 @@ record_name_in_zone_with_wildcard(ZoneLabels, RecordLabels) ->
 
 %% Checks if there is a wildcard record matching all the way to the last label.
 do_record_name_in_zone_with_wildcard(_, []) ->
-    false;
+    [];
+do_record_name_in_zone_with_wildcard(_, [_]) ->
+    [];
 do_record_name_in_zone_with_wildcard(ZoneLabels, QLabels) ->
     Parent = lists:droplast(QLabels),
     WildcardPath = Parent ++ [~"*"],

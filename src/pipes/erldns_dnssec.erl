@@ -304,7 +304,7 @@ map_nsec_rr_types(QType, Types, Handlers) ->
 %% compact-denial-of-existence-07
 record_types_for_name(_Zone, Name) ->
     Labels = dns:dname_to_labels(dns:dname_to_lower(Name)),
-    case erldns_resolver:best_match_at_node(Labels) of
+    try best_match_at_node(Labels) of
         ent ->
             lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]);
         [] ->
@@ -312,4 +312,34 @@ record_types_for_name(_Zone, Name) ->
         RecordsAtName ->
             TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
             lists:usort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC | TypesCovered])
+    catch
+        C:E:S ->
+            ?LOG_ERROR(
+                #{
+                    what => best_match_at_node_failed,
+                    name => Name,
+                    class => C,
+                    exception => E,
+                    stacktrace => S
+                },
+                #{domain => [erldns]}
+            ),
+            lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME])
+    end.
+
+% Find the best match records for the given Qname in the given zone.
+% This will looking for both exact and wildcard matches AT the QNAME label count
+% without attempting to walk down to the root.
+-spec best_match_at_node([dns:label()]) -> ent | [dns:rr()].
+best_match_at_node(Labels) ->
+    maybe
+        #zone{} = Zone ?= erldns_zone_cache:get_authoritative_zone(Labels),
+        [] ?= erldns_zone_cache:get_records_by_name_wildcard(Zone, Labels),
+        true ?= erldns_zone_cache:is_record_name_in_zone_strict(Zone, Labels),
+        ent
+    else
+        [_ | _] = RRs ->
+            RRs;
+        _ ->
+            []
     end.

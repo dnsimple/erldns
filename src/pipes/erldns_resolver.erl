@@ -13,7 +13,6 @@ Emits the following telemetry events:
 -include("erldns.hrl").
 
 -export([resolve/4]).
--export([best_match/2, best_match_at_node/1]).
 
 -ifdef(TEST).
 -export([resolve_authoritative/5]).
@@ -107,8 +106,9 @@ resolve_authoritative(Message, Zone, Qname, QLabels, Qtype, CnameChain) ->
                 case erldns_zone_cache:get_records_by_name(Zone, QLabels) of
                     [] ->
                         % No exact match of name and type, move to best match resolution
+                        BestMatchRecords = best_match(Zone, QLabels),
                         best_match_resolution(
-                            Message, Qname, Qtype, CnameChain, best_match(Zone, QLabels), Zone
+                            Message, Qname, Qtype, CnameChain, BestMatchRecords, Zone
                         );
                     Records ->
                         % Exact match of name and type
@@ -749,41 +749,6 @@ best_match(Zone, Labels, []) ->
     end;
 best_match(_, _Labels, WildcardMatches) ->
     WildcardMatches.
-
-% Find the best match records for the given Qname in the given zone.
-% This will looking for both exact and wildcard matches AT the QNAME label count
-% without attempting to walk down to the root.
--spec best_match_at_node([dns:label()]) -> ent | [dns:rr()].
-best_match_at_node(Labels) ->
-    maybe
-        #zone{} = Zone ?= erldns_zone_cache:get_authoritative_zone(Labels),
-        [] ?= erldns_zone_cache:get_records_by_name(Zone, Labels),
-        [] ?= wildcard_match(Labels),
-        true ?= erldns_zone_cache:is_record_name_in_zone_strict(Zone, Labels),
-        ent
-    else
-        zone_not_found ->
-            [];
-        false ->
-            [];
-        [_ | _] = RRs ->
-            RRs
-    end.
-
-% Recursive wildcard lookup.
--spec wildcard_match([dns:label()]) -> [dns:rr()].
-wildcard_match([]) ->
-    [];
-wildcard_match([_]) ->
-    [];
-wildcard_match([_ | ParentLabels]) ->
-    WildcardName = [~"*" | ParentLabels],
-    case erldns_zone_cache:get_records_by_name(WildcardName) of
-        [] ->
-            wildcard_match(ParentLabels);
-        Matches ->
-            Matches
-    end.
 
 %% Call all registered handlers.
 -spec call_handlers(dns:dname(), dns:type(), [dns:rr()], dns:message()) ->
