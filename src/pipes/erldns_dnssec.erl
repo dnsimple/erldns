@@ -305,8 +305,9 @@ map_nsec_rr_types(QType, Types, Handlers) ->
 record_types_for_name(_Zone, Name) ->
     Labels = dns:dname_to_labels(dns:dname_to_lower(Name)),
     case erldns_resolver:best_match_at_node(Labels) of
+        ent ->
+            lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]);
         [] ->
-            %% §3.1: Responses for Non-Existent Names
             lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME]);
         RecordsAtName ->
             TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),

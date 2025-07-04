@@ -19,6 +19,8 @@ This module holds three tables:
     get_zone_records/1,
     get_records_by_name/1,
     get_records_by_name/2,
+    get_records_by_name_wildcard/2,
+    get_records_by_name_ent/2,
     get_records_by_name_and_type/2,
     get_records_by_name_and_type/3,
     get_authoritative_zone/1,
@@ -104,6 +106,26 @@ get_records_by_name(#zone{labels = ZoneLabels}, Labels) when is_list(Labels) ->
     RecordLabels = reduce_record_labels(ZoneLabels, Labels),
     Pattern = {{{ZoneLabels, RecordLabels, '_'}, '$1'}, [], ['$1']},
     lists:append(ets:select(zone_records_typed, [Pattern])).
+
+-doc #{group => ~"API: Lookups"}.
+-doc "Return the record set for the given dname in the given zone, including wildcard matches.".
+-spec get_records_by_name_wildcard(erldns:zone(), dns:dname() | [dns:label()]) -> [dns:rr()].
+get_records_by_name_wildcard(Zone, Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(dns:dname_to_lower(Name)),
+    get_records_by_name_wildcard(Zone, Labels);
+get_records_by_name_wildcard(#zone{labels = ZoneLabels}, Labels) when is_list(Labels) ->
+    RecordLabels = reduce_record_labels(ZoneLabels, Labels),
+    record_name_in_zone_with_wildcard(ZoneLabels, RecordLabels).
+
+-doc #{group => ~"API: Lookups"}.
+-doc "Return the record set for the given dname in the given zone, including descendants.".
+-spec get_records_by_name_ent(erldns:zone(), dns:dname() | [dns:label()]) -> [dns:rr()].
+get_records_by_name_ent(Zone, Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(dns:dname_to_lower(Name)),
+    get_records_by_name_ent(Zone, Labels);
+get_records_by_name_ent(#zone{labels = ZoneLabels}, Labels) when is_list(Labels) ->
+    RecordLabels = reduce_record_labels(ZoneLabels, Labels),
+    record_name_in_zone_with_descendants(ZoneLabels, RecordLabels).
 
 -doc #{group => ~"API: Lookups"}.
 -doc "Get all records for the given type and given name.".
@@ -200,7 +222,7 @@ is_record_name_in_zone(#zone{labels = ZoneLabels}, Labels) when is_list(Labels) 
             false;
         true ->
             RecordLabels = reduce_record_labels(ZoneLabels, Labels),
-            record_name_in_zone_helper(ZoneLabels, RecordLabels)
+            is_record_name_in_zone_helper(ZoneLabels, RecordLabels)
     end.
 
 -doc #{group => ~"API: Boolean Operations"}.
@@ -220,8 +242,8 @@ is_record_name_in_zone_strict(#zone{labels = ZoneLabels}, Labels) when is_list(L
             false;
         true ->
             RecordLabels = reduce_record_labels(ZoneLabels, Labels),
-            record_name_in_zone_helper(ZoneLabels, RecordLabels) orelse
-                record_name_in_zone_with_descendants(ZoneLabels, RecordLabels)
+            is_record_name_in_zone_helper(ZoneLabels, RecordLabels) orelse
+                is_record_name_in_zone_with_descendants(ZoneLabels, RecordLabels)
     end.
 
 -doc #{group => ~"API: Utilities"}.
@@ -281,11 +303,6 @@ erldns_zone_cache:put_zone({
     Sha :: erldns_zones:version(),
     Records :: [dns:rr()],
     Keys :: [erldns:keyset()].
-put_zone({Name, Sha, Records}) ->
-    put_zone({Name, Sha, Records, []});
-put_zone({Name, Sha, Records, Keys}) ->
-    Zone = erldns_zone_codec:build_zone(Name, Sha, Records, Keys),
-    put_zone(Zone);
 put_zone(#zone{name = Name} = Zone) ->
     NormalizedName = dns:dname_to_lower(Name),
     ZoneLabels = dns:dname_to_labels(NormalizedName),
@@ -296,7 +313,12 @@ put_zone(#zone{name = Name} = Zone) ->
     delete_zone_records(ZoneLabels),
     true = insert_zone(SignedZone#zone{records = []}),
     put_zone_records(ZoneRecords),
-    fix_tables(false).
+    fix_tables(false);
+put_zone({Name, Sha, Records}) ->
+    put_zone({Name, Sha, Records, []});
+put_zone({Name, Sha, Records, Keys}) ->
+    Zone = erldns_zone_codec:build_zone(Name, Sha, Records, Keys),
+    put_zone(Zone).
 
 -doc #{group => ~"API: Zone inserts"}.
 -doc "Put zone RRSet".
@@ -536,26 +558,6 @@ is_name_in_zone(ZoneLabels, RecordLabels) ->
             true
     end.
 
-%% Checks if there is a wildcard record matching all the way to the last label.
-record_name_in_zone_with_wildcard(_, []) ->
-    false;
-record_name_in_zone_with_wildcard(ZoneLabels, QLabels) ->
-    Parent = lists:droplast(QLabels),
-    WildcardPath = Parent ++ [~"*"],
-    Pattern = {{{ZoneLabels, WildcardPath, '_'}, '_'}, [], [true]},
-    case ets:select_count(zone_records_typed, [Pattern]) of
-        0 ->
-            record_name_in_zone_with_wildcard(ZoneLabels, Parent);
-        _ ->
-            true
-    end.
-
-record_name_in_zone_with_descendants(ZoneLabels, QLabels) ->
-    % eqwalizer:ignore this needs to be an improper list for tree traversal
-    HasDescendantsPath = QLabels ++ '_',
-    Pattern = {{{ZoneLabels, HasDescendantsPath, '_'}, '_'}, [], [true]},
-    0 =/= ets:select_count(zone_records_typed, [Pattern]).
-
 find_authoritative_zone_in_cache([]) ->
     zone_not_found;
 find_authoritative_zone_in_cache([_ | Tail] = Labels) ->
@@ -658,14 +660,63 @@ rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
         RRSigRecords
     ).
 
-record_name_in_zone_helper(ZoneLabels, RecordLabels) ->
+record_name_in_zone_with_wildcard(ZoneLabels, RecordLabels) ->
+    Pattern = {{{ZoneLabels, RecordLabels, '_'}, '$1'}, [], ['$1']},
+    case lists:append(ets:select(zone_records_typed, [Pattern])) of
+        [] ->
+            do_record_name_in_zone_with_wildcard(ZoneLabels, RecordLabels);
+        RRs ->
+            RRs
+    end.
+
+%% Checks if there is a wildcard record matching all the way to the last label.
+do_record_name_in_zone_with_wildcard(_, []) ->
+    false;
+do_record_name_in_zone_with_wildcard(ZoneLabels, QLabels) ->
+    Parent = lists:droplast(QLabels),
+    WildcardPath = Parent ++ [~"*"],
+    Pattern = {{{ZoneLabels, WildcardPath, '_'}, '$1'}, [], ['$1']},
+    case lists:append(ets:select(zone_records_typed, [Pattern])) of
+        [] ->
+            do_record_name_in_zone_with_wildcard(ZoneLabels, Parent);
+        RRs ->
+            RRs
+    end.
+
+record_name_in_zone_with_descendants(ZoneLabels, QLabels) ->
+    % eqwalizer:ignore this needs to be an improper list for tree traversal
+    HasDescendantsPath = QLabels ++ '_',
+    Pattern = {{{ZoneLabels, HasDescendantsPath, '_'}, '$1'}, [], ['$1']},
+    lists:append(ets:select(zone_records_typed, [Pattern])).
+
+is_record_name_in_zone_helper(ZoneLabels, RecordLabels) ->
     Pattern = {{{ZoneLabels, RecordLabels, '_'}, '_'}, [], [true]},
     case ets:select_count(zone_records_typed, [Pattern]) of
         0 ->
-            record_name_in_zone_with_wildcard(ZoneLabels, RecordLabels);
+            is_record_name_in_zone_with_wildcard(ZoneLabels, RecordLabels);
         _ ->
             true
     end.
+
+%% Checks if there is a wildcard record matching all the way to the last label.
+is_record_name_in_zone_with_wildcard(_, []) ->
+    false;
+is_record_name_in_zone_with_wildcard(ZoneLabels, QLabels) ->
+    Parent = lists:droplast(QLabels),
+    WildcardPath = Parent ++ [~"*"],
+    Pattern = {{{ZoneLabels, WildcardPath, '_'}, '_'}, [], [true]},
+    case ets:select_count(zone_records_typed, [Pattern]) of
+        0 ->
+            is_record_name_in_zone_with_wildcard(ZoneLabels, Parent);
+        _ ->
+            true
+    end.
+
+is_record_name_in_zone_with_descendants(ZoneLabels, QLabels) ->
+    % eqwalizer:ignore this needs to be an improper list for tree traversal
+    HasDescendantsPath = QLabels ++ '_',
+    Pattern = {{{ZoneLabels, HasDescendantsPath, '_'}, '_'}, [], [true]},
+    0 =/= ets:select_count(zone_records_typed, [Pattern]).
 
 fix_tables(Fix) ->
     ets:safe_fixtable(zone_records_typed, Fix),

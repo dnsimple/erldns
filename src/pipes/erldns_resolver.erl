@@ -753,14 +753,21 @@ best_match(_, _Labels, WildcardMatches) ->
 % Find the best match records for the given Qname in the given zone.
 % This will looking for both exact and wildcard matches AT the QNAME label count
 % without attempting to walk down to the root.
--spec best_match_at_node([dns:label()]) -> false | [dns:rr()].
+-spec best_match_at_node([dns:label()]) -> ent | [dns:rr()].
 best_match_at_node(Labels) ->
-    case erldns_zone_cache:get_records_by_name(Labels) of
-        [] ->
-            % No exact matches, so look for wildcard matches
-            wildcard_match(Labels);
-        Matches ->
-            Matches
+    maybe
+        #zone{} = Zone ?= erldns_zone_cache:get_authoritative_zone(Labels),
+        [] ?= erldns_zone_cache:get_records_by_name(Zone, Labels),
+        [] ?= wildcard_match(Labels),
+        true ?= erldns_zone_cache:is_record_name_in_zone_strict(Zone, Labels),
+        ent
+    else
+        zone_not_found ->
+            [];
+        false ->
+            [];
+        [_ | _] = RRs ->
+            RRs
     end.
 
 % Recursive wildcard lookup.
@@ -872,7 +879,7 @@ detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
         true ->
             [];
         false ->
-            case erldns_zone_cache:get_records_by_name_and_type(Zone, Labels, ?DNS_TYPE_NS) of
+            case erldns_zone_cache:get_records_by_name_and_type(Labels, ?DNS_TYPE_NS) of
                 [] ->
                     detect_zonecut(Zone, ParentLabels);
                 ZonecutNSRecords ->
