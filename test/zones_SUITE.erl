@@ -49,6 +49,7 @@ groups() ->
             parse_json_keys_unsorted_proplists
         ]},
         {cache, [], [
+            cache_coverage,
             is_record_name_in_zone,
             put_zone_rrset_zone,
             put_zone_rrset_records_count_with_existing_rrset,
@@ -525,6 +526,11 @@ wildcard_loose(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     application:set_env(erldns, zones, #{strict => false, path => DataDir}),
     ?assertMatch(4, erldns_zone_loader:load_zones()).
+
+cache_coverage(_) ->
+    gen_server:call(erldns_zone_cache, anything),
+    gen_server:cast(erldns_zone_cache, anything),
+    ?assert(erlang:is_process_alive(whereis(erldns_zone_cache))).
 
 is_record_name_in_zone(_) ->
     ZoneName = dns:dname_to_lower(~"EXAMPLE.COM"),
