@@ -150,10 +150,14 @@ custom_decode(_) ->
 encode_meta_to_json(_) ->
     {ok, _} = erldns_zone_cache:start_link(),
     {ok, _} = erldns_zone_codec:start_link(),
+    ZoneName = dns:dname_to_lower(~"example.com"),
+    ZoneLabels = dns:dname_to_labels(ZoneName),
     Z = #zone{
-        name = ~"example.com",
+        labels = ZoneLabels,
+        name = ZoneName,
         authority = [#dns_rr{name = ~"example.com", type = ?DNS_TYPE_SOA}]
     },
+    erldns_zone_cache:put_zone(Z),
     Data = erldns_zone_codec:encode(Z, #{mode => zone_meta_to_json}),
     JSON = iolist_to_binary(json:encode(Data)),
     ?assert(is_binary(JSON)),
@@ -522,16 +526,15 @@ wildcard_loose(Config) ->
     ?assertMatch(4, erldns_zone_loader:load_zones()).
 
 is_record_name_in_zone(_) ->
-    ZoneName = ~"EXAMPLE.COM",
+    ZoneName = dns:dname_to_lower(~"EXAMPLE.COM"),
     Zone = #zone{
-        labels = dns:dname_to_labels(dns:dname_to_lower(ZoneName)),
+        labels = dns:dname_to_labels(ZoneName),
         name = ZoneName,
         version = ~"irrelevantDigest",
         records = []
     },
     Qname = ~"FRESH-ACADEMY.EXAMPLE.COM",
     NormalizedName = dns:dname_to_lower(Qname),
-    NormalizedZoneName = dns:dname_to_lower(ZoneName),
     NS = #dns_rr{
         name = NormalizedName,
         type = ?DNS_TYPE_NS,
@@ -539,7 +542,7 @@ is_record_name_in_zone(_) ->
         ttl = 3600
     },
     SOA = #dns_rr{
-        name = NormalizedZoneName,
+        name = ZoneName,
         type = ?DNS_TYPE_SOA,
         data =
             #dns_rrdata_soa{
@@ -553,12 +556,13 @@ is_record_name_in_zone(_) ->
             },
         ttl = 3600
     },
-    erldns_zone_cache:put_zone({NormalizedZoneName, ~"_", [NS, SOA]}),
+    erldns_zone_cache:put_zone({ZoneName, ~"_", [NS, SOA]}),
     ?assertMatch(true, erldns_zone_cache:is_record_name_in_zone(Zone, Qname)).
 
 put_zone_rrset_zone(_) ->
     ZoneName = dns:dname_to_lower(~"example.com"),
-    ZoneBase = erldns_zone_cache:find_zone(ZoneName),
+    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     Zone = #zone{
         name = ZoneName,
         version = ~"irrelevantDigest",
@@ -577,13 +581,14 @@ put_zone_rrset_zone(_) ->
         5,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(ZoneName),
+    ZoneModified = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     % There should be no change in record count
     ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count).
 
 put_zone_rrset_records_count_with_existing_rrset(_) ->
     ZoneName = dns:dname_to_lower(~"example.com"),
-    ZoneBase = erldns_zone_cache:find_zone(ZoneName),
+    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, ~"irrelevantDigest",
             [
@@ -599,13 +604,14 @@ put_zone_rrset_records_count_with_existing_rrset(_) ->
         ?DNS_TYPE_CNAME,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(ZoneName),
+    ZoneModified = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     % There should be no change in record count
     ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count).
 
 put_zone_rrset_records_count_with_new_rrset(_) ->
-    ZoneName = ~"example.com",
-    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneName = dns:dname_to_lower(~"example.com"),
+    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, ~"irrelevantDigest",
             [
@@ -621,12 +627,13 @@ put_zone_rrset_records_count_with_new_rrset(_) ->
         5,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneModified = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     % New RRSet is being added with one record we should see an increase by 1
     ?assertEqual(ZoneBase#zone.record_count + 1, ZoneModified#zone.record_count).
 
 put_zone_rrset_records_count_matches_cache(_) ->
-    ZoneName = ~"example.com",
+    ZoneName = dns:dname_to_lower(~"example.com"),
+    ZoneLabels = dns:dname_to_labels(ZoneName),
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, ~"irrelevantDigest",
             [
@@ -642,15 +649,16 @@ put_zone_rrset_records_count_matches_cache(_) ->
         5,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneModified = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     % New RRSet is being added with one record we should see an increase by 1
     ?assertEqual(
         length(erldns_zone_cache:get_zone_records(ZoneName)), ZoneModified#zone.record_count
     ).
 
 put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset(_) ->
-    ZoneName = ~"example-dnssec.com",
-    Zone = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneName = dns:dname_to_lower(~"example-dnssec.com"),
+    ZoneLabels = dns:dname_to_labels(ZoneName),
+    Zone = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, ~"irrelevantDigest",
             [
@@ -666,13 +674,14 @@ put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset(_) ->
         5,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneModified = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     % New RRSet entry for the CNAME + 1 RRSig record
     ?assertEqual(Zone#zone.record_count + 2, ZoneModified#zone.record_count).
 
 delete_zone_rrset_records_count_width_existing_rrset(_) ->
-    ZoneName = ~"example.com",
-    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneName = dns:dname_to_lower(~"example.com"),
+    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     erldns_zone_cache:delete_zone_rrset(
         ZoneName,
         ~"irrelevantDigest",
@@ -680,13 +689,14 @@ delete_zone_rrset_records_count_width_existing_rrset(_) ->
         5,
         1
     ),
-    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneModified = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     % Deletes a CNAME RRSet with one record
     ?assertEqual(ZoneBase#zone.record_count - 1, ZoneModified#zone.record_count).
 
 delete_zone_rrset_records_count_width_dnssec_zone_and_existing_rrset(_) ->
-    ZoneName = ~"example-dnssec.com",
-    ZoneBase = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneName = dns:dname_to_lower(~"example-dnssec.com"),
+    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     erldns_zone_cache:delete_zone_rrset(
         ZoneName,
         ~"irrelevantDigest",
@@ -694,12 +704,13 @@ delete_zone_rrset_records_count_width_dnssec_zone_and_existing_rrset(_) ->
         5,
         2
     ),
-    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneModified = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     % Deletes a CNAME RRSet with one record + RRSig
     ?assertEqual(ZoneBase#zone.record_count - 2, ZoneModified#zone.record_count).
 
 delete_zone_rrset_records_count_matches_cache(_) ->
-    ZoneName = ~"example-dnssec.com",
+    ZoneName = dns:dname_to_lower(~"example-dnssec.com"),
+    ZoneLabels = dns:dname_to_labels(ZoneName),
     erldns_zone_cache:delete_zone_rrset(
         ZoneName,
         ~"irrelevantDigest",
@@ -707,7 +718,7 @@ delete_zone_rrset_records_count_matches_cache(_) ->
         5,
         2
     ),
-    ZoneModified = erldns_zone_cache:find_zone(dns:dname_to_lower(ZoneName)),
+    ZoneModified = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     % Deletes a CNAME RRSet with one record + RRSig
     ?assertEqual(
         length(erldns_zone_cache:get_zone_records(ZoneName)), ZoneModified#zone.record_count

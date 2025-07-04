@@ -15,7 +15,7 @@ DNSSEC implementation.
 -export([map_nsec_rr_types/1, map_nsec_rr_types/2]).
 
 -ifdef(TEST).
--export([requires_key_signing_key/1, choose_signer_for_rrset/2]).
+-export([handle/4, requires_key_signing_key/1, choose_signer_for_rrset/2]).
 -endif.
 
 -define(NEXT_DNAME_PART, <<"\000">>).
@@ -145,10 +145,10 @@ maybe_sign_rrset(Message, Records, Zone) ->
 Apply DNSSEC records to the given message if the zone is signed and DNSSEC is requested.
 """.
 -spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type()) -> dns:message().
-handle(Message, Zone, Qname, QType) ->
+handle(Message, Zone, QName, QType) ->
     HasKeySets = [] =/= Zone#zone.keysets,
     RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Message)),
-    handle(Message, Zone, Qname, QType, HasKeySets, RequestDnssec).
+    handle(Message, Zone, QName, QType, HasKeySets, RequestDnssec).
 
 -doc """
 Check if any record in the set requires key-signing-key for RRSIG.
@@ -175,7 +175,7 @@ handle(Msg, _, _, ?DNS_TYPE_NXNAME, _, true) ->
 handle(Msg, _, _, _, false, true) ->
     % DNSSEC requested, zone unsigned, nothing to do
     Msg;
-handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, Qname, QType, true, true) ->
+handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, QName, QType, true, true) ->
     % No answers found, return NSEC.
     Authority = lists:last(Zone#zone.authority),
     Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
@@ -184,14 +184,14 @@ handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, Qname, QTyp
     SoaRRSigRecords = lists:filter(
         erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords
     ),
-    NameToNormalise = dns:labels_to_dname([?NEXT_DNAME_PART | dns:dname_to_labels(Qname)]),
+    NameToNormalise = dns:labels_to_dname([?NEXT_DNAME_PART | dns:dname_to_labels(QName)]),
     NextDname = dns:dname_to_lower(NameToNormalise),
-    RecordTypesForQname = record_types_for_name(Zone, Qname),
+    RecordTypesForQname = record_types_for_name(Zone, QName),
     NsecRrTypes = map_nsec_rr_types(QType, RecordTypesForQname),
     NsecRecords =
         [
             #dns_rr{
-                name = Qname,
+                name = QName,
                 type = ?DNS_TYPE_NSEC,
                 ttl = Ttl,
                 data = #dns_rrdata_nsec{

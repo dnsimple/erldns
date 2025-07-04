@@ -79,6 +79,7 @@ encode(_) ->
     decoders :: [decoder()]
 }).
 -type state() :: #state{}.
+-export_type([state/0]).
 
 -spec build_zone(dns:dname(), binary(), [dns:rr()], [erldns:keyset()]) -> erldns:zone().
 build_zone(Name, Version, Records, Keys) ->

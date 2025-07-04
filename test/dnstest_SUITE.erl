@@ -100,6 +100,6 @@ assert(_Definitions, Results) ->
 failing() ->
     [
         direct_rrsig,
-        nsec_nxname_ent,
+        % nsec_nxname_ent,
         ns_zonecut_child_cname
     ].

@@ -30,11 +30,11 @@ prepare(Opts) ->
 
 -doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
-call(Msg, #{resolved := false, query_labels := QLabels, query_type := QType} = Opts) ->
+call(Msg, #{resolved := false, query_labels := QLabels, query_type := Qtype} = Opts) ->
     %% Search the available zones for the zone which is the nearest ancestor to QLabels
-    case erldns_zone_cache:find_authoritative_zone(QLabels) of
+    case erldns_zone_cache:get_authoritative_zone(QLabels) of
         #zone{} = Zone ->
-            Msg1 = resolve(Msg, Zone, QLabels, QType),
+            Msg1 = resolve(Msg, Zone, QLabels, Qtype),
             Msg2 = complete_response(Msg1),
             {Msg2, Opts#{auth_zone => Zone, resolved => true}};
         Error when Error =:= not_authoritative; Error =:= zone_not_found ->
@@ -48,9 +48,9 @@ call(Msg, _) ->
 %% Start the resolution process on the given question. Assumes only one question.
 %% Handlers can escape the control flow by throwing `{error, rcode, RCODE}`.
 -spec resolve(dns:message(), erldns:zone(), [dns:label()], dns:type()) -> dns:message().
-resolve(Msg, Zone, QLabels, QType) ->
+resolve(Msg, Zone, QLabels, Qtype) ->
     try
-        resolve_question(Msg, Zone, QLabels, QType)
+        resolve_question(Msg, Zone, QLabels, Qtype)
     catch
         throw:{error, rcode, RC} ->
             telemetry:execute([erldns, pipeline, resolver, error], #{count => 1}, #{rc => RC}),
@@ -72,14 +72,14 @@ resolve(Msg, Zone, QLabels, QType) ->
             Msg#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}
     end.
 
-%% With the extracted QLabels and QType in hand,
--spec resolve_question(Msg, Zone, QLabels, QType) -> Msg when
+%% With the extracted QLabels and Qtype in hand,
+-spec resolve_question(Msg, Zone, QLabels, Qtype) -> Msg when
     Msg :: dns:message(),
     Zone :: erldns:zone(),
     QLabels :: [dns:label()],
-    QType :: dns:type().
-resolve_question(Msg, Zone, QLabels, QType) ->
-    Msg1 = resolve_authoritative(Msg, Zone, QLabels, QType, []),
+    Qtype :: dns:type().
+resolve_question(Msg, Zone, QLabels, Qtype) ->
+    Msg1 = resolve_authoritative(Msg, Zone, QLabels, Qtype, []),
     additional_processing(Msg1, Zone).
 
 %% An SOA was found, thus we are authoritative and have the zone.
@@ -104,7 +104,7 @@ resolve_authoritative(Message, Zone, Qname, QLabels, Qtype, CnameChain) ->
             {false, []} ->
                 resolve_ent(Message, QLabels, Zone);
             _ ->
-                case erldns_zone_cache:get_records_in_zone_by_name(Zone, QLabels) of
+                case erldns_zone_cache:get_records_by_name(Zone, QLabels) of
                     [] ->
                         % No exact match of name and type, move to best match resolution
                         best_match_resolution(
@@ -218,10 +218,12 @@ resolve_exact_match(Message, Qname, Qtype, CnameChain, MatchedRecords, Zone) ->
     ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), MatchedRecords),
     case {ExactTypeMatches, ReferralRecords} of
         {[], []} ->
-            % There are no exact type matches and no referrals, return NOERROR with the authority set
+            % There are no exact type matches and no referrals,
+            % return NOERROR with the authority set
             Message#dns_message{aa = true, authority = Zone#zone.authority};
         {[], _} ->
-            % There were no exact type matches, but there were other name matches and there are NS records,
+            % There were no exact type matches,
+            % but there were other name matches and there are NS records,
             % so this is an exact match referral
             resolve_exact_match_referral(
                 Message, Qtype, MatchedRecords, ReferralRecords, AuthorityRecords
@@ -267,7 +269,8 @@ resolve_exact_type_match(
 resolve_exact_type_match(
     Message, Qname, Qtype, CnameChain, MatchedRecords, Zone, AuthorityRecords
 ) ->
-    % There was an exact type match for something other than an NS record and we are authoritative because there is an SOA record.
+    % There was an exact type match for something other than an NS record
+    % and we are authoritative because there is an SOA record.
     Answer = lists:last(MatchedRecords),
     case erldns_zone_cache:get_delegations(Answer#dns_rr.name) of
         [] ->
@@ -278,7 +281,7 @@ resolve_exact_type_match(
                 answers = Message#dns_message.answers ++ MatchedRecords
             };
         NSRecords ->
-            % NOTE: this is a potential bug because it assumes the last record is the one to examine.
+            % NOTE: this is a potential bug because it assumes the last record is the one to examine
             NSRecord = lists:last(NSRecords),
             SoaRecord = lists:last(Zone#zone.authority),
             case SoaRecord#dns_rr.name =:= NSRecord#dns_rr.name of
@@ -291,8 +294,8 @@ resolve_exact_type_match(
                         answers = Message#dns_message.answers ++ MatchedRecords
                     };
                 false ->
-                    % The SOA record and NS name do not match, so this may require restarting the search as the name may or may not be
-                    % delegated to another zone in the cache
+                    % The SOA record and NS name do not match, so this may require restarting the
+                    % search as the name may or may not be delegated to another zone in the cache
                     resolve_exact_type_match_delegated(
                         Message,
                         Qname,
@@ -306,7 +309,8 @@ resolve_exact_type_match(
             end
     end.
 
-%% There is an exact name and type match and there NS records present. This may indicate the name is at the apex
+%% There is an exact name and type match and there NS records present.
+%% This may indicate the name is at the apex
 %% or it may indicate that the name is delegated.
 -spec resolve_exact_type_match_delegated(
     Message :: dns:message(),
@@ -368,8 +372,8 @@ resolve_exact_type_match_delegated(
 ) ->
     dns:message().
 resolve_exact_match_referral(Message, _Qtype, _MatchedRecords, ReferralRecords, []) ->
-    % Given an exact name match where the Qtype is not found in the record set and we are not authoritative,
-    % add the NS records to the authority section of the message.
+    % Given an exact name match where the Qtype is not found in the record set
+    % and we are not authoritative, add the NS records to the authority section of the message.
     Message#dns_message{authority = Message#dns_message.authority ++ ReferralRecords};
 resolve_exact_match_referral(
     Message, ?DNS_TYPE_ANY, MatchedRecords, _ReferralRecords, _AuthorityRecords
@@ -385,12 +389,14 @@ resolve_exact_match_referral(
 resolve_exact_match_referral(
     Message, ?DNS_TYPE_SOA, _MatchedRecords, _ReferralRecords, AuthorityRecords
 ) ->
-    % Given an exact name match and the type SOA, where the SOA record is not found in the records set,
+    % Given an exact name match and the type SOA,
+    % where the SOA record is not found in the records set,
     % return the SOA records in the answers section of the message.
     Message#dns_message{aa = true, answers = AuthorityRecords};
 resolve_exact_match_referral(Message, _, _MatchedRecords, _ReferralRecords, AuthorityRecords) ->
-    % Given an exact name match where the Qtype is not found in the record set and is not ANY, SOA or NS,
-    % return the SOA records for the zone in the authority section of the message and set the RC to NOERROR.
+    % Given an exact name match where the Qtype is not found in the record set
+    % and is not ANY, SOA or NS, return the SOA records for the zone in the authority section
+    % of the message and set the RC to NOERROR.
     Message#dns_message{
         aa = true,
         rc = ?DNS_RCODE_NOERROR,
@@ -409,12 +415,14 @@ resolve_exact_match_referral(Message, _, _MatchedRecords, _ReferralRecords, Auth
 resolve_exact_match_with_cname(
     Message, ?DNS_TYPE_CNAME, _CnameChain, _MatchedRecords, _Zone, CnameRecords
 ) ->
-    % There is a CNAME record and the request was for a CNAME record so append the CNAME records to the answers section.
+    % There is a CNAME record and the request was for a CNAME record
+    % so append the CNAME records to the answers section.
     Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
 resolve_exact_match_with_cname(
     Message, Qtype, CnameChain, _MatchedRecords, Zone, CnameRecords
 ) ->
-    % There is a CNAME record, however the Qtype is not CNAME, check for a CNAME loop before continuing.
+    % There is a CNAME record, however the Qtype is not CNAME,
+    % check for a CNAME loop before continuing.
     case lists:member(lists:last(CnameRecords), CnameChain) of
         true ->
             % Indicates a CNAME loop. The response code is a SERVFAIL in this case.
@@ -445,7 +453,8 @@ resolve_exact_match_with_cname(
 ) ->
     dns:message().
 best_match_resolution(Message, Qname, Qtype, CnameChain, BestMatchRecords, Zone) ->
-    % There was no exact match for the Qname, so we use the best matches that were returned by the best_match() function.
+    % There was no exact match for the Qname,
+    % so we use the best matches that were returned by the best_match() function.
     ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), BestMatchRecords),
     case ReferralRecords of
         [] ->
@@ -460,12 +469,13 @@ best_match_resolution(Message, Qname, Qtype, CnameChain, BestMatchRecords, Zone)
 
 %% There is no referral, so check to see if there is a wildcard.
 %%
-%% If there is a wildcard present, then the resolver needs to continue to handle various possible types.
+%% If there is a wildcard present,
+%% then the resolver needs to continue to handle various possible types.
 %%
 %% If there is no wildcard present and the qname matches the original question then return NXDOMAIN.
 %%
-%% If there is no wildcard present and the qname does not match the origina question then return NOERROR
-%% and include root hints in the additional section if necessary.
+%% If there is no wildcard present and the qname does not match the original question
+%% then return NOERROR and include root hints in the additional section if necessary.
 -spec resolve_best_match(
     Message :: dns:message(),
     Qname :: dns:dname(),
@@ -492,15 +502,17 @@ resolve_best_match(Message, Qname, Qtype, CnameChain, BestMatchRecords, Zone) ->
             % TODO this logic can be moved up higher in processing potentially.
             case Qname =:= Question#dns_query.name of
                 true ->
-                    % We are authoritative but there is no match on name and type, so respond with NXDOMAIN
+                    % We are authoritative but there is no match on name and type,
+                    % so respond with NXDOMAIN
                     Message#dns_message{
                         rc = ?DNS_RCODE_NXDOMAIN,
                         authority = Zone#zone.authority,
                         aa = true
                     };
                 false ->
-                    % This happens when we have a CNAME to an out-of-balliwick hostname and the query is for
-                    % something other than CNAME. Note that the response is still NOERROR here.
+                    % This happens when we have a CNAME to an out-of-balliwick hostname and the
+                    % query is for something other than CNAME.
+                    % Note that the response is still NOERROR here.
                     %
                     % In the dnstest suite, this is hit by cname_to_unauth_any (and others)
                     optionally_add_root_hints(Message)
@@ -531,7 +543,8 @@ resolve_best_match_with_wildcard(
     TypeMatches = lists:map(erldns_records:replace_name(Qname), TypeMatchedRecords),
     case TypeMatches of
         [] ->
-            % There is no exact type matches for the original qtype, ask the custom handlers for their records.
+            % There is no exact type matches for the original qtype,
+            % ask the custom handlers for their records.
             Handlers = erldns_handler:get_versioned_handlers(),
             HandlerRecords = lists:flatmap(
                 call_handlers(Qname, Qtype, MatchedRecords, Message), Handlers
@@ -540,7 +553,8 @@ resolve_best_match_with_wildcard(
             NewRecords = erldns_dnssec:maybe_sign_rrset(Message, Records, Zone),
             case NewRecords of
                 [] ->
-                    % Custom handlers returned no answers, so set the authority section of the response and return NOERROR
+                    % Custom handlers returned no answers,
+                    % so set the authority section of the response and return NOERROR
                     Message#dns_message{aa = true, authority = Zone#zone.authority};
                 NewRecords ->
                     % Custom handlers returned answers
@@ -560,8 +574,8 @@ resolve_best_match_with_wildcard(
         Message, Qname, Qtype, CnameChain, BestMatchRecords, Zone, CnameRecords
     ).
 
-% Handle the case where the wildcard is a CNAME in the zone. If the Qtype was CNAME then answer, otherwise determine if
-% the CNAME should be followed
+% Handle the case where the wildcard is a CNAME in the zone.
+% If the Qtype was CNAME then answer, otherwise determine if the CNAME should be followed
 -spec resolve_best_match_with_wildcard_cname(
     Message :: dns:message(),
     Qname :: dns:dname(),
@@ -619,10 +633,12 @@ resolve_best_match_referral(
     Authority = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), BestMatchRecords),
     case {Qtype, Authority, CnameChain} of
         {_, [], []} ->
-            % We are authoritative for the name since there was an SOA record in the best match results.
+            % We are authoritative for the name since there was an SOA record
+            % in the best match results.
             resolve_ent(Message, dns:dname_to_labels(Qname), Zone);
         {_, _, []} ->
-            % Indicate that we are not authoritative for the name as there were novSOA records in the best-match results.
+            % Indicate that we are not authoritative for the name
+            % as there were novSOA records in the best-match results.
             % The name has thus been delegated to another authority.
             Message#dns_message{
                 aa = false, authority = Message#dns_message.authority ++ ReferralRecords
@@ -631,11 +647,13 @@ resolve_best_match_referral(
             % We are authoritative and the Qtype is ANY, return the original message
             Message;
         _ ->
-            % We are authoritative and the Qtype is something other than ANY, set the authority in the response
+            % We are authoritative and the Qtype is something other than ANY,
+            % set the authority in the response
             Message#dns_message{authority = Authority}
     end.
 
-% The CNAME is in a zone. If it is the same zone, then continue the chain, otherwise return the message
+% The CNAME is in a zone.
+% If it is the same zone, then continue the chain, otherwise return the message
 -spec restart_query(
     Message :: dns:message(),
     Name :: dns:dname(),
@@ -670,13 +688,18 @@ restart_delegated_query(Message, Qname, Qtype, CnameChain, Zone, true) ->
     resolve_authoritative(Message, Zone, Qname, Qtype, CnameChain);
 % Delegated to a different zone.
 restart_delegated_query(Message, Qname, Qtype, CnameChain, Zone, false) ->
-    resolve_authoritative(
-        Message,
-        erldns_zone_cache:find_zone(Qname, Zone#zone.authority),
-        Qname,
-        Qtype,
-        CnameChain
-    ).
+    case erldns_zone_cache:get_authoritative_zone(dns:dname_to_labels(Qname)) of
+        #zone{} = Zone ->
+            resolve_authoritative(
+                Message,
+                Zone,
+                Qname,
+                Qtype,
+                CnameChain
+            );
+        zone_not_found ->
+            Message
+    end.
 
 %% Utility functions
 
@@ -710,13 +733,15 @@ best_match(_, []) ->
     [];
 best_match(Zone, [_ | ParentLabels]) ->
     WildcardName = [~"*" | ParentLabels],
-    best_match(Zone, ParentLabels, erldns_zone_cache:get_records_in_zone_by_name(Zone, WildcardName)).
+    best_match(
+        Zone, ParentLabels, erldns_zone_cache:get_records_by_name(Zone, WildcardName)
+    ).
 
 -spec best_match(erldns:zone(), [dns:label()], [dns:rr()]) -> [dns:rr()].
 best_match(_, [], []) ->
     [];
 best_match(Zone, Labels, []) ->
-    case erldns_zone_cache:get_records_in_zone_by_name(Zone, Labels) of
+    case erldns_zone_cache:get_records_by_name(Zone, Labels) of
         [] ->
             best_match(Zone, Labels);
         Matches ->
@@ -847,7 +872,7 @@ detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
         true ->
             [];
         false ->
-            case erldns_zone_cache:get_records_in_zone_by_name_and_type(Zone, Labels, ?DNS_TYPE_NS) of
+            case erldns_zone_cache:get_records_by_name_and_type(Zone, Labels, ?DNS_TYPE_NS) of
                 [] ->
                     detect_zonecut(Zone, ParentLabels);
                 ZonecutNSRecords ->
@@ -865,4 +890,3 @@ complete_response(Msg) ->
         adc = length(Msg#dns_message.additional)
     },
     erldns_records:rewrite_soa_ttl(Msg1).
-

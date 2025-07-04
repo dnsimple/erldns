@@ -321,5 +321,8 @@ get_pfactor(Config) ->
     end.
 
 trigger_delayed(_Ref, _Alarm, _SupPid, _ConnPids) ->
-    ?LOG_WARNING(#{what => tcp_acceptor_delayed, transport => tcp}, #{domain => [erldns, listeners]}),
+    ?LOG_WARNING(
+        #{what => tcp_acceptor_delayed, transport => tcp},
+        #{domain => [erldns, listeners]}
+    ),
     telemetry:execute([erldns, request, delayed], #{count => 1}, #{transport => tcp}).

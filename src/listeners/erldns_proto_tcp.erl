@@ -70,8 +70,8 @@ handle_if_within_time(Socket, TimerPid, TS, IngressTimeoutMs, Bin) ->
 -spec handle(inet:socket(), pid(), integer(), binary()) -> dynamic().
 handle(Socket, TimerPid, TS, Bin) ->
     Measurements = #{monotonic_time => TS, request_size => byte_size(Bin)},
-    Metadata = #{transport => tcp},
-    telemetry:execute([erldns, request, start], Measurements, Metadata),
+    InitMetadata = #{transport => tcp},
+    telemetry:execute([erldns, request, start], Measurements, InitMetadata),
     try
         {ok, {IpAddr, _Port}} = inet:peername(Socket),
         case dns:decode_message(Bin) of
@@ -89,10 +89,10 @@ handle(Socket, TimerPid, TS, Bin) ->
         end
     catch
         Class:Reason:Stacktrace ->
-            MetaData = #{
+            ExceptionMetadata = #{
                 transport => tcp, kind => Class, reason => Reason, stacktrace => Stacktrace
             },
-            telemetry:execute([erldns, request, error], #{count => 1}, MetaData)
+            telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata)
     end.
 
 -spec handle_decoded(inet:socket(), pid(), integer(), dns:message(), dynamic()) -> dynamic().

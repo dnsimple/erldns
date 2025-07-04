@@ -43,9 +43,11 @@ Configuration parameters, see the module documentation for details.
     username := binary(),
     password := binary()
 }.
--export_type([config/0, handler_state/0]).
 
--type env() :: [{atom(), term()}].
+-doc false.
+-opaque env() :: [{atom(), term()}].
+
+-export_type([env/0, config/0, handler_state/0]).
 
 -spec maybe_start() -> ok | {ok, pid()} | {error, any()}.
 maybe_start() ->
