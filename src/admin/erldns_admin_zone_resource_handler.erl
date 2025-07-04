@@ -102,9 +102,9 @@ to_json(Req, State) ->
         #{domain => [erldns, admin]}
     ),
     case erldns_zone_cache:get_zone(Name) of
-        {error, Reason} ->
-            ?LOG_ERROR(#{what => get_zone_error, error => Reason}, #{domain => [erldns, admin]}),
-            Resp = io_lib:format("Error getting zone: ~p", [Reason]),
+        zone_not_found ->
+            ?LOG_ERROR(#{what => get_zone_error, error => zone_not_found}, #{domain => [erldns, admin]}),
+            Resp = "Error getting zone: zone not found",
             {stop, cowboy_req:reply(400, #{}, Resp, Req), State};
         Zone ->
             Body = get_body(Zone, lists:keymember(<<"metaonly">>, 1, Params)),

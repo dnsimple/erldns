@@ -17,6 +17,8 @@ only the first question will be resolved.
     get_zone_records/1,
     get_records_by_name/1,
     get_records_by_name_and_type/2,
+    get_records_in_zone_by_name/2,
+    get_records_in_zone_by_name_and_type/3,
     is_in_any_zone/1,
     is_record_name_in_zone/2,
     is_record_name_in_zone_strict/2,
@@ -103,6 +105,26 @@ get_records_by_name_and_type(QLabels, Type) when is_list(QLabels) ->
             lists:append(ets:select(zone_records_typed, [Pattern]))
     end.
 
+-doc "Return the record set for the given dname.".
+-spec get_records_in_zone_by_name(erldns:zone(), dns:dname() | [dns:label()]) -> [dns:rr()].
+get_records_in_zone_by_name(Zone, Name) when is_binary(Name) ->
+    QLabels = dns:dname_to_labels(dns:dname_to_lower(Name)),
+    get_records_in_zone_by_name(Zone, QLabels);
+get_records_in_zone_by_name(#zone{labels = ZoneLabels}, QLabels) when is_list(QLabels) ->
+    RecordLabels = reduce_record_labels(ZoneLabels, QLabels),
+    Pattern = {{{ZoneLabels, RecordLabels, '_'}, '$1'}, [], ['$1']},
+    lists:append(ets:select(zone_records_typed, [Pattern])).
+
+-doc "Get all records for the given type and given name.".
+-spec get_records_in_zone_by_name_and_type(erldns:zone(), dns:dname() | [dns:label()], dns:type()) -> [dns:rr()].
+get_records_in_zone_by_name_and_type(Zone, Name, Type) when is_binary(Name) ->
+    QLabels = dns:dname_to_labels(dns:dname_to_lower(Name)),
+    get_records_in_zone_by_name_and_type(Zone, QLabels, Type);
+get_records_in_zone_by_name_and_type(#zone{labels = ZoneLabels}, QLabels, Type) when is_list(QLabels) ->
+    RecordLabels = reduce_record_labels(ZoneLabels, QLabels),
+    Pattern = {{{ZoneLabels, RecordLabels, Type}, '$1'}, [], ['$1']},
+    lists:append(ets:select(zone_records_typed, [Pattern])).
+
 -doc "Check if the name is in any available zone.".
 -spec is_in_any_zone(dns:dname() | [dns:label()]) -> boolean().
 is_in_any_zone(Name) when is_binary(Name) ->
@@ -182,7 +204,7 @@ find_zone(Name, #dns_rr{} = Authority) ->
             case get_zone(NormalizedName) of
                 #zone{} = Zone ->
                     Zone;
-                {error, zone_not_found} ->
+                zone_not_found ->
                     case NormalizedName =:= Authority#dns_rr.name of
                         true ->
                             {error, zone_not_found};
@@ -200,12 +222,12 @@ Get a zone for the specific name.
 This function will not attempt to resolve the dname in any way,
 it will simply look up the name in the underlying data store.
 """.
--spec get_zone(dns:dname()) -> erldns:zone() | {error, zone_not_found}.
+-spec get_zone(dns:dname()) -> erldns:zone() | zone_not_found.
 get_zone(Name) ->
     QLabels = dns:dname_to_labels(dns:dname_to_lower(Name)),
     case ets:lookup(zones, QLabels) of
         [] ->
-            {error, zone_not_found};
+            zone_not_found;
         [#zone{} = Zone] ->
             Zone
     end.
@@ -321,7 +343,7 @@ put_zone(#zone{name = Name} = Zone) ->
     put_zone_records(ZoneRecords).
 
 -doc "Put zone RRSet".
--spec put_zone_rrset(RRSet, RRFqdn, Type, Counter) -> ok | {error, term()} when
+-spec put_zone_rrset(RRSet, RRFqdn, Type, Counter) -> ok | zone_not_found when
     RRSet ::
         erldns:zone()
         | {dns:dname(), erldns_zones:version(), [dns:rr()]}
@@ -355,12 +377,13 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
             ),
             KeySets = Zone#zone.keysets,
             NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
+            Labels = dns:dname_to_labels(NormalizedRRFqdn),
             SignedRRSet = sign_rrset(Zone#zone{records = Records, keysets = KeySets}),
             {RRSigRecsCovering, RRSigRecsNotCovering} = filter_rrsig_records_with_type_covered(
                 NormalizedRRFqdn, Type
             ),
             % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
-            CurrentRRSetRecords = get_records_by_name_and_type(NormalizedRRFqdn, Type),
+            CurrentRRSetRecords = get_records_in_zone_by_name_and_type(Zone, Labels, Type),
             ZoneRecordsCount = Zone#zone.record_count,
             % put zone_records_typed records first then create the records in zone_records
             TypedRecords = Records ++ SignedRRSet ++ RRSigRecsNotCovering,
@@ -379,9 +402,9 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
                 },
                 #{domain => [erldns, zones]}
             );
-        % if zone is not in cache, return error
+        % if zone is not in cache, return not found
         zone_not_found ->
-            {error, zone_not_found}
+            zone_not_found
     end.
 
 -doc "Remove a zone from the cache without waiting for a response.".
@@ -418,17 +441,17 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                         #{domain => [erldns, zones]}
                     ),
                     ZoneRecordsCount = Zone#zone.record_count,
-                    CurrentRRSetRecords = get_records_by_name_and_type(RRFqdn, Type),
                     NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
-                    QLabels = dns:dname_to_labels(NormalizedRRFqdn),
-                    RecordLabels = reduce_record_labels(ZoneLabels, QLabels),
+                    Labels = dns:dname_to_labels(NormalizedRRFqdn),
+                    CurrentRRSetRecords = get_records_in_zone_by_name_and_type(Zone, Labels, Type),
+                    RecordLabels = reduce_record_labels(ZoneLabels, Labels),
                     Pattern = {{{ZoneLabels, RecordLabels, Type}, '_'}, [], [true]},
                     ets:select_delete(zone_records_typed, [Pattern]),
                     % remove the RRSIG for the given record type
                     {RRSigsCovering, RRSigsNotCovering} =
                         lists:partition(
                             erldns_records:match_type_covered(Type),
-                            get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_RRSIG_NUMBER)
+                            get_records_in_zone_by_name_and_type(Zone, Labels, ?DNS_TYPE_RRSIG)
                         ),
                     do_put_zone_records_typed_entry(
                         NormalizedZoneName, NormalizedRRFqdn, ?DNS_TYPE_RRSIG, RRSigsNotCovering
@@ -467,22 +490,22 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
 
 -doc "Given a zone name, list of records, and a digest, update the zone metadata in cache.".
 -spec update_zone_records_and_digest(dns:dname(), integer(), erldns_zones:version()) ->
-    ok | {error, Reason :: term()}.
+    ok | zone_not_found.
 update_zone_records_and_digest(ZoneName, RecordsCount, Digest) ->
     NormalizedZoneName = dns:dname_to_lower(ZoneName),
     ZQLabels = dns:dname_to_labels(NormalizedZoneName),
     case find_zone_in_cache(ZQLabels, zone) of
-        #zone{} = Zone ->
+        #zone{labels = ZoneLabels} = Zone ->
             UpdatedZone =
                 Zone#zone{
                     version = Digest,
-                    authority = get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA),
+                    authority = get_records_in_zone_by_name_and_type(Zone, ZoneLabels, ?DNS_TYPE_SOA),
                     record_count = RecordsCount
                 },
             true = insert_zone(UpdatedZone),
             ok;
         zone_not_found ->
-            {error, zone_not_found}
+            zone_not_found
     end.
 
 %% Filter RRSig records for FQDN, removing type covered..
@@ -492,12 +515,12 @@ filter_rrsig_records_with_type_covered(RRFqdn, TypeCovered) ->
     % guards below do not allow fun calls to prevent side effects
     NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
     QLabels = dns:dname_to_labels(NormalizedRRFqdn),
-    case find_zone_in_cache(QLabels, member) of
-        true ->
+    case find_zone_in_cache(QLabels, zone) of
+        #zone{} = Zone ->
             % {RRSigsCovering, RRSigsNotCovering} =
             lists:partition(
                 erldns_records:match_type_covered(TypeCovered),
-                get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_RRSIG_NUMBER)
+                get_records_in_zone_by_name_and_type(Zone, QLabels, ?DNS_TYPE_RRSIG)
             );
         zone_not_found ->
             {[], []}
@@ -605,7 +628,6 @@ record_name_in_zone_with_descendants(ZoneLabels, QLabels) ->
 %% expects name to be already normalized
 -spec find_zone_in_cache
     ([dns:label()], zone) -> zone_not_found | erldns:zone();
-    ([dns:label()], member) -> zone_not_found | boolean();
     ([dns:label()], dynamic()) -> zone_not_found | dynamic().
 find_zone_in_cache([], _) ->
     zone_not_found;
@@ -615,13 +637,6 @@ find_zone_in_cache([_ | Tail] = Labels, zone) ->
             find_zone_in_cache(Tail, zone);
         [#zone{} = Zone] ->
             Zone
-    end;
-find_zone_in_cache([_ | Tail] = Labels, member) ->
-    case ets:member(zones, Labels) of
-        false ->
-            find_zone_in_cache(Tail, member);
-        true ->
-            true
     end;
 find_zone_in_cache([_ | Tail] = Labels, Pos) when is_number(Pos) ->
     case ets:lookup_element(zones, Labels, Pos, zone_not_found) of
@@ -672,8 +687,8 @@ sign_zone(Zone) ->
 
 % Sign RRSet
 -spec sign_rrset(erldns:zone()) -> [dns:rr()].
-sign_rrset(#zone{name = Name} = Zone) ->
-    ZoneRecords = get_records_by_name_and_type(Name, ?DNS_TYPE_SOA),
+sign_rrset(#zone{labels = ZoneLabels} = Zone) ->
+    ZoneRecords = get_records_in_zone_by_name_and_type(Zone, ZoneLabels, ?DNS_TYPE_SOA),
     ZoneRRSigRecords = erldns_dnssec:get_signed_zone_records(Zone),
     rewrite_soa_rrsig_ttl(ZoneRecords, ZoneRRSigRecords).
 
@@ -705,7 +720,7 @@ record_name_in_zone_helper(ZoneLabels, RecordLabels) ->
     end.
 
 -doc "Creates a new table.".
--spec create(atom()) -> ok | {error, Reason :: term()}.
+-spec create(atom()) -> ok.
 create(zones) ->
     create_ets_table(zones, set, #zone.labels);
 create(zone_records_typed) ->
@@ -739,11 +754,11 @@ handle_cast(Cast, State) ->
     ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, #{domain => [erldns, zones]}),
     {noreply, State}.
 
--spec create_ets_table(atom(), ets:table_type()) -> ok | {error, term()}.
+-spec create_ets_table(atom(), ets:table_type()) -> ok.
 create_ets_table(TableName, Type) ->
     create_ets_table(TableName, Type, 1).
 
--spec create_ets_table(atom(), ets:table_type(), non_neg_integer()) -> ok | {error, term()}.
+-spec create_ets_table(atom(), ets:table_type(), non_neg_integer()) -> ok.
 create_ets_table(TableName, Type, Pos) ->
     case ets:info(TableName) of
         undefined ->

@@ -104,11 +104,11 @@ resolve_authoritative(Message, Zone, Qname, QLabels, Qtype, CnameChain) ->
             {false, []} ->
                 resolve_ent(Message, QLabels, Zone);
             _ ->
-                case erldns_zone_cache:get_records_by_name(Qname) of
+                case erldns_zone_cache:get_records_in_zone_by_name(Zone, QLabels) of
                     [] ->
                         % No exact match of name and type, move to best match resolution
                         best_match_resolution(
-                            Message, Qname, Qtype, CnameChain, best_match(Qname, Zone), Zone
+                            Message, Qname, Qtype, CnameChain, best_match(Zone, QLabels), Zone
                         );
                     Records ->
                         % Exact match of name and type
@@ -702,31 +702,27 @@ check_if_parent(PossibleParentName, Name) ->
             false
     end.
 
-% Find the best match records for the given Qname in the given zone. This will attempt to walk through the
-% domain hierarchy in the Qname looking for both exact and wildcard matches.
--spec best_match(dns:dname(), erldns:zone()) -> [dns:rr()].
-best_match(Qname, Zone) ->
-    best_match(Qname, Zone, dns:dname_to_labels(Qname)).
-
--spec best_match(dns:dname(), erldns:zone(), [dns:label()]) -> [dns:rr()].
-best_match(_Qname, _Zone, []) ->
+% Find the best match records for the given Qname in the given zone.
+% This will attempt to walk through the domain hierarchy in the Qname
+% looking for both exact and wildcard matches.
+-spec best_match(erldns:zone(), [dns:label()]) -> [dns:rr()].
+best_match(_, []) ->
     [];
-best_match(Qname, Zone, [_ | Rest]) ->
-    WildcardName = dns:labels_to_dname([<<"*">> | Rest]),
-    best_match(Qname, Zone, Rest, erldns_zone_cache:get_records_by_name(WildcardName)).
+best_match(Zone, [_ | ParentLabels]) ->
+    WildcardName = [~"*" | ParentLabels],
+    best_match(Zone, ParentLabels, erldns_zone_cache:get_records_in_zone_by_name(Zone, WildcardName)).
 
--spec best_match(dns:dname(), erldns:zone(), [dns:label()], [dns:rr()]) -> [dns:rr()].
-best_match(_Qname, _Zone, [], []) ->
+-spec best_match(erldns:zone(), [dns:label()], [dns:rr()]) -> [dns:rr()].
+best_match(_, [], []) ->
     [];
-best_match(Qname, Zone, Labels, []) ->
-    Name = dns:labels_to_dname(Labels),
-    case erldns_zone_cache:get_records_by_name(Name) of
+best_match(Zone, Labels, []) ->
+    case erldns_zone_cache:get_records_in_zone_by_name(Zone, Labels) of
         [] ->
-            best_match(Qname, Zone, Labels);
+            best_match(Zone, Labels);
         Matches ->
             Matches
     end;
-best_match(_Qname, _Zone, _Labels, WildcardMatches) ->
+best_match(_, _Labels, WildcardMatches) ->
     WildcardMatches.
 
 % Find the best match records for the given Qname in the given zone.
@@ -748,12 +744,11 @@ wildcard_match([]) ->
     [];
 wildcard_match([_]) ->
     [];
-wildcard_match(Labels) ->
-    [_FirstLabel | Rest] = Labels,
-    WildcardName = dns:labels_to_dname([<<"*">> | Rest]),
+wildcard_match([_ | ParentLabels]) ->
+    WildcardName = [~"*" | ParentLabels],
     case erldns_zone_cache:get_records_by_name(WildcardName) of
         [] ->
-            wildcard_match(Rest);
+            wildcard_match(ParentLabels);
         Matches ->
             Matches
     end.
@@ -852,7 +847,7 @@ detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
         true ->
             [];
         false ->
-            case erldns_zone_cache:get_records_by_name_and_type(Qname, ?DNS_TYPE_NS) of
+            case erldns_zone_cache:get_records_in_zone_by_name_and_type(Zone, Labels, ?DNS_TYPE_NS) of
                 [] ->
                     detect_zonecut(Zone, ParentLabels);
                 ZonecutNSRecords ->
