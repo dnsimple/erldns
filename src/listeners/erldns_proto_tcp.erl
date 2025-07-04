@@ -38,6 +38,8 @@ loop(Socket, TimerPid, TS, IngressTimeoutMs) ->
             ?LOG_INFO(#{what => tcp_error, reason => Reason}, #{domain => [erldns, listeners]});
         {tcp_closed, Socket} ->
             ok
+    after IngressTimeoutMs ->
+        gen_tcp:close(Socket)
     end.
 
 -spec loop(inet:socket(), pid(), integer(), integer(), non_neg_integer(), binary()) -> dynamic().
@@ -52,6 +54,8 @@ loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, Acc) ->
             ?LOG_INFO(#{what => tcp_error, reason => Reason}, #{domain => [erldns, listeners]});
         {tcp_closed, Socket} ->
             ok
+    after IngressTimeoutMs ->
+        gen_tcp:close(Socket)
     end.
 
 handle_if_within_time(Socket, TimerPid, TS, IngressTimeoutMs, Bin) ->

@@ -18,7 +18,7 @@
     %% hence removing the need to re-normalize them on every fetch
     labels :: [dns:label()],
     name :: dns:dname(),
-    version :: binary(),
+    version :: erldns_zones:version(),
     authority = [] :: dns:authority(),
     record_count = 0 :: non_neg_integer(),
     records = [] :: [dns:rr()],

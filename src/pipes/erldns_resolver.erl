@@ -282,9 +282,9 @@ resolve_exact_type_match(
             };
         NSRecords ->
             % NOTE: this is a potential bug because it assumes the last record is the one to examine
-            NSRecord = lists:last(NSRecords),
-            SoaRecord = lists:last(Zone#zone.authority),
-            case SoaRecord#dns_rr.name =:= NSRecord#dns_rr.name of
+            #dns_rr{name = NSRecordName} = lists:last(NSRecords),
+            #dns_rr{name = SoaRecordName} = lists:last(Zone#zone.authority),
+            case SoaRecordName =:= NSRecordName of
                 true ->
                     % The SOA record name matches the NS record name, we are at the apex,
                     % NOERROR and append the matched records to the answers

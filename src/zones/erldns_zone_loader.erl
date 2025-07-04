@@ -17,6 +17,7 @@ See the type `t:erldns_zones:config/0` for details.
 -include_lib("kernel/include/logger.hrl").
 
 -define(WILDCARD, "**/*.json").
+-define(TIMEOUT, timer:minutes(30)).
 
 -behaviour(gen_server).
 -export([load_zones/0, load_zones/1]).
@@ -104,6 +105,8 @@ if_any_died(Ref, Pids, LoaderMons, ReaderMon, ParserMon) ->
         {'DOWN', _LoaderMon, process, _, Reason} when normal =/= Reason ->
             [exit(Pid, kill) || Pid <- Pids],
             {error, Reason}
+    after ?TIMEOUT ->
+        ok
     end.
 
 count_zones(Ref, Count) ->
@@ -132,6 +135,8 @@ zone_reader(Ref, ParentPid, ParserPid, Strict) ->
         {Ref, ParentPid, stop} ->
             ParserPid ! {Ref, ParentPid, stop},
             ok
+    after ?TIMEOUT ->
+        ok
     end.
 
 zone_parser(Ref, ParentPid, LoaderPids, Strict) ->
@@ -156,6 +161,8 @@ zone_parser(Ref, ParentPid, LoaderPids, Strict) ->
         {Ref, ParentPid, stop} ->
             [LoaderPid ! {Ref, ParentPid, stop} || LoaderPid <- LoaderPids],
             ok
+    after ?TIMEOUT ->
+        ok
     end.
 
 zone_loader(Ref, ParentPid) ->
@@ -166,6 +173,8 @@ zone_loader(Ref, ParentPid) ->
             zone_loader(Ref, ParentPid);
         {Ref, ParentPid, stop} ->
             ok
+    after ?TIMEOUT ->
+        ok
     end.
 
 load_zone(JsonZone) ->
