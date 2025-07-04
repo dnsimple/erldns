@@ -49,7 +49,7 @@ groups() ->
             parse_json_keys_unsorted_proplists
         ]},
         {cache, [], [
-            record_name_in_zone,
+            is_record_name_in_zone,
             put_zone_rrset_zone,
             put_zone_rrset_records_count_with_existing_rrset,
             put_zone_rrset_records_count_with_new_rrset,
@@ -521,8 +521,14 @@ wildcard_loose(Config) ->
     application:set_env(erldns, zones, #{strict => false, path => DataDir}),
     ?assertMatch(4, erldns_zone_loader:load_zones()).
 
-record_name_in_zone(_) ->
+is_record_name_in_zone(_) ->
     ZoneName = ~"EXAMPLE.COM",
+    Zone = #zone{
+        labels = dns:dname_to_labels(dns:dname_to_lower(ZoneName)),
+        name = ZoneName,
+        version = ~"irrelevantDigest",
+        records = []
+    },
     Qname = ~"FRESH-ACADEMY.EXAMPLE.COM",
     NormalizedName = dns:dname_to_lower(Qname),
     NormalizedZoneName = dns:dname_to_lower(ZoneName),
@@ -548,7 +554,7 @@ record_name_in_zone(_) ->
         ttl = 3600
     },
     erldns_zone_cache:put_zone({NormalizedZoneName, ~"_", [NS, SOA]}),
-    ?assertMatch(true, erldns_zone_cache:record_name_in_zone(ZoneName, Qname)).
+    ?assertMatch(true, erldns_zone_cache:is_record_name_in_zone(Zone, Qname)).
 
 put_zone_rrset_zone(_) ->
     ZoneName = dns:dname_to_lower(~"example.com"),

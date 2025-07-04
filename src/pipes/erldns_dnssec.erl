@@ -186,7 +186,7 @@ handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, Qname, QTyp
     ),
     NameToNormalise = dns:labels_to_dname([?NEXT_DNAME_PART | dns:dname_to_labels(Qname)]),
     NextDname = dns:dname_to_lower(NameToNormalise),
-    RecordTypesForQname = record_types_for_name(Qname, Zone),
+    RecordTypesForQname = record_types_for_name(Zone, Qname),
     NsecRrTypes = map_nsec_rr_types(QType, RecordTypesForQname),
     NsecRecords =
         [
@@ -302,8 +302,9 @@ map_nsec_rr_types(QType, Types, Handlers) ->
     ).
 
 %% compact-denial-of-existence-07
-record_types_for_name(Name, _Zone) ->
-    case erldns_resolver:best_match_at_node(Name) of
+record_types_for_name(_Zone, Name) ->
+    Labels = dns:dname_to_labels(dns:dname_to_lower(Name)),
+    case erldns_resolver:best_match_at_node(Labels) of
         [] ->
             %% §3.1: Responses for Non-Existent Names
             lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME]);

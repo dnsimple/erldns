@@ -78,8 +78,8 @@ resolve(Msg, Zone, QLabels, QType) ->
     Zone :: erldns:zone(),
     QLabels :: [dns:label()],
     QType :: dns:type().
-resolve_question(#dns_message{questions = [#dns_query{name = Qname}]} = Msg, Zone, _QLabels, QType) ->
-    Msg1 = resolve_authoritative(Msg, Zone, Qname, QType, []),
+resolve_question(Msg, Zone, QLabels, QType) ->
+    Msg1 = resolve_authoritative(Msg, Zone, QLabels, QType, []),
     additional_processing(Msg1, Zone).
 
 %% An SOA was found, thus we are authoritative and have the zone.
@@ -88,16 +88,21 @@ resolve_question(#dns_message{questions = [#dns_query{name = Qname}]} = Msg, Zon
 -spec resolve_authoritative(
     Message :: dns:message(),
     Zone :: erldns:zone(),
-    Qname :: dns:dname(),
+    Q :: [dns:label()] | dns:dname(),
     Qtype :: dns:type(),
     CnameChain :: [dns:rr()]
 ) ->
     dns:message().
-resolve_authoritative(Message, Zone, Qname, Qtype, CnameChain) ->
+resolve_authoritative(Message, Zone, Qname, Qtype, CnameChain) when is_binary(Qname) ->
+    resolve_authoritative(Message, Zone, Qname, dns:dname_to_labels(Qname), Qtype, CnameChain);
+resolve_authoritative(Message, Zone, QLabels, Qtype, CnameChain) when is_list(QLabels) ->
+    resolve_authoritative(Message, Zone, dns:labels_to_dname(QLabels), QLabels, Qtype, CnameChain).
+
+resolve_authoritative(Message, Zone, Qname, QLabels, Qtype, CnameChain) ->
     Result =
-        case {erldns_zone_cache:record_name_in_zone(Zone#zone.name, Qname), CnameChain} of
+        case {erldns_zone_cache:is_record_name_in_zone(Zone, QLabels), CnameChain} of
             {false, []} ->
-                resolve_ent(Message, Qname, Zone);
+                resolve_ent(Message, QLabels, Zone);
             _ ->
                 case erldns_zone_cache:get_records_by_name(Qname) of
                     [] ->
@@ -140,12 +145,12 @@ resolve_authoritative(Message, Zone, Qname, Qtype, CnameChain) ->
 
 -spec resolve_ent(
     Message :: dns:message(),
-    Qname :: dns:dname(),
+    QLabels :: [dns:label()],
     Zone :: erldns:zone()
 ) ->
     dns:message().
-resolve_ent(Message, Qname, Zone) ->
-    case erldns_zone_cache:record_name_in_zone_strict(Zone#zone.name, Qname) of
+resolve_ent(Message, QLabels, Zone) ->
+    case erldns_zone_cache:is_record_name_in_zone_strict(Zone, QLabels) of
         false ->
             % No host name with the given record in the zone, return NXDOMAIN and include authority
             Message#dns_message{
@@ -248,7 +253,7 @@ resolve_exact_type_match(Message, Qname, ?DNS_TYPE_NS, CnameChain, MatchedRecord
     Name = Answer#dns_rr.name,
     % It isn't clear what the QTYPE should be on a delegated restart. I assume an A record.
     restart_delegated_query(
-        Message, Name, ?DNS_TYPE_A, CnameChain, Zone, erldns_zone_cache:in_zone(Name)
+        Message, Name, ?DNS_TYPE_A, CnameChain, Zone, erldns_zone_cache:is_in_any_zone(Name)
     );
 resolve_exact_type_match(
     Message, _Qname, ?DNS_TYPE_NS, _CnameChain, MatchedRecords, _Zone, _AuthorityRecords
@@ -341,7 +346,7 @@ resolve_exact_type_match_delegated(
                         Qtype,
                         CnameChain,
                         Zone,
-                        erldns_zone_cache:in_zone(Name)
+                        erldns_zone_cache:is_in_any_zone(Name)
                     );
                 false ->
                     % NS record name is not a parent of the answer name
@@ -426,7 +431,7 @@ resolve_exact_match_with_cname(
                 Qtype,
                 CnameChain ++ CnameRecords,
                 Zone,
-                erldns_zone_cache:in_zone(Name)
+                erldns_zone_cache:is_in_any_zone(Name)
             )
     end.
 
@@ -593,7 +598,7 @@ resolve_best_match_with_wildcard_cname(
                 Qtype,
                 CnameChain ++ CnameRecords,
                 Zone,
-                erldns_zone_cache:in_zone(Name)
+                erldns_zone_cache:is_in_any_zone(Name)
             )
     end.
 
@@ -609,17 +614,13 @@ resolve_best_match_with_wildcard_cname(
 ) ->
     dns:message().
 resolve_best_match_referral(
-    Message, _Qname, Qtype, CnameChain, BestMatchRecords, _Zone, ReferralRecords
+    Message, Qname, Qtype, CnameChain, BestMatchRecords, Zone, ReferralRecords
 ) ->
     Authority = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), BestMatchRecords),
     case {Qtype, Authority, CnameChain} of
         {_, [], []} ->
             % We are authoritative for the name since there was an SOA record in the best match results.
-            Message#dns_message{
-                aa = true,
-                rc = ?DNS_RCODE_NXDOMAIN,
-                authority = Authority
-            };
+            resolve_ent(Message, dns:dname_to_labels(Qname), Zone);
         {_, _, []} ->
             % Indicate that we are not authoritative for the name as there were novSOA records in the best-match results.
             % The name has thus been delegated to another authority.
@@ -731,11 +732,10 @@ best_match(_Qname, _Zone, _Labels, WildcardMatches) ->
 % Find the best match records for the given Qname in the given zone.
 % This will looking for both exact and wildcard matches AT the QNAME label count
 % without attempting to walk down to the root.
--spec best_match_at_node(dns:dname()) -> [dns:rr()].
-best_match_at_node(Qname) ->
-    case erldns_zone_cache:get_records_by_name(Qname) of
+-spec best_match_at_node([dns:label()]) -> false | [dns:rr()].
+best_match_at_node(Labels) ->
+    case erldns_zone_cache:get_records_by_name(Labels) of
         [] ->
-            Labels = dns:dname_to_labels(Qname),
             % No exact matches, so look for wildcard matches
             wildcard_match(Labels);
         Matches ->

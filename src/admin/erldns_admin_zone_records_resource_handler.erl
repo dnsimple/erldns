@@ -62,7 +62,7 @@ is_authorized(Req, State) ->
     {boolean(), cowboy_req:req(), erldns_admin:handler_state()}.
 resource_exists(Req, State) ->
     Name = cowboy_req:binding(zone_name, Req),
-    {erldns_zone_cache:in_zone(Name), Req, State}.
+    {erldns_zone_cache:is_in_any_zone(Name), Req, State}.
 
 -doc false.
 -spec to_html(cowboy_req:req(), erldns_admin:handler_state()) ->
