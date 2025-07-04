@@ -14,6 +14,8 @@ This module holds three tables:
 -include_lib("kernel/include/logger.hrl").
 -include_lib("erldns/include/erldns.hrl").
 
+-define(LOG_METADATA, #{domain => [erldns, zones]}).
+
 -export([
     lookup_zone/1,
     get_zone_records/1,
@@ -353,7 +355,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
                     zone => NormalizedZoneName,
                     records => Records
                 },
-                log_metadata()
+                ?LOG_METADATA
             ),
             KeySets = Zone#zone.keysets,
             NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
@@ -376,7 +378,7 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
             write_rrset_sync_counter(NormalizedZoneName, NormalizedRRFqdn, Type, Counter),
             ?LOG_DEBUG(
                 #{what => rrset_update_completed, rrset => NormalizedRRFqdn, type => Type},
-                log_metadata()
+                ?LOG_METADATA
             );
         % if zone is not in cache, return not found
         zone_not_found ->
@@ -407,7 +409,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                 N when N =:= 0; CurrentCounter < N ->
                     ?LOG_DEBUG(
                         #{what => removing_rrset, rrset => RRFqdn, type => Type},
-                        log_metadata()
+                        ?LOG_METADATA
                     ),
                     ZoneRecordsCount = Zone#zone.record_count,
                     NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
@@ -451,7 +453,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                             rrset => RRFqdn,
                             counter => Counter
                         },
-                        log_metadata()
+                        ?LOG_METADATA
                     )
             end;
         zone_not_found ->
@@ -742,13 +744,13 @@ init(noargs) ->
 -spec handle_call(dynamic(), gen_server:from(), nostate) ->
     {reply, not_implemented, nostate}.
 handle_call(Call, From, State) ->
-    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, log_metadata()),
+    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, ?LOG_METADATA),
     {reply, not_implemented, State}.
 
 -doc false.
 -spec handle_cast(dynamic(), nostate) -> {noreply, nostate}.
 handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, log_metadata()),
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, ?LOG_METADATA),
     {noreply, State}.
 
 -spec create_ets_table(atom(), ets:table_type()) -> ok.
@@ -773,6 +775,3 @@ create_ets_table(TableName, Type, Pos) ->
         _InfoList ->
             ok
     end.
-
-log_metadata() ->
-    #{domain => [erldns, zones]}.
