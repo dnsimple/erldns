@@ -334,6 +334,7 @@ record_types_for_name(_Zone, Name) ->
 best_match_at_node(Labels) ->
     maybe
         #zone{} = Zone ?= erldns_zone_cache:get_authoritative_zone(Labels),
+        [] ?= erldns_zone_cache:get_records_by_name(Zone, Labels),
         [] ?= erldns_zone_cache:get_records_by_name_wildcard(Zone, Labels),
         true ?= erldns_zone_cache:is_record_name_in_zone_strict(Zone, Labels),
         ent

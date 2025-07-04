@@ -52,7 +52,7 @@ encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
 
 encode_zone_records_to_json(_ZoneName, RecordName, RecordType, Encoders) ->
     Records = erldns_zone_cache:get_records_by_name_and_type(
-        RecordName, erldns_records:name_type(RecordType)
+        RecordName, dns_names:name_type(RecordType)
     ),
     lists:filter(record_filter(), lists:map(encode(Encoders), Records)).
 

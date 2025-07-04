@@ -117,7 +117,6 @@ resolve_authoritative(Message, Zone, Qname, QLabels, Qtype, CnameChain) ->
                         )
                 end
         end,
-
     case detect_zonecut(Zone, Qname) of
         [] ->
             Result;
@@ -844,7 +843,7 @@ detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
         true ->
             [];
         false ->
-            case erldns_zone_cache:get_records_by_name_and_type(Labels, ?DNS_TYPE_NS) of
+            case erldns_zone_cache:get_records_by_name_and_type(Zone, Labels, ?DNS_TYPE_NS) of
                 [] ->
                     detect_zonecut(Zone, ParentLabels);
                 ZonecutNSRecords ->
