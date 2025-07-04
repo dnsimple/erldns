@@ -174,7 +174,7 @@ get_zone_record_resource(CtConfig) ->
     case httpc:request(get, Request, [], []) of
         {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Payload}} ->
             Body = json:decode(iolist_to_binary(Payload)),
-            ?assertMatch([], Body);
+            ?assertMatch([_ | _], Body);
         {_, Other} ->
             ct:fail(Other)
     end.

@@ -303,8 +303,8 @@ map_nsec_rr_types(QType, Types, Handlers) ->
 
 %% compact-denial-of-existence-07
 record_types_for_name(_Zone, Name) ->
-    Labels = dns:dname_to_labels(dns:dname_to_lower(Name)),
-    try best_match_at_node(Labels) of
+    Labels = dns:dname_to_lower_labels(Name),
+    case best_match_at_node(Labels) of
         ent ->
             lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]);
         [] ->
@@ -312,19 +312,6 @@ record_types_for_name(_Zone, Name) ->
         RecordsAtName ->
             TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
             lists:usort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC | TypesCovered])
-    catch
-        C:E:S ->
-            ?LOG_ERROR(
-                #{
-                    what => best_match_at_node_failed,
-                    name => Name,
-                    class => C,
-                    exception => E,
-                    stacktrace => S
-                },
-                #{domain => [erldns]}
-            ),
-            lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME])
     end.
 
 % Find the best match records for the given Qname in the given zone.

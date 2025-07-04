@@ -95,13 +95,13 @@ to_text(Req, State) ->
 -spec to_json(cowboy_req:req(), erldns_admin:handler_state()) ->
     {stop | cowboy_req:resp_body(), cowboy_req:req(), erldns_admin:handler_state()}.
 to_json(Req, State) ->
-    Name = cowboy_req:binding(zone_name, Req),
+    ZoneName = cowboy_req:binding(zone_name, Req),
     Params = cowboy_req:parse_qs(Req),
     ?LOG_DEBUG(
-        #{what => received_get, resource => Name, params => Params},
+        #{what => received_get, resource => ZoneName, params => Params},
         #{domain => [erldns, admin]}
     ),
-    case erldns_zone_cache:lookup_zone(Name) of
+    case erldns_zone_cache:lookup_zone(ZoneName) of
         zone_not_found ->
             ?LOG_ERROR(#{what => get_zone_error, error => zone_not_found}, #{
                 domain => [erldns, admin]

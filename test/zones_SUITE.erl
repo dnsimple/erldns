@@ -187,6 +187,7 @@ encode_meta_to_json_dnssec(Config) ->
     ZoneName = ~"example-dnssec.com",
     RecordName = ~"example-dnssec.com",
     Z = #zone{
+        labels = dns:dname_to_labels(ZoneName),
         name = ZoneName,
         authority = [#dns_rr{name = ~"example-dnssec.com", type = ?DNS_TYPE_SOA}]
     },
