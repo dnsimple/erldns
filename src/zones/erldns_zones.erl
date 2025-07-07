@@ -40,7 +40,8 @@ Codecs are a list of modules that implement the `m:erldns_zone_codec` behaviour.
     strict => boolean(),
     codecs => [module()]
 }.
--export_type([config/0]).
+-type version() :: binary().
+-export_type([config/0, version/0]).
 
 -behaviour(supervisor).
 

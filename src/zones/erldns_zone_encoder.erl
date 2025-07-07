@@ -115,7 +115,10 @@ encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_CDNSKEY, ttl = Ttl, d
 encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_RRSIG, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
-    ?LOG_WARNING(#{what => unable_to_encode_record, record => Record}, #{domain => [erldns, zones]}),
+    ?LOG_WARNING(
+        #{what => unable_to_encode_record, record => Record},
+        #{domain => [erldns, zones]}
+    ),
     not_implemented.
 
 encode_record(Name, Type, Ttl, Data) ->
@@ -185,13 +188,13 @@ encode_data(#dns_rrdata_naptr{
             Order, Preference, Flags, Services, Regexp, Replacements
         ])
     );
-encode_data(#dns_rrdata_ds{keytag = KeyTag, alg = Alg, digest_type = DigestType, digest = Digest}) ->
+encode_data(#dns_rrdata_ds{keytag = KeyTag, alg = Alg, digest_type = DigType, digest = Digest}) ->
     escape_chars(
-        io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest])
+        io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigType, Digest])
     );
-encode_data(#dns_rrdata_cds{keytag = KeyTag, alg = Alg, digest_type = DigestType, digest = Digest}) ->
+encode_data(#dns_rrdata_cds{keytag = KeyTag, alg = Alg, digest_type = DigType, digest = Digest}) ->
     escape_chars(
-        io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest])
+        io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigType, Digest])
     );
 encode_data(#dns_rrdata_dnskey{
     flags = Flags, protocol = Protocol, alg = Alg, public_key = Key, keytag = KeyTag

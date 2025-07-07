@@ -13,7 +13,8 @@
     name :: atom(),
     socket :: gen_udp:socket()
 }).
--type state() :: #udp_acceptor{}.
+-opaque state() :: #udp_acceptor{}.
+-export_type([state/0]).
 
 -spec start_link(erldns_listeners:name(), [gen_udp:option()]) -> gen_server:start_ret().
 start_link(Name, SocketOpts) ->

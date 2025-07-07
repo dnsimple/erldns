@@ -55,7 +55,7 @@ register_handler(RecordTypes, Module) ->
 -doc "Register a record handler with version".
 -spec register_handler([dns:type()], module(), integer()) -> ok.
 register_handler(RecordTypes, Module, Version) ->
-    gen_server:call(?MODULE, {register_handler, RecordTypes, Module, Version}).
+    gen_server:call(?MODULE, {register_handler, RecordTypes, Module, Version}, 5000).
 
 -doc "Get all registered handlers along with the DNS types they handle and associated versions".
 -spec get_versioned_handlers() -> [versioned_handler()].

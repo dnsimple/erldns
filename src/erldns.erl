@@ -26,6 +26,6 @@ Convenience API to start erldns directly.
 -type keyset() :: #keyset{}.
 -type zone() :: #zone{}.
 
--spec start() -> any().
+-spec start() -> term().
 start() ->
     application:ensure_all_started(erldns).
