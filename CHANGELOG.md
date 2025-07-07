@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+- Update dns_erlang v4.2 and remove `erldns_records:name_type/1`.
+
 ## v7.0.0
 
 This is a big release full of massive performance improvements and protocol compliance,
