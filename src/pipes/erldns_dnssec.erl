@@ -13,10 +13,6 @@ DNSSEC implementation.
     get_signed_zone_records/1
 ]).
 -export([maybe_sign_rrset/3, rrsig_for_zone_rrset/2]).
--export([
-    map_nsec_rr_types/1,
-    map_nsec_rr_types/2
-]).
 
 -ifdef(TEST).
 -export([requires_key_signing_key/1, choose_signer_for_rrset/2]).
@@ -167,7 +163,7 @@ handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, Qname, QTyp
     NameToNormalise = dns:labels_to_dname([?NEXT_DNAME_PART | dns:dname_to_labels(Qname)]),
     NextDname = dns:dname_to_lower(NameToNormalise),
     RecordTypesForQname = record_types_for_name(Qname, Zone),
-    NsecRrTypes = map_nsec_rr_types(QType, RecordTypesForQname),
+    NsecRrTypes = erldns_handler:call_map_nsec_rr_types(QType, RecordTypesForQname),
     NsecRecords =
         [
             #dns_rr{
@@ -231,54 +227,6 @@ find_unsigned_records(Records) ->
                 ) =:= [])
         end,
         Records
-    ).
-
--spec map_nsec_rr_types([dns:type()]) -> [dns:type()].
-map_nsec_rr_types(Types) ->
-    case erldns_handler:get_versioned_handlers() of
-        [] ->
-            %% No handlers, return the types as is
-            Types;
-        Handlers ->
-            %% Map the types using the handlers
-            MappedTypes = lists:flatmap(
-                fun(Type) ->
-                    case lists:keyfind([Type], 2, Handlers) of
-                        false -> [Type];
-                        {M, _, _} -> M:nsec_rr_type_mapper(Type)
-                    end
-                end,
-                Types
-            ),
-            lists:usort(MappedTypes)
-    end.
-
--spec map_nsec_rr_types(dns:type(), [dns:type()]) -> [dns:type()].
-map_nsec_rr_types(QType, Types) ->
-    Handlers = erldns_handler:get_versioned_handlers(),
-    MappedTypes = map_nsec_rr_types(QType, Types, Handlers),
-    lists:usort(MappedTypes).
-
--spec map_nsec_rr_types(dns:type(), [dns:type()], [erldns_handler:versioned_handler()]) ->
-    [dns:type()].
-map_nsec_rr_types(_QType, Types, []) ->
-    Types;
-map_nsec_rr_types(QType, Types, Handlers) ->
-    lists:flatmap(
-        fun(Type) ->
-            case lists:keyfind([Type], 2, Handlers) of
-                false ->
-                    [Type];
-                {M, _, _} ->
-                    case erlang:function_exported(M, nsec_rr_type_mapper, 2) of
-                        true ->
-                            M:nsec_rr_type_mapper(Type, QType);
-                        false ->
-                            M:nsec_rr_type_mapper(Type)
-                    end
-            end
-        end,
-        Types
     ).
 
 %% compact-denial-of-existence-07
