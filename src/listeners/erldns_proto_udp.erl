@@ -102,7 +102,8 @@ handle_decoded(_, _, _, #dns_message{qr = true}, _) ->
     {error, not_a_question};
 handle_decoded(Socket, IpAddr, Port, DecodedMessage0, TS0) ->
     DecodedMessage = normalize_edns_max_payload_size(DecodedMessage0),
-    Response = erldns_pipeline:call(DecodedMessage, #{transport => udp, host => IpAddr}),
+    InitOpts = #{monotonic_time => TS0, transport => udp, host => IpAddr},
+    Response = erldns_pipeline:call(DecodedMessage, InitOpts),
     Result = erldns_encoder:encode_message(Response, #{}),
     EncodedResponse =
         case Result of
