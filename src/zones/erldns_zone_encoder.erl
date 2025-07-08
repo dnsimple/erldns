@@ -188,13 +188,23 @@ encode_data(#dns_rrdata_naptr{
             Order, Preference, Flags, Services, Regexp, Replacements
         ])
     );
-encode_data(#dns_rrdata_ds{keytag = KeyTag, alg = Alg, digest_type = DigType, digest = Digest}) ->
+encode_data(#dns_rrdata_ds{
+    keytag = KeyTag,
+    alg = Alg,
+    digest_type = DigestType,
+    digest = Digest
+}) ->
     escape_chars(
-        io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigType, Digest])
+        io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest])
     );
-encode_data(#dns_rrdata_cds{keytag = KeyTag, alg = Alg, digest_type = DigType, digest = Digest}) ->
+encode_data(#dns_rrdata_cds{
+    keytag = KeyTag,
+    alg = Alg,
+    digest_type = DigestType,
+    digest = Digest
+}) ->
     escape_chars(
-        io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigType, Digest])
+        io_lib:format("~w ~w ~w ~s", [KeyTag, Alg, DigestType, Digest])
     );
 encode_data(#dns_rrdata_dnskey{
     flags = Flags, protocol = Protocol, alg = Alg, public_key = Key, keytag = KeyTag
