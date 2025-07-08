@@ -15,6 +15,7 @@ be injected as a new pipe handler in the right order.
 
 The following are enabled by default, see their documentation for details:
 
+- `m:erldns_questions`
 - `m:erldns_query_throttle`
 - `m:erldns_packet_cache`
 - `m:erldns_resolver`
@@ -49,6 +50,7 @@ The API expected by a module pipe is defined as a behaviour by this module.
 ```erlang
 {erldns, [
     {packet_pipeline, [
+        erldns_questions,
         erldns_query_throttle,
         erldns_packet_cache,
         erldns_resolver,
@@ -93,6 +95,9 @@ call(Msg, _Opts) ->
 -type transport() :: tcp | udp.
 -doc "Options that can be passed and accumulated to the pipeline.".
 -type opts() :: #{
+    query_labels := dns:labels(),
+    query_type := dns:type(),
+    monotonic_time := integer(),
     resolved := boolean(),
     transport := transport(),
     host := host(),
@@ -139,6 +144,7 @@ This callback can return
 -endif.
 
 -define(DEFAULT_PACKET_PIPELINE, [
+    erldns_questions,
     erldns_query_throttle,
     erldns_packet_cache,
     erldns_resolver,
@@ -265,4 +271,11 @@ prepare_pipe(Fun, _) when is_function(Fun) ->
     erlang:error({badpipe, {function_pipe_has_wrong_arity, Fun}}).
 
 def_opts() ->
-    #{resolved => false, transport => udp, host => undefined}.
+    #{
+        query_labels => [],
+        query_type => ?DNS_TYPE_A,
+        monotonic_time => 0,
+        resolved => false,
+        transport => udp,
+        host => undefined
+    }.
