@@ -26,11 +26,11 @@ prepare(Opts) ->
 -doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
 call(
-    #dns_message{questions = [#dns_query{name = Qname, type = QType}]} = Msg,
+    #dns_message{questions = [#dns_query{name = QName, type = QType}]} = Msg,
     #{resolved := true, auth_zone := #zone{} = Zone} = Opts
 ) ->
     RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Msg)),
-    {handle(Msg, Zone, Qname, QType), Opts#{dnssec => RequestDnssec}};
+    {handle(Msg, Zone, QName, QType), Opts#{dnssec => RequestDnssec}};
 call(Msg, _) ->
     Msg.
 
@@ -54,7 +54,7 @@ filter_cds_cdnskey(#dns_rr{type = Type}) ->
         (Type =/= ?DNS_TYPE_DNSKEY) andalso
         (Type =/= ?DNS_TYPE_CDNSKEY).
 
-%% Given a zone and a set of records, return the RRSIG records..
+%% Given a zone and a set of records, return the RRSIG records.
 -spec rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()].
 rrsig_for_zone_rrset(Zone, RRs) ->
     lists:flatmap(choose_signer_for_rrset(Zone#zone.name, RRs), Zone#zone.keysets).
@@ -115,10 +115,10 @@ choose_signer_for_rrset(ZoneName, RRs) ->
 Apply DNSSEC records to the given message if the zone is signed and DNSSEC is requested.
 """.
 -spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type()) -> dns:message().
-handle(Message, Zone, Qname, QType) ->
+handle(Message, Zone, QName, QType) ->
     HasKeySets = [] =/= Zone#zone.keysets,
     RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Message)),
-    handle(Message, Zone, Qname, QType, HasKeySets, RequestDnssec).
+    handle(Message, Zone, QName, QType, HasKeySets, RequestDnssec).
 
 -doc """
 Check if any record in the set requires key-signing-key for RRSIG.
@@ -145,7 +145,7 @@ handle(Msg, _, _, ?DNS_TYPE_NXNAME, _, true) ->
 handle(Msg, _, _, _, false, true) ->
     % DNSSEC requested, zone unsigned, nothing to do
     Msg;
-handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, Qname, QType, true, true) ->
+handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, QName, QType, true, true) ->
     % No answers found, return NSEC.
     Authority = lists:last(Zone#zone.authority),
     Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
@@ -154,14 +154,14 @@ handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, Qname, QTyp
     SoaRRSigRecords = lists:filter(
         erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords
     ),
-    NameToNormalise = dns:labels_to_dname([?NEXT_DNAME_PART | dns:dname_to_labels(Qname)]),
+    NameToNormalise = dns:labels_to_dname([?NEXT_DNAME_PART | dns:dname_to_labels(QName)]),
     NextDname = dns:dname_to_lower(NameToNormalise),
-    RecordTypesForQname = record_types_for_name(Qname, Zone),
+    RecordTypesForQname = record_types_for_name(Zone, QName),
     NsecRrTypes = erldns_handler:call_map_nsec_rr_types(QType, RecordTypesForQname),
     NsecRecords =
         [
             #dns_rr{
-                name = Qname,
+                name = QName,
                 type = ?DNS_TYPE_NSEC,
                 ttl = Ttl,
                 data = #dns_rrdata_nsec{
@@ -224,12 +224,32 @@ find_unsigned_records(Records) ->
     ).
 
 %% compact-denial-of-existence-07
-record_types_for_name(Name, _Zone) ->
-    case erldns_resolver:best_match_at_node(Name) of
+record_types_for_name(_Zone, Name) ->
+    Labels = dns:dname_to_lower_labels(Name),
+    case best_match_at_node(Labels) of
+        ent ->
+            lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]);
         [] ->
-            %% §3.1: Responses for Non-Existent Names
             lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME]);
         RecordsAtName ->
             TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
             lists:usort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC | TypesCovered])
+    end.
+
+% Find the best match records for the given QName in the given zone.
+% This will looking for both exact and wildcard matches AT the QNAME label count
+% without attempting to walk down to the root.
+-spec best_match_at_node(dns:labels()) -> ent | [dns:rr()].
+best_match_at_node(Labels) ->
+    maybe
+        #zone{} = Zone ?= erldns_zone_cache:get_authoritative_zone(Labels),
+        [] ?= erldns_zone_cache:get_records_by_name(Zone, Labels),
+        [] ?= erldns_zone_cache:get_records_by_name_wildcard(Zone, Labels),
+        true ?= erldns_zone_cache:is_record_name_in_zone_strict(Zone, Labels),
+        ent
+    else
+        [_ | _] = RRs ->
+            RRs;
+        _ ->
+            []
     end.

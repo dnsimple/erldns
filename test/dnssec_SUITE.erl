@@ -42,6 +42,7 @@ end_per_testcase(_, _Config) ->
 
 verify_ksk_signed(_) ->
     Name = dns:dname_to_lower(~"example-dnssec0.com"),
+    Labels = dns:dname_to_labels(Name),
     QType = ?DNS_TYPE_A,
     Q = #dns_query{name = Name, type = QType},
     A = #dns_rr{name = Name, type = QType, data = #dns_rrdata_a{ip = {1, 2, 3, 4}}},
@@ -49,7 +50,7 @@ verify_ksk_signed(_) ->
     Msg0 = #dns_message{
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
-    Zone = erldns_zone_cache:find_zone(Name),
+    Zone = erldns_zone_cache:get_authoritative_zone(Labels),
     Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
     ?assertMatch(
         #dns_message{
@@ -71,6 +72,7 @@ verify_ksk_signed(_) ->
 
 verify_zsk_signed(_) ->
     Name = dns:dname_to_lower(~"example-dnssec0.com"),
+    Labels = dns:dname_to_labels(Name),
     QType = ?DNS_TYPE_CDNSKEY,
     CDSRecord = #dns_rr{
         name = ~"example.com",
@@ -90,7 +92,7 @@ verify_zsk_signed(_) ->
     Msg0 = #dns_message{
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
-    Zone = erldns_zone_cache:find_zone(Name),
+    Zone = erldns_zone_cache:get_authoritative_zone(Labels),
     Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
     ?assertMatch(
         #dns_message{

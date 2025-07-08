@@ -68,7 +68,7 @@ is_authorized(Req, State) ->
     {boolean(), cowboy_req:req(), erldns_admin:handler_state()}.
 resource_exists(Req, State) ->
     Name = cowboy_req:binding(zone_name, Req),
-    {erldns_zone_cache:in_zone(Name), Req, State}.
+    {erldns_zone_cache:is_in_any_zone(Name), Req, State}.
 
 -doc "Delete a zone from cache".
 -spec delete_resource(cowboy_req:req(), erldns_admin:handler_state()) ->
@@ -95,16 +95,18 @@ to_text(Req, State) ->
 -spec to_json(cowboy_req:req(), erldns_admin:handler_state()) ->
     {stop | cowboy_req:resp_body(), cowboy_req:req(), erldns_admin:handler_state()}.
 to_json(Req, State) ->
-    Name = cowboy_req:binding(zone_name, Req),
+    ZoneName = cowboy_req:binding(zone_name, Req),
     Params = cowboy_req:parse_qs(Req),
     ?LOG_DEBUG(
-        #{what => received_get, resource => Name, params => Params},
+        #{what => received_get, resource => ZoneName, params => Params},
         #{domain => [erldns, admin]}
     ),
-    case erldns_zone_cache:get_zone(Name) of
-        {error, Reason} ->
-            ?LOG_ERROR(#{what => get_zone_error, error => Reason}, #{domain => [erldns, admin]}),
-            Resp = io_lib:format("Error getting zone: ~p", [Reason]),
+    case erldns_zone_cache:lookup_zone(ZoneName) of
+        zone_not_found ->
+            ?LOG_ERROR(#{what => get_zone_error, error => zone_not_found}, #{
+                domain => [erldns, admin]
+            }),
+            Resp = "Error getting zone: zone not found",
             {stop, cowboy_req:reply(400, #{}, Resp, Req), State};
         Zone ->
             Body = get_body(Zone, lists:keymember(<<"metaonly">>, 1, Params)),
