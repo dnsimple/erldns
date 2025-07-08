@@ -22,14 +22,22 @@ Emits the following telemetry events:
 
 -behaviour(erldns_pipeline).
 
--export([call/2]).
+-export([prepare/1, call/2]).
+
+-doc "`c:erldns_pipeline:prepare/1` callback.".
+-spec prepare(erldns_pipeline:opts()) -> erldns_pipeline:opts().
+prepare(Opts) ->
+    Opts#{auth_zone => zone_not_found}.
 
 -doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
-call(Msg, #{resolved := false} = Opts) ->
+call(#dns_message{questions = [#dns_query{name = Qname}]} = Msg, #{resolved := false} = Opts) ->
     case erldns_zone_cache:get_authority(Msg) of
         {ok, Authority} ->
-            complete_response(call(Msg, Opts, Authority));
+            Zone = erldns_zone_cache:find_zone(Qname, Authority),
+            Msg1 = complete_response(call(Msg, Opts, Authority)),
+            Opts1 = Opts#{resolved := true, auth_zone := Zone},
+            {Msg1, Opts1};
         {error, _} ->
             complete_response(Msg#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED})
     end;
@@ -64,9 +72,6 @@ call(Msg, #{host := Host}, AuthorityRecords) ->
 
 complete_response(Message) ->
     Message#dns_message{
-        anc = length(Message#dns_message.answers),
-        auc = length(Message#dns_message.authority),
-        adc = length(Message#dns_message.additional),
         qr = true
     }.
 
@@ -92,28 +97,16 @@ resolve(Message, AuthorityRecords, Host) ->
 ) ->
     dns:message().
 resolve_question(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
-    case Question#dns_query.type of
-        ?DNS_TYPE_RRSIG ->
-            % Refuse all RRSIG requests.
-            Message#dns_message{
-                ra = false,
-                ad = false,
-                cd = false,
-                rc = ?DNS_RCODE_REFUSED
-            };
-        Qtype ->
-            resolve_qname_and_qtype(
-                Message#dns_message{
-                    ra = false,
-                    ad = false,
-                    cd = false
-                },
-                AuthorityRecords,
-                Question#dns_query.name,
-                Qtype,
-                Host
-            )
-    end.
+    resolve_qname_and_qtype(
+        Message#dns_message{
+            ad = false,
+            cd = false
+        },
+        AuthorityRecords,
+        Question#dns_query.name,
+        Question#dns_query.type,
+        Host
+    ).
 
 %% With the extracted Qname and Qtype in hand, find the nearest zone
 %% Step 2: Search the available zones for the zone which is the nearest ancestor to QNAME
@@ -132,9 +125,7 @@ resolve_qname_and_qtype(Message, AuthorityRecords, Qname, Qtype, Host) ->
             Zone = erldns_zone_cache:find_zone(Qname, AuthorityRecords),
             Message1 = resolve_authoritative(Message, Qname, Qtype, Zone, Host, []),
             Message2 = erldns_records:rewrite_soa_ttl(Message1),
-            Message3 = additional_processing(Message2, Host, Zone),
-            Message4 = erldns_dnssec:handle(Message3, Zone, Qname, Qtype),
-            sort_answers(Message4)
+            additional_processing(Message2, Host, Zone)
     end.
 
 %% An SOA was found, thus we are authoritative and have the zone.
@@ -239,10 +230,9 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
             [] ->
                 % No records matched the qtype, call custom handler
                 QLabels = dns:dname_to_labels(Qname),
-                HandlerRecords = erldns_handler:call_handlers(
+                erldns_handler:call_handlers(
                     Message, QLabels, Qtype, MatchedRecords
-                ),
-                erldns_dnssec:maybe_sign_rrset(Message, HandlerRecords, Zone);
+                );
             _ ->
                 % Records match qtype, use them
                 TypeMatches
@@ -578,8 +568,7 @@ resolve_best_match_with_wildcard(
             HandlerRecords = erldns_handler:call_handlers(
                 Message, QLabels, Qtype, MatchedRecords
             ),
-            Records = lists:map(erldns_records:replace_name(Qname), HandlerRecords),
-            NewRecords = erldns_dnssec:maybe_sign_rrset(Message, Records, Zone),
+            NewRecords = lists:map(erldns_records:replace_name(Qname), HandlerRecords),
             case NewRecords of
                 [] ->
                     % Custom handlers returned no answers, so set the authority section of the response and return NOERROR
@@ -846,27 +835,6 @@ requires_additional_processing([_ | Rest], Acc) ->
     requires_additional_processing(Rest, Acc);
 requires_additional_processing([], Acc) ->
     lists:reverse(Acc).
-
-%% Sort the answers in the given message.
--spec sort_answers(dns:message()) -> dns:message().
-sort_answers(Message) ->
-    Message#dns_message{answers = lists:usort(fun sort_fun/2, Message#dns_message.answers)}.
-
--spec sort_fun(dns:rr(), dns:rr()) -> boolean().
-sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME, data = #dns_rrdata_cname{dname = Name}}, #dns_rr{
-    type = ?DNS_TYPE_CNAME, name = Name
-}) ->
-    true;
-sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME, name = Name}, #dns_rr{
-    type = ?DNS_TYPE_CNAME, data = #dns_rrdata_cname{dname = Name}
-}) ->
-    false;
-sort_fun(#dns_rr{type = ?DNS_TYPE_CNAME}, #dns_rr{}) ->
-    true;
-sort_fun(#dns_rr{}, #dns_rr{type = ?DNS_TYPE_CNAME}) ->
-    false;
-sort_fun(A, B) ->
-    A =< B.
 
 % Extract the name from the first record in the list.
 zone_authority_name([Record | _]) ->

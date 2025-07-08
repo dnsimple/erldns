@@ -5,20 +5,34 @@ DNSSEC implementation.
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
--include("erldns.hrl").
+-include_lib("erldns/include/erldns.hrl").
 
--export([handle/4]).
--export([
-    get_signed_records/1,
-    get_signed_zone_records/1
-]).
--export([maybe_sign_rrset/3, rrsig_for_zone_rrset/2]).
+-behaviour(erldns_pipeline).
+
+-export([prepare/1, call/2]).
+-export([get_signed_records/1, get_signed_zone_records/1]).
 
 -ifdef(TEST).
--export([requires_key_signing_key/1, choose_signer_for_rrset/2]).
+-export([handle/4, requires_key_signing_key/1, choose_signer_for_rrset/2]).
 -endif.
 
 -define(NEXT_DNAME_PART, <<"\000">>).
+
+-doc "`c:erldns_pipeline:prepare/1` callback.".
+-spec prepare(erldns_pipeline:opts()) -> erldns_pipeline:opts().
+prepare(Opts) ->
+    Opts#{dnssec => false}.
+
+-doc "`c:erldns_pipeline:call/2` callback.".
+-spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
+call(
+    #dns_message{questions = [#dns_query{name = Qname, type = QType}]} = Msg,
+    #{resolved := true, auth_zone := #zone{} = Zone} = Opts
+) ->
+    RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Msg)),
+    {handle(Msg, Zone, Qname, QType), Opts#{dnssec => RequestDnssec}};
+call(Msg, _) ->
+    Msg.
 
 -doc "Get signed records from a zone".
 -spec get_signed_records(erldns:zone()) -> #{atom() => [dns:rr()]}.
@@ -40,7 +54,7 @@ filter_cds_cdnskey(#dns_rr{type = Type}) ->
         (Type =/= ?DNS_TYPE_DNSKEY) andalso
         (Type =/= ?DNS_TYPE_CDNSKEY).
 
--doc " Given a zone and a set of records, return the RRSIG records.".
+%% Given a zone and a set of records, return the RRSIG records..
 -spec rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()].
 rrsig_for_zone_rrset(Zone, RRs) ->
     lists:flatmap(choose_signer_for_rrset(Zone#zone.name, RRs), Zone#zone.keysets).
@@ -95,26 +109,6 @@ choose_signer_for_rrset(ZoneName, RRs) ->
             key_rrset_signer(ZoneName, RRs);
         false ->
             zone_rrset_signer(ZoneName, RRs)
-    end.
-
--doc """
-This function will potentially sign the given RR set if the following conditions are true:
-
-- DNSSEC is requested
-- The zone is signed
-""".
--spec maybe_sign_rrset(dns:message(), [dns:rr()], erldns:zone()) -> [dns:rr()].
-maybe_sign_rrset(Message, Records, Zone) ->
-    case {proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets} of
-        {true, []} ->
-            % DNSSEC requested, zone not signed
-            Records;
-        {true, _} ->
-            % DNSSEC requested, zone signed
-            Records ++ rrsig_for_zone_rrset(Zone, Records);
-        {false, _} ->
-            % DNSSEC not requested
-            Records
     end.
 
 -doc """
@@ -221,7 +215,7 @@ sign_unsigned(Message, Zone) ->
 find_unsigned_records(Records) ->
     lists:filter(
         fun(RR) ->
-            (RR#dns_rr.type =/= ?DNS_TYPE_RRSIG) and
+            (RR#dns_rr.type =/= ?DNS_TYPE_RRSIG) andalso
                 (lists:filter(
                     erldns_records:match_name_and_type(RR#dns_rr.name, ?DNS_TYPE_RRSIG), Records
                 ) =:= [])
