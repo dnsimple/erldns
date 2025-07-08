@@ -230,7 +230,7 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
     TypeMatches =
         case Qtype of
             ?DNS_TYPE_ANY ->
-                filter_records(MatchedRecords, erldns_handler:get_versioned_handlers());
+                erldns_handler:call_filters(MatchedRecords);
             _ ->
                 lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
         end,
@@ -238,9 +238,9 @@ resolve_exact_match(Message, Qname, Qtype, Host, CnameChain, MatchedRecords, Zon
         case TypeMatches of
             [] ->
                 % No records matched the qtype, call custom handler
-                Handlers = erldns_handler:get_versioned_handlers(),
-                HandlerRecords = lists:flatmap(
-                    call_handlers(Qname, Qtype, MatchedRecords, Message), Handlers
+                QLabels = dns:dname_to_labels(Qname),
+                HandlerRecords = erldns_handler:call_handlers(
+                    Message, QLabels, Qtype, MatchedRecords
                 ),
                 erldns_dnssec:maybe_sign_rrset(Message, HandlerRecords, Zone);
             _ ->
@@ -566,7 +566,7 @@ resolve_best_match_with_wildcard(
     TypeMatchedRecords =
         case Qtype of
             ?DNS_TYPE_ANY ->
-                filter_records(MatchedRecords, erldns_handler:get_versioned_handlers());
+                erldns_handler:call_filters(MatchedRecords);
             _ ->
                 lists:filter(erldns_records:match_type(Qtype), MatchedRecords)
         end,
@@ -574,9 +574,9 @@ resolve_best_match_with_wildcard(
     case TypeMatches of
         [] ->
             % There is no exact type matches for the original qtype, ask the custom handlers for their records.
-            Handlers = erldns_handler:get_versioned_handlers(),
-            HandlerRecords = lists:flatmap(
-                call_handlers(Qname, Qtype, MatchedRecords, Message), Handlers
+            QLabels = dns:dname_to_labels(Qname),
+            HandlerRecords = erldns_handler:call_handlers(
+                Message, QLabels, Qtype, MatchedRecords
             ),
             Records = lists:map(erldns_records:replace_name(Qname), HandlerRecords),
             NewRecords = erldns_dnssec:maybe_sign_rrset(Message, Records, Zone),
@@ -809,47 +809,6 @@ wildcard_match(Labels) ->
             wildcard_match(Rest);
         Matches ->
             Matches
-    end.
-
-%% Call all registered handlers.
--spec call_handlers(dns:dname(), dns:type(), [dns:rr()], dns:message()) ->
-    fun(({module(), [dns:type()], integer()}) -> [dns:rr()]).
-call_handlers(Qname, ?DNS_TYPE_ANY, Records, Message) ->
-    fun
-        ({Module, _, 1}) ->
-            Module:handle(Qname, ?DNS_TYPE_ANY, Records);
-        ({Module, _, 2}) ->
-            Module:handle(Qname, ?DNS_TYPE_ANY, Records, Message)
-    end;
-call_handlers(Qname, Qtype, Records, Message) ->
-    fun
-        ({Module, Types, 1}) ->
-            case lists:member(Qtype, Types) of
-                true ->
-                    Module:handle(Qname, Qtype, Records);
-                false ->
-                    []
-            end;
-        ({Module, Types, 2}) ->
-            case lists:member(Qtype, Types) of
-                true ->
-                    Module:handle(Qname, Qtype, Records, Message);
-                false ->
-                    []
-            end
-    end.
-
-% Filter records through registered handlers.
-filter_records(Records, []) ->
-    Records;
-filter_records(Records, [{Handler, _Types, Version} | Rest]) ->
-    case Version of
-        1 ->
-            filter_records(Handler:filter(Records), Rest);
-        2 ->
-            filter_records(Handler:filter(Records), Rest);
-        _ ->
-            []
     end.
 
 %% See if additional processing is necessary.
