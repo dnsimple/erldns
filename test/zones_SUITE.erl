@@ -19,6 +19,7 @@ all() ->
 groups() ->
     [
         {loader, [], [
+            loader_coverage,
             defaults,
             bad_config,
             strict_true,
@@ -71,11 +72,6 @@ end_per_suite(_) ->
     application:unset_env(erldns, zones).
 
 -spec init_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> ct_suite:ct_config().
-init_per_group(cache, Config) ->
-    meck:new(telemetry, [passthrough, no_link]),
-    Config;
-init_per_group(codec, Config) ->
-    Config;
 init_per_group(loader, Config) ->
     meck:new(erldns_zone_codec, [passthrough, no_link]),
     meck:expect(erldns_zone_codec, decode, fun(Term) -> Term end),
@@ -84,16 +80,15 @@ init_per_group(loader, Config) ->
         (false) -> {error, false};
         (Term) -> Term
     end),
+    Config;
+init_per_group(_, Config) ->
     Config.
 
 -spec end_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> term().
-end_per_group(codec, _Config) ->
-    ok;
-end_per_group(cache, _Config) ->
-    ?assert(meck:validate(telemetry)),
-    meck:unload();
 end_per_group(loader, _Config) ->
-    meck:unload().
+    meck:unload();
+end_per_group(_, _Config) ->
+    ok.
 
 -spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_testcase(_, Config) ->
@@ -150,10 +145,9 @@ custom_decode(_) ->
 encode_meta_to_json(_) ->
     {ok, _} = erldns_zone_cache:start_link(),
     {ok, _} = erldns_zone_codec:start_link(),
-    Z = #zone{
-        name = ~"example.com",
-        authority = [#dns_rr{name = ~"example.com", type = ?DNS_TYPE_SOA}]
-    },
+    ZoneName = dns:dname_to_lower(~"example.com"),
+    Z = erldns_zone_codec:build_zone(ZoneName, ~"", [], []),
+    erldns_zone_cache:put_zone(Z),
     Data = erldns_zone_codec:encode(Z, #{mode => zone_meta_to_json}),
     JSON = iolist_to_binary(json:encode(Data)),
     ?assert(is_binary(JSON)),
@@ -470,6 +464,12 @@ parse_json_keys_unsorted_proplists(_) ->
             }
         ])
     ).
+
+loader_coverage(_) ->
+    erldns_zone_loader:start_link(),
+    gen_server:call(erldns_zone_loader, anything),
+    gen_server:cast(erldns_zone_loader, anything),
+    ?assert(erlang:is_process_alive(whereis(erldns_zone_loader))).
 
 defaults(_) ->
     ?assertEqual(0, erldns_zone_loader:load_zones()).
