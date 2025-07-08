@@ -18,7 +18,11 @@ The following are enabled by default, see their documentation for details:
 - `m:erldns_questions`
 - `m:erldns_query_throttle`
 - `m:erldns_packet_cache`
+- `m:erldns_resolver_recursive`
 - `m:erldns_resolver`
+- `m:erldns_dnssec`
+- `m:erldns_sorter`
+- `m:erldns_section_counter`
 - `m:erldns_empty_verification`
 
 ## Types of pipelines
@@ -53,7 +57,11 @@ The API expected by a module pipe is defined as a behaviour by this module.
         erldns_questions,
         erldns_query_throttle,
         erldns_packet_cache,
+        erldns_resolver_recursive,
         erldns_resolver,
+        erldns_dnssec,
+        erldns_sorter,
+        erldns_section_counter,
         erldns_packet_cache,
         erldns_empty_verification
     ]},
@@ -147,7 +155,11 @@ This callback can return
     erldns_questions,
     erldns_query_throttle,
     erldns_packet_cache,
+    erldns_resolver_recursive,
     erldns_resolver,
+    erldns_dnssec,
+    erldns_sorter,
+    erldns_section_counter,
     erldns_packet_cache,
     erldns_empty_verification
 ]).
