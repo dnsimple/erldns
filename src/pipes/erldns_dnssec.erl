@@ -11,7 +11,6 @@ DNSSEC implementation.
 
 -export([prepare/1, call/2]).
 -export([get_signed_records/1, get_signed_zone_records/1]).
--export([maybe_sign_rrset/3, rrsig_for_zone_rrset/2]).
 
 -ifdef(TEST).
 -export([handle/4, requires_key_signing_key/1, choose_signer_for_rrset/2]).
@@ -55,7 +54,7 @@ filter_cds_cdnskey(#dns_rr{type = Type}) ->
         (Type =/= ?DNS_TYPE_DNSKEY) andalso
         (Type =/= ?DNS_TYPE_CDNSKEY).
 
--doc " Given a zone and a set of records, return the RRSIG records.".
+%% Given a zone and a set of records, return the RRSIG records..
 -spec rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()].
 rrsig_for_zone_rrset(Zone, RRs) ->
     lists:flatmap(choose_signer_for_rrset(Zone#zone.name, RRs), Zone#zone.keysets).
@@ -110,26 +109,6 @@ choose_signer_for_rrset(ZoneName, RRs) ->
             key_rrset_signer(ZoneName, RRs);
         false ->
             zone_rrset_signer(ZoneName, RRs)
-    end.
-
--doc """
-This function will potentially sign the given RR set if the following conditions are true:
-
-- DNSSEC is requested
-- The zone is signed
-""".
--spec maybe_sign_rrset(dns:message(), [dns:rr()], erldns:zone()) -> [dns:rr()].
-maybe_sign_rrset(Message, Records, Zone) ->
-    case {proplists:get_bool(dnssec, erldns_edns:get_opts(Message)), Zone#zone.keysets} of
-        {true, [_ | _]} ->
-            % DNSSEC requested, zone signed
-            Records ++ rrsig_for_zone_rrset(Zone, Records);
-        {true, []} ->
-            % DNSSEC requested, zone not signed
-            Records;
-        {false, _} ->
-            % DNSSEC not requested
-            Records
     end.
 
 -doc """
