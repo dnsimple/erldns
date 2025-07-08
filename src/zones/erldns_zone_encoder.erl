@@ -17,16 +17,15 @@ encode(Zone, #{mode := {zone_records_to_json, RecordName, RecordType}}, Encoders
     encode_zone_records_to_json(Zone, RecordName, RecordType, Encoders);
 encode(Zone, #{mode := zone_to_json}, Encoders) ->
     Records = records_to_json(Zone, Encoders),
-    FilteredRecords = lists:filter(record_filter(), Records),
     #{
         ~"erldns" =>
             #{
                 ~"zone" => #{
                     ~"name" => Zone#zone.name,
                     ~"version" => Zone#zone.version,
-                    ~"records_count" => length(FilteredRecords),
+                    ~"records_count" => length(Records),
                     % Note: Private key material is purposely omitted
-                    ~"records" => FilteredRecords
+                    ~"records" => Records
                 }
             }
     }.
@@ -36,11 +35,11 @@ zone_meta_to_json(Zone) ->
     #{
         ~"erldns" =>
             #{
+                % Note: Private key material is purposely omitted
                 ~"zone" => #{
                     ~"name" => Zone#zone.name,
                     ~"version" => Zone#zone.version,
-                    % Note: Private key material is purposely omitted
-                    ~"records_count" => length(erldns_zone_cache:get_zone_records(Zone#zone.name))
+                    ~"records_count" => Zone#zone.record_count
                 }
             }
     }.
@@ -48,24 +47,16 @@ zone_meta_to_json(Zone) ->
 % Internal API
 encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
     Records = erldns_zone_cache:get_records_by_name(RecordName),
-    lists:filter(record_filter(), lists:map(encode(Encoders), Records)).
+    lists:flatmap(encode(Encoders), Records).
 
 encode_zone_records_to_json(_ZoneName, RecordName, RecordType, Encoders) ->
     Records = erldns_zone_cache:get_records_by_name_and_type(
         RecordName, dns_names:name_type(RecordType)
     ),
-    lists:filter(record_filter(), lists:map(encode(Encoders), Records)).
-
-record_filter() ->
-    fun(R) ->
-        case R of
-            not_implemented -> false;
-            _ -> true
-        end
-    end.
+    lists:flatmap(encode(Encoders), Records).
 
 records_to_json(Zone, Encoders) ->
-    lists:map(encode(Encoders), erldns_zone_cache:get_zone_records(Zone#zone.name)).
+    lists:flatmap(encode(Encoders), erldns_zone_cache:get_zone_records(Zone#zone.name)).
 
 encode(Encoders) ->
     fun(Record) -> encode_record(Record, Encoders) end.
@@ -75,7 +66,7 @@ encode_record(Record, Encoders) ->
         not_implemented ->
             try_custom_encoders(Record, Encoders);
         EncodedRecord ->
-            EncodedRecord
+            [EncodedRecord]
     end.
 
 encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_SOA, ttl = Ttl, data = Data}) ->
@@ -130,13 +121,13 @@ encode_record(Name, Type, Ttl, Data) ->
     }.
 
 try_custom_encoders(_, []) ->
-    not_implemented;
+    [];
 try_custom_encoders(Record, [Encoder | Rest]) ->
     case Encoder(Record) of
         not_implemented ->
             try_custom_encoders(Record, Rest);
         EncodedData ->
-            EncodedData
+            [EncodedData]
     end.
 
 encode_data(#dns_rrdata_soa{
