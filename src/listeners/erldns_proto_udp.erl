@@ -79,7 +79,7 @@ handle(Socket, IpAddr, Port, TS, Bin) ->
                 handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS);
             {Error, Message, _} ->
                 ErrorMetadata = #{transport => udp, reason => Error, message => Message},
-                telemetry:execute([erldns, request, error], #{count => 1}, ErrorMetadata);
+                request_error_event(ErrorMetadata);
             DecodedMessage ->
                 handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS)
         end
@@ -88,7 +88,7 @@ handle(Socket, IpAddr, Port, TS, Bin) ->
             ExceptionMetadata = #{
                 transport => udp, kind => Class, reason => Reason, stacktrace => Stacktrace
             },
-            telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata)
+            request_error_event(ExceptionMetadata)
     end.
 
 -spec handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS0) -> Result when
@@ -128,6 +128,9 @@ normalize_edns_max_payload_size(Message) ->
         _ ->
             Message
     end.
+
+request_error_event(Metadata) ->
+    telemetry:execute([erldns, request, error], #{count => 1}, Metadata).
 
 measure_time(Response, EncodedResponse, TS0) ->
     ?LOG_DEBUG(

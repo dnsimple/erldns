@@ -87,7 +87,7 @@ handle(Socket, TimerPid, TS, Bin) ->
                 handle_decoded(Socket, TimerPid, TS, DecodedMessage, IpAddr);
             {Error, Message, _} ->
                 ErrorMetadata = #{transport => tcp, reason => Error, message => Message},
-                telemetry:execute([erldns, request, error], #{count => 1}, ErrorMetadata);
+                request_error_event(ErrorMetadata);
             DecodedMessage ->
                 handle_decoded(Socket, TimerPid, TS, DecodedMessage, IpAddr)
         end
@@ -96,7 +96,7 @@ handle(Socket, TimerPid, TS, Bin) ->
             ExceptionMetadata = #{
                 transport => tcp, kind => Class, reason => Reason, stacktrace => Stacktrace
             },
-            telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata)
+            request_error_event(ExceptionMetadata)
     end.
 
 -spec handle_decoded(inet:socket(), pid(), integer(), dns:message(), dynamic()) -> dynamic().
@@ -110,6 +110,9 @@ handle_decoded(Socket, TimerPid, TS0, DecodedMessage, IpAddr) ->
     ok = gen_tcp:send(Socket, [<<(byte_size(EncodedResponse)):16>>, EncodedResponse]),
     measure_time(Response, EncodedResponse, TS0),
     gen_tcp:close(Socket).
+
+request_error_event(Metadata) ->
+    telemetry:execute([erldns, request, error], #{count => 1}, Metadata).
 
 measure_time(Response, EncodedResponse, TS0) ->
     ?LOG_DEBUG(
