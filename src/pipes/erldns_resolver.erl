@@ -99,7 +99,6 @@ resolve(Message, AuthorityRecords, Host) ->
 resolve_question(Message, AuthorityRecords, Host, Question) when is_record(Question, dns_query) ->
     resolve_qname_and_qtype(
         Message#dns_message{
-            ra = false,
             ad = false,
             cd = false
         },
