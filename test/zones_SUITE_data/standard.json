@@ -49,6 +49,30 @@
         }
       },
       {
+        "name": "a3.a2.a1.example.com",
+        "type": "A",
+        "ttl": 120,
+        "data": {
+          "ip": "1.2.3.4"
+        }
+      },
+      {
+        "name": "a3a.a2.a1.example.com",
+        "type": "A",
+        "ttl": 120,
+        "data": {
+          "ip": "1.2.3.4"
+        }
+      },
+      {
+        "name": "delegation.example.com",
+        "type": "NS",
+        "ttl": 120,
+        "data": {
+          "dname": "delegation.example.com"
+        }
+      },
+      {
         "name": "cname.example.com",
         "type": "CNAME",
         "ttl": 120,
