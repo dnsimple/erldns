@@ -26,6 +26,7 @@ middleware modules that will be applied to all admin API requests.
 
 -ifdef(TEST).
 -export([middleware/1]).
+-export_type([env/0]).
 -endif.
 
 -doc """
@@ -47,7 +48,7 @@ Configuration parameters, see the module documentation for details.
 
 -type env() :: [{atom(), term()}].
 
--spec maybe_start() -> ok | {ok, pid()} | {error, any()}.
+-spec maybe_start() -> ok | {ok, pid()} | {error, term()}.
 maybe_start() ->
     case ensure_valid_config() of
         disabled ->
@@ -58,7 +59,7 @@ maybe_start() ->
             start(Config)
     end.
 
--spec start(config()) -> {ok, pid()} | {error, any()}.
+-spec start(config()) -> {ok, pid()} | {error, term()}.
 start(#{port := Port, username := Username, password := Password} = Config) ->
     State = #{username => Username, password => Password},
     Dispatch = cowboy_router:compile(

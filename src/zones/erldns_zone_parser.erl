@@ -108,7 +108,7 @@ apply_context_list_check(ContextAllow, Context) ->
     ContextAllowSet = sets:from_list(ContextAllow, [{version, 2}]),
     0 =/= sets:size(sets:intersection(ContextAllowSet, ContextSet)).
 
--spec apply_context_match_empty_check(true | dynamic(), [any()]) -> boolean().
+-spec apply_context_match_empty_check(true | dynamic(), [dynamic()]) -> boolean().
 apply_context_match_empty_check(true, []) ->
     true;
 apply_context_match_empty_check(_, _) ->
@@ -253,7 +253,12 @@ json_record_to_erlang(#{~"name" := Name, ~"type" := ~"PTR", ~"ttl" := Ttl, ~"dat
         data = #dns_rrdata_ptr{dname = maps:get(~"dname", Data)},
         ttl = Ttl
     };
-json_record_to_erlang(#{~"name" := Name, ~"type" := Type = ~"SSHFP", ~"ttl" := Ttl, ~"data" := Data}) ->
+json_record_to_erlang(#{
+    ~"name" := Name,
+    ~"type" := Type = ~"SSHFP",
+    ~"ttl" := Ttl,
+    ~"data" := Data
+}) ->
     %% This function call may crash. Handle it as a bad record.
     try binary:decode_hex(maps:get(~"fp", Data)) of
         Fp ->
@@ -311,7 +316,12 @@ json_record_to_erlang(#{~"name" := Name, ~"type" := ~"NAPTR", ~"ttl" := Ttl, ~"d
             },
         ttl = Ttl
     };
-json_record_to_erlang(#{~"name" := Name, ~"type" := Type = ~"DS", ~"ttl" := Ttl, ~"data" := Data}) ->
+json_record_to_erlang(#{
+    ~"name" := Name,
+    ~"type" := Type = ~"DS",
+    ~"ttl" := Ttl,
+    ~"data" := Data
+}) ->
     try binary:decode_hex(maps:get(~"digest", Data)) of
         Digest ->
             #dns_rr{
@@ -341,7 +351,12 @@ json_record_to_erlang(#{~"name" := Name, ~"type" := Type = ~"DS", ~"ttl" := Ttl,
             ),
             not_implemented
     end;
-json_record_to_erlang(#{~"name" := Name, ~"type" := Type = ~"CDS", ~"ttl" := Ttl, ~"data" := Data}) ->
+json_record_to_erlang(#{
+    ~"name" := Name,
+    ~"type" := Type = ~"CDS",
+    ~"ttl" := Ttl,
+    ~"data" := Data
+}) ->
     try binary:decode_hex(maps:get(~"digest", Data)) of
         Digest ->
             #dns_rr{

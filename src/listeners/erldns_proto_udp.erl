@@ -15,9 +15,10 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -type task() :: {gen_udp:socket(), inet:ip_address(), inet:port_number(), integer(), binary()}.
--type state() :: non_neg_integer().
+-opaque state() :: non_neg_integer().
+-export_type([task/0, state/0]).
 
--spec overrun_handler([{atom(), term()}, ...]) -> any().
+-spec overrun_handler([{atom(), term()}, ...]) -> term().
 overrun_handler(Args) ->
     ?LOG_WARNING(
         maps:from_list([{what, request_timeout}, {transport, udp} | Args]),
@@ -66,8 +67,8 @@ handle_if_within_time(Socket, IpAddr, Port, TS, Bin, IngressTimeoutNative) ->
     dynamic().
 handle(Socket, IpAddr, Port, TS, Bin) ->
     Measurements = #{monotonic_time => TS, request_size => byte_size(Bin)},
-    Metadata = #{transport => udp},
-    telemetry:execute([erldns, request, start], Measurements, Metadata),
+    InitMetadata = #{transport => udp},
+    telemetry:execute([erldns, request, start], Measurements, InitMetadata),
     try
         case dns:decode_message(Bin) of
             {trailing_garbage, DecodedMessage, TrailingGarbage} ->
@@ -78,16 +79,16 @@ handle(Socket, IpAddr, Port, TS, Bin) ->
                 handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS);
             {Error, Message, _} ->
                 ErrorMetadata = #{transport => udp, reason => Error, message => Message},
-                telemetry:execute([erldns, request, error], #{count => 1}, ErrorMetadata);
+                request_error_event(ErrorMetadata);
             DecodedMessage ->
                 handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS)
         end
     catch
         Class:Reason:Stacktrace ->
-            MetaData = #{
+            ExceptionMetadata = #{
                 transport => udp, kind => Class, reason => Reason, stacktrace => Stacktrace
             },
-            telemetry:execute([erldns, request, error], #{count => 1}, MetaData)
+            request_error_event(ExceptionMetadata)
     end.
 
 -spec handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS0) -> Result when
@@ -127,6 +128,9 @@ normalize_edns_max_payload_size(Message) ->
         _ ->
             Message
     end.
+
+request_error_event(Metadata) ->
+    telemetry:execute([erldns, request, error], #{count => 1}, Metadata).
 
 measure_time(Response, EncodedResponse, TS0) ->
     ?LOG_DEBUG(

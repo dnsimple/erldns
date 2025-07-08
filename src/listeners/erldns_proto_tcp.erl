@@ -38,6 +38,8 @@ loop(Socket, TimerPid, TS, IngressTimeoutMs) ->
             ?LOG_INFO(#{what => tcp_error, reason => Reason}, #{domain => [erldns, listeners]});
         {tcp_closed, Socket} ->
             ok
+    after IngressTimeoutMs ->
+        gen_tcp:close(Socket)
     end.
 
 -spec loop(inet:socket(), pid(), integer(), integer(), non_neg_integer(), binary()) -> dynamic().
@@ -52,6 +54,8 @@ loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, Acc) ->
             ?LOG_INFO(#{what => tcp_error, reason => Reason}, #{domain => [erldns, listeners]});
         {tcp_closed, Socket} ->
             ok
+    after IngressTimeoutMs ->
+        gen_tcp:close(Socket)
     end.
 
 handle_if_within_time(Socket, TimerPid, TS, IngressTimeoutMs, Bin) ->
@@ -70,8 +74,8 @@ handle_if_within_time(Socket, TimerPid, TS, IngressTimeoutMs, Bin) ->
 -spec handle(inet:socket(), pid(), integer(), binary()) -> dynamic().
 handle(Socket, TimerPid, TS, Bin) ->
     Measurements = #{monotonic_time => TS, request_size => byte_size(Bin)},
-    Metadata = #{transport => tcp},
-    telemetry:execute([erldns, request, start], Measurements, Metadata),
+    InitMetadata = #{transport => tcp},
+    telemetry:execute([erldns, request, start], Measurements, InitMetadata),
     try
         {ok, {IpAddr, _Port}} = inet:peername(Socket),
         case dns:decode_message(Bin) of
@@ -83,16 +87,16 @@ handle(Socket, TimerPid, TS, Bin) ->
                 handle_decoded(Socket, TimerPid, TS, DecodedMessage, IpAddr);
             {Error, Message, _} ->
                 ErrorMetadata = #{transport => tcp, reason => Error, message => Message},
-                telemetry:execute([erldns, request, error], #{count => 1}, ErrorMetadata);
+                request_error_event(ErrorMetadata);
             DecodedMessage ->
                 handle_decoded(Socket, TimerPid, TS, DecodedMessage, IpAddr)
         end
     catch
         Class:Reason:Stacktrace ->
-            MetaData = #{
+            ExceptionMetadata = #{
                 transport => tcp, kind => Class, reason => Reason, stacktrace => Stacktrace
             },
-            telemetry:execute([erldns, request, error], #{count => 1}, MetaData)
+            request_error_event(ExceptionMetadata)
     end.
 
 -spec handle_decoded(inet:socket(), pid(), integer(), dns:message(), dynamic()) -> dynamic().
@@ -106,6 +110,9 @@ handle_decoded(Socket, TimerPid, TS0, DecodedMessage, IpAddr) ->
     ok = gen_tcp:send(Socket, [<<(byte_size(EncodedResponse)):16>>, EncodedResponse]),
     measure_time(Response, EncodedResponse, TS0),
     gen_tcp:close(Socket).
+
+request_error_event(Metadata) ->
+    telemetry:execute([erldns, request, error], #{count => 1}, Metadata).
 
 measure_time(Response, EncodedResponse, TS0) ->
     ?LOG_DEBUG(
@@ -126,7 +133,7 @@ measure_time(Response, EncodedResponse, TS0) ->
     },
     telemetry:execute([erldns, request, stop], Measurements, Metadata).
 
--spec init_timer(integer(), pid()) -> any().
+-spec init_timer(integer(), pid()) -> term().
 init_timer(IngressTimeoutMs, Parent) ->
     Ref = erlang:monitor(process, Parent),
     receive

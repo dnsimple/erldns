@@ -60,7 +60,7 @@ call(Msg, _) ->
     Msg.
 
 -doc false.
--spec start_link() -> any().
+-spec start_link() -> ignore | gen_server:start_ret().
 start_link() ->
     case enabled() of
         false ->
@@ -76,7 +76,7 @@ start_link() ->
     end.
 
 -doc "Clear the cache".
--spec clear() -> any().
+-spec clear() -> true.
 clear() ->
     segmented_cache:delete_pattern(?MODULE, '_').
 

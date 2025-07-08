@@ -69,7 +69,7 @@ handle_info(Info, State) ->
     ?LOG_INFO(#{what => unexpected_info, info => Info}, #{domain => [erldns, listeners]}),
     {noreply, State}.
 
--spec terminate(term(), state()) -> any().
+-spec terminate(term(), state()) -> term().
 terminate(_, _) ->
     persistent_term:erase(?MODULE).
 

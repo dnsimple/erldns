@@ -26,6 +26,6 @@ handle_call(_, _, nostate) ->
 handle_cast(_, nostate) ->
     {noreply, nostate}.
 
--spec terminate(term(), nostate) -> any().
+-spec terminate(term(), nostate) -> term().
 terminate(_, nostate) ->
     persistent_term:erase(erldns_pipeline).

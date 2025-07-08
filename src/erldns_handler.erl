@@ -24,6 +24,7 @@ The meat of the resolution occurs in erldns_resolver:resolve/3
 -include_lib("kernel/include/logger.hrl").
 
 -define(DEFAULT_HANDLER_VERSION, 1).
+-define(TIMEOUT, 5000).
 
 -export([
     start_link/0,
@@ -55,7 +56,7 @@ register_handler(RecordTypes, Module) ->
 -doc "Register a record handler with version".
 -spec register_handler([dns:type()], module(), integer()) -> ok.
 register_handler(RecordTypes, Module, Version) ->
-    gen_server:call(?MODULE, {register_handler, RecordTypes, Module, Version}).
+    gen_server:call(?MODULE, {register_handler, RecordTypes, Module, Version}, ?TIMEOUT).
 
 -doc "Get all registered handlers along with the DNS types they handle and associated versions".
 -spec get_versioned_handlers() -> [versioned_handler()].

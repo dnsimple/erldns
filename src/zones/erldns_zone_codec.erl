@@ -56,6 +56,8 @@ encode(_) ->
 -include_lib("kernel/include/logger.hrl").
 -include_lib("erldns/include/erldns.hrl").
 
+-define(TIMEOUT, 5000).
+
 -export([
     build_zone/4,
     encode/1,
@@ -79,6 +81,7 @@ encode(_) ->
     decoders :: [decoder()]
 }).
 -type state() :: #state{}.
+-export_type([state/0]).
 
 -spec build_zone(dns:dname(), binary(), [dns:rr()], [erldns:keyset()]) -> erldns:zone().
 build_zone(Name, Version, Records, Keys) ->
@@ -122,7 +125,7 @@ register_codecs(Modules) when is_list(Modules) ->
         #{what => registering_custom_parsers, parsers => Modules},
         #{domain => [erldns, zones]}
     ),
-    gen_server:call(?MODULE, {register_codecs, Modules}).
+    gen_server:call(?MODULE, {register_codecs, Modules}, ?TIMEOUT).
 
 -doc "Get the list of registered zone parsers.".
 -spec list_codecs() -> {[encoder()], [decoder()]}.
@@ -163,7 +166,7 @@ handle_cast(Cast, State) ->
     {noreply, State}.
 
 -doc false.
--spec terminate(term(), state()) -> any().
+-spec terminate(term(), state()) -> term().
 terminate(_, _) ->
     persistent_term:erase(?MODULE).
 
