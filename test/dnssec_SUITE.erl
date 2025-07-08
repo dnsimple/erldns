@@ -41,7 +41,7 @@ end_per_testcase(_, _Config) ->
     ok.
 
 verify_ksk_signed(_) ->
-    Name = <<"example-dnssec0.com">>,
+    Name = dns:dname_to_lower(~"example-dnssec0.com"),
     QType = ?DNS_TYPE_A,
     Q = #dns_query{name = Name, type = QType},
     A = #dns_rr{name = Name, type = QType, data = #dns_rrdata_a{ip = {1, 2, 3, 4}}},
@@ -70,17 +70,17 @@ verify_ksk_signed(_) ->
     ).
 
 verify_zsk_signed(_) ->
-    Name = <<"example-dnssec0.com">>,
+    Name = dns:dname_to_lower(~"example-dnssec0.com"),
     QType = ?DNS_TYPE_CDNSKEY,
     CDSRecord = #dns_rr{
-        name = <<"example.com">>,
+        name = ~"example.com",
         type = ?DNS_TYPE_CDNSKEY,
         ttl = 120,
         data = #dns_rrdata_cds{
             keytag = 0,
             alg = 0,
             digest_type = 0,
-            digest = <<"00">>
+            digest = ~"00"
         }
     },
 
@@ -114,33 +114,33 @@ verify_zsk_signed(_) ->
 test_requires_key_signing_key_function(_Config) ->
     % Test CDS record
     CDSRecord = #dns_rr{
-        name = <<"example.com">>,
+        name = ~"example.com",
         type = ?DNS_TYPE_CDS,
         ttl = 120,
         data = #dns_rrdata_cds{
             keytag = 12345,
             alg = 8,
             digest_type = 2,
-            digest = <<"abcdef1234567890">>
+            digest = ~"abcdef1234567890"
         }
     },
 
     % Test CDNSKEY record
     CDNSKEYRecord = #dns_rr{
-        name = <<"example.com">>,
+        name = ~"example.com",
         type = ?DNS_TYPE_CDNSKEY,
         ttl = 120,
         data = #dns_rrdata_dnskey{
             flags = 257,
             protocol = 3,
             alg = 8,
-            public_key = <<"test_public_key">>
+            public_key = ~"test_public_key"
         }
     },
 
     % Test A record
     ARecord = #dns_rr{
-        name = <<"example.com">>,
+        name = ~"example.com",
         type = ?DNS_TYPE_A,
         ttl = 300,
         data = #dns_rrdata_a{ip = {192, 168, 1, 1}}
@@ -164,7 +164,7 @@ test_requires_key_signing_key_function(_Config) ->
 
 %% Test the signer selection logic in choose_signer_for_rrset
 test_signer_selection_logic(_Config) ->
-    ZoneName = <<"example.com">>,
+    ZoneName = ~"example.com",
 
     % Test CDS record should use key signer
     CDSRecord = #dns_rr{
@@ -175,7 +175,7 @@ test_signer_selection_logic(_Config) ->
             keytag = 12345,
             alg = 8,
             digest_type = 2,
-            digest = <<"abcdef1234567890">>
+            digest = ~"abcdef1234567890"
         }
     },
 
@@ -188,7 +188,7 @@ test_signer_selection_logic(_Config) ->
             flags = 257,
             protocol = 3,
             alg = 8,
-            public_key = <<"test_public_key">>
+            public_key = ~"test_public_key"
         }
     },
 

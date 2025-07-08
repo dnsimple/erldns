@@ -129,8 +129,7 @@ match_delegation(Name) ->
 match_type_covered(Qtype) ->
     fun(#dns_rr{data = #dns_rrdata_rrsig{type_covered = TypeCovered}}) -> TypeCovered =:= Qtype end.
 
-%% Replacement functions.
-
+-spec replace_name(dns:dname()) -> fun((dns:rr()) -> dns:rr()).
 replace_name(Name) ->
     fun(#dns_rr{} = R) -> R#dns_rr{name = Name} end.
 
