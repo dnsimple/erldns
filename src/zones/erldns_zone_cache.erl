@@ -349,11 +349,10 @@ put_zone(#zone{name = Name} = Zone) ->
     SignedZone = sign_zone(Zone#zone{name = NormalizedName, labels = ZoneLabels}),
     NamedRecords = build_named_index(SignedZone#zone.records),
     ZoneRecords = prepare_zone_records(ZoneLabels, NamedRecords),
-    fix_tables(true, ZoneLabels),
-    delete_zone_records(ZoneLabels),
     true = insert_zone(SignedZone#zone{records = []}),
+    NumDeleted = delete_zone_records(ZoneLabels),
+    maybe_notify_of_zone_replacement(NumDeleted, NormalizedName),
     put_zone_records(ZoneRecords),
-    fix_tables(false, ZoneLabels),
     ok;
 put_zone({Name, Sha, Records}) ->
     put_zone({Name, Sha, Records, []});
@@ -397,16 +396,17 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
             ),
             KeySets = Zone#zone.keysets,
             NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
-            Labels = dns:dname_to_labels(NormalizedRRFqdn),
+            RecordLabels = dns:dname_to_labels(NormalizedRRFqdn),
             SignedRRSet = sign_rrset(Zone#zone{records = Records, keysets = KeySets}),
             {RRSigRecsCovering, RRSigRecsNotCovering} = filter_rrsig_records_with_type_covered(
-                Labels, Type
+                RecordLabels, Type
             ),
             % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
-            CurrentRRSetRecords = get_records_by_name_and_type(Zone, Labels, Type),
+            CurrentRRSetRecords = get_records_by_name_and_type(Zone, RecordLabels, Type),
             ZoneRecordsCount = Zone#zone.record_count,
             % put erldns_zone_records_typed records first then create the records in zone_records
             TypedRecords = Records ++ SignedRRSet ++ RRSigRecsNotCovering,
+            Labels = reduce_record_labels(ZoneLabels, RecordLabels),
             put_zone_records_typed_entry(ZoneLabels, Labels, TypedRecords),
             UpdatedZoneRecordsCount =
                 ZoneRecordsCount +
@@ -417,7 +417,8 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
             ?LOG_DEBUG(
                 #{what => rrset_update_completed, rrset => NormalizedRRFqdn, type => Type},
                 ?LOG_METADATA
-            );
+            ),
+            ok;
         % if zone is not in cache, return not found
         zone_not_found ->
             zone_not_found
@@ -451,18 +452,18 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                     ),
                     ZoneRecordsCount = Zone#zone.record_count,
                     NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
-                    Labels = dns:dname_to_labels(NormalizedRRFqdn),
-                    CurrentRRSetRecords = get_records_by_name_and_type(Zone, Labels, Type),
-                    RecordLabels = reduce_record_labels(ZoneLabels, Labels),
-                    pattern_zone_dname_type_delete(ZoneLabels, RecordLabels, Type),
+                    RecordLabels = dns:dname_to_labels(NormalizedRRFqdn),
+                    CurrentRRSetRecords = get_records_by_name_and_type(Zone, RecordLabels, Type),
+                    ReducedLabels = reduce_record_labels(ZoneLabels, RecordLabels),
+                    pattern_zone_dname_type_delete(ZoneLabels, ReducedLabels, Type),
                     % remove the RRSIG for the given record type
                     {RRSigsCovering, RRSigsNotCovering} =
                         lists:partition(
                             erldns_records:match_type_covered(Type),
-                            get_records_by_name_and_type(Zone, Labels, ?DNS_TYPE_RRSIG)
+                            get_records_by_name_and_type(Zone, RecordLabels, ?DNS_TYPE_RRSIG)
                         ),
                     do_put_zone_records_typed_entry(
-                        ZoneLabels, Labels, ?DNS_TYPE_RRSIG, RRSigsNotCovering
+                        ZoneLabels, ReducedLabels, ?DNS_TYPE_RRSIG, RRSigsNotCovering
                     ),
                     % only write counter if called explicitly with Counter value i.e.
                     % different than 0. this will not write the counter if called by
@@ -517,7 +518,7 @@ insert_zone(#zone{} = Zone) ->
     ets:insert(erldns_zones_table, Zone).
 
 %% Expects normalized names
--spec delete_zone_records(dns:labels()) -> term().
+-spec delete_zone_records(dns:labels()) -> non_neg_integer().
 delete_zone_records(ZoneLabels) ->
     pattern_zone_delete(ZoneLabels).
 
@@ -541,36 +542,37 @@ prepare_zone_records(ZoneLabels, RecordsByName) ->
 prepare_zone_records_typed_entry(ZoneLabels, RecordLabels, ListTypedRecords) ->
     lists:map(
         fun({Type, Records}) ->
-            {ZoneLabels, RecordLabels, Type, Records}
+            ReducedLabels = reduce_record_labels(ZoneLabels, RecordLabels),
+            {ZoneLabels, ReducedLabels, Type, Records}
         end,
         ListTypedRecords
     ).
 
-%% expects name to be already normalized
+%% Expects record labels to be already reduced
 -spec put_zone_records([{dns:labels(), dns:labels(), dns:type(), [dns:rr()]}]) -> ok.
 put_zone_records(RecordsByName) ->
     lists:foreach(
-        fun({ZoneLabels, RecordLabels, Type, Records}) ->
-            do_put_zone_records_typed_entry(ZoneLabels, RecordLabels, Type, Records)
+        fun({ZoneLabels, ReducedLabels, Type, Records}) ->
+            do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Records)
         end,
         RecordsByName
     ).
 
-%% expects name to be already normalized
+%% Expects record labels to be already reduced
 -spec put_zone_records_typed_entry(dns:labels(), dns:labels(), [dns:rr()]) -> ok.
-put_zone_records_typed_entry(ZoneLabels, RecordLabels, Records) ->
+put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Records) ->
     TypedRecords = build_typed_index(Records),
     maps:foreach(
         fun(Type, Record) ->
-            do_put_zone_records_typed_entry(ZoneLabels, RecordLabels, Type, Record)
+            do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Record)
         end,
         TypedRecords
     ).
 
+%% Expects record labels to be already reduced
 -spec do_put_zone_records_typed_entry(dns:labels(), dns:labels(), dns:type(), [dns:rr()]) -> true.
-do_put_zone_records_typed_entry(ZoneLabels, RecordLabels, Type, Record) ->
-    Labels = reduce_record_labels(ZoneLabels, RecordLabels),
-    ets:insert(erldns_zone_records_typed, {{ZoneLabels, Labels, Type}, Record}).
+do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Record) ->
+    ets:insert(erldns_zone_records_typed, {{ZoneLabels, ReducedLabels, Type}, Record}).
 
 %% record paths shall not cross the zone boundary,
 %% hence we can cut the zone labels from the record labels
@@ -782,17 +784,13 @@ pattern_zone_delete(ZoneLabels) ->
     Pattern = {{{ZoneLabels, '_', '_'}, '_'}, [], [true]},
     ets:select_delete(erldns_zone_records_typed, [Pattern]).
 
-fix_tables(false, _) ->
-    ets:safe_fixtable(erldns_zone_records_typed, false),
-    ets:safe_fixtable(erldns_zones_table, false);
-fix_tables(true, ZoneLabels) ->
-    case lookup_zone(ZoneLabels) of
-        zone_not_found ->
-            ok;
-        #zone{} ->
-            ets:safe_fixtable(erldns_zone_records_typed, true),
-            ets:safe_fixtable(erldns_zones_table, true)
-    end.
+maybe_notify_of_zone_replacement(0, _) ->
+    ok;
+maybe_notify_of_zone_replacement(NumDeleted, NormalizedName) ->
+    ?LOG_WARNING(
+        #{what => zone_replaced, zone => NormalizedName, records_deleted => NumDeleted},
+        ?LOG_METADATA
+    ).
 
 -doc false.
 -spec start_link() -> term().
