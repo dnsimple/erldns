@@ -11,6 +11,7 @@ DNSSEC implementation.
 
 -export([prepare/1, call/2]).
 -export([get_signed_records/1, get_signed_zone_records/1]).
+-export([rrsig_for_zone_rrset/2]).
 
 -ifdef(TEST).
 -export([handle/4, requires_key_signing_key/1, choose_signer_for_rrset/2]).
@@ -54,7 +55,7 @@ filter_cds_cdnskey(#dns_rr{type = Type}) ->
         (Type =/= ?DNS_TYPE_DNSKEY) andalso
         (Type =/= ?DNS_TYPE_CDNSKEY).
 
-%% Given a zone and a set of records, return the RRSIG records.
+-doc "Given a zone and a set of records, return the RRSIG records.".
 -spec rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()].
 rrsig_for_zone_rrset(Zone, RRs) ->
     lists:flatmap(choose_signer_for_rrset(Zone#zone.name, RRs), Zone#zone.keysets).
