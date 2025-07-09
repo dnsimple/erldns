@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v8.0.0-rc2
+
+- Accept no SOA record if no RRSIG are required.
+
 ## v8.0.0-rc1
 
 - Rework `erldns_zone_cache` and `erldns_resolver`: algorithm is extensively optimised and now supports ENT correctly.

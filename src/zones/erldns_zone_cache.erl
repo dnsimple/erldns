@@ -689,7 +689,7 @@ filter_rrsig_records_with_type_covered(Labels, TypeCovered) ->
 
 % Rewrite the RRSIG TTL so it follows the same rewrite rules as the SOA TTL.
 rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
-    SoaRR = #dns_rr{} = lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, ZoneRecords),
+    SoaRR = lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, ZoneRecords),
     lists:map(
         fun
             (#dns_rr{type = ?DNS_TYPE_RRSIG, data = #dns_rrdata_rrsig{} = Data} = RR) ->
