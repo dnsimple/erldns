@@ -152,7 +152,7 @@ resolve_ent(Message, Zone, QLabels) ->
                 authority = Zone#zone.authority
             };
         true ->
-            % No host name with the given record in the zone, return NXDOMAIN and include authority
+            % Domain name exists in the zone, return NOERROR and include authority
             Message#dns_message{
                 aa = true,
                 rc = ?DNS_RCODE_NOERROR,
@@ -632,7 +632,7 @@ resolve_best_match_referral(
             resolve_ent(Message, Zone, QLabels);
         {_, _, []} ->
             % Indicate that we are not authoritative for the name
-            % as there were novSOA records in the best-match results.
+            % as there were no SOA records in the best-match results.
             % The name has thus been delegated to another authority.
             Message#dns_message{
                 aa = false, authority = Message#dns_message.authority ++ ReferralRecords
