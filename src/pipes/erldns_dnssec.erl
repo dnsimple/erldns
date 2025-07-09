@@ -237,7 +237,7 @@ record_types_for_name(_Zone, Name) ->
     end.
 
 % Find the best match records for the given QName in the given zone.
-% This will looking for both exact and wildcard matches AT the QNAME label count
+% This will look for both exact and wildcard matches AT the QNAME label count
 % without attempting to walk down to the root.
 -spec best_match_at_node(dns:labels()) -> ent | [dns:rr()].
 best_match_at_node(Labels) ->
