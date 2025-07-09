@@ -67,7 +67,7 @@ handle(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> [dns:rr()].
 -doc "Filter out records not related to the given handler".
 -callback handle(dns:message(), dns:labels(), dns:type(), [dns:rr()]) -> [dns:rr()].
 -doc "Map handler's record types to NSEC bit types.".
--callback nsec_rr_type_mapper(dns:type(), dns:type()) -> dns:type().
+-callback nsec_rr_type_mapper(dns:type(), dns:type()) -> [dns:type()].
 
 -doc "Register a record handler with the default version of 1".
 -spec register_handler([dns:type()], module()) -> ok.
@@ -160,7 +160,7 @@ map_nsec_rr_types(QType, Types, Handlers) ->
                 false ->
                     [Type];
                 {_, _, Mapper, _, _, _} ->
-                    [Mapper(Type, QType)]
+                    Mapper(Type, QType)
             end
         end,
         Types
