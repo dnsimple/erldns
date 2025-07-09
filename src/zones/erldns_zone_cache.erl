@@ -349,11 +349,12 @@ put_zone(#zone{name = Name} = Zone) ->
     SignedZone = sign_zone(Zone#zone{name = NormalizedName, labels = ZoneLabels}),
     NamedRecords = build_named_index(SignedZone#zone.records),
     ZoneRecords = prepare_zone_records(ZoneLabels, NamedRecords),
-    fix_tables(true),
+    fix_tables(true, ZoneLabels),
     delete_zone_records(ZoneLabels),
     true = insert_zone(SignedZone#zone{records = []}),
     put_zone_records(ZoneRecords),
-    fix_tables(false);
+    fix_tables(false, ZoneLabels),
+    ok;
 put_zone({Name, Sha, Records}) ->
     put_zone({Name, Sha, Records, []});
 put_zone({Name, Sha, Records, Keys}) ->
@@ -781,10 +782,17 @@ pattern_zone_delete(ZoneLabels) ->
     Pattern = {{{ZoneLabels, '_', '_'}, '_'}, [], [true]},
     ets:select_delete(erldns_zone_records_typed, [Pattern]).
 
-fix_tables(Fix) ->
-    ets:safe_fixtable(erldns_zone_records_typed, Fix),
-    ets:safe_fixtable(erldns_zones_table, Fix),
-    ok.
+fix_tables(false, _) ->
+    ets:safe_fixtable(erldns_zone_records_typed, false),
+    ets:safe_fixtable(erldns_zones_table, false);
+fix_tables(true, ZoneLabels) ->
+    case lookup_zone(ZoneLabels) of
+        zone_not_found ->
+            ok;
+        #zone{} ->
+            ets:safe_fixtable(erldns_zone_records_typed, true),
+            ets:safe_fixtable(erldns_zones_table, true)
+    end.
 
 -doc false.
 -spec start_link() -> term().
