@@ -2,33 +2,62 @@
 -moduledoc """
 A cache holding all of the zone data.
 
-Supports only a single question per request: if a request contains multiple questions,
-only the first question will be resolved.
+This module expects all input to use normalised (that is, lowercase) names, therefore it is the
+responsibility of the client to call this API with normalised names.
+This is to avoid normalising already normalised names, which can result into computational waste.
+As the client might need to call multiple points of this API, the client can ensure to normalise
+once and use multiple times.
 """.
+
+%% This module's gen_server holds three tables:
+%%
+%% 1. `erldns_zones_table`:
+%% Holds the zones themselves as `#zone{}` records,
+%% where the key is the zone's label set (`#zone.labels`).
+%%
+%% 2. `erldns_zone_records_typed`:
+%% Holds all RR records, where keys look like,
+%% `{<zone labels>, <reverse record path up to the zone>, dns:type()}`
+%% For example, if the zone is `example.com` and the record is `a2.a1.example.com` type A:
+%% `{[<<"example">>, <<"com">>], [<<"a1">>, <<"a2">>], ?DNS_TYPE_A]}`
+%%
+%% This serves two purposes: smaller memory footprint, and when traversing the tree for a path in a
+%% zone, traversal will forcefully stop when it arrives at the parent zone, ensuring no resources
+%% are waste looking for a record above the zone boundary.
+%%
+%% 3. `erldns_sync_counters`:
+%% Holds a counter of updates for each RR.
 
 -behaviour(gen_server).
 
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("erldns/include/erldns.hrl").
 
--include("erldns.hrl").
+-define(LOG_METADATA, #{domain => [erldns, zones]}).
 
 -export([
-    find_zone/1,
-    find_zone/2,
-    get_zone/1,
-    get_authority/1,
-    get_delegations/1,
+    lookup_zone/1,
     get_zone_records/1,
     get_records_by_name/1,
+    get_records_by_name/2,
     get_records_by_name_and_type/2,
-    in_zone/1,
-    record_name_in_zone/2,
-    zone_names_and_versions/0,
-    get_rrset_sync_counter/3
+    get_records_by_name_and_type/3,
+    get_records_by_name_ent/2,
+    get_records_by_name_wildcard/2,
+    get_records_by_name_wildcard_strict/2,
+    get_authoritative_zone/1,
+    get_delegations/1,
+    get_rrset_sync_counter/3,
+    is_in_any_zone/1,
+    is_name_in_zone/2,
+    is_record_name_in_zone/2,
+    is_record_name_in_zone_strict/2
 ]).
 
+%% Other
 -export([
+    zone_names_and_versions/0,
     put_zone/1,
     delete_zone/1,
     update_zone_records_and_digest/3,
@@ -36,209 +65,250 @@ only the first question will be resolved.
     delete_zone_rrset/5
 ]).
 
--export([create/1]).
-
 -export([start_link/0, init/1, handle_call/3, handle_cast/2]).
 
--doc "Creates a new table.".
--spec create(atom()) -> ok | {error, Reason :: term()}.
-create(zones) ->
-    create_ets_table(zones, set, #zone.name);
-create(zone_records_typed) ->
-    create_ets_table(zone_records_typed, ordered_set);
-create(sync_counters) ->
-    create_ets_table(sync_counters, set).
-
--doc "Find a zone for a given qname.".
--spec find_zone(dns:dname()) ->
-    erldns:zone() | {error, no_question | zone_not_found | not_authoritative}.
-find_zone(Name) ->
-    case get_authority(Name) of
-        {error, Error} ->
-            {error, Error};
-        {ok, Authority} ->
-            find_zone(Name, Authority)
-    end.
-
--doc "Find a zone for a given qname.".
--spec find_zone(dns:dname(), dns:rr() | [dns:rr()]) ->
-    erldns:zone() | {error, zone_not_found | not_authoritative}.
-find_zone(_Name, []) ->
-    {error, not_authoritative};
-find_zone(Name, [FirstAuthority | _]) ->
-    find_zone(Name, FirstAuthority);
-find_zone(Name, #dns_rr{} = Authority) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    case dns:dname_to_labels(NormalizedName) of
-        [_ | Labels] ->
-            case get_zone(NormalizedName) of
-                #zone{} = Zone ->
-                    Zone;
-                {error, zone_not_found} ->
-                    case NormalizedName =:= Authority#dns_rr.name of
-                        true ->
-                            {error, zone_not_found};
-                        false ->
-                            find_zone(dns:labels_to_dname(Labels), Authority)
-                    end
-            end;
-        _ ->
-            {error, zone_not_found}
-    end.
-
+-doc #{group => ~"API: Lookups"}.
 -doc """
 Get a zone for the specific name.
 
 This function will not attempt to resolve the dname in any way,
 it will simply look up the name in the underlying data store.
 """.
--spec get_zone(dns:dname()) -> erldns:zone() | {error, zone_not_found}.
-get_zone(Name) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    case ets:lookup(zones, NormalizedName) of
+-spec lookup_zone(dns:dname() | dns:labels()) -> erldns:zone() | zone_not_found.
+lookup_zone(Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    lookup_zone(Labels);
+lookup_zone(Labels) when is_list(Labels) ->
+    case ets:lookup(erldns_zones_table, Labels) of
         [] ->
-            {error, zone_not_found};
+            zone_not_found;
         [#zone{} = Zone] ->
-            Zone#zone{records = []}
+            Zone
     end.
 
--doc "Find the SOA record for the given DNS question or zone.".
--spec get_authority(dns:message() | dns:dname()) ->
-    {error, no_question} | {error, not_authoritative} | {ok, dns:authority()}.
-get_authority(#dns_message{questions = []}) ->
-    {error, no_question};
-get_authority(#dns_message{questions = [Question | _]}) ->
-    get_authority(Question#dns_query.name);
-get_authority(Name) when is_binary(Name) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, #zone.authority) of
+-doc #{group => ~"API: Lookups"}.
+-doc "Get all records for the given zone.".
+-spec get_zone_records(erldns:zone() | dns:dname() | dns:labels()) -> [dns:rr()].
+get_zone_records(Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    get_zone_records(Labels);
+get_zone_records(Labels) when is_list(Labels) ->
+    case find_zone_labels_in_cache(Labels) of
         zone_not_found ->
-            {error, not_authoritative};
-        Authority ->
-            {ok, Authority}
+            [];
+        ZoneLabels ->
+            pattern_zone(ZoneLabels)
+    end;
+get_zone_records(#zone{labels = ZoneLabels}) ->
+    pattern_zone(ZoneLabels).
+
+-doc #{group => ~"API: Lookups"}.
+-doc "Return the record set for the given dname.".
+-spec get_records_by_name(dns:dname() | dns:labels()) -> [dns:rr()].
+get_records_by_name(Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    get_records_by_name(Labels);
+get_records_by_name(Labels) when is_list(Labels) ->
+    case find_zone_labels_in_cache(Labels) of
+        zone_not_found ->
+            [];
+        ZoneLabels ->
+            RecordLabels = reduce_record_labels(ZoneLabels, Labels),
+            pattern_zone_dname(ZoneLabels, RecordLabels)
     end.
 
+-doc #{group => ~"API: Lookups"}.
+-doc "Return the record set for the given dname in the given zone.".
+-spec get_records_by_name(erldns:zone(), dns:dname() | dns:labels()) -> [dns:rr()].
+get_records_by_name(Zone, Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    get_records_by_name(Zone, Labels);
+get_records_by_name(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
+    RecordLabels = reduce_record_labels(ZL, Labels),
+    pattern_zone_dname(ZL, RecordLabels).
+
+-doc #{group => ~"API: Lookups"}.
+-doc "Get all records for the given type and given name.".
+-spec get_records_by_name_and_type(dns:dname() | dns:labels(), dns:type()) -> [dns:rr()].
+get_records_by_name_and_type(Name, Type) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    get_records_by_name_and_type(Labels, Type);
+get_records_by_name_and_type(Labels, Type) when is_list(Labels) ->
+    case find_zone_labels_in_cache(Labels) of
+        zone_not_found ->
+            [];
+        ZoneLabels ->
+            RecordLabels = reduce_record_labels(ZoneLabels, Labels),
+            pattern_zone_dname_type(ZoneLabels, RecordLabels, Type)
+    end.
+
+-doc #{group => ~"API: Lookups"}.
+-doc "Get all records for the given name and type in the given zone.".
+-spec get_records_by_name_and_type(erldns:zone(), dns:dname() | dns:labels(), dns:type()) ->
+    [dns:rr()].
+get_records_by_name_and_type(Zone, Name, Type) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    get_records_by_name_and_type(Zone, Labels, Type);
+get_records_by_name_and_type(#zone{labels = ZL}, Labels, Type) when is_list(ZL), is_list(Labels) ->
+    RecordLabels = reduce_record_labels(ZL, Labels),
+    pattern_zone_dname_type(ZL, RecordLabels, Type).
+
+-doc #{group => ~"API: Lookups"}.
+-doc "Return the full record set for the tree below the given dname".
+-spec get_records_by_name_ent(erldns:zone(), dns:dname() | dns:labels()) -> [dns:rr()].
+get_records_by_name_ent(Zone, Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    get_records_by_name_ent(Zone, Labels);
+get_records_by_name_ent(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
+    RecordLabels = reduce_record_labels(ZL, Labels),
+    record_name_in_zone_with_descendants(ZL, RecordLabels).
+
+-doc #{group => ~"API: Lookups"}.
+-doc """
+Return the record set for the given dname in the given zone, including parent wildcard matches.
+""".
+-spec get_records_by_name_wildcard(erldns:zone(), dns:dname() | dns:labels()) -> [dns:rr()].
+get_records_by_name_wildcard(Zone, Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    get_records_by_name_wildcard(Zone, Labels);
+get_records_by_name_wildcard(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
+    RecordLabels = reduce_record_labels(ZL, Labels),
+    record_name_in_zone_with_wildcard(ZL, RecordLabels).
+
+-doc #{group => ~"API: Lookups"}.
+-doc """
+Return the record set for the given dname in the given zone,
+including parent exact and wildcard matches.
+""".
+-spec get_records_by_name_wildcard_strict(erldns:zone(), dns:dname() | dns:labels()) -> [dns:rr()].
+get_records_by_name_wildcard_strict(Zone, Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    get_records_by_name_wildcard_strict(Zone, Labels);
+get_records_by_name_wildcard_strict(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
+    RecordLabels = reduce_record_labels(ZL, Labels),
+    record_name_in_zone_with_wildcard_strict(ZL, RecordLabels).
+
+-doc #{group => ~"API: Lookups"}.
+-doc "Find an authoritative zone for a given qname.".
+-spec get_authoritative_zone(dns:dname() | dns:labels()) ->
+    erldns:zone() | zone_not_found | not_authoritative.
+get_authoritative_zone(Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    find_authoritative_zone_in_cache(Labels);
+get_authoritative_zone(Labels) when is_list(Labels) ->
+    find_authoritative_zone_in_cache(Labels).
+
+-doc #{group => ~"API: Lookups"}.
 -doc """
 Get the list of NS and glue records for the given name.
 
 This function will always return a list, even if it is empty.
 """.
--spec get_delegations(dns:dname()) -> [dns:rr()].
-get_delegations(Name) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, #zone.name) of
-        zone_not_found ->
-            [];
-        ZoneName ->
-            NormalizedZoneName = dns:dname_to_lower(ZoneName),
-            Pattern = {{{NormalizedZoneName, NormalizedName, ?DNS_TYPE_NS}, '$1'}, [], ['$1']},
-            Records = lists:append(ets:select(zone_records_typed, [Pattern])),
-            lists:filter(erldns_records:match_delegation(NormalizedName), Records)
-    end.
+-spec get_delegations(dns:dname() | dns:labels()) -> [dns:rr()].
+get_delegations(Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    get_delegations(Name, Labels);
+get_delegations(Labels) when is_list(Labels) ->
+    Name = dns:labels_to_dname(Labels),
+    get_delegations(Name, Labels).
 
--doc "Get all records for the given zone.".
--spec get_zone_records(dns:dname()) -> [dns:rr()].
-get_zone_records(Name) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, #zone.name) of
-        zone_not_found ->
-            [];
-        ZoneName ->
-            NormalizedZoneName = dns:dname_to_lower(ZoneName),
-            Pattern = {{{NormalizedZoneName, '_', '_'}, '$1'}, [], ['$1']},
-            lists:append(ets:select(zone_records_typed, [Pattern]))
-    end.
-
--doc "Get all records for the given type and given name.".
--spec get_records_by_name_and_type(dns:dname(), dns:type()) -> [dns:rr()].
-get_records_by_name_and_type(Name, Type) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, #zone.name) of
-        zone_not_found ->
-            [];
-        ZoneName ->
-            NormalizedZoneName = dns:dname_to_lower(ZoneName),
-            Pattern = {{{NormalizedZoneName, NormalizedName, Type}, '$1'}, [], ['$1']},
-            lists:append(ets:select(zone_records_typed, [Pattern]))
-    end.
-
--doc "Return the record set for the given dname.".
--spec get_records_by_name(dns:dname()) -> [dns:rr()].
-get_records_by_name(Name) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, #zone.name) of
-        zone_not_found ->
-            [];
-        ZoneName ->
-            NormalizedZoneName = dns:dname_to_lower(ZoneName),
-            Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '$1'}, [], ['$1']},
-            lists:append(ets:select(zone_records_typed, [Pattern]))
-    end.
-
--doc "Check if the name is in a zone.".
--spec in_zone(binary()) -> boolean().
-in_zone(Name) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    case find_zone_in_cache(NormalizedName, #zone.name) of
-        zone_not_found ->
-            false;
-        ZoneName ->
-            is_name_in_zone(ZoneName, NormalizedName)
-    end.
-
--doc """
-Check if the record name is in the zone.
-
-Will also return true if a wildcard is present at the node.
-""".
--spec record_name_in_zone(binary(), dns:dname()) -> boolean().
-record_name_in_zone(ZoneName, Name) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    NormalizedZoneName = dns:dname_to_lower(ZoneName),
-    case find_zone_in_cache(NormalizedName, member) of
-        zone_not_found ->
-            false;
-        true ->
-            Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '_'}, [], [true]},
-            case ets:select_count(zone_records_typed, [Pattern]) of
-                0 ->
-                    is_name_in_zone_with_wildcard(NormalizedZoneName, NormalizedName);
-                _ ->
-                    true
-            end
-    end.
-
--doc "Return a list of tuples with each tuple as a name and the version SHA for the zone.".
--spec zone_names_and_versions() -> [{dns:dname(), binary()}].
-zone_names_and_versions() ->
-    ets:foldl(
-        fun(Zone, NamesAndShas) ->
-            [{Zone#zone.name, Zone#zone.version} | NamesAndShas]
-        end,
-        [],
-        zones
-    ).
-
+-doc #{group => ~"API: Lookups"}.
 -doc "Return current sync counter".
 -spec get_rrset_sync_counter(dns:dname(), dns:dname(), dns:type()) -> integer().
-get_rrset_sync_counter(ZoneName, RRFqdn, Type) ->
-    NormalizedZoneName = dns:dname_to_lower(ZoneName),
+get_rrset_sync_counter(NormalizedZoneName, RRFqdn, Type) ->
     NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
     Key = {NormalizedZoneName, NormalizedRRFqdn, Type},
     % return default value of 0
-    ets:lookup_element(sync_counters, Key, 2, 0).
+    ets:lookup_element(erldns_sync_counters, Key, 2, 0).
+
+-doc #{group => ~"API: Boolean Operations"}.
+-doc "Check if the name is in any available zone.".
+-spec is_in_any_zone(dns:dname() | dns:labels()) -> boolean().
+is_in_any_zone(Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    is_in_any_zone(Labels);
+is_in_any_zone(Labels) when is_list(Labels) ->
+    case find_zone_labels_in_cache(Labels) of
+        zone_not_found ->
+            false;
+        ZoneLabels ->
+            RecordLabels = reduce_record_labels(ZoneLabels, Labels),
+            is_name_in_any_zone_helper(ZoneLabels, RecordLabels)
+    end.
+
+-doc #{group => ~"API: Boolean Operations"}.
+-doc """
+Check if the exact record name is in the zone, without recursing nor traversing the zone tree.
+""".
+-spec is_name_in_zone(erldns:zone(), dns:dname() | dns:labels()) -> boolean().
+is_name_in_zone(Zone, Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    is_name_in_zone(Zone, Labels);
+is_name_in_zone(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
+    case reduce_record_labels(ZL, Labels) of
+        false ->
+            false;
+        RecordLabels ->
+            0 =/= pattern_zone_dname_count(ZL, RecordLabels)
+    end.
+
+-doc #{group => ~"API: Boolean Operations"}.
+-doc "Check if the record name, or any wildcard or parent wildcard, is in the zone.".
+-spec is_record_name_in_zone(erldns:zone(), dns:dname() | dns:labels()) -> boolean().
+is_record_name_in_zone(Zone, Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    is_record_name_in_zone(Zone, Labels);
+is_record_name_in_zone(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
+    case reduce_record_labels(ZL, Labels) of
+        false ->
+            false;
+        RecordLabels ->
+            is_record_name_in_zone_helper(ZL, RecordLabels)
+    end.
+
+-doc #{group => ~"API: Boolean Operations"}.
+-doc """
+Check if the record name, or any wildcard, or parent wildcard, or descendant, is in the zone.
+
+Will also return true if a wildcard is present at the node,
+or if any descendant has existing records (and the queried name is an ENT).
+""".
+-spec is_record_name_in_zone_strict(erldns:zone(), dns:dname() | dns:labels()) -> boolean().
+is_record_name_in_zone_strict(Zone, Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    is_record_name_in_zone_strict(Zone, Labels);
+is_record_name_in_zone_strict(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
+    case reduce_record_labels(ZL, Labels) of
+        false ->
+            false;
+        RecordLabels ->
+            is_record_name_in_zone_helper(ZL, RecordLabels) orelse
+                is_record_name_in_zone_with_descendants(ZL, RecordLabels)
+    end.
+
+-doc #{group => ~"API: Utilities"}.
+-doc "Return a list of tuples with each tuple as a name and the version SHA for the zone.".
+-spec zone_names_and_versions() -> [{dns:dname(), erldns_zones:version()}].
+zone_names_and_versions() ->
+    ets:foldl(
+        fun(#zone{name = Name, version = Version}, NamesAndShas) ->
+            [{Name, Version} | NamesAndShas]
+        end,
+        [],
+        erldns_zones_table
+    ).
 
 %% Update the RRSet sync counter for the given RR set name and type in the given zone.
 -spec write_rrset_sync_counter(dns:dname(), dns:dname(), dns:type(), integer()) -> ok.
 write_rrset_sync_counter(ZoneName, RRFqdn, Type, Counter) ->
-    true = ets:insert(sync_counters, {{ZoneName, RRFqdn, Type}, Counter}),
+    true = ets:insert(erldns_sync_counters, {{ZoneName, RRFqdn, Type}, Counter}),
     ok.
 
-% ----------------------------------------------------------------------------------------------------
 % Write API
 %% All write operations write records with normalized names, hence reads won't need to
 %% renormalize again and again
 
+-doc #{group => ~"API: Mutations"}.
 -doc """
 Put a name and its records into the cache, along with a SHA which can be
 used to determine if the zone requires updating.
@@ -270,29 +340,33 @@ erldns_zone_cache:put_zone({
 -spec put_zone(Zone | {Name, Sha, Records} | {Name, Sha, Records, Keys}) -> ok when
     Zone :: erldns:zone(),
     Name :: dns:dname(),
-    Sha :: binary(),
+    Sha :: erldns_zones:version(),
     Records :: [dns:rr()],
     Keys :: [erldns:keyset()].
+put_zone(#zone{name = Name} = Zone) ->
+    NormalizedName = dns:dname_to_lower(Name),
+    ZoneLabels = dns:dname_to_labels(NormalizedName),
+    SignedZone = sign_zone(Zone#zone{name = NormalizedName, labels = ZoneLabels}),
+    NamedRecords = build_named_index(SignedZone#zone.records),
+    ZoneRecords = prepare_zone_records(ZoneLabels, NamedRecords),
+    true = insert_zone(SignedZone#zone{records = []}),
+    NumDeleted = delete_zone_records(ZoneLabels),
+    maybe_notify_of_zone_replacement(NumDeleted, NormalizedName),
+    put_zone_records(ZoneRecords),
+    ok;
 put_zone({Name, Sha, Records}) ->
     put_zone({Name, Sha, Records, []});
 put_zone({Name, Sha, Records, Keys}) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    put_zone(build_zone(NormalizedName, Sha, Records, Keys));
-put_zone(#zone{name = Name} = Zone) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    SignedZone = sign_zone(Zone#zone{name = NormalizedName}),
-    NamedRecords = build_named_index(SignedZone#zone.records),
-    ZoneRecords = prepare_zone_records(NormalizedName, NamedRecords),
-    delete_zone_records(NormalizedName),
-    true = insert_zone(SignedZone#zone{records = trimmed}),
-    put_zone_records(ZoneRecords).
+    Zone = erldns_zone_codec:build_zone(Name, Sha, Records, Keys),
+    put_zone(Zone).
 
+-doc #{group => ~"API: Mutations"}.
 -doc "Put zone RRSet".
--spec put_zone_rrset(RRSet, RRFqdn, Type, Counter) -> ok | {error, term()} when
+-spec put_zone_rrset(RRSet, RRFqdn, Type, Counter) -> ok | zone_not_found when
     RRSet ::
         erldns:zone()
-        | {dns:dname(), binary(), [dns:rr()]}
-        | {dns:dname(), binary(), [dns:rr()], [term()]},
+        | {dns:dname(), erldns_zones:version(), [dns:rr()]}
+        | {dns:dname(), erldns_zones:version(), [dns:rr()], [term()]},
     RRFqdn :: dns:dname(),
     Type :: dns:type(),
     Counter :: integer().
@@ -307,8 +381,9 @@ put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter) ->
     put_zone_rrset({ZoneName, Digest, Records, []}, RRFqdn, Type, Counter);
 put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
     NormalizedZoneName = dns:dname_to_lower(ZoneName),
-    case find_zone_in_cache(NormalizedZoneName, zone) of
-        #zone{} = Zone ->
+    ZQLabels = dns:dname_to_labels(NormalizedZoneName),
+    case find_zone_in_cache(ZQLabels) of
+        #zone{labels = ZoneLabels} = Zone ->
             ?LOG_DEBUG(
                 #{
                     what => putting_rrset,
@@ -317,85 +392,82 @@ put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
                     zone => NormalizedZoneName,
                     records => Records
                 },
-                #{domain => [erldns, zones]}
+                ?LOG_METADATA
             ),
             KeySets = Zone#zone.keysets,
             NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
+            RecordLabels = dns:dname_to_labels(NormalizedRRFqdn),
             SignedRRSet = sign_rrset(Zone#zone{records = Records, keysets = KeySets}),
             {RRSigRecsCovering, RRSigRecsNotCovering} = filter_rrsig_records_with_type_covered(
-                NormalizedRRFqdn, Type
+                RecordLabels, Type
             ),
             % RRSet records + RRSIG records for the type + the rest of RRSIG records for FQDN
-            CurrentRRSetRecords = get_records_by_name_and_type(NormalizedRRFqdn, Type),
+            CurrentRRSetRecords = get_records_by_name_and_type(Zone, RecordLabels, Type),
             ZoneRecordsCount = Zone#zone.record_count,
-            % put zone_records_typed records first then create the records in zone_records
+            % put erldns_zone_records_typed records first then create the records in zone_records
             TypedRecords = Records ++ SignedRRSet ++ RRSigRecsNotCovering,
-            put_zone_records_typed_entry(NormalizedZoneName, NormalizedRRFqdn, TypedRecords),
+            Labels = reduce_record_labels(ZoneLabels, RecordLabels),
+            put_zone_records_typed_entry(ZoneLabels, Labels, TypedRecords),
             UpdatedZoneRecordsCount =
                 ZoneRecordsCount +
                     (length(Records) - length(CurrentRRSetRecords)) +
                     (length(SignedRRSet) - length(RRSigRecsCovering)),
-            update_zone_records_and_digest(ZoneName, UpdatedZoneRecordsCount, Digest),
+            update_zone_records_and_digest(ZoneLabels, UpdatedZoneRecordsCount, Digest),
             write_rrset_sync_counter(NormalizedZoneName, NormalizedRRFqdn, Type, Counter),
             ?LOG_DEBUG(
-                #{
-                    what => rrset_update_completed,
-                    rrset => NormalizedRRFqdn,
-                    type => Type
-                },
-                #{domain => [erldns, zones]}
-            );
-        % if zone is not in cache, return error
+                #{what => rrset_update_completed, rrset => NormalizedRRFqdn, type => Type},
+                ?LOG_METADATA
+            ),
+            ok;
+        % if zone is not in cache, return not found
         zone_not_found ->
-            {error, zone_not_found}
+            zone_not_found
     end.
 
+-doc #{group => ~"API: Mutations"}.
 -doc "Remove a zone from the cache without waiting for a response.".
--spec delete_zone(dns:dname()) -> term().
-delete_zone(Name) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    ets:delete(zones, NormalizedName),
-    delete_zone_records(NormalizedName).
+-spec delete_zone(dns:dname() | dns:labels()) -> term().
+delete_zone(Name) when is_binary(Name) ->
+    Labels = dns:dname_to_labels(Name),
+    delete_zone(Labels);
+delete_zone(ZoneLabels) when is_list(ZoneLabels) ->
+    ets:delete(erldns_zones_table, ZoneLabels),
+    delete_zone_records(ZoneLabels).
 
-%% Expects normalized names
--spec delete_zone_records(dns:dname()) -> term().
-delete_zone_records(NormalizedName) ->
-    Pattern = {{{NormalizedName, '_', '_'}, '_'}, [], [true]},
-    ets:select_delete(zone_records_typed, [Pattern]).
-
+-doc #{group => ~"API: Mutations"}.
 -doc "Remove zone RRSet".
--spec delete_zone_rrset(binary(), binary(), binary(), integer(), integer()) -> term().
+-spec delete_zone_rrset(dns:dname(), erldns_zones:version(), dns:dname(), integer(), integer()) ->
+    ok | zone_not_found.
 delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
     NormalizedZoneName = dns:dname_to_lower(ZoneName),
-    case find_zone_in_cache(NormalizedZoneName, zone) of
-        #zone{} = Zone ->
+    ZQLabels = dns:dname_to_labels(NormalizedZoneName),
+    case find_zone_in_cache(ZQLabels) of
+        #zone{labels = ZoneLabels} = Zone ->
             CurrentCounter = get_rrset_sync_counter(ZoneName, RRFqdn, Type),
             case Counter of
-                N when N =:= 0; CurrentCounter < N ->
+                N when N =:= 0; CurrentCounter =< N ->
                     ?LOG_DEBUG(
-                        #{
-                            what => removing_rrset,
-                            rrset => RRFqdn,
-                            type => Type
-                        },
-                        #{domain => [erldns, zones]}
+                        #{what => removing_rrset, rrset => RRFqdn, type => Type},
+                        ?LOG_METADATA
                     ),
                     ZoneRecordsCount = Zone#zone.record_count,
-                    CurrentRRSetRecords = get_records_by_name_and_type(RRFqdn, Type),
                     NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
-                    Pattern = {{{NormalizedZoneName, NormalizedRRFqdn, Type}, '_'}, [], [true]},
-                    ets:select_delete(zone_records_typed, [Pattern]),
+                    RecordLabels = dns:dname_to_labels(NormalizedRRFqdn),
+                    CurrentRRSetRecords = get_records_by_name_and_type(Zone, RecordLabels, Type),
+                    ReducedLabels = reduce_record_labels(ZoneLabels, RecordLabels),
+                    pattern_zone_dname_type_delete(ZoneLabels, ReducedLabels, Type),
                     % remove the RRSIG for the given record type
                     {RRSigsCovering, RRSigsNotCovering} =
                         lists:partition(
                             erldns_records:match_type_covered(Type),
-                            get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_RRSIG_NUMBER)
+                            get_records_by_name_and_type(Zone, RecordLabels, ?DNS_TYPE_RRSIG)
                         ),
                     do_put_zone_records_typed_entry(
-                        NormalizedZoneName, NormalizedRRFqdn, ?DNS_TYPE_RRSIG, RRSigsNotCovering
+                        ZoneLabels, ReducedLabels, ?DNS_TYPE_RRSIG, RRSigsNotCovering
                     ),
-                    % only write counter if called explicitly with Counter value i.e. different than 0.
-                    % this will not write the counter if called by put_zone_rrset/3 as it will prevent subsequent delete ops
+                    % only write counter if called explicitly with Counter value i.e.
+                    % different than 0. this will not write the counter if called by
+                    % put_zone_rrset/3 as it will prevent subsequent delete ops
                     case Counter of
                         N when N > 0 ->
                             % DELETE RRSet command has been sent
@@ -405,7 +477,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                                     length(CurrentRRSetRecords) -
                                     length(RRSigsCovering),
                             update_zone_records_and_digest(
-                                ZoneName, UpdatedZoneRecordsCount, Digest
+                                ZoneLabels, UpdatedZoneRecordsCount, Digest
                             ),
                             write_rrset_sync_counter(NormalizedZoneName, RRFqdn, Type, Counter);
                         _ ->
@@ -419,187 +491,155 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                             rrset => RRFqdn,
                             counter => Counter
                         },
-                        #{domain => [erldns, zones]}
+                        ?LOG_METADATA
                     )
             end;
         zone_not_found ->
-            {error, zone_not_found}
+            zone_not_found
     end.
 
+-doc #{group => ~"API: Mutations"}.
 -doc "Given a zone name, list of records, and a digest, update the zone metadata in cache.".
--spec update_zone_records_and_digest(dns:dname(), integer(), binary()) ->
-    ok | {error, Reason :: term()}.
-update_zone_records_and_digest(ZoneName, RecordsCount, Digest) ->
-    NormalizedZoneName = dns:dname_to_lower(ZoneName),
-    case find_zone_in_cache(NormalizedZoneName, zone) of
+-spec update_zone_records_and_digest(dns:labels(), non_neg_integer(), erldns_zones:version()) ->
+    ok | zone_not_found.
+update_zone_records_and_digest(ZLabels, RecordsCount, Digest) ->
+    case find_zone_in_cache(ZLabels) of
         #zone{} = Zone ->
-            UpdatedZone =
-                Zone#zone{
-                    version = Digest,
-                    authority = get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA),
-                    record_count = RecordsCount
-                },
+            UpdatedZone = Zone#zone{version = Digest, record_count = RecordsCount},
             true = insert_zone(UpdatedZone),
             ok;
         zone_not_found ->
-            {error, zone_not_found}
-    end.
-
-%% Filter RRSig records for FQDN, removing type covered..
--spec filter_rrsig_records_with_type_covered(dns:dname(), dns:type()) ->
-    {[dns:rr()], [dns:rr()]} | {[], []}.
-filter_rrsig_records_with_type_covered(RRFqdn, TypeCovered) ->
-    % guards below do not allow fun calls to prevent side effects
-    NormalizedRRFqdn = dns:dname_to_lower(RRFqdn),
-    case find_zone_in_cache(NormalizedRRFqdn, member) of
-        true ->
-            % {RRSigsCovering, RRSigsNotCovering} =
-            lists:partition(
-                erldns_records:match_type_covered(TypeCovered),
-                get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_RRSIG_NUMBER)
-            );
-        zone_not_found ->
-            {[], []}
+            zone_not_found
     end.
 
 % Internal API
 -spec insert_zone(erldns:zone()) -> true.
 insert_zone(#zone{} = Zone) ->
-    ets:insert(zones, Zone).
+    ets:insert(erldns_zones_table, Zone).
+
+%% Expects normalized names
+-spec delete_zone_records(dns:labels()) -> non_neg_integer().
+delete_zone_records(ZoneLabels) ->
+    pattern_zone_delete(ZoneLabels).
 
 %% expects name to be already normalized
--spec prepare_zone_records(dns:dname(), #{dns:dname() => [dns:rr()]}) ->
-    [{dns:dname(), dns:dname(), dns:type(), [dns:rr()]}].
-prepare_zone_records(NormalizedName, RecordsByName) ->
+-spec prepare_zone_records(dns:labels(), #{dns:dname() => [dns:rr()]}) ->
+    [{dns:labels(), dns:labels(), dns:type(), [dns:rr()]}].
+prepare_zone_records(ZoneLabels, RecordsByName) ->
     lists:flatmap(
         fun({Fqdn, Records}) ->
-            NormalizedFqdn = dns:dname_to_lower(Fqdn),
+            RecordLabels = dns:dname_to_labels(Fqdn),
             TypedRecords = build_typed_index(Records),
             ListTypedRecords = maps:to_list(TypedRecords),
-            prepare_zone_records_typed_entry(NormalizedName, NormalizedFqdn, ListTypedRecords)
+            prepare_zone_records_typed_entry(ZoneLabels, RecordLabels, ListTypedRecords)
         end,
         maps:to_list(RecordsByName)
     ).
 
 %% expects name to be already normalized
-prepare_zone_records_typed_entry(NormalizedZoneName, NormalizedRecordName, ListTypedRecords) ->
+-spec prepare_zone_records_typed_entry(dns:labels(), dns:labels(), [{dns:type(), [dns:rr()]}]) ->
+    [{dns:labels(), dns:labels(), dns:type(), [dns:rr()]}].
+prepare_zone_records_typed_entry(ZoneLabels, RecordLabels, ListTypedRecords) ->
     lists:map(
         fun({Type, Records}) ->
-            {NormalizedZoneName, NormalizedRecordName, Type, Records}
+            ReducedLabels = reduce_record_labels(ZoneLabels, RecordLabels),
+            {ZoneLabels, ReducedLabels, Type, Records}
         end,
         ListTypedRecords
     ).
 
-%% expects name to be already normalized
--spec put_zone_records([{dns:dname(), dns:dname(), dns:type(), [dns:rr()]}]) -> ok.
+%% Expects record labels to be already reduced
+-spec put_zone_records([{dns:labels(), dns:labels(), dns:type(), [dns:rr()]}]) -> ok.
 put_zone_records(RecordsByName) ->
     lists:foreach(
-        fun({NormalizedZoneName, NormalizedRecordName, Type, Records}) ->
-            do_put_zone_records_typed_entry(NormalizedZoneName, NormalizedRecordName, Type, Records)
+        fun({ZoneLabels, ReducedLabels, Type, Records}) ->
+            do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Records)
         end,
         RecordsByName
     ).
 
-%% expects name to be already normalized
-put_zone_records_typed_entry(NormalizedName, Fqdn, Records) ->
-    NormalizedFqdn = dns:dname_to_lower(Fqdn),
+%% Expects record labels to be already reduced
+-spec put_zone_records_typed_entry(dns:labels(), dns:labels(), [dns:rr()]) -> ok.
+put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Records) ->
     TypedRecords = build_typed_index(Records),
     maps:foreach(
         fun(Type, Record) ->
-            do_put_zone_records_typed_entry(NormalizedName, NormalizedFqdn, Type, Record)
+            do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Record)
         end,
         TypedRecords
     ).
 
-do_put_zone_records_typed_entry(NormalizedName, NormalizedFqdn, Type, Record) ->
-    ets:insert(zone_records_typed, {{NormalizedName, NormalizedFqdn, Type}, Record}).
+%% Expects record labels to be already reduced
+-spec do_put_zone_records_typed_entry(dns:labels(), dns:labels(), dns:type(), [dns:rr()]) -> true.
+do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Record) ->
+    ets:insert(erldns_zone_records_typed, {{ZoneLabels, ReducedLabels, Type}, Record}).
+
+%% record paths shall not cross the zone boundary,
+%% hence we can cut the zone labels from the record labels
+reduce_record_labels(ZoneLabels, RecordLabels) when is_list(ZoneLabels), is_list(RecordLabels) ->
+    match_labels(lists:reverse(ZoneLabels), lists:reverse(RecordLabels)).
+
+match_labels([], Rest) ->
+    Rest;
+match_labels([Label | ZoneLabels], [Label | RecordLabels]) ->
+    match_labels(ZoneLabels, RecordLabels);
+match_labels([_ | _], [_ | _]) ->
+    false.
 
 %% expects name to be already normalized
-is_name_in_zone(NormalizedZoneName, NormalizedName) ->
-    Pattern = {{{NormalizedZoneName, NormalizedName, '_'}, '$1'}, [], ['$1']},
-    case lists:append(ets:select(zone_records_typed, [Pattern])) of
-        [] ->
-            case dns:dname_to_labels(NormalizedName) of
-                [] ->
-                    false;
-                [_] ->
-                    false;
-                [_ | Labels] ->
-                    is_name_in_zone(NormalizedZoneName, dns:labels_to_dname(Labels))
-            end;
-        _ ->
-            true
-    end.
+is_name_in_any_zone_helper(ZoneLabels, []) ->
+    0 =/= pattern_zone_dname_count(ZoneLabels, []);
+is_name_in_any_zone_helper(ZoneLabels, [_ | ParentLabels] = RecordLabels) ->
+    0 =/= pattern_zone_dname_count(ZoneLabels, RecordLabels) orelse
+        is_name_in_any_zone_helper(ZoneLabels, ParentLabels).
 
-%% expects name to be already normalized
-is_name_in_zone_with_wildcard(NormalizedZoneName, NormalizedName) ->
-    WildcardName = dns:dname_to_lower(erldns_records:wildcard_qname(NormalizedName)),
-    Pattern = {{{NormalizedZoneName, WildcardName, '_'}, '_'}, [], [true]},
-    case ets:select_count(zone_records_typed, [Pattern]) of
-        0 ->
-            case dns:dname_to_labels(NormalizedName) of
-                [] ->
-                    false;
-                [_] ->
-                    false;
-                [_ | Labels] ->
-                    is_name_in_zone_with_wildcard(NormalizedZoneName, dns:labels_to_dname(Labels))
-            end;
-        _ ->
-            true
-    end.
-
-%% expects name to be already normalized
--spec find_zone_in_cache
-    (dns:dname(), zone) -> erldns:zone();
-    (dns:dname(), member) -> boolean();
-    (dns:dname(), dynamic()) -> dynamic().
-find_zone_in_cache(Name, Pos) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    find_zone_in_cache(NormalizedName, dns:dname_to_labels(NormalizedName), Pos).
-
-find_zone_in_cache(_Name, [], _) ->
+find_authoritative_zone_in_cache([]) ->
     zone_not_found;
-find_zone_in_cache(Name, [_ | Labels], zone) ->
-    case ets:lookup(zones, Name) of
-        [] ->
-            if_labels_find_zone_in_cache(Labels, zone);
-        [#zone{} = Zone] ->
-            Zone
-    end;
-find_zone_in_cache(Name, [_ | Labels], member) ->
-    case ets:member(zones, Name) of
-        false ->
-            if_labels_find_zone_in_cache(Labels, member);
-        true ->
-            true
-    end;
-find_zone_in_cache(Name, [_ | Labels], Pos) ->
-    case ets:lookup_element(zones, Name, Pos, zone_not_found) of
+find_authoritative_zone_in_cache([_ | Tail] = Labels) ->
+    case ets:lookup(erldns_zones_table, Labels) of
+        [#zone{authority = [_ | _]} = Zone] ->
+            Zone;
+        [#zone{authority = []}] ->
+            not_authoritative;
+        _ ->
+            find_authoritative_zone_in_cache(Tail)
+    end.
+
+get_delegations(Name, Labels) ->
+    case find_zone_labels_in_cache(Labels) of
         zone_not_found ->
-            if_labels_find_zone_in_cache(Labels, Pos);
-        Elem ->
+            [];
+        ZoneLabels ->
+            RecordLabels = reduce_record_labels(ZoneLabels, Labels),
+            Records = pattern_zone_dname_type(ZoneLabels, RecordLabels, ?DNS_TYPE_NS),
+            lists:filter(erldns_records:match_delegation(Name), Records)
+    end.
+
+%% expects name to be already normalized
+%% A positive return of this fuction implies that the zone exists and is a parent of the given name
+-spec find_zone_labels_in_cache(dns:labels()) -> zone_not_found | dynamic().
+find_zone_labels_in_cache([]) ->
+    zone_not_found;
+find_zone_labels_in_cache([_ | Tail] = Labels) ->
+    case ets:lookup_element(erldns_zones_table, Labels, #zone.labels, zone_not_found) of
+        zone_not_found ->
+            find_zone_labels_in_cache(Tail);
+        Elem when is_list(Elem) ->
             Elem
     end.
 
-if_labels_find_zone_in_cache([], _QueryType) ->
+-spec find_zone_in_cache(dns:labels()) -> zone_not_found | erldns:zone().
+find_zone_in_cache([]) ->
     zone_not_found;
-if_labels_find_zone_in_cache(Labels, QueryType) ->
-    find_zone_in_cache(dns:labels_to_dname(Labels), QueryType).
+find_zone_in_cache([_ | Tail] = Labels) ->
+    case ets:lookup(erldns_zones_table, Labels) of
+        [] ->
+            find_zone_in_cache(Tail);
+        [#zone{} = Zone] ->
+            Zone
+    end.
 
-%% Expects normalized names
-build_zone(NormalizedName, Version, Records, Keys) ->
-    Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
-    #zone{
-        name = NormalizedName,
-        version = Version,
-        record_count = length(Records),
-        authority = Authorities,
-        records = Records,
-        keysets = Keys
-    }.
-
--spec build_named_index([dns:rr()]) -> #{binary() => [dns:rr()]}.
+-spec build_named_index([dns:rr()]) -> #{dns:dname() => [dns:rr()]}.
 build_named_index(Records) ->
     maps:groups_from_list(fun(R) -> dns:dname_to_lower(R#dns_rr.name) end, Records).
 
@@ -608,7 +648,7 @@ build_typed_index(Records) ->
     maps:groups_from_list(fun(R) -> R#dns_rr.type end, Records).
 
 -spec sign_zone(erldns:zone()) -> erldns:zone().
-sign_zone(Zone = #zone{keysets = []}) ->
+sign_zone(#zone{keysets = []} = Zone) ->
     Zone;
 sign_zone(Zone) ->
     #{
@@ -626,27 +666,130 @@ sign_zone(Zone) ->
 
 % Sign RRSet
 -spec sign_rrset(erldns:zone()) -> [dns:rr()].
-sign_rrset(#zone{name = Name} = Zone) ->
-    ZoneRecords = get_records_by_name_and_type(Name, ?DNS_TYPE_SOA),
+sign_rrset(#zone{labels = ZoneLabels} = Zone) ->
+    ZoneRecords = get_records_by_name_and_type(Zone, ZoneLabels, ?DNS_TYPE_SOA),
     ZoneRRSigRecords = erldns_dnssec:get_signed_zone_records(Zone),
     rewrite_soa_rrsig_ttl(ZoneRecords, ZoneRRSigRecords).
 
+%% Filter RRSig records for FQDN, removing type covered..
+-spec filter_rrsig_records_with_type_covered(dns:labels(), dns:type()) ->
+    {[dns:rr()], [dns:rr()]} | {[], []}.
+filter_rrsig_records_with_type_covered(Labels, TypeCovered) ->
+    % guards below do not allow fun calls to prevent side effects
+    case find_zone_in_cache(Labels) of
+        #zone{} = Zone ->
+            % {RRSigsCovering, RRSigsNotCovering} =
+            lists:partition(
+                erldns_records:match_type_covered(TypeCovered),
+                get_records_by_name_and_type(Zone, Labels, ?DNS_TYPE_RRSIG)
+            );
+        zone_not_found ->
+            {[], []}
+    end.
+
 % Rewrite the RRSIG TTL so it follows the same rewrite rules as the SOA TTL.
 rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
-    SoaRR = lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, ZoneRecords),
+    SoaRR = #dns_rr{} = lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, ZoneRecords),
     lists:map(
-        fun(RR) ->
-            case RR#dns_rr.type of
-                ?DNS_TYPE_RRSIG ->
-                    case RR#dns_rr.data#dns_rrdata_rrsig.type_covered of
-                        ?DNS_TYPE_SOA -> erldns_records:minimum_soa_ttl(RR, SoaRR#dns_rr.data);
-                        _ -> RR
-                    end;
-                _ ->
-                    RR
-            end
+        fun
+            (#dns_rr{type = ?DNS_TYPE_RRSIG, data = #dns_rrdata_rrsig{} = Data} = RR) ->
+                case Data#dns_rrdata_rrsig.type_covered of
+                    ?DNS_TYPE_SOA -> erldns_records:minimum_soa_ttl(RR, SoaRR#dns_rr.data);
+                    _ -> RR
+                end;
+            (#dns_rr{} = RR) ->
+                RR
         end,
         RRSigRecords
+    ).
+
+record_name_in_zone_with_descendants(ZoneLabels, QLabels) ->
+    % eqwalizer:ignore this needs to be an improper list for tree traversal
+    HasDescendantsPath = QLabels ++ '_',
+    pattern_zone_dname(ZoneLabels, HasDescendantsPath).
+
+%% Checks if there is a wildcard record matching all the way to the last label.
+record_name_in_zone_with_wildcard(_, []) ->
+    [];
+record_name_in_zone_with_wildcard(ZoneLabels, QLabels) ->
+    Parent = lists:droplast(QLabels),
+    WildcardPath = Parent ++ [~"*"],
+    case pattern_zone_dname(ZoneLabels, WildcardPath) of
+        [] ->
+            record_name_in_zone_with_wildcard(ZoneLabels, Parent);
+        RRsWild ->
+            RRsWild
+    end.
+
+% Find the best match records for the given QName in the given zone.
+% This will attempt to walk through the domain hierarchy in the QName
+% looking for both exact and wildcard matches.
+record_name_in_zone_with_wildcard_strict(_, []) ->
+    [];
+record_name_in_zone_with_wildcard_strict(ZoneLabels, [_ | _] = RecordLabels) ->
+    Parent = lists:droplast(RecordLabels),
+    WildcardLabels = Parent ++ [~"*"],
+    case pattern_zone_dname(ZoneLabels, WildcardLabels) of
+        [] ->
+            case pattern_zone_dname(ZoneLabels, Parent) of
+                [] ->
+                    record_name_in_zone_with_wildcard_strict(ZoneLabels, Parent);
+                RRsStrict ->
+                    RRsStrict
+            end;
+        RRsWild ->
+            RRsWild
+    end.
+
+is_record_name_in_zone_helper(ZoneLabels, RecordLabels) ->
+    is_record_name_in_zone_traverse_wildcard(ZoneLabels, RecordLabels, RecordLabels).
+
+is_record_name_in_zone_with_wildcard(_, []) ->
+    false;
+is_record_name_in_zone_with_wildcard(ZoneLabels, QLabels) ->
+    Parent = lists:droplast(QLabels),
+    WildcardPath = Parent ++ [~"*"],
+    is_record_name_in_zone_traverse_wildcard(ZoneLabels, WildcardPath, Parent).
+
+is_record_name_in_zone_traverse_wildcard(ZoneLabels, Path, ParentPath) ->
+    0 =/= pattern_zone_dname_count(ZoneLabels, Path) orelse
+        is_record_name_in_zone_with_wildcard(ZoneLabels, ParentPath).
+
+is_record_name_in_zone_with_descendants(ZoneLabels, QLabels) ->
+    % eqwalizer:ignore this needs to be an improper list for tree traversal
+    HasDescendantsPath = QLabels ++ '_',
+    0 =/= pattern_zone_dname_count(ZoneLabels, HasDescendantsPath).
+
+pattern_zone(ZoneLabels) ->
+    Pattern = {{{ZoneLabels, '_', '_'}, '$1'}, [], ['$1']},
+    lists:append(ets:select(erldns_zone_records_typed, [Pattern])).
+
+pattern_zone_dname(ZoneLabels, Labels) ->
+    Pattern = {{{ZoneLabels, Labels, '_'}, '$1'}, [], ['$1']},
+    lists:append(ets:select(erldns_zone_records_typed, [Pattern])).
+
+pattern_zone_dname_type(ZoneLabels, Labels, Type) ->
+    Pattern = {{{ZoneLabels, Labels, Type}, '$1'}, [], ['$1']},
+    lists:append(ets:select(erldns_zone_records_typed, [Pattern])).
+
+pattern_zone_dname_count(ZoneLabels, Labels) ->
+    Pattern = {{{ZoneLabels, Labels, '_'}, '$1'}, [], [true]},
+    ets:select_count(erldns_zone_records_typed, [Pattern]).
+
+pattern_zone_dname_type_delete(ZoneLabels, Labels, Type) ->
+    Pattern = {{{ZoneLabels, Labels, Type}, '_'}, [], [true]},
+    ets:select_delete(erldns_zone_records_typed, [Pattern]).
+
+pattern_zone_delete(ZoneLabels) ->
+    Pattern = {{{ZoneLabels, '_', '_'}, '_'}, [], [true]},
+    ets:select_delete(erldns_zone_records_typed, [Pattern]).
+
+maybe_notify_of_zone_replacement(0, _) ->
+    ok;
+maybe_notify_of_zone_replacement(NumDeleted, NormalizedName) ->
+    ?LOG_WARNING(
+        #{what => zone_replaced, zone => NormalizedName, records_deleted => NumDeleted},
+        ?LOG_METADATA
     ).
 
 -doc false.
@@ -657,43 +800,38 @@ start_link() ->
 -doc false.
 -spec init(noargs) -> {ok, nostate}.
 init(noargs) ->
-    create(zones),
-    create(zone_records_typed),
-    create(sync_counters),
+    create_ets_table(erldns_zones_table, set, #zone.labels),
+    create_ets_table(erldns_zone_records_typed, ordered_set),
+    create_ets_table(erldns_sync_counters, set),
     {ok, nostate}.
 
 -doc false.
 -spec handle_call(dynamic(), gen_server:from(), nostate) ->
     {reply, not_implemented, nostate}.
 handle_call(Call, From, State) ->
-    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, #{domain => [erldns, zones]}),
+    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, ?LOG_METADATA),
     {reply, not_implemented, State}.
 
 -doc false.
 -spec handle_cast(dynamic(), nostate) -> {noreply, nostate}.
 handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, #{domain => [erldns, zones]}),
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, ?LOG_METADATA),
     {noreply, State}.
 
--spec create_ets_table(atom(), ets:table_type()) -> ok | {error, term()}.
+-spec create_ets_table(atom(), ets:table_type()) -> ok.
 create_ets_table(TableName, Type) ->
     create_ets_table(TableName, Type, 1).
 
--spec create_ets_table(atom(), ets:table_type(), non_neg_integer()) -> ok | {error, term()}.
+-spec create_ets_table(atom(), ets:table_type(), non_neg_integer()) -> ok.
 create_ets_table(TableName, Type, Pos) ->
-    case ets:info(TableName) of
-        undefined ->
-            Opts = [
-                Type,
-                public,
-                named_table,
-                {keypos, Pos},
-                {read_concurrency, true},
-                {write_concurrency, auto},
-                {decentralized_counters, true}
-            ],
-            TableName = ets:new(TableName, Opts),
-            ok;
-        _InfoList ->
-            ok
-    end.
+    Opts = [
+        Type,
+        public,
+        named_table,
+        {keypos, Pos},
+        {read_concurrency, true},
+        {write_concurrency, auto},
+        {decentralized_counters, true}
+    ],
+    TableName = ets:new(TableName, Opts),
+    ok.

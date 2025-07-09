@@ -62,7 +62,7 @@ is_authorized(Req, State) ->
     {boolean(), cowboy_req:req(), erldns_admin:handler_state()}.
 resource_exists(Req, State) ->
     Name = cowboy_req:binding(zone_name, Req),
-    {erldns_zone_cache:in_zone(Name), Req, State}.
+    {erldns_zone_cache:is_in_any_zone(Name), Req, State}.
 
 -doc false.
 -spec to_html(cowboy_req:req(), erldns_admin:handler_state()) ->
@@ -83,28 +83,33 @@ to_json(Req, State) ->
     ZoneName = cowboy_req:binding(zone_name, Req),
     RecordName = cowboy_req:binding(record_name, Req, <<>>),
     Params = cowboy_req:parse_qs(Req),
-    case lists:keyfind(<<"type">>, 1, Params) of
-        false ->
-            ?LOG_DEBUG(
-                #{what => get_zone_resource_call, zone => ZoneName, record => RecordName},
-                #{domain => [erldns, admin]}
-            ),
+    Type = lists:keyfind(<<"type">>, 1, Params),
+    ?LOG_DEBUG(
+        #{what => get_zone_resource_call, zone => ZoneName, record => RecordName, type => Type},
+        #{domain => [erldns, admin]}
+    ),
+    case {RecordName, Type} of
+        {<<>>, false} ->
+            Opts = #{mode => zone_records_to_json},
+            return_answer(ZoneName, Opts, Req, State);
+        {_, false} ->
             Opts = #{mode => {zone_records_to_json, RecordName}},
-            Json = erldns_zone_codec:encode(ZoneName, Opts),
-            Response = iolist_to_binary(json:encode(Json)),
-            {Response, Req, State};
-        {<<"type">>, RecordType} ->
-            ?LOG_DEBUG(
-                #{
-                    what => get_zone_resource_call,
-                    zone => ZoneName,
-                    record => RecordName,
-                    type => RecordType
-                },
-                #{domain => [erldns, admin]}
-            ),
+            return_answer(ZoneName, Opts, Req, State);
+        {_, {_, RecordType}} ->
             Opts = #{mode => {zone_records_to_json, RecordName, RecordType}},
-            Json = erldns_zone_codec:encode(ZoneName, Opts),
+            return_answer(ZoneName, Opts, Req, State)
+    end.
+
+return_answer(ZoneName, Opts, Req, State) ->
+    case erldns_zone_cache:lookup_zone(ZoneName) of
+        zone_not_found ->
+            ?LOG_ERROR(#{what => get_zone_records_error, error => zone_not_found}, #{
+                domain => [erldns, admin]
+            }),
+            Resp = "Error getting zone: zone not found",
+            {stop, cowboy_req:reply(400, #{}, Resp, Req), State};
+        Zone ->
+            Json = erldns_zone_codec:encode(Zone, Opts),
             Response = iolist_to_binary(json:encode(Json)),
             {Response, Req, State}
     end.

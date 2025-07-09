@@ -11,6 +11,8 @@
     not_implemented | json:encode_value().
 encode(Zone, #{mode := zone_meta_to_json}, _) ->
     zone_meta_to_json(Zone);
+encode(Zone, #{mode := zone_records_to_json}, Encoders) ->
+    encode_zone_records_to_json(Zone, Encoders);
 encode(Zone, #{mode := {zone_records_to_json, RecordName}}, Encoders) ->
     encode_zone_records_to_json(Zone, RecordName, Encoders);
 encode(Zone, #{mode := {zone_records_to_json, RecordName, RecordType}}, Encoders) ->
@@ -45,18 +47,21 @@ zone_meta_to_json(Zone) ->
     }.
 
 % Internal API
-encode_zone_records_to_json(_ZoneName, RecordName, Encoders) ->
-    Records = erldns_zone_cache:get_records_by_name(RecordName),
+encode_zone_records_to_json(Zone, Encoders) ->
+    Records = erldns_zone_cache:get_zone_records(Zone),
     lists:flatmap(encode(Encoders), Records).
 
-encode_zone_records_to_json(_ZoneName, RecordName, RecordType, Encoders) ->
-    Records = erldns_zone_cache:get_records_by_name_and_type(
-        RecordName, dns_names:name_type(RecordType)
-    ),
+encode_zone_records_to_json(Zone, RecordName, Encoders) ->
+    Records = erldns_zone_cache:get_records_by_name(Zone, RecordName),
+    lists:flatmap(encode(Encoders), Records).
+
+encode_zone_records_to_json(Zone, RecordName, RecordType, Encoders) ->
+    Type = dns_names:name_type(RecordType),
+    Records = erldns_zone_cache:get_records_by_name_and_type(Zone, RecordName, Type),
     lists:flatmap(encode(Encoders), Records).
 
 records_to_json(Zone, Encoders) ->
-    lists:flatmap(encode(Encoders), erldns_zone_cache:get_zone_records(Zone#zone.name)).
+    lists:flatmap(encode(Encoders), erldns_zone_cache:get_zone_records(Zone)).
 
 encode(Encoders) ->
     fun(Record) -> encode_record(Record, Encoders) end.

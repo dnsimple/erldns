@@ -16,7 +16,9 @@ groups() ->
             pdns_definitions,
             pdns_dnssec_definitions,
             erldns_definitions,
-            erldns_dnssec_definitions
+            erldns_dnssec_definitions,
+            wildcard_specs,
+            ent_specs
         ]}
     ].
 
@@ -76,6 +78,14 @@ erldns_dnssec_definitions(_) ->
     Result = dnstest_harness:run(dnstest_definitions:erldns_dnssec_definitions()),
     assert(?FUNCTION_NAME, Result).
 
+wildcard_specs(_) ->
+    Result = dnstest_harness:run(wildcard_specs:definitions()),
+    assert(?FUNCTION_NAME, Result).
+
+ent_specs(_) ->
+    Result = dnstest_harness:run(ent_specs:definitions()),
+    assert(?FUNCTION_NAME, Result).
+
 assert(_Definitions, Results) ->
     All = lists:filter(
         fun(#{name := Name, result := Result}) ->
@@ -89,7 +99,6 @@ assert(_Definitions, Results) ->
 %% until we can run all of them
 failing() ->
     [
-        nsec_nxname_ent,
         direct_rrsig,
         ns_zonecut_child_cname
     ].
