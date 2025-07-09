@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v8.0.0-rc1
+
 - Rework `erldns_zone_cache` and `erldns_resolver`: algorithm is extensively optimised and now supports ENT correctly.
 - Rework `erldns_handler`: behaviour is now improved and clearly defined.
 - Split `erldns_resolver` pipe into more granular steps, adding `erldns_resolver_recursive`,

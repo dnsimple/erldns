@@ -16,7 +16,7 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           otp-version: '27'
-          rebar3-version: '3.24'
+          rebar3-version: '3.25'
       - run: rebar3 compile
       - name: Publish to hex.pm
         env:
