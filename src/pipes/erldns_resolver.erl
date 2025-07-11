@@ -245,7 +245,13 @@ resolve_exact_type_match(Message, Zone, QLabels, ?DNS_TYPE_NS, CnameChain, Match
     Labels = dns:dname_to_labels(Name),
     % It isn't clear what the QTYPE should be on a delegated restart. I assume an A record.
     restart_delegated_query(
-        Message, Zone, Labels, Name, ?DNS_TYPE_A, CnameChain, erldns_zone_cache:is_in_any_zone(Name)
+        Message,
+        Zone,
+        Labels,
+        Name,
+        ?DNS_TYPE_A,
+        CnameChain,
+        erldns_zone_cache:is_in_any_zone(Labels)
     );
 resolve_exact_type_match(
     Message, _Zone, _QLabels, ?DNS_TYPE_NS, _CnameChain, MatchedRecords, _AuthorityRecords
@@ -756,25 +762,29 @@ requires_additional_processing([], Acc) ->
     lists:reverse(Acc).
 
 % Extract the name from the first record in the list.
-zone_authority_name([Record | _]) ->
+zone_authority_name(#zone{authority = [Record | _]}) ->
     Record#dns_rr.name.
 
 % Find NS records that represent a zone cut.
 detect_zonecut(Zone, QName) when is_binary(QName) ->
     detect_zonecut(Zone, dns:dname_to_labels(QName));
-detect_zonecut(_Zone, []) ->
+detect_zonecut(Zone, QLabels) when is_list(QLabels) ->
+    AuthName = zone_authority_name(Zone),
+    AuthLabels = dns:dname_to_labels(AuthName),
+    do_detect_zonecut(Zone, AuthLabels, QLabels).
+
+do_detect_zonecut(_, _, []) ->
     [];
-detect_zonecut(_Zone, [_Label]) ->
+do_detect_zonecut(_, _, [_]) ->
     [];
-detect_zonecut(Zone, [_ | ParentLabels] = Labels) ->
-    QName = dns:labels_to_dname(Labels),
-    case dns:compare_dname(zone_authority_name(Zone#zone.authority), QName) of
+do_detect_zonecut(Zone, AuthLabels, [_ | ParentLabels] = Labels) ->
+    case dns:compare_labels(AuthLabels, Labels) of
         true ->
             [];
         false ->
             case erldns_zone_cache:get_records_by_name_and_type(Zone, Labels, ?DNS_TYPE_NS) of
                 [] ->
-                    detect_zonecut(Zone, ParentLabels);
+                    do_detect_zonecut(Zone, AuthLabels, ParentLabels);
                 ZonecutNSRecords ->
                     ZonecutNSRecords
             end
