@@ -69,8 +69,9 @@ configure_handlers_bad_types(_) ->
     meck:expect(?FUNCTION_NAME, handle, fun(_, _, _, _) -> [] end),
     meck:expect(?FUNCTION_NAME, filter, fun(RRs) -> RRs end),
     meck:expect(?FUNCTION_NAME, nsec_rr_type_mapper, fun(T, _) -> T end),
-    application:set_env(erldns, packet_handlers, [{?FUNCTION_NAME, [~"badtype"],
-                                                   ?DEFAULT_HANDLER_VERSION}]),
+    application:set_env(erldns, packet_handlers, [
+        {?FUNCTION_NAME, [~"badtype"], ?DEFAULT_HANDLER_VERSION}
+    ]),
     ?assertMatch(
         {error, {{badhandler, ?FUNCTION_NAME, {record_type, ~"badtype"}}, _}},
         erldns_handler:start_link()
