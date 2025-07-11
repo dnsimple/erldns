@@ -8,10 +8,20 @@ The meat of the resolution occurs in erldns_resolver:resolve/3
 
 ```erlang
 {erldns, [
-    {handlers, [
+    {packet_handlers, [
         {my_custom_handler_module, [?DNS_TYPE_A, ?DNS_TYPE_AAAA], 3}
     ]},
 ]}
+```
+
+Record types can be given in their integer codes or binary representations,
+meaning, the following are equivalent:
+```erlang
+    {my_custom_handler_module, [?DNS_TYPE_A, ?DNS_TYPE_AAAA], 3}
+    ...
+    {my_custom_handler_module, [?DNS_TYPE_A, ~"AAAA"], 3}
+    ...
+    {my_custom_handler_module, [~"A", ~"AAAA"], 3}
 ```
 
 The minimum supported version is `2`.
@@ -31,8 +41,8 @@ handle(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> [dns:rr()].
 -include_lib("kernel/include/logger.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 
--define(MINIMUM_HANDLER_VERSION, 2).
--define(DEFAULT_HANDLER_VERSION, 3).
+-define(MIN_HANDLER_VER, 2).
+-define(DEF_HANDLER_VER, 3).
 -define(TIMEOUT, 5000).
 
 -export([
@@ -72,7 +82,7 @@ handle(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> [dns:rr()].
 -doc "Register a record handler with the default version of 1".
 -spec register_handler([dns:type()], module()) -> ok.
 register_handler(RecordTypes, Module) ->
-    register_handler(RecordTypes, Module, ?DEFAULT_HANDLER_VERSION).
+    register_handler(RecordTypes, Module, ?DEF_HANDLER_VER).
 
 -doc "Register a record handler with version".
 -spec register_handler([dns:type()], module(), integer()) -> ok.
@@ -104,19 +114,19 @@ call_handlers(Message, QLabels, QType, Records) ->
     fun((...) -> [dns:rr()]).
 call_handlers_fun(Message, QLabels, ?DNS_TYPE_ANY, Records) ->
     fun
-        ({Handler, _, _, _, _, ?MINIMUM_HANDLER_VERSION}) ->
+        ({Handler, _, _, _, _, ?MIN_HANDLER_VER}) ->
             Handler(dns:labels_to_dname(QLabels), ?DNS_TYPE_ANY, Records, Message);
-        ({Handler, _, _, _, _, ?DEFAULT_HANDLER_VERSION}) ->
+        ({Handler, _, _, _, _, ?DEF_HANDLER_VER}) ->
             Handler(Message, QLabels, ?DNS_TYPE_ANY, Records)
     end;
 call_handlers_fun(Message, QLabels, QType, Records) ->
     fun
-        ({Handler, _, _, _, Types, ?MINIMUM_HANDLER_VERSION}) ->
+        ({Handler, _, _, _, Types, ?MIN_HANDLER_VER}) ->
             case lists:member(QType, Types) of
                 true -> Handler(dns:labels_to_dname(QLabels), QType, Records, Message);
                 false -> []
             end;
-        ({Handler, _, _, _, Types, ?DEFAULT_HANDLER_VERSION}) ->
+        ({Handler, _, _, _, Types, ?DEF_HANDLER_VER}) ->
             case lists:member(QType, Types) of
                 true -> Handler(Message, QLabels, QType, Records);
                 false -> []
@@ -205,7 +215,7 @@ terminate(_, _) ->
 
 -spec prepare_handlers() -> [versioned_handler()].
 prepare_handlers() ->
-    Handlers = application:get_env(erldns, handlers, []),
+    Handlers = application:get_env(erldns, packet_handlers, []),
     prepare_handlers(Handlers, []).
 
 -spec prepare_handlers([dynamic()], [versioned_handler()]) -> [versioned_handler()].
@@ -221,19 +231,32 @@ prepare_handlers([{Module, RecordTypes, Version} | Rest], Acc) ->
         true ?= erlang:function_exported(Module, handle, 4),
         true ?= erlang:function_exported(Module, filter, 1),
         true ?= erlang:function_exported(Module, nsec_rr_type_mapper, 2),
-        true ?= Version >= ?MINIMUM_HANDLER_VERSION orelse {error, {version, Version}},
+        true ?= Version >= ?MIN_HANDLER_VER orelse {error, {version, Version}},
+        {ok, RecordTypesNums} ?= ensure_valid_record_types(RecordTypes, []),
         Prepared = {
             fun Module:handle/4,
             fun Module:filter/1,
             fun Module:nsec_rr_type_mapper/2,
             Module,
-            RecordTypes,
+            RecordTypesNums,
             Version
         },
         prepare_handlers(Rest, [Prepared | Acc])
     else
         {error, Reason} ->
-            erlang:error({badhandler, {module, Reason}});
+            erlang:error({badhandler, Module, Reason});
         false ->
-            erlang:error({badhandler, {module_does_not_export_call, Module}})
+            erlang:error({badhandler, Module, module_does_not_export_call})
+    end.
+
+ensure_valid_record_types([], Acc) ->
+    {ok, lists:reverse(Acc)};
+ensure_valid_record_types([Type | Rest], Acc) when is_integer(Type) ->
+    ensure_valid_record_types(Rest, [Type | Acc]);
+ensure_valid_record_types([TypeBin | Rest], Acc) when is_binary(TypeBin) ->
+    case dns_names:name_type(TypeBin) of
+        undefined ->
+            {error, {record_type, TypeBin}};
+        Type ->
+            ensure_valid_record_types(Rest, [Type | Acc])
     end.

@@ -6,7 +6,7 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 
--define(DEFAULT_HANDLER_VERSION, 3).
+-define(DEF_HANDLER_VER, 3).
 
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
@@ -14,6 +14,7 @@ all() ->
         terminate_removes_pt,
         survives_cast_and_calls,
         configure_handlers,
+        configure_handlers_bad_types,
         at_least_version_2,
         misses_callback,
         call_handlers,
@@ -30,12 +31,12 @@ init_per_testcase(_, Config) ->
 -spec end_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> term().
 end_per_testcase(_, _) ->
     meck:unload(),
-    application:unset_env(erldns, handlers),
+    application:unset_env(erldns, packet_handlers),
     erlang:process_flag(trap_exit, false).
 
 %% Tests
 terminate_removes_pt(_) ->
-    application:set_env(erldns, handlers, []),
+    application:set_env(erldns, packet_handlers, []),
     ?assertMatch({ok, _}, erldns_handler:start_link()),
     erlang:exit(whereis(erldns_handler), normal),
     receive
@@ -46,7 +47,7 @@ terminate_removes_pt(_) ->
     ?assertEqual(undefined, persistent_term:get(erldns_handler, undefined)).
 
 survives_cast_and_calls(_) ->
-    application:set_env(erldns, handlers, []),
+    application:set_env(erldns, packet_handlers, []),
     ?assertMatch({ok, _}, erldns_handler:start_link()),
     ?assertEqual(ok, gen_server:cast(erldns_handler, whatever)),
     ?assertEqual(not_implemented, gen_server:call(erldns_handler, whatever)),
@@ -57,18 +58,31 @@ configure_handlers(_) ->
     meck:expect(?FUNCTION_NAME, handle, fun(_, _, _, _) -> [] end),
     meck:expect(?FUNCTION_NAME, filter, fun(RRs) -> RRs end),
     meck:expect(?FUNCTION_NAME, nsec_rr_type_mapper, fun(T, _) -> T end),
-    application:set_env(erldns, handlers, [{?FUNCTION_NAME, [], ?DEFAULT_HANDLER_VERSION}]),
+    application:set_env(erldns, packet_handlers, [
+        {?FUNCTION_NAME, [?DNS_TYPE_A, ~"AAAA"], ?DEF_HANDLER_VER}
+    ]),
     ?assertMatch({ok, _}, erldns_handler:start_link()),
     ?assertMatch([_], persistent_term:get(erldns_handler, undefined)).
+
+configure_handlers_bad_types(_) ->
+    meck:new(?FUNCTION_NAME, [non_strict]),
+    meck:expect(?FUNCTION_NAME, handle, fun(_, _, _, _) -> [] end),
+    meck:expect(?FUNCTION_NAME, filter, fun(RRs) -> RRs end),
+    meck:expect(?FUNCTION_NAME, nsec_rr_type_mapper, fun(T, _) -> T end),
+    application:set_env(erldns, packet_handlers, [{?FUNCTION_NAME, [~"badtype"], ?DEF_HANDLER_VER}]),
+    ?assertMatch(
+        {error, {{badhandler, ?FUNCTION_NAME, {record_type, ~"badtype"}}, _}},
+        erldns_handler:start_link()
+    ).
 
 at_least_version_2(_) ->
     meck:new(?FUNCTION_NAME, [non_strict]),
     meck:expect(?FUNCTION_NAME, handle, fun(_, _, _, _) -> [] end),
     meck:expect(?FUNCTION_NAME, filter, fun(RRs) -> RRs end),
     meck:expect(?FUNCTION_NAME, nsec_rr_type_mapper, fun(T, _) -> T end),
-    application:set_env(erldns, handlers, [{?FUNCTION_NAME, [], 1}]),
+    application:set_env(erldns, packet_handlers, [{?FUNCTION_NAME, [], 1}]),
     ?assertMatch(
-        {error, {{badhandler, {module, {version, 1}}}, _}},
+        {error, {{badhandler, ?FUNCTION_NAME, {version, 1}}, _}},
         erldns_handler:start_link()
     ).
 
@@ -76,9 +90,9 @@ misses_callback(_) ->
     meck:new(?FUNCTION_NAME, [non_strict]),
     meck:expect(?FUNCTION_NAME, handle, fun(_, _, _, _) -> [] end),
     meck:expect(?FUNCTION_NAME, nsec_rr_type_mapper, fun(T, _) -> T end),
-    application:set_env(erldns, handlers, [{?FUNCTION_NAME, [], ?DEFAULT_HANDLER_VERSION}]),
+    application:set_env(erldns, packet_handlers, [{?FUNCTION_NAME, [], ?DEF_HANDLER_VER}]),
     ?assertMatch(
-        {error, {{badhandler, {module_does_not_export_call, ?FUNCTION_NAME}}, _}},
+        {error, {{badhandler, ?FUNCTION_NAME, module_does_not_export_call}, _}},
         erldns_handler:start_link()
     ).
 
@@ -113,8 +127,8 @@ meck_handler(Name) ->
     meck:expect(Name, handle, fun(_, _, _, RRs) -> RRs end),
     meck:expect(Name, filter, fun(_) -> [] end),
     meck:expect(Name, nsec_rr_type_mapper, fun(T, _) -> [T] end),
-    application:set_env(erldns, handlers, [
-        {Name, [?DNS_TYPE_A, ?DNS_TYPE_AAAA], ?DEFAULT_HANDLER_VERSION}
+    application:set_env(erldns, packet_handlers, [
+        {Name, [?DNS_TYPE_A, ?DNS_TYPE_AAAA], ?DEF_HANDLER_VER}
     ]),
     ?assertMatch({ok, _}, erldns_handler:start_link()).
 
