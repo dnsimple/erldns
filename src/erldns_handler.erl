@@ -41,8 +41,8 @@ handle(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> [dns:rr()].
 -include_lib("kernel/include/logger.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 
--define(MIN_HANDLER_VER, 2).
--define(DEF_HANDLER_VER, 3).
+-define(MINIMUM_HANDLER_VERSION, 2).
+-define(DEFAULT_HANDLER_VERSION, 3).
 -define(TIMEOUT, 5000).
 
 -export([
@@ -82,7 +82,7 @@ handle(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> [dns:rr()].
 -doc "Register a record handler with the default version of 1".
 -spec register_handler([dns:type()], module()) -> ok.
 register_handler(RecordTypes, Module) ->
-    register_handler(RecordTypes, Module, ?DEF_HANDLER_VER).
+    register_handler(RecordTypes, Module, ?DEFAULT_HANDLER_VERSION).
 
 -doc "Register a record handler with version".
 -spec register_handler([dns:type()], module(), integer()) -> ok.
@@ -114,19 +114,19 @@ call_handlers(Message, QLabels, QType, Records) ->
     fun((...) -> [dns:rr()]).
 call_handlers_fun(Message, QLabels, ?DNS_TYPE_ANY, Records) ->
     fun
-        ({Handler, _, _, _, _, ?MIN_HANDLER_VER}) ->
+        ({Handler, _, _, _, _, ?MINIMUM_HANDLER_VERSION}) ->
             Handler(dns:labels_to_dname(QLabels), ?DNS_TYPE_ANY, Records, Message);
-        ({Handler, _, _, _, _, ?DEF_HANDLER_VER}) ->
+        ({Handler, _, _, _, _, ?DEFAULT_HANDLER_VERSION}) ->
             Handler(Message, QLabels, ?DNS_TYPE_ANY, Records)
     end;
 call_handlers_fun(Message, QLabels, QType, Records) ->
     fun
-        ({Handler, _, _, _, Types, ?MIN_HANDLER_VER}) ->
+        ({Handler, _, _, _, Types, ?MINIMUM_HANDLER_VERSION}) ->
             case lists:member(QType, Types) of
                 true -> Handler(dns:labels_to_dname(QLabels), QType, Records, Message);
                 false -> []
             end;
-        ({Handler, _, _, _, Types, ?DEF_HANDLER_VER}) ->
+        ({Handler, _, _, _, Types, ?DEFAULT_HANDLER_VERSION}) ->
             case lists:member(QType, Types) of
                 true -> Handler(Message, QLabels, QType, Records);
                 false -> []
@@ -231,7 +231,7 @@ prepare_handlers([{Module, RecordTypes, Version} | Rest], Acc) ->
         true ?= erlang:function_exported(Module, handle, 4),
         true ?= erlang:function_exported(Module, filter, 1),
         true ?= erlang:function_exported(Module, nsec_rr_type_mapper, 2),
-        true ?= Version >= ?MIN_HANDLER_VER orelse {error, {version, Version}},
+        true ?= Version >= ?MINIMUM_HANDLER_VERSION orelse {error, {version, Version}},
         {ok, RecordTypesNums} ?= ensure_valid_record_types(RecordTypes, []),
         Prepared = {
             fun Module:handle/4,
