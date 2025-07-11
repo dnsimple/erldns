@@ -323,10 +323,14 @@ udp_reactivate(_) ->
     [request_response(udp, Socket, Packet) || _ <- lists:seq(1, Iterations)].
 
 udp_coverage(_) ->
-    application:set_env(erldns, ingress_udp_request_timeout, 50),
-    application:set_env(erldns, listeners, [
-        #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
-    ]),
+    AppConfig = [
+        {erldns, [
+            {listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]},
+            {packet_pipeline, []},
+            {ingress_udp_request_timeout, 50}
+        ]}
+    ],
+    application:set_env(AppConfig),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     Children = supervisor:which_children(erldns_listeners),
     {_, Me, _, _} = lists:keyfind(?FUNCTION_NAME, 1, Children),
@@ -334,6 +338,7 @@ udp_coverage(_) ->
     [{_, AcceptorPid, _, _} | _] = supervisor:which_children(AccSup),
     gen_server:call(AcceptorPid, anything),
     gen_server:cast(AcceptorPid, anything),
+    erlang:send(AcceptorPid, anything),
     wpool:call(WorkersPool, anything, random_worker),
     wpool:cast(WorkersPool, anything, random_worker),
     wpool_pool:random_worker(WorkersPool) ! anything.
