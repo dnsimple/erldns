@@ -99,6 +99,5 @@ assert(_Definitions, Results) ->
 %% until we can run all of them
 failing() ->
     [
-        direct_rrsig,
-        ns_zonecut_child_cname
+        direct_rrsig
     ].

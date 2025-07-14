@@ -178,8 +178,7 @@ handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, QName, QTyp
         rc = ?DNS_RCODE_NOERROR,
         authority = Auth
     },
-    Msg2 = sign_unsigned(Msg1, Zone),
-    erldns_records:rewrite_soa_ttl(Msg2);
+    sign_unsigned(Msg1, Zone);
 handle(Msg, Zone, _, _, true, true) ->
     ?LOG_DEBUG(#{what => dnssec_requested, name => Zone#zone.name}, #{domain => [erldns]}),
     AnswerSignatures = find_rrsigs(Msg#dns_message.answers),
@@ -189,8 +188,7 @@ handle(Msg, Zone, _, _, true, true) ->
         answers = Msg#dns_message.answers ++ AnswerSignatures,
         authority = Msg#dns_message.authority ++ AuthoritySignatures
     },
-    Msg2 = sign_unsigned(Msg1, Zone),
-    erldns_records:rewrite_soa_ttl(Msg2).
+    sign_unsigned(Msg1, Zone).
 
 % Find all RRSIG records that cover the records in the provided record list.
 -spec find_rrsigs([dns:rr()]) -> [dns:rr()].

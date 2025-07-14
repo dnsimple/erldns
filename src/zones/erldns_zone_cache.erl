@@ -658,7 +658,7 @@ sign_zone(Zone) ->
     Records =
         Zone#zone.records ++
             KeyRRSigRecords ++
-            rewrite_soa_rrsig_ttl(Zone#zone.records, ZoneRRSigRecords),
+            ZoneRRSigRecords,
     Zone#zone{
         record_count = length(Records),
         records = Records
@@ -666,10 +666,8 @@ sign_zone(Zone) ->
 
 % Sign RRSet
 -spec sign_rrset(erldns:zone()) -> [dns:rr()].
-sign_rrset(#zone{labels = ZoneLabels} = Zone) ->
-    ZoneRecords = get_records_by_name_and_type(Zone, ZoneLabels, ?DNS_TYPE_SOA),
-    ZoneRRSigRecords = erldns_dnssec:get_signed_zone_records(Zone),
-    rewrite_soa_rrsig_ttl(ZoneRecords, ZoneRRSigRecords).
+sign_rrset(Zone) ->
+    erldns_dnssec:get_signed_zone_records(Zone).
 
 %% Filter RRSig records for FQDN, removing type covered..
 -spec filter_rrsig_records_with_type_covered(dns:labels(), dns:type()) ->
@@ -686,22 +684,6 @@ filter_rrsig_records_with_type_covered(Labels, TypeCovered) ->
         zone_not_found ->
             {[], []}
     end.
-
-% Rewrite the RRSIG TTL so it follows the same rewrite rules as the SOA TTL.
-rewrite_soa_rrsig_ttl(ZoneRecords, RRSigRecords) ->
-    SoaRR = lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, ZoneRecords),
-    lists:map(
-        fun
-            (#dns_rr{type = ?DNS_TYPE_RRSIG, data = #dns_rrdata_rrsig{} = Data} = RR) ->
-                case Data#dns_rrdata_rrsig.type_covered of
-                    ?DNS_TYPE_SOA -> erldns_records:minimum_soa_ttl(RR, SoaRR#dns_rr.data);
-                    _ -> RR
-                end;
-            (#dns_rr{} = RR) ->
-                RR
-        end,
-        RRSigRecords
-    ).
 
 record_name_in_zone_with_descendants(ZoneLabels, QLabels) ->
     % eqwalizer:ignore this needs to be an improper list for tree traversal

@@ -791,9 +791,8 @@ do_detect_zonecut(Zone, AuthLabels, [_ | ParentLabels] = Labels) ->
     end.
 
 complete_response(Msg) ->
-    Msg1 = Msg#dns_message{
+    Msg#dns_message{
         qr = true,
         ad = false,
         cd = false
-    },
-    erldns_records:rewrite_soa_ttl(Msg1).
+    }.
