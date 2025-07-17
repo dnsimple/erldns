@@ -51,7 +51,6 @@ handle(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> [dns:rr()].
     get_versioned_handlers/0,
     call_filters/1,
     call_handlers/4,
-    call_map_nsec_rr_types/1,
     call_map_nsec_rr_types/2
 ]).
 
@@ -65,7 +64,6 @@ handle(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> [dns:rr()].
     fun((dns:message(), dns:labels(), dns:type(), [dns:rr()]) -> [dns:rr()]),
     fun(([dns:rr()]) -> [dns:rr()]),
     fun((dns:type(), dns:type()) -> [dns:type()]),
-    module(),
     [dns:type()],
     integer()
 }.
@@ -101,7 +99,7 @@ call_filters(Records) ->
 
 filter_records(Records, []) ->
     Records;
-filter_records(Records, [{_, Filter, _, _, _, _} | Rest]) ->
+filter_records(Records, [{_, Filter, _, _, _} | Rest]) ->
     filter_records(Filter(Records), Rest).
 
 -doc "Call all registered handlers.".
@@ -114,43 +112,23 @@ call_handlers(Message, QLabels, QType, Records) ->
     fun((...) -> [dns:rr()]).
 call_handlers_fun(Message, QLabels, ?DNS_TYPE_ANY, Records) ->
     fun
-        ({Handler, _, _, _, _, ?MINIMUM_HANDLER_VERSION}) ->
+        ({Handler, _, _, _, ?MINIMUM_HANDLER_VERSION}) ->
             Handler(dns:labels_to_dname(QLabels), ?DNS_TYPE_ANY, Records, Message);
-        ({Handler, _, _, _, _, ?DEFAULT_HANDLER_VERSION}) ->
+        ({Handler, _, _, _, ?DEFAULT_HANDLER_VERSION}) ->
             Handler(Message, QLabels, ?DNS_TYPE_ANY, Records)
     end;
 call_handlers_fun(Message, QLabels, QType, Records) ->
     fun
-        ({Handler, _, _, _, Types, ?MINIMUM_HANDLER_VERSION}) ->
+        ({Handler, _, _, Types, ?MINIMUM_HANDLER_VERSION}) ->
             case lists:member(QType, Types) of
                 true -> Handler(dns:labels_to_dname(QLabels), QType, Records, Message);
                 false -> []
             end;
-        ({Handler, _, _, _, Types, ?DEFAULT_HANDLER_VERSION}) ->
+        ({Handler, _, _, Types, ?DEFAULT_HANDLER_VERSION}) ->
             case lists:member(QType, Types) of
                 true -> Handler(Message, QLabels, QType, Records);
                 false -> []
             end
-    end.
-
--spec call_map_nsec_rr_types([dns:type()]) -> [dns:type()].
-call_map_nsec_rr_types(Types) ->
-    case get_versioned_handlers() of
-        [] ->
-            %% No handlers, return the types as is
-            Types;
-        Handlers ->
-            %% Map the types using the handlers
-            MappedTypes = lists:flatmap(
-                fun(Type) ->
-                    case lists:keyfind([Type], 5, Handlers) of
-                        false -> [Type];
-                        {_, _, _, M, _, _} -> M:nsec_rr_type_mapper(Type)
-                    end
-                end,
-                Types
-            ),
-            lists:usort(MappedTypes)
     end.
 
 -spec call_map_nsec_rr_types(dns:type(), [dns:type()]) -> [dns:type()].
@@ -159,22 +137,18 @@ call_map_nsec_rr_types(QType, Types) ->
     MappedTypes = map_nsec_rr_types(QType, Types, Handlers),
     lists:usort(MappedTypes).
 
--spec map_nsec_rr_types(dns:type(), [dns:type()], [versioned_handler()]) ->
-    [dns:type()].
-map_nsec_rr_types(_QType, Types, []) ->
-    Types;
+-spec map_nsec_rr_types(dns:type(), [dns:type()], [versioned_handler()]) -> [dns:type()].
 map_nsec_rr_types(QType, Types, Handlers) ->
-    lists:flatmap(
-        fun(Type) ->
-            case lists:keyfind([Type], 5, Handlers) of
-                false ->
-                    [Type];
-                {_, _, Mapper, _, _, _} ->
-                    Mapper(Type, QType)
-            end
-        end,
-        Types
-    ).
+    lists:append([
+        case lists:member(Type, HandlerTypes) of
+            false ->
+                [Type];
+            true ->
+                Mapper(QType, Type)
+        end
+     || Type <- Types,
+        {_, _, Mapper, HandlerTypes, _} <- Handlers
+    ]).
 
 -doc "Start the handler registry process".
 -spec start_link() -> gen_server:start_ret().
@@ -237,7 +211,6 @@ prepare_handlers([{Module, RecordTypes, Version} | Rest], Acc) ->
             fun Module:handle/4,
             fun Module:filter/1,
             fun Module:nsec_rr_type_mapper/2,
-            Module,
             RecordTypesNums,
             Version
         },
