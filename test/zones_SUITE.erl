@@ -66,6 +66,7 @@ groups() ->
             is_record_name_in_zone_strict,
             put_zone,
             put_zone_rrset,
+            put_zone_rrset_fetch_soa_match,
             put_zone_rrset_records_count_with_existing_rrset,
             put_zone_rrset_records_count_with_new_rrset,
             put_zone_rrset_records_count_matches_cache,
@@ -737,6 +738,43 @@ put_zone_rrset(_) ->
     ZoneModified = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     % There should be no change in record count
     ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count).
+
+put_zone_rrset_fetch_soa_match(_) ->
+    ZoneName = dns:dname_to_lower(~"put_zone_rrset_fetch_soa_match.com"),
+    SoaData = #dns_rrdata_soa{
+        mname = ~"ns1.put_zone_rrset_fetch_soa_match.com",
+        rname = ~"admin.put_zone_rrset_fetch_soa_match.com",
+        serial = 12345,
+        refresh = 555,
+        retry = 666,
+        expire = 777,
+        minimum = 888
+    },
+    SOA = #dns_rr{
+        name = ZoneName,
+        type = ?DNS_TYPE_SOA,
+        data = SoaData,
+        ttl = 3600
+    },
+    Z = erldns_zone_codec:build_zone(ZoneName, ~"Digest-01", [SOA], []),
+    ?assertMatch(ok, erldns_zone_cache:put_zone(Z)),
+    ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneName),
+    SoaRecordsInCache = erldns_zone_cache:get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA),
+    ?assertMatch(SoaRecordsInCache, ZoneBase#zone.authority),
+    NewSoa = SOA#dns_rr{data = SoaData#dns_rrdata_soa{serial = 12346}},
+    ?assertMatch(
+        ok,
+        erldns_zone_cache:put_zone_rrset(
+            {ZoneName, ~"Digest-02", [NewSoa], []},
+            ~"put_zone_rrset_fetch_soa_match.com",
+            ?DNS_TYPE_SOA,
+            1
+        )
+    ),
+    ZoneModified = erldns_zone_cache:get_authoritative_zone(ZoneName),
+    NewSoaRecordsInCache = erldns_zone_cache:get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA),
+    Comment = #{soa_in_zone => ZoneModified#zone.authority, soa_in_cache => NewSoaRecordsInCache},
+    ?assertMatch(NewSoaRecordsInCache, ZoneModified#zone.authority, Comment).
 
 put_zone_rrset_records_count_with_existing_rrset(_) ->
     ZoneName = dns:dname_to_lower(~"example.com"),
