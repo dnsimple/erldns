@@ -505,7 +505,11 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
 update_zone_records_and_digest(ZLabels, RecordsCount, Digest) ->
     case find_zone_in_cache(ZLabels) of
         #zone{} = Zone ->
-            UpdatedZone = Zone#zone{version = Digest, record_count = RecordsCount},
+            UpdatedZone = Zone#zone{
+                version = Digest,
+                authority = get_records_by_name_and_type(Zone, ZLabels, ?DNS_TYPE_SOA),
+                record_count = RecordsCount
+            },
             true = insert_zone(UpdatedZone),
             ok;
         zone_not_found ->
