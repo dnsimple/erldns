@@ -15,7 +15,7 @@ This application consists of three main subsystems:
 The system responsible for loading and caching zone data.
 
 - `m:erldns_pipeline`
-The system responsible for processing incoming DNS queries.
+The system responsible for processing incoming DNS queries, including resolution and any extension thereof.
 
 - `m:erldns_listeners`
 The system responsible for listening for incoming DNS queries. The system is designed to be able to listen on multiple ports and interfaces and supports both UDP and TCP, Unix network stack optimisations, and high parallelism.
