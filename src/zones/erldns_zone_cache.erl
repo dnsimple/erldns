@@ -371,15 +371,15 @@ put_zone({Name, Sha, Records, Keys}) ->
     Type :: dns:type(),
     Counter :: integer().
 put_zone_rrset(
-    #zone{name = ZoneName, version = Digest, records = Records, keysets = KeySets},
+    #zone{name = ZoneName, version = Digest, records = Records},
     RRFqdn,
     Type,
     Counter
 ) ->
-    put_zone_rrset({ZoneName, Digest, Records, KeySets}, RRFqdn, Type, Counter);
+    put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter);
+put_zone_rrset({ZoneName, Digest, Records, _}, RRFqdn, Type, Counter) ->
+    put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter);
 put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter) ->
-    put_zone_rrset({ZoneName, Digest, Records, []}, RRFqdn, Type, Counter);
-put_zone_rrset({ZoneName, Digest, Records, _Keys}, RRFqdn, Type, Counter) ->
     NormalizedZoneName = dns:dname_to_lower(ZoneName),
     ZQLabels = dns:dname_to_labels(NormalizedZoneName),
     case find_zone_in_cache(ZQLabels) of
