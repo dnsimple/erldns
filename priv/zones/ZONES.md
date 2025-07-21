@@ -14,6 +14,26 @@ You can place your custom zones files inside the `priv/zones/local` directory. T
 
 A JSON zone file contains an array of 1 or more zones. Each zone has a name and an array of records. Each record has a name, type, ttl and data field. The data field contains a JSON object with one or more attributes that are appropriate for the specific record type.
 
+### Contexts
+
+Each record can optionally contain a `context` field, that can be used to restrict the record to a specific context, as configured by the context options in the node.
+
+For example, if you have multiple nodes across many datacentres, and one of them, deployed in a datacenter in Amsterdam, declares the following section in the config:
+
+```erlang
+{erldns, [
+    {zones, #{
+        context_options => #{match_empty => true, allow => [<<"AMS">>]}
+    }},
+]}
+```
+
+You can then declare a JSON entry with `"context": ["AMS"]`, and this specific record will be loaded _only_ in the node that is configured as deployed in Amsterdam, and not in others.
+
+Note that these strings are opaque to `erldns`, and you can use any string you want, as long as there's a sensible matching between the configuration and the values in the JSON entry.
+
+`match_empty` means if a record with an empty context should match by default.
+
 ### Example
 
 The follow is an example of a collection of zones with a single zone in the collection:
