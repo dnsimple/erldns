@@ -1,6 +1,10 @@
 -module(erldns_dnssec).
 -moduledoc """
 DNSSEC implementation.
+
+If you want to enable DNSSEC, you need to add this module to the packet pipeline _after_ a resolver,
+that being an authoritative (e.g. `m:erldns_resolver`) or recursive
+(e.g. `m:erldns_resolver_recursive`).
 """.
 
 -include_lib("dns_erlang/include/dns.hrl").

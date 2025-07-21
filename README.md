@@ -107,7 +107,7 @@ If you want to perform some benchmarks, see [`benchmarking`](./BENCHMARKING.md).
 
 ### AXFR Support
 
-AXFR zone transfers are not currently implemented. The current "implementation" is just a stub.
+AXFR zone transfers are not currently implemented. The current "implementation" (`m:erldns_axfr`) is just a stub.
 
 ## Tests
 
