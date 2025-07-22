@@ -31,6 +31,7 @@ against potential DoS attacks through oversized packets.
 
 -export([call/2]).
 
+-doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> dns:message().
 call(#dns_message{} = Msg, #{transport := udp}) ->
     normalize_edns_max_payload_size(Msg);
