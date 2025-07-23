@@ -88,8 +88,8 @@ record_filter() ->
 %% then it will be included in the zone
 -spec apply_context_options(dynamic()) -> boolean().
 apply_context_options(#{~"context" := Context}) ->
-    case application:get_env(erldns, context_options) of
-        {ok, ContextOptions} when is_map(ContextOptions) ->
+    case application:get_env(erldns, zones, #{}) of
+        #{context_options := ContextOptions} when is_map(ContextOptions) ->
             apply_context_match_empty_check(
                 maps:get(match_empty, ContextOptions, false), Context
             ) orelse

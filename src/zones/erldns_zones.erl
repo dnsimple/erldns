@@ -18,7 +18,8 @@ For more details about its subsections, see:
     {zones, #{
         path => "zones.json",
         strict => true,
-        codecs => [sample_custom_zone_codec]
+        codecs => [sample_custom_zone_codec],
+        context_options => #{match_empty => true, allow => [<<"anycast">>, <<"AMS">>, <<"TKO">>]}
     }},
 ]}
 ```
@@ -34,11 +35,18 @@ If a path is configured and `strict` is true, and the path is not resolvable, it
 See `m:erldns_zone_loader` for more details.
 
 Codecs are a list of modules that implement the `m:erldns_zone_codec` behaviour.
+
+Context options allow you to filter loading certain records in a zone depending on configuration
+details. See [`ZONES`](priv/zones/ZONES.md) for more details.
 """.
 -type config() :: #{
     path => undefined | file:name(),
     strict => boolean(),
-    codecs => [module()]
+    codecs => [module()],
+    context_options => #{
+        match_empty => boolean(),
+        allow => [binary()]
+    }
 }.
 -type version() :: binary().
 -export_type([config/0, version/0]).
