@@ -138,8 +138,8 @@ This callback can return
 - a possibly new `t:dns:message/0`;
 - a tuple containing a new `t:dns:message/0` and a new set of `t:opts/0`;
 - a tuple `{stop, t:dns:message/0}` tuple to stop the pipeline execution altogether.
-- a `halt` atom, in which case the pipeline will be halted and no further pipes will be executed,
-    and the socket workers won't respond nor trigger any events and it's fully the responsibility of
+- a `halt` atom, in which case the pipeline will be halted and no further pipes will be executed.
+    The socket workers won't respond nor trigger any events, and it's fully the responsibility of
     a handler to deal with all the edge cases. This could be useful for either dropping the request
     entirely, or for stealing the request from a given worker to answer separately.
     Note that the pipe options will contain the UDP or TCP socket to answer to, so in the case
