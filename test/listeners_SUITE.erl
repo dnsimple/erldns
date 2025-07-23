@@ -6,29 +6,49 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 
+-define(INGRESS_TIMEOUT, 50).
+-define(UDP_LISTENER_NAME, udp_listener).
+-define(TCP_LISTENER_NAME, tcp_listener).
+
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
     [
-        name_must_be_atom,
-        port_must_be_inet_port,
-        transport_must_be_tcp_udp_or_both,
-        p_factor_must_be_positive,
-        ip_must_be_inet_parseable,
-        tcp_in_pieces,
-        tcp_closed,
-        tcp_overrun,
-        udp_overrun,
-        udp_drop_packets,
-        tcp_drop_packets,
-        udp_reactivate,
-        udp_coverage,
+        {group, configuration},
+        {group, udp},
+        {group, tcp},
         sched_mon_coverage,
-        udp_encoder_failure,
-        tcp_encoder_failure,
-        stats,
-        udp_load_shedding,
-        tcp_load_shedding,
-        reset_queues
+        reset_queues,
+        stats
+    ].
+
+-spec groups() -> [ct_suite:ct_group_def()].
+groups() ->
+    [
+        {configuration, [sequence], [
+            name_must_be_atom,
+            port_must_be_inet_port,
+            transport_must_be_tcp_udp_or_both,
+            p_factor_must_be_positive,
+            ip_must_be_inet_parseable
+        ]},
+        {udp, [], [
+            udp_halted,
+            udp_overrun,
+            udp_drop_packets,
+            udp_reactivate,
+            udp_coverage,
+            udp_encoder_failure,
+            udp_load_shedding
+        ]},
+        {tcp, [sequence], [
+            tcp_halted,
+            tcp_closed,
+            tcp_overrun,
+            tcp_drop_packets,
+            tcp_encoder_failure,
+            tcp_load_shedding,
+            tcp_in_pieces
+        ]}
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -38,7 +58,41 @@ init_per_suite(Config) ->
 
 -spec end_per_suite(ct_suite:ct_config()) -> term().
 end_per_suite(_) ->
-    [application:stop(App) || App <- [ranch, worker_pool, telemetry]].
+    [application:stop(App) || App <- [ranch, worker_pool, telemetry]],
+    application:unset_env(erldns, ingress_udp_request_timeout),
+    application:unset_env(erldns, ingress_tcp_request_timeout),
+    application:unset_env(erldns, packet_pipeline),
+    application:unset_env(erldns, listeners).
+
+-spec init_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> ct_suite:ct_config().
+init_per_group(udp, Config) ->
+    AppConfig = [
+        {erldns, [
+            {listeners, [#{name => ?UDP_LISTENER_NAME, transport => udp, port => 8053}]},
+            {ingress_udp_request_timeout, ?INGRESS_TIMEOUT}
+        ]}
+    ],
+    application:set_env(AppConfig),
+    Config;
+init_per_group(tcp, Config) ->
+    AppConfig = [
+        {erldns, [
+            {listeners, [#{name => ?TCP_LISTENER_NAME, transport => tcp, port => 8053}]},
+            {ingress_tcp_request_timeout, ?INGRESS_TIMEOUT}
+        ]}
+    ],
+    application:set_env(AppConfig),
+    Config;
+init_per_group(_, Config) ->
+    Config.
+
+-spec end_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> term().
+end_per_group(udp, _Config) ->
+    ok;
+end_per_group(tcp, _Config) ->
+    ok;
+end_per_group(_, _Config) ->
+    ok.
 
 -spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_testcase(_, Config) ->
@@ -146,15 +200,66 @@ ip_must_be_inet_parseable(_) ->
     application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, ip => "0.0.0.0", port => 0}]),
     ?assertMatch({ok, _}, erldns_listeners:start_link()).
 
+udp_halted(_) ->
+    prepare_test(?FUNCTION_NAME, timeout, [fun halting_pipe/2]),
+    Packet = packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, 8053, Packet),
+    {error, timeout} = gen_udp:recv(Socket, 65535, 500),
+    assert_no_telemetry_event().
+
+udp_overrun(_) ->
+    prepare_test(?FUNCTION_NAME, timeout, [fun sleeping_pipe/2]),
+    Packet = packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, 8053, Packet),
+    assert_telemetry_event(timeout),
+    ok.
+
+udp_drop_packets(_) ->
+    prepare_test(?FUNCTION_NAME, dropped, [fun pause_pipe/2]),
+    Iterations = 500,
+    Packet = packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    [ok = gen_udp:send(Socket, {127, 0, 0, 1}, 8053, Packet) || _ <- lists:seq(1, Iterations)],
+    assert_telemetry_event(dropped).
+
+udp_reactivate(_) ->
+    prepare_test(?FUNCTION_NAME, dropped, []),
+    Iterations = 5000,
+    Packet = packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    [request_response(udp, Socket, Packet) || _ <- lists:seq(1, Iterations)].
+
+udp_coverage(_) ->
+    prepare_test(?FUNCTION_NAME, timeout, []),
+    Children = supervisor:which_children(erldns_listeners),
+    {_, Me, _, _} = lists:keyfind(?UDP_LISTENER_NAME, 1, Children),
+    [{_, AccSup, _, _}, {WorkersPool, _, _, _}] = supervisor:which_children(Me),
+    [{_, AcceptorPid, _, _} | _] = supervisor:which_children(AccSup),
+    gen_server:call(AcceptorPid, anything),
+    gen_server:cast(AcceptorPid, anything),
+    erlang:send(AcceptorPid, anything),
+    wpool:call(WorkersPool, anything, random_worker),
+    wpool:cast(WorkersPool, anything, random_worker),
+    wpool_pool:random_worker(WorkersPool) ! anything.
+
+udp_encoder_failure(_) ->
+    prepare_test(?FUNCTION_NAME, timeout, [fun bad_record/2]),
+    Packet = packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    Response = request_response(udp, Socket, Packet),
+    ?assertEqual(?DNS_RCODE_SERVFAIL, Response#dns_message.rc, Response).
+
+udp_load_shedding(_) ->
+    [spawn_link(fun waste_fun/0) || _ <- lists:seq(1, erlang:system_info(schedulers))],
+    prepare_test(?FUNCTION_NAME, delayed, [fun sleeping_pipe/2]),
+    [spawn_link(fun bombard_udp_fun/0) || _ <- lists:seq(1, erlang:system_info(schedulers))],
+    assert_telemetry_event(delayed).
+
 tcp_in_pieces(_) ->
-    attach_to_telemetry(?FUNCTION_NAME, timeout, self()),
     application:set_env(erldns, ingress_tcp_request_timeout, 1000),
-    application:set_env(erldns, listeners, [
-        #{name => ?FUNCTION_NAME, transport => tcp, port => 8053}
-    ]),
-    application:set_env(erldns, packet_pipeline, []),
-    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
-    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    prepare_test(?FUNCTION_NAME, timeout, []),
     Packet = packet(),
     P1 = binary:part(Packet, 0, 10),
     P2 = binary:part(Packet, 10, byte_size(Packet) - 10),
@@ -170,14 +275,7 @@ tcp_in_pieces(_) ->
     ?assertMatch(#dns_message{}, Response).
 
 tcp_closed(_) ->
-    attach_to_telemetry(?FUNCTION_NAME, timeout, self()),
-    application:set_env(erldns, ingress_tcp_request_timeout, 50),
-    application:set_env(erldns, listeners, [
-        #{name => ?FUNCTION_NAME, transport => tcp, port => 8053}
-    ]),
-    application:set_env(erldns, packet_pipeline, [fun sleeping_pipe/2]),
-    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
-    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    prepare_test(?FUNCTION_NAME, timeout, [fun sleeping_pipe/2]),
     {ok, Socket1} = gen_tcp:connect(
         {127, 0, 0, 1}, 8053, [binary, {packet, raw}, {active, false}], 1000
     ),
@@ -189,148 +287,48 @@ tcp_closed(_) ->
     ok = gen_tcp:close(Socket2),
     assert_no_telemetry_event().
 
-tcp_overrun(_) ->
-    attach_to_telemetry(?FUNCTION_NAME, timeout, self()),
+tcp_halted(_) ->
+    prepare_test(?FUNCTION_NAME, timeout, [fun halting_pipe/2]),
     Packet = packet(),
-    application:set_env(erldns, ingress_tcp_request_timeout, 50),
-    application:set_env(erldns, listeners, [
-        #{name => ?FUNCTION_NAME, transport => tcp, port => 8053}
-    ]),
-    application:set_env(erldns, packet_pipeline, [fun sleeping_pipe/2]),
-    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
-    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    {ok, Socket1} = gen_tcp:connect(
+        {127, 0, 0, 1}, 8053, [binary, {packet, raw}, {active, false}], 1000
+    ),
+    ok = gen_tcp:send(Socket1, [<<(byte_size(Packet)):16>>, Packet]),
+    {error, closed} = gen_tcp:recv(Socket1, 0, 2000),
+    assert_no_telemetry_event().
+
+tcp_overrun(_) ->
+    prepare_test(?FUNCTION_NAME, timeout, [fun sleeping_pipe/2]),
+    Packet = packet(),
     {ok, Socket1} = gen_tcp:connect(
         {127, 0, 0, 1}, 8053, [binary, {packet, 2}, {active, false}], 1000
     ),
     ok = gen_tcp:send(Socket1, Packet),
     assert_telemetry_event(timeout).
 
-udp_overrun(_) ->
-    attach_to_telemetry(?FUNCTION_NAME, timeout, self()),
-    Packet = packet(),
-    application:set_env(erldns, ingress_udp_request_timeout, 50),
-    application:set_env(erldns, listeners, [
-        #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
-    ]),
-    application:set_env(erldns, packet_pipeline, [fun sleeping_pipe/2]),
-    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
-    ?assertMatch({ok, _}, erldns_listeners:start_link()),
-    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
-    ok = gen_udp:send(Socket, {127, 0, 0, 1}, 8053, Packet),
-    assert_telemetry_event(timeout),
-    ok.
-
 tcp_drop_packets(_) ->
-    attach_to_telemetry(?FUNCTION_NAME, timeout, self()),
-    AppConfig = [
-        {erldns, [
-            {listeners, [#{name => ?FUNCTION_NAME, transport => tcp, port => 8053}]},
-            {packet_pipeline, [fun sleeping_pipe/2]},
-            {ingress_tcp_request_timeout, 50}
-        ]}
-    ],
-    application:set_env(AppConfig),
-    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
-    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    prepare_test(?FUNCTION_NAME, timeout, [fun sleeping_pipe/2]),
     _ = [
         spawn_link(fun bombard_tcp_fun/0)
      || _ <- lists:seq(1, erlang:system_info(schedulers))
     ],
     assert_telemetry_event(timeout).
 
-udp_drop_packets(_) ->
-    Iterations = 500,
-    attach_to_telemetry(?FUNCTION_NAME, dropped, self()),
-    Packet = packet(),
-    AppConfig = [
-        {erldns, [
-            {listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]},
-            {packet_pipeline, [fun pause_pipe/2]},
-            {ingress_udp_request_timeout, 50}
-        ]}
-    ],
-    application:set_env(AppConfig),
-    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
-    ?assertMatch({ok, _}, erldns_listeners:start_link()),
-    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
-    [ok = gen_udp:send(Socket, {127, 0, 0, 1}, 8053, Packet) || _ <- lists:seq(1, Iterations)],
-    assert_telemetry_event(dropped).
-
-udp_load_shedding(_) ->
-    attach_to_telemetry(?FUNCTION_NAME, delayed, self()),
-    AppConfig = [
-        {erldns, [
-            {listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]},
-            {packet_pipeline, [fun sleeping_pipe/2]},
-            {ingress_udp_request_timeout, 50}
-        ]}
-    ],
-    application:set_env(AppConfig),
-    [spawn_link(fun waste_fun/0) || _ <- lists:seq(1, erlang:system_info(schedulers))],
-    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
-    ?assertMatch({ok, _}, erldns_listeners:start_link()),
-    [spawn_link(fun bombard_udp_fun/0) || _ <- lists:seq(1, erlang:system_info(schedulers))],
-    assert_telemetry_event(delayed).
-
 tcp_load_shedding(_) ->
-    attach_to_telemetry(?FUNCTION_NAME, delayed, self()),
-    AppConfig = [
-        {erldns, [
-            {listeners, [#{name => ?FUNCTION_NAME, transport => tcp, port => 8053}]},
-            {packet_pipeline, [fun sleeping_pipe/2]},
-            {ingress_tcp_request_timeout, 50}
-        ]}
-    ],
-    application:set_env(AppConfig),
     _ = [spawn_link(fun waste_fun/0) || _ <- lists:seq(1, erlang:system_info(schedulers))],
-    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
-    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    prepare_test(?FUNCTION_NAME, delayed, [fun sleeping_pipe/2]),
     _ = [
         spawn_link(fun bombard_tcp_fun/0)
      || _ <- lists:seq(1, erlang:system_info(schedulers))
     ],
     assert_telemetry_event(delayed).
 
-udp_reactivate(_) ->
-    Iterations = 5000,
-    Packet = packet(),
-    application:set_env(erldns, ingress_udp_request_timeout, 50),
-    application:set_env(erldns, listeners, [
-        #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
-    ]),
-    application:set_env(erldns, packet_pipeline, []),
-    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
-    ?assertMatch({ok, _}, erldns_listeners:start_link()),
-    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
-    [request_response(udp, Socket, Packet) || _ <- lists:seq(1, Iterations)].
-
-udp_coverage(_) ->
-    AppConfig = [
-        {erldns, [
-            {listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 8053}]},
-            {packet_pipeline, []},
-            {ingress_udp_request_timeout, 50}
-        ]}
-    ],
-    application:set_env(AppConfig),
-    ?assertMatch({ok, _}, erldns_listeners:start_link()),
-    Children = supervisor:which_children(erldns_listeners),
-    {_, Me, _, _} = lists:keyfind(?FUNCTION_NAME, 1, Children),
-    [{_, AccSup, _, _}, {WorkersPool, _, _, _}] = supervisor:which_children(Me),
-    [{_, AcceptorPid, _, _} | _] = supervisor:which_children(AccSup),
-    gen_server:call(AcceptorPid, anything),
-    gen_server:cast(AcceptorPid, anything),
-    erlang:send(AcceptorPid, anything),
-    wpool:call(WorkersPool, anything, random_worker),
-    wpool:cast(WorkersPool, anything, random_worker),
-    wpool_pool:random_worker(WorkersPool) ! anything.
-
 sched_mon_coverage(_) ->
     AppConfig = [
         {erldns, [
             {listeners, []},
             {packet_pipeline, []},
-            {ingress_udp_request_timeout, 50}
+            {ingress_udp_request_timeout, ?INGRESS_TIMEOUT}
         ]}
     ],
     application:set_env(AppConfig),
@@ -344,10 +342,7 @@ sched_mon_coverage(_) ->
 
 tcp_encoder_failure(_) ->
     Packet = packet(),
-    application:set_env(erldns, ingress_udp_request_timeout, 50),
-    application:set_env(erldns, listeners, [
-        #{name => ?FUNCTION_NAME, transport => tcp, port => 8053}
-    ]),
+    application:set_env(erldns, ingress_udp_request_timeout, ?INGRESS_TIMEOUT),
     application:set_env(erldns, packet_pipeline, [fun bad_record/2]),
     ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
@@ -355,20 +350,6 @@ tcp_encoder_failure(_) ->
         {127, 0, 0, 1}, 8053, [binary, {packet, 2}, {active, false}], 1000
     ),
     Response = request_response(tcp, Socket, Packet),
-    ct:pal("Value ~p~n", [Response]),
-    ?assertEqual(?DNS_RCODE_SERVFAIL, Response#dns_message.rc).
-
-udp_encoder_failure(_) ->
-    Packet = packet(),
-    application:set_env(erldns, ingress_udp_request_timeout, 50),
-    application:set_env(erldns, listeners, [
-        #{name => ?FUNCTION_NAME, transport => udp, port => 8053}
-    ]),
-    application:set_env(erldns, packet_pipeline, [fun bad_record/2]),
-    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
-    ?assertMatch({ok, _}, erldns_listeners:start_link()),
-    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
-    Response = request_response(udp, Socket, Packet),
     ct:pal("Value ~p~n", [Response]),
     ?assertEqual(?DNS_RCODE_SERVFAIL, Response#dns_message.rc).
 
@@ -464,6 +445,9 @@ sleeping_pipe(A, _) ->
     ct:sleep(500),
     A.
 
+halting_pipe(_, _) ->
+    halt.
+
 bad_record(A, _) ->
     A#dns_message{authority = [#dns_query{}]}.
 
@@ -497,3 +481,9 @@ packet() ->
     Q = #dns_query{name = ~"example.com", type = ?DNS_TYPE_A},
     Msg = #dns_message{qc = 1, questions = [Q]},
     dns:encode_message(Msg).
+
+prepare_test(Name, TelemetryEvent, Pipeline) ->
+    application:set_env(erldns, packet_pipeline, Pipeline),
+    attach_to_telemetry(Name, TelemetryEvent, self()),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()).
