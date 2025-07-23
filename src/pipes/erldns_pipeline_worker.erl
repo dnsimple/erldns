@@ -28,4 +28,4 @@ handle_cast(_, nostate) ->
 
 -spec terminate(term(), nostate) -> term().
 terminate(_, nostate) ->
-    persistent_term:erase(erldns_pipeline).
+    erldns_pipeline:delete_pipeline(erldns_pipeline).

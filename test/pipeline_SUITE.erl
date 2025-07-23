@@ -19,6 +19,7 @@ all() ->
         configure_module_pipes_with_prepare_returns_disable,
         configure_module_pipes_with_prepare,
         fail_to_configure_non_existing_module_pipe,
+        configure_custom_pipeline,
         configure_module_pipe_without_call,
         pipe_returns_stop,
         pipe_returns_new_msg,
@@ -111,6 +112,17 @@ configure_module_pipes_without_prepare(_) ->
 fail_to_configure_non_existing_module_pipe(_) ->
     application:set_env(erldns, packet_pipeline, [?FUNCTION_NAME]),
     ?assertMatch({error, {{badpipe, {module, nofile}}, _}}, erldns_pipeline_worker:start_link()).
+
+configure_custom_pipeline(_) ->
+    meck:new(?FUNCTION_NAME, [non_strict]),
+    meck:expect(?FUNCTION_NAME, call, fun(Msg, _) -> Msg end),
+    meck:expect(?FUNCTION_NAME, prepare, fun(Opts) -> Opts end),
+    Fun = fun(Msg, _) -> Msg end,
+    erldns_pipeline:store_pipeline(?FUNCTION_NAME, [?FUNCTION_NAME, Fun]),
+    Qs = [#dns_query{name = ~"example.com", type = ?DNS_TYPE_A}],
+    Msg = #dns_message{qc = 1, questions = Qs},
+    ?assertMatch(Msg, erldns_pipeline:call_custom(Msg, def_opts(), ?FUNCTION_NAME)),
+    erldns_pipeline:delete_pipeline(?FUNCTION_NAME).
 
 configure_module_pipe_without_call(_) ->
     meck:new(?FUNCTION_NAME, [non_strict]),

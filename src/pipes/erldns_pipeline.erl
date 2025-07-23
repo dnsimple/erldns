@@ -144,9 +144,8 @@ This callback can return
 
 -behaviour(supervisor).
 
--export([call/2]).
--export([start_link/0, init/1]).
--export([store_pipeline/0]).
+-export([call/2, call_custom/3, store_pipeline/2, delete_pipeline/1]).
+-export([start_link/0, init/1, store_pipeline/0]).
 -ifdef(TEST).
 -export([def_opts/0]).
 -else.
@@ -167,14 +166,57 @@ This callback can return
     erldns_empty_verification
 ]).
 
+-define(LOG_METADATA, #{domain => [erldns, pipeline]}).
+
+-doc """
+Call the main application packet pipeline with the pipes configured in the system configuration.
+""".
 -spec call(dns:message(), #{atom() => dynamic()}) -> dns:message().
 call(Msg, Opts) ->
     ?LOG_DEBUG(
-        #{what => pipeline_triggered, dns_message => Msg, opts => Opts},
-        #{domain => [erldns, pipeline]}
+        #{what => main_pipeline_triggered, dns_message => Msg, opts => Opts},
+        ?LOG_METADATA
     ),
     {Pipeline, DefOpts} = get_pipeline(),
     do_call(Msg, Pipeline, maps:merge(DefOpts, Opts)).
+
+-doc """
+Call a custom pipeline by name.
+
+The pipeline should have been verifiend and stored previously with `store_pipeline/2`.
+""".
+-spec call_custom(dns:message(), #{atom() => dynamic()}, dynamic()) -> dns:message().
+call_custom(Msg, Opts, PipelineName) ->
+    ?LOG_DEBUG(
+        #{
+            what => custom_pipeline_triggered,
+            name => PipelineName,
+            dns_message => Msg,
+            opts => Opts
+        },
+        ?LOG_METADATA
+    ),
+    {Pipeline, DefOpts} = get_pipeline(PipelineName),
+    do_call(Msg, Pipeline, maps:merge(DefOpts, Opts)).
+
+-doc """
+Verify and store a custom pipeline.
+
+Can be used to prepare a custom pipeline that can be triggered using `call_custom/3`.
+""".
+-spec store_pipeline(dynamic(), [module()]) -> ok.
+store_pipeline(PipelineName, Pipes) ->
+    {Pipeline, Opts} = lists:foldl(fun prepare_pipe/2, {[], def_opts()}, Pipes),
+    persistent_term:put(PipelineName, {lists:reverse(Pipeline), Opts}).
+
+-doc """
+Remove a custom pipeline from storage.
+
+Should be used to clean up a custom pipeline stored with `store_pipeline/2`.
+""".
+-spec delete_pipeline(dynamic()) -> term().
+delete_pipeline(PipelineName) ->
+    persistent_term:erase(PipelineName).
 
 -spec do_call(dns:message(), pipeline(), opts()) -> dns:message().
 do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
@@ -195,7 +237,7 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
                     opts => Opts,
                     unexpected_return => Other
                 },
-                #{domain => [erldns, pipeline]}
+                ?LOG_METADATA
             ),
             do_call(Msg, Pipes, Opts)
     catch
@@ -211,7 +253,7 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
                     error => Error,
                     stacktrace => Stacktrace
                 },
-                #{domain => [erldns, pipeline]}
+                ?LOG_METADATA
             ),
             do_call(Msg, Pipes, Opts)
     end;
@@ -247,12 +289,15 @@ worker(Name, Module, Args) ->
 get_pipeline() ->
     persistent_term:get(?MODULE).
 
+-spec get_pipeline(dynamic()) -> {pipeline(), opts()}.
+get_pipeline(PipelineName) ->
+    persistent_term:get(PipelineName).
+
 -doc false.
 -spec store_pipeline() -> ok.
 store_pipeline() ->
     Pipes = application:get_env(erldns, packet_pipeline, ?DEFAULT_PACKET_PIPELINE),
-    {Pipeline, Opts} = lists:foldl(fun prepare_pipe/2, {[], def_opts()}, Pipes),
-    persistent_term:put(?MODULE, {lists:reverse(Pipeline), Opts}).
+    store_pipeline(?MODULE, Pipes).
 
 -spec prepare_pipe(pipe(), {pipeline(), opts()}) -> {pipeline(), opts()}.
 prepare_pipe(Module, {Pipeline, Opts}) when is_atom(Module) ->
@@ -271,7 +316,7 @@ prepare_pipe(Module, {Pipeline, Opts}) when is_atom(Module) ->
                 disabled ->
                     ?LOG_WARNING(
                         #{what => pipe_disabled, module => Module},
-                        #{domain => [erldns, pipeline]}
+                        ?LOG_METADATA
                     ),
                     {Pipeline, Opts};
                 Opts1 when is_map(Opts1) ->
