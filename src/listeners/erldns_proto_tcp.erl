@@ -104,8 +104,13 @@ handle_decoded(_, _, _, #dns_message{qr = true}, _) ->
     {error, not_a_question};
 handle_decoded(Socket, TimerPid, TS0, DecodedMessage, IpAddr) ->
     forward_dp_to_timer(DecodedMessage, TimerPid),
-    InitOpts = #{monotonic_time => TS0, transport => tcp, host => IpAddr},
+    InitOpts = #{monotonic_time => TS0, transport => tcp, socket => Socket, host => IpAddr},
     Response = erldns_pipeline:call(DecodedMessage, InitOpts),
+    handle_pipeline_response(Socket, TimerPid, TS0, Response).
+
+handle_pipeline_response(_, _, _, halt) ->
+    ok;
+handle_pipeline_response(Socket, TimerPid, TS0, #dns_message{} = Response) ->
     EncodedResponse = erldns_encoder:encode_message(Response),
     exit(TimerPid, kill),
     ok = gen_tcp:send(Socket, [<<(byte_size(EncodedResponse)):16>>, EncodedResponse]),

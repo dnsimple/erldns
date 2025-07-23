@@ -111,9 +111,10 @@ call(Msg, _Opts) ->
     resolved := boolean(),
     transport := transport(),
     host := host(),
+    socket := gen_tcp:socket() | {gen_udp:socket(), inet:port_number()},
     atom() => dynamic()
 }.
--type return() :: dns:message() | {dns:message(), opts()} | {stop, dns:message()}.
+-type return() :: halt | dns:message() | {dns:message(), opts()} | {stop, dns:message()}.
 -type pipe() :: module() | fun((dns:message(), opts()) -> return()).
 -type pipeline() :: [fun((dns:message(), opts()) -> return())].
 -export_type([transport/0, host/0, pipe/0, opts/0, return/0]).
@@ -137,16 +138,23 @@ This callback can return
 - a possibly new `t:dns:message/0`;
 - a tuple containing a new `t:dns:message/0` and a new set of `t:opts/0`;
 - a tuple `{stop, t:dns:message/0}` tuple to stop the pipeline execution altogether.
+- a `halt` atom, in which case the pipeline will be halted and no further pipes will be executed.
+    The socket workers won't respond nor trigger any events, and it's fully the responsibility of
+    a handler to deal with all the edge cases. This could be useful for either dropping the request
+    entirely, or for stealing the request from a given worker to answer separately.
+    Note that the pipe options will contain the UDP or TCP socket to answer to, so in the case
+    of UDP the client can be answered using `gen_udp:send/4` with the socket, host and port;
+    and in the case of TCP it would be required to first steal the socket using
+    `gen_tcp:controlling_process/2` so that the connection is not closed.
 """.
 -callback call(dns:message(), opts()) ->
-    dns:message() | {dns:message(), opts()} | {stop, dns:message()}.
+    halt | dns:message() | {dns:message(), opts()} | {stop, dns:message()}.
 -optional_callbacks([prepare/1]).
 
 -behaviour(supervisor).
 
--export([call/2]).
--export([start_link/0, init/1]).
--export([store_pipeline/0]).
+-export([call/2, call_custom/3, store_pipeline/2, delete_pipeline/1]).
+-export([start_link/0, init/1, store_pipeline/0]).
 -ifdef(TEST).
 -export([def_opts/0]).
 -else.
@@ -167,18 +175,63 @@ This callback can return
     erldns_empty_verification
 ]).
 
--spec call(dns:message(), #{atom() => dynamic()}) -> dns:message().
+-define(LOG_METADATA, #{domain => [erldns, pipeline]}).
+
+-doc """
+Call the main application packet pipeline with the pipes configured in the system configuration.
+""".
+-spec call(dns:message(), #{atom() => dynamic()}) -> halt | dns:message().
 call(Msg, Opts) ->
     ?LOG_DEBUG(
-        #{what => pipeline_triggered, dns_message => Msg, opts => Opts},
-        #{domain => [erldns, pipeline]}
+        #{what => main_pipeline_triggered, dns_message => Msg, opts => Opts},
+        ?LOG_METADATA
     ),
     {Pipeline, DefOpts} = get_pipeline(),
     do_call(Msg, Pipeline, maps:merge(DefOpts, Opts)).
 
--spec do_call(dns:message(), pipeline(), opts()) -> dns:message().
+-doc """
+Call a custom pipeline by name.
+
+The pipeline should have been verifiend and stored previously with `store_pipeline/2`.
+""".
+-spec call_custom(dns:message(), #{atom() => dynamic()}, dynamic()) -> halt | dns:message().
+call_custom(Msg, Opts, PipelineName) ->
+    ?LOG_DEBUG(
+        #{
+            what => custom_pipeline_triggered,
+            name => PipelineName,
+            dns_message => Msg,
+            opts => Opts
+        },
+        ?LOG_METADATA
+    ),
+    {Pipeline, DefOpts} = get_pipeline(PipelineName),
+    do_call(Msg, Pipeline, maps:merge(DefOpts, Opts)).
+
+-doc """
+Verify and store a custom pipeline.
+
+Can be used to prepare a custom pipeline that can be triggered using `call_custom/3`.
+""".
+-spec store_pipeline(dynamic(), [module()]) -> ok.
+store_pipeline(PipelineName, Pipes) ->
+    {Pipeline, Opts} = lists:foldl(fun prepare_pipe/2, {[], def_opts()}, Pipes),
+    persistent_term:put(PipelineName, {lists:reverse(Pipeline), Opts}).
+
+-doc """
+Remove a custom pipeline from storage.
+
+Should be used to clean up a custom pipeline stored with `store_pipeline/2`.
+""".
+-spec delete_pipeline(dynamic()) -> term().
+delete_pipeline(PipelineName) ->
+    persistent_term:erase(PipelineName).
+
+-spec do_call(dns:message(), pipeline(), opts()) -> halt | dns:message().
 do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
     try Pipe(Msg, Opts) of
+        halt ->
+            halt;
         #dns_message{} = Msg1 ->
             do_call(Msg1, Pipes, Opts);
         {#dns_message{} = Msg1, Opts1} ->
@@ -195,7 +248,7 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
                     opts => Opts,
                     unexpected_return => Other
                 },
-                #{domain => [erldns, pipeline]}
+                ?LOG_METADATA
             ),
             do_call(Msg, Pipes, Opts)
     catch
@@ -211,7 +264,7 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
                     error => Error,
                     stacktrace => Stacktrace
                 },
-                #{domain => [erldns, pipeline]}
+                ?LOG_METADATA
             ),
             do_call(Msg, Pipes, Opts)
     end;
@@ -247,12 +300,15 @@ worker(Name, Module, Args) ->
 get_pipeline() ->
     persistent_term:get(?MODULE).
 
+-spec get_pipeline(dynamic()) -> {pipeline(), opts()}.
+get_pipeline(PipelineName) ->
+    persistent_term:get(PipelineName).
+
 -doc false.
 -spec store_pipeline() -> ok.
 store_pipeline() ->
     Pipes = application:get_env(erldns, packet_pipeline, ?DEFAULT_PACKET_PIPELINE),
-    {Pipeline, Opts} = lists:foldl(fun prepare_pipe/2, {[], def_opts()}, Pipes),
-    persistent_term:put(?MODULE, {lists:reverse(Pipeline), Opts}).
+    store_pipeline(?MODULE, Pipes).
 
 -spec prepare_pipe(pipe(), {pipeline(), opts()}) -> {pipeline(), opts()}.
 prepare_pipe(Module, {Pipeline, Opts}) when is_atom(Module) ->
@@ -271,7 +327,7 @@ prepare_pipe(Module, {Pipeline, Opts}) when is_atom(Module) ->
                 disabled ->
                     ?LOG_WARNING(
                         #{what => pipe_disabled, module => Module},
-                        #{domain => [erldns, pipeline]}
+                        ?LOG_METADATA
                     ),
                     {Pipeline, Opts};
                 Opts1 when is_map(Opts1) ->
@@ -292,5 +348,6 @@ def_opts() ->
         monotonic_time => 0,
         resolved => false,
         transport => udp,
-        host => undefined
+        host => undefined,
+        socket => undefined
     }.
