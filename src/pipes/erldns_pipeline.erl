@@ -111,6 +111,7 @@ call(Msg, _Opts) ->
     resolved := boolean(),
     transport := transport(),
     host := host(),
+    socket := gen_tcp:socket() | {gen_udp:socket(), inet:port_number()},
     atom() => dynamic()
 }.
 -type return() :: dns:message() | {dns:message(), opts()} | {stop, dns:message()}.
@@ -337,5 +338,6 @@ def_opts() ->
         monotonic_time => 0,
         resolved => false,
         transport => udp,
-        host => undefined
+        host => undefined,
+        socket => undefined
     }.
