@@ -11,7 +11,7 @@ the payload is put into a pipeline of transformations over the DNS message. When
 
 DNS over UDP has traditionally been limited to 512 bytes per message. However, with the introduction of EDNS (Extension Mechanisms for DNS), clients can specify larger UDP payload sizes through the OPT RR (Resource Record) in the additional section of the DNS message.
 
-In `erldns`, we've implemented a pipeline handler that allows to ensure compatibility and prevent potential issues,see `m:erldns_edns_max_payload_size` for details.
+In `erldns`, we've implemented a pipeline handler that allows to ensure compatibility and prevent potential issues, see `m:erldns_edns_max_payload_size` for details.
 
 ## Questions
 

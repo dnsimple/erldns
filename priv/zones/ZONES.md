@@ -16,7 +16,7 @@ A JSON zone file contains an array of 1 or more zones. Each zone has a name and 
 
 ### Contexts
 
-Each record can optionally contain a `context` field, that can be used to restrict the record to a specific context, as configured by the context options in the node.
+Each record can optionally contain a `context` field, that can be used to restrict the record to a specific subset of nodes. These are specified by the `context_options` configuration option of each node. This field is used for global node provisioning, and not part of any DNS specification.
 
 For example, if you have multiple nodes across many datacentres, and one of them, deployed in a datacenter in Amsterdam, declares the following section in the config:
 
