@@ -21,6 +21,7 @@ all() ->
         fail_to_configure_non_existing_module_pipe,
         configure_custom_pipeline,
         configure_module_pipe_without_call,
+        pipe_returns_halt,
         pipe_returns_stop,
         pipe_returns_new_msg,
         pipe_returns_msg_and_opts,
@@ -132,8 +133,16 @@ configure_module_pipe_without_call(_) ->
         erldns_pipeline_worker:start_link()
     ).
 
+pipe_returns_halt(_) ->
+    Qs = [#dns_query{name = ~"example.com", type = ?DNS_TYPE_A}],
+    Msg = #dns_message{qc = 1, questions = Qs},
+    Fun = fun(_, _) -> halt end,
+    application:set_env(erldns, packet_pipeline, [Fun]),
+    ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
+    ?assertMatch(halt, erldns_pipeline:call(Msg, def_opts())).
+
 pipe_returns_stop(_) ->
-    Qs = [#dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A}],
+    Qs = [#dns_query{name = ~"example.com", type = ?DNS_TYPE_A}],
     Msg = #dns_message{qc = 1, questions = Qs},
     Fun = fun(M, _) -> {stop, M#dns_message{tc = true}} end,
     application:set_env(erldns, packet_pipeline, [Fun]),
@@ -142,7 +151,7 @@ pipe_returns_stop(_) ->
     ?assertMatch(#dns_message{tc = true}, erldns_pipeline:call(Msg, def_opts())).
 
 pipe_returns_new_msg(_) ->
-    Qs = [#dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A}],
+    Qs = [#dns_query{name = ~"example.com", type = ?DNS_TYPE_A}],
     Msg = #dns_message{qc = 1, questions = Qs},
     Fun = fun(M, _) -> M#dns_message{tc = true} end,
     application:set_env(erldns, packet_pipeline, [Fun]),
@@ -151,7 +160,7 @@ pipe_returns_new_msg(_) ->
     ?assertMatch(#dns_message{tc = true}, erldns_pipeline:call(Msg, def_opts())).
 
 pipe_returns_msg_and_opts(_) ->
-    Qs = [#dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A}],
+    Qs = [#dns_query{name = ~"example.com", type = ?DNS_TYPE_A}],
     Msg = #dns_message{qc = 1, questions = Qs},
     Fun = fun(M, O) -> {M#dns_message{tc = true}, O#{a => b}} end,
     application:set_env(erldns, packet_pipeline, [Fun]),
@@ -160,7 +169,7 @@ pipe_returns_msg_and_opts(_) ->
     ?assertMatch(#dns_message{tc = true}, erldns_pipeline:call(Msg, def_opts())).
 
 pipe_returns_unexpected_value(_) ->
-    Qs = [#dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A}],
+    Qs = [#dns_query{name = ~"example.com", type = ?DNS_TYPE_A}],
     Msg = #dns_message{qc = 1, questions = Qs},
     Fun = fun(_, _) -> #{} end,
     application:set_env(erldns, packet_pipeline, [Fun]),
@@ -169,7 +178,7 @@ pipe_returns_unexpected_value(_) ->
     ?assertMatch(#dns_message{tc = false}, erldns_pipeline:call(Msg, def_opts())).
 
 pipe_raises(_) ->
-    Qs = [#dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A}],
+    Qs = [#dns_query{name = ~"example.com", type = ?DNS_TYPE_A}],
     Msg = #dns_message{qc = 1, questions = Qs},
     Fun = fun(_, _) -> erlang:error(an_error) end,
     application:set_env(erldns, packet_pipeline, [Fun]),

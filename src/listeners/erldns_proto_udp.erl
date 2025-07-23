@@ -100,6 +100,11 @@ handle_decoded(_, _, _, #dns_message{qr = true}, _) ->
 handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS0) ->
     InitOpts = #{monotonic_time => TS0, transport => udp, socket => {Socket, Port}, host => IpAddr},
     Response = erldns_pipeline:call(DecodedMessage, InitOpts),
+    handle_pipeline_response(Socket, IpAddr, Port, TS0, Response).
+
+handle_pipeline_response(_, _, _, _, halt) ->
+    ok;
+handle_pipeline_response(Socket, IpAddr, Port, TS0, #dns_message{} = Response) ->
     Result = erldns_encoder:encode_message(Response, #{}),
     EncodedResponse =
         case Result of
