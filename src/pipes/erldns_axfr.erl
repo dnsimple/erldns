@@ -28,6 +28,7 @@ AXFR zone transfers are not currently implemented. The current "implementation" 
 -export([call/2]).
 -export([is_enabled/2]).
 
+-doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> dns:message().
 call(#dns_message{questions = Questions} = Msg, _) ->
     %% If the message is an AXFR request then append the SOA record.
@@ -38,18 +39,17 @@ call(#dns_message{questions = Questions} = Msg, _) ->
             Msg
     end.
 
-%% Determine if AXFR is enabled for the given request host.
+-doc "Determine if AXFR is enabled for the given request host.".
+-spec is_enabled(_, _) -> boolean().
 is_enabled(Host, Metadata) ->
-    MatchingMetadata =
-        lists:filter(
-            fun(MetadataRow) ->
-                [_Id, _DomainId, Kind, Content] = MetadataRow,
-                {ok, AllowedAddress} = inet_parse:address(binary_to_list(Content)),
-                AllowedAddress =:= Host andalso Kind =:= <<"axfr">>
-            end,
-            Metadata
-        ),
-    length(MatchingMetadata) > 0.
+    lists:any(
+        fun(MetadataRow) ->
+            [_Id, _DomainId, Kind, Content] = MetadataRow,
+            {ok, AllowedAddress} = inet_parse:address(binary_to_list(Content)),
+            AllowedAddress =:= Host andalso Kind =:= <<"axfr">>
+        end,
+        Metadata
+    ).
 
 append_soa(Message, []) ->
     Message;

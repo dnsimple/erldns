@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v8.0.0-rc5
+
 - Documentation improvements (#267)
 - Separate edns payload size over UDP as a configurable pipe (#267)
 - Extend pipelines with halt and secondary pipelines (#268)

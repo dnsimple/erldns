@@ -1,4 +1,5 @@
 -module(erldns_proto_udp_acceptor_sup).
+-moduledoc false.
 
 -behaviour(supervisor).
 
