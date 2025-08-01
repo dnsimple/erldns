@@ -353,6 +353,41 @@ json_record_to_erlang(#{
     end;
 json_record_to_erlang(#{
     ~"name" := Name,
+    ~"type" := Type = ~"TLSA",
+    ~"ttl" := Ttl,
+    ~"data" := Data
+}) ->
+    try binary:decode_hex(maps:get(~"certificate", Data)) of
+        Certificate ->
+            #dns_rr{
+                name = Name,
+                type = ?DNS_TYPE_TLSA,
+                data =
+                    #dns_rrdata_tlsa{
+                        usage = maps:get(~"usage", Data),
+                        selector = maps:get(~"selector", Data),
+                        matching_type = maps:get(~"matching_type", Data),
+                        certificate = Certificate
+                    },
+                ttl = Ttl
+            }
+    catch
+        Class:Reason ->
+            ?LOG_ERROR(
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => Type,
+                    data => Data,
+                    class => Class,
+                    reason => Reason
+                },
+                #{domain => [erldns, zones]}
+            ),
+            not_implemented
+    end;
+json_record_to_erlang(#{
+    ~"name" := Name,
     ~"type" := Type = ~"CDS",
     ~"ttl" := Ttl,
     ~"data" := Data

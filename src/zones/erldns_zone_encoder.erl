@@ -110,6 +110,8 @@ encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_CDNSKEY, ttl = Ttl, d
     encode_record(Name, Type, Ttl, Data);
 encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_RRSIG, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_TLSA, ttl = Ttl, data = Data}) ->
+    encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
     ?LOG_WARNING(
         #{what => unable_to_encode_record, record => Record},
@@ -242,6 +244,15 @@ encode_data(
                 Signature
             ]
         )
+    );
+encode_data(#dns_rrdata_tlsa{
+    usage = Usage,
+    selector = Selector,
+    matching_type = MatchingType,
+    certificate = Certificate
+}) ->
+    escape_chars(
+        io_lib:format("~w ~w ~w ~s", [Usage, Selector, MatchingType, Certificate])
     );
 encode_data(Data) ->
     ?LOG_INFO(
