@@ -1279,7 +1279,7 @@ input() ->
             "matching_type": 1,
             "certificate": "DE38C1C08EB239D76B45DA575C70151CE7DA13A935BF5FB887B4E43664D6F728"
           },
-          "name": "_443._tcp.exmaple.com",
+          "name": "_443._tcp.example.com",
           "ttl": 3600,
           "type": "TLSA"
         }
