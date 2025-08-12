@@ -26,10 +26,14 @@ See the type `t:erldns_zones:config/0` for details.
 -doc "Load zones.".
 -spec load_zones() -> non_neg_integer().
 load_zones() ->
-    ?LOG_INFO(#{what => loading_zones_from_local_files}, #{domain => [erldns, zones]}),
     Count =
         case get_config() of
             #{path := Path, strict := Strict} ->
+                ?LOG_INFO(
+                    #{what => loading_zones_from_local_files, path => Path, strict => Strict}, #{
+                        domain => [erldns, zones]
+                    }
+                ),
                 load_zones(Strict, Path);
             _ ->
                 0

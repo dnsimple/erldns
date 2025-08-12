@@ -46,6 +46,7 @@ groups() ->
             json_record_a_to_erlang,
             json_record_aaaa_to_erlang,
             json_record_cds_to_erlang,
+            json_record_tlsa_to_erlang,
             parse_json_keys_unsorted_proplists_time_unit,
             parse_json_keys_unsorted_proplists
         ]},
@@ -395,6 +396,38 @@ json_record_cds_to_erlang(_) ->
                 ~"alg" => 8,
                 ~"digest" =>
                     ~"4315A7AD09AE0BEBA6CC3104BBCD88000ED796887F1C4D520A3A608D715B72CA"
+            },
+            ~"context" => null
+        })
+    ).
+
+json_record_tlsa_to_erlang(_) ->
+    Name = ~"example-dnssec.com",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_TLSA,
+            data =
+                #dns_rrdata_tlsa{
+                    usage = 3,
+                    selector = 1,
+                    matching_type = 1,
+                    certificate = binary:decode_hex(
+                        ~"DE38C1C08EB239D76B45DA575C70151CE7DA13A935BF5FB887B4E43664D6F728"
+                    )
+                },
+            ttl = 3600
+        },
+        erldns_zone_parser:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"TLSA",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"usage" => 3,
+                ~"selector" => 1,
+                ~"matching_type" => 1,
+                ~"certificate" =>
+                    ~"DE38C1C08EB239D76B45DA575C70151CE7DA13A935BF5FB887B4E43664D6F728"
             },
             ~"context" => null
         })
@@ -1237,6 +1270,18 @@ input() ->
           "name": "example.com",
           "ttl": 3600,
           "type": "CDS"
+        },
+        {
+          "context": [],
+          "data": {
+            "usage": 3,
+            "selector": 1,
+            "matching_type": 1,
+            "certificate": "DE38C1C08EB239D76B45DA575C70151CE7DA13A935BF5FB887B4E43664D6F728"
+          },
+          "name": "_443._tcp.example.com",
+          "ttl": 3600,
+          "type": "TLSA"
         }
       ],
       "keys": [
