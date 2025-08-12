@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v8.0.0-rc6
+
+- Add TLSA record support (#270)
+
 ## v8.0.0-rc5
 
 - Documentation improvements (#267)
