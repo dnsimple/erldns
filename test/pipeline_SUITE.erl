@@ -5,6 +5,7 @@
 
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
+-define(PIPELINE_ERROR_EVENT, [erldns, pipeline, error]).
 
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
@@ -28,6 +29,16 @@ all() ->
         pipe_returns_unexpected_value,
         pipe_raises
     ].
+
+-spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
+init_per_suite(Config) ->
+    application:ensure_all_started([telemetry]),
+    ok = telemetry:attach(?MODULE, ?PIPELINE_ERROR_EVENT, fun ?MODULE:telemetry_handler/4, []),
+    Config.
+
+-spec end_per_suite(ct_suite:ct_config()) -> term().
+end_per_suite(_) ->
+    application:stop(telemetry).
 
 -spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_testcase(_, Config) ->
@@ -169,7 +180,8 @@ pipe_returns_unexpected_value(_) ->
     application:set_env(erldns, packet_pipeline, [Fun]),
     ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({[_], #{}}, persistent_term:get(erldns_pipeline, undefined)),
-    ?assertMatch(#dns_message{tc = false}, erldns_pipeline:call(Msg, def_opts())).
+    ?assertMatch(#dns_message{tc = false}, erldns_pipeline:call(Msg, def_opts())),
+    assert_telemetry_event().
 
 pipe_raises(_) ->
     Msg = example_msg(),
@@ -177,7 +189,20 @@ pipe_raises(_) ->
     application:set_env(erldns, packet_pipeline, [Fun]),
     ?assertMatch({ok, _}, erldns_pipeline_worker:start_link()),
     ?assertMatch({[_], #{}}, persistent_term:get(erldns_pipeline, undefined)),
-    ?assertMatch(#dns_message{tc = false}, erldns_pipeline:call(Msg, def_opts())).
+    ?assertMatch(#dns_message{tc = false}, erldns_pipeline:call(Msg, def_opts())),
+    assert_telemetry_event().
+
+telemetry_handler(EventName, _, _, _) ->
+    ct:pal("EventName ~p~n", [EventName]),
+    self() ! EventName.
+
+assert_telemetry_event() ->
+    receive
+        ?PIPELINE_ERROR_EVENT ->
+            ok
+    after 1000 ->
+        ct:fail("Telemetry event not triggered: questions")
+    end.
 
 def_opts() ->
     erldns_pipeline:def_opts().
