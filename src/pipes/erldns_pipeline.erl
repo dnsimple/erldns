@@ -70,6 +70,27 @@ The API expected by a module pipe is defined as a behaviour by this module.
 ]}
 ```
 
+## Telemetry events
+
+Emits the following telemetry events:
+
+### `[erldns, pipeline, error]`
+- Measurements:
+```erlang
+count := non_neg_integer()
+```
+- Metadata:
+If it is an exception, the metadata will contain:
+```erlang
+kind => exit | error | throw
+reason => term()
+stacktrace => [term()]
+```
+otherwise, it will contain:
+```erlang
+reason => term()
+```
+
 ## Examples
 
 Here's an example of a function pipe that arbitrarily sets the truncated bit
@@ -239,7 +260,7 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
         {stop, #dns_message{} = Msg1} ->
             Msg1;
         Other ->
-            telemetry:execute([erldns, pipeline, error], #{count => 1}, #{}),
+            telemetry:execute([erldns, pipeline, error], #{count => 1}, #{reason => Other}),
             ?LOG_ERROR(
                 #{
                     what => pipe_failed_with_invalid_return,
@@ -253,7 +274,8 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
             do_call(Msg, Pipes, Opts)
     catch
         Class:Error:Stacktrace ->
-            telemetry:execute([erldns, pipeline, error], #{count => 1}, #{}),
+            ExceptionMetadata = #{kind => Class, reason => Error, stacktrace => Stacktrace},
+            telemetry:execute([erldns, pipeline, error], #{count => 1}, ExceptionMetadata),
             ?LOG_ERROR(
                 #{
                     what => pipe_failed_with_exception,
