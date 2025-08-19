@@ -7,37 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
-## v8.0.0-rc6
+## v8.0.0
 
-- Add TLSA record support ([#270](https://github.com/dnsimple/erldns/pull/270))
+This release has many optimisations, documentation and code quality improvements.
 
-## v8.0.0-rc5
+### Changed
 
+- Rework `erldns_zone_cache` and `erldns_resolver`: algorithm is extensively optimised and now supports ENT correctly.
+- Rework `erldns_handler`: behaviour is now improved and clearly defined. Minimum supported handler version is now `2`.
+- Split `erldns_resolver` pipe into more granular steps, adding `erldns_resolver_recursive`,
+  `erldns_dnssec`, `erldns_sorter`, and `erldns_section_counter`.
+- Add `erldns_questions` questions filter to the packet pipeline.
+- Update dns_erlang to [v4.3](https://github.com/dnsimple/dns_erlang/releases/tag/v4.3.0) and remove `erldns_records:name_type/1`.
+- Accept no SOA record if no RRSIG are required.
 - Documentation improvements ([#267](https://github.com/dnsimple/erldns/pull/267))
 - Separate edns payload size over UDP as a configurable pipe ([#267](https://github.com/dnsimple/erldns/pull/267))
 - Extend pipelines with halt and secondary pipelines ([#268](https://github.com/dnsimple/erldns/pull/268))
 
-## v8.0.0-rc4
+### Added
 
-- Fix bug with SOA records not updating correctly ([#266](https://github.com/dnsimple/erldns/pull/266))
+- `[erldns, pipeline, questions]` telemetry event with `#{count => non_neg_integer()}` where `count` is the number of questions removed.
 - Document some design decisions ([#265](https://github.com/dnsimple/erldns/pull/265))
+- Add TLSA record support ([#270](https://github.com/dnsimple/erldns/pull/270))
 
-## v8.0.0-rc3
+### Deprecated
+
+- SPF record support will be removed in the upcoming releases (https://blog.dnsimple.com/2025/07/discontinuing-spf-record-type/)
+
+### Fixed
 
 - Stop overwriting SOA RRSIG TTLs ([#264](https://github.com/dnsimple/erldns/pull/264))
-
-## v8.0.0-rc2
-
-- Accept no SOA record if no RRSIG are required.
-
-## v8.0.0-rc1
-
-- Rework `erldns_zone_cache` and `erldns_resolver`: algorithm is extensively optimised and now supports ENT correctly.
-- Rework `erldns_handler`: behaviour is now improved and clearly defined.
-- Split `erldns_resolver` pipe into more granular steps, adding `erldns_resolver_recursive`,
-`erldns_dnssec`, `erldns_sorter`, and `erldns_section_counter`.
-- Add `erldns_questions` questions filter to the packet pipeline.
-- Update dns_erlang v4.2 and remove `erldns_records:name_type/1`.
+- Fix bug with SOA records not updating correctly ([#266](https://github.com/dnsimple/erldns/pull/266))
 
 ## v7.0.0
 
@@ -65,7 +65,7 @@ that the `zone_to_erlang/1,2` callbacks are now `decode/1` and `zone_*/x` callba
 
 #### TXT and SPF record formats
 
-TXT and SPF record formats has changed, from a single string, to an array, to support
+TXT and SPF record formats have changed, from a single string, to an array, to support
 more complex DNS records & use cases, so that the following:
 
 ```json
