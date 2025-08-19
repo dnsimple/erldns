@@ -32,7 +32,7 @@ This release has many optimisations, documentation and code quality improvements
 
 ### Deprecated
 
-- SPF record support will be removed in the upcoming releases (https://blog.dnsimple.com/2025/07/discontinuing-spf-record-type/)
+- SPF record support will be removed in the upcoming releases (<https://blog.dnsimple.com/2025/07/discontinuing-spf-record-type/>)
 
 ### Fixed
 
