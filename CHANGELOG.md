@@ -9,22 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## v8.0.0-rc6
 
-- Add TLSA record support (#270)
+- Add TLSA record support ([#270](https://github.com/dnsimple/erldns/pull/270))
 
 ## v8.0.0-rc5
 
-- Documentation improvements (#267)
-- Separate edns payload size over UDP as a configurable pipe (#267)
-- Extend pipelines with halt and secondary pipelines (#268)
+- Documentation improvements ([#267](https://github.com/dnsimple/erldns/pull/267))
+- Separate edns payload size over UDP as a configurable pipe ([#267](https://github.com/dnsimple/erldns/pull/267))
+- Extend pipelines with halt and secondary pipelines ([#268](https://github.com/dnsimple/erldns/pull/268))
 
 ## v8.0.0-rc4
 
-- Fix bug with SOA records not updating correctly (#266)
-- Document some design decisions (#265)
+- Fix bug with SOA records not updating correctly ([#266](https://github.com/dnsimple/erldns/pull/266))
+- Document some design decisions ([#265](https://github.com/dnsimple/erldns/pull/265))
 
 ## v8.0.0-rc3
 
-- Stop overwriting SOA RRSIG TTLs (#264)
+- Stop overwriting SOA RRSIG TTLs ([#264](https://github.com/dnsimple/erldns/pull/264))
 
 ## v8.0.0-rc2
 
