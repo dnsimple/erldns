@@ -72,6 +72,7 @@ groups() ->
             put_zone_rrset_records_count_with_new_rrset,
             put_zone_rrset_records_count_matches_cache,
             put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset,
+            put_zone_rrset_after_soa_delete,
             delete_zone_rrset_records_count_width_existing_rrset,
             delete_zone_rrset_records_count_width_dnssec_zone_and_existing_rrset,
             delete_zone_rrset_records_count_matches_cache,
@@ -901,6 +902,54 @@ put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset(_) ->
     ZoneModified = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     % New RRSet entry for the CNAME + 1 RRSig record
     ?assertEqual(Zone#zone.record_count + 2, ZoneModified#zone.record_count).
+
+put_zone_rrset_after_soa_delete(_) ->
+    % This testcase simulates a situation when the zone needs to be updated even without the SOA
+    % record present. This may happen for example during an Inbound AXFR.
+    % Create a zone without SOA to simulate a deletion of SOA record
+    ZoneName = dns:dname_to_lower(~"put_zone_rrset_after_soa_delete.com"),
+    TxtData = #dns_rrdata_txt{
+        txt = "put_zone_rrset_after_soa_delete zone without SOA"
+    },
+    TXT = #dns_rr{
+        name = ZoneName,
+        type = ?DNS_TYPE_TXT,
+        data = TxtData,
+        ttl = 3600
+    },
+    Z = erldns_zone_codec:build_zone(ZoneName, ~"Digest-01", [TXT], []),
+    ?assertMatch(ok, erldns_zone_cache:put_zone(Z)),
+    ZoneBase = erldns_zone_cache:lookup_zone(ZoneName),
+    % No SOA
+    ?assertMatch([], erldns_zone_cache:get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA)),
+    ?assertMatch([], ZoneBase#zone.authority),
+    ?assertMatch(~"Digest-01", ZoneBase#zone.version),
+    % TXT is saved
+    TxtRecordsInCache = erldns_zone_cache:get_records_by_name_and_type(ZoneName, ?DNS_TYPE_TXT),
+    ?assertMatch(TxtRecordsInCache, [TXT]),
+    % Check that the zone can be updated, even without a SOA record
+    NewTXT = TXT#dns_rr{
+        data = #dns_rrdata_txt{
+            txt = "put_zone_rrset_after_soa_delete update for a zone without SOA"
+        }
+    },
+    ?assertMatch(
+        ok,
+        erldns_zone_cache:put_zone_rrset(
+            {ZoneName, ~"Digest-02", [NewTXT], []},
+            ~"put_zone_rrset_after_soa_delete.com",
+            ?DNS_TYPE_TXT,
+            1
+        )
+    ),
+    % Still no SOA in cache
+    ?assertMatch([], erldns_zone_cache:get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA)),
+    ZoneModified = erldns_zone_cache:lookup_zone(ZoneName),
+    ?assertMatch([], ZoneModified#zone.authority),
+    % But the digest is updated, and TXT record as well
+    ?assertMatch(~"Digest-02", ZoneModified#zone.version),
+    NewTXTRecordsInCache = erldns_zone_cache:get_records_by_name_and_type(ZoneName, ?DNS_TYPE_TXT),
+    ?assertMatch(NewTXTRecordsInCache, [NewTXT]).
 
 delete_zone_rrset_records_count_width_existing_rrset(_) ->
     ZoneName = dns:dname_to_lower(~"example.com"),
