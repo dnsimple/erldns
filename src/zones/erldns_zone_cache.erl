@@ -253,7 +253,10 @@ is_name_in_zone(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
     end.
 
 -doc #{group => ~"API: Boolean Operations"}.
--doc "Check if the record name, or any wildcard or parent wildcard, is in the zone.".
+-doc """
+Check if the record name, or any wildcard or parent wildcard, is in the zone.
+Returns `false` for empty non terminals.
+""".
 -spec is_record_name_in_zone(erldns:zone(), dns:dname() | dns:labels()) -> boolean().
 is_record_name_in_zone(Zone, Name) when is_binary(Name) ->
     Labels = dns:dname_to_labels(Name),
@@ -351,7 +354,10 @@ put_zone(#zone{name = Name} = Zone) ->
     ZoneRecords = prepare_zone_records(ZoneLabels, NamedRecords),
     true = insert_zone(SignedZone#zone{records = []}),
     NumDeleted = delete_zone_records(ZoneLabels),
+    delete_zone_ents(ZoneLabels),
     maybe_notify_of_zone_replacement(NumDeleted, NormalizedName),
+    ENTLabels = prepare_ents(ZoneRecords),
+    put_ents(ZoneLabels, ENTLabels),
     put_zone_records(ZoneRecords),
     ok;
 put_zone({Name, Sha, Records}) ->
@@ -407,6 +413,8 @@ put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter) ->
             % put erldns_zone_records_typed records first then create the records in zone_records
             TypedRecords = Records ++ SignedRRSet ++ RRSigRecsNotCovering,
             Labels = reduce_record_labels(ZoneLabels, RecordLabels),
+            ENTLabels = prepare_ents(TypedRecords),
+            put_ents(ZoneLabels, ENTLabels),
             put_zone_records_typed_entry(ZoneLabels, Labels, TypedRecords),
             UpdatedZoneRecordsCount =
                 ZoneRecordsCount +
@@ -432,6 +440,7 @@ delete_zone(Name) when is_binary(Name) ->
     delete_zone(Labels);
 delete_zone(ZoneLabels) when is_list(ZoneLabels) ->
     ets:delete(erldns_zones_table, ZoneLabels),
+    delete_zone_ents(ZoneLabels),
     delete_zone_records(ZoneLabels).
 
 -doc #{group => ~"API: Mutations"}.
@@ -474,6 +483,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                                 ZoneLabels, ReducedLabels, ?DNS_TYPE_RRSIG, RRSigsNotCovering
                             )
                     end,
+                    update_ents_on_delete(ZoneLabels, ReducedLabels),
                     % only write counter if called explicitly with Counter value i.e.
                     % different than 0. this will not write the counter if called by
                     % put_zone_rrset/3 as it will prevent subsequent delete ops
@@ -535,6 +545,24 @@ insert_zone(#zone{} = Zone) ->
 delete_zone_records(ZoneLabels) ->
     pattern_zone_delete(ZoneLabels).
 
+-spec delete_zone_ents(dns:labels()) -> non_neg_integer().
+delete_zone_ents(ZoneLabels) ->
+    pattern_ents_delete(ZoneLabels).
+
+%% Checks if deleting records from RecordLabels removed any ENTs as well.
+%% Expects name to be already normalized
+-spec update_ents_on_delete(dns:labels(), dns:labels()) -> non_neg_integer().
+update_ents_on_delete(ZoneLabels, RecordLabels) ->
+    PossibleNewENTs = all_path_prefixes(RecordLabels),
+    % check if any of possible new ENTs has any records - if they do, they are not ENTs
+    NewENTs = lists:filter(
+        fun(PossibleENT) ->
+            pattern_zone_dname_count(ZoneLabels, PossibleENT) == 0
+        end,
+        PossibleNewENTs
+    ),
+    put_ents(ZoneLabels, NewENTs).
+
 %% expects name to be already normalized
 -spec prepare_zone_records(dns:labels(), #{dns:dname() => [dns:rr()]}) ->
     [{dns:labels(), dns:labels(), dns:type(), [dns:rr()]}].
@@ -561,6 +589,21 @@ prepare_zone_records_typed_entry(ZoneLabels, RecordLabels, ListTypedRecords) ->
         ListTypedRecords
     ).
 
+-doc "Takes a list typed zone records entries, and returns labels for empty non terminals (ENTs).".
+-spec prepare_ents([{dns:labels(), dns:labels(), dns:type(), [dns:rr()]}]) ->
+    [{dns:labels(), dns:labels(), dns:type(), [dns:rr()]}].
+prepare_ents(TypedRecords) ->
+    PossibleENTs = lists:uniq(
+        lists:append([
+            % Remove leaf node, we know it has record data; check all prefixes, as all could be ENTs
+            all_path_prefixes(lists:droplast(ReducedLabels))
+         || {_, ReducedLabels, _, _} <- TypedRecords, ReducedLabels =/= []
+        ])
+    ),
+    RecordLabels = lists:uniq([Labels || {_, Labels, _, _} <- TypedRecords]),
+    % All nodes which have records are by definition not ENTs.
+    PossibleENTs -- RecordLabels.
+
 %% Expects record labels to be already reduced
 -spec put_zone_records([{dns:labels(), dns:labels(), dns:type(), [dns:rr()]}]) -> ok.
 put_zone_records(RecordsByName) ->
@@ -569,6 +612,14 @@ put_zone_records(RecordsByName) ->
             do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Records)
         end,
         RecordsByName
+    ).
+
+put_ents(ZoneLabels, ENTs) ->
+    lists:foreach(
+        fun(ENTLabels) ->
+            ets:insert(erlds_ent_labels, {{ZoneLabels, ENTLabels}, ENTLabels})
+        end,
+        ENTs
     ).
 
 %% Expects record labels to be already reduced
@@ -598,6 +649,18 @@ match_labels([Label | ZoneLabels], [Label | RecordLabels]) ->
     match_labels(ZoneLabels, RecordLabels);
 match_labels([_ | _], [_ | _]) ->
     false.
+
+all_path_prefixes(Labels) ->
+    % get all path prefixes, including the full path
+    {_, AllPrefixes} = lists:foldl(
+        fun(Label, {CurrentPrefix, Prefixes}) ->
+            NewPrefix = CurrentPrefix ++ [Label],
+            {NewPrefix, [NewPrefix | Prefixes]}
+        end,
+        {[], []},
+        Labels
+    ),
+    AllPrefixes.
 
 %% expects name to be already normalized
 is_name_in_any_zone_helper(ZoneLabels, []) ->
@@ -747,8 +810,19 @@ is_record_name_in_zone_with_wildcard(ZoneLabels, QLabels) ->
     is_record_name_in_zone_traverse_wildcard(ZoneLabels, WildcardPath, Parent).
 
 is_record_name_in_zone_traverse_wildcard(ZoneLabels, Path, ParentPath) ->
-    0 =/= pattern_zone_dname_count(ZoneLabels, Path) orelse
-        is_record_name_in_zone_with_wildcard(ZoneLabels, ParentPath).
+    % check if exact wildcard record exists
+    case pattern_zone_dname_count(ZoneLabels, Path) of
+        0 ->
+            % check if parent is an ENT - if it is, it's the closest encloser, and we can finish
+            case pattern_ent_dname_count(ZoneLabels, ParentPath) of
+                0 ->
+                    is_record_name_in_zone_with_wildcard(ZoneLabels, ParentPath);
+                _N ->
+                    false
+            end;
+        _N ->
+            true
+    end.
 
 is_record_name_in_zone_with_descendants(ZoneLabels, QLabels) ->
     % eqwalizer:ignore this needs to be an improper list for tree traversal
@@ -779,6 +853,14 @@ pattern_zone_delete(ZoneLabels) ->
     Pattern = {{{ZoneLabels, '_', '_'}, '_'}, [], [true]},
     ets:select_delete(erldns_zone_records_typed, [Pattern]).
 
+pattern_ents_delete(ZoneLabels) ->
+    Pattern = {{{ZoneLabels, '_'}, '_'}, [], [true]},
+    ets:select_delete(erlds_ent_labels, [Pattern]).
+
+pattern_ent_dname_count(ZoneLabels, Labels) ->
+    Pattern = {{{ZoneLabels, Labels}, '_'}, [], [true]},
+    ets:select_count(erlds_ent_labels, [Pattern]).
+
 maybe_notify_of_zone_replacement(0, _) ->
     ok;
 maybe_notify_of_zone_replacement(NumDeleted, NormalizedName) ->
@@ -797,6 +879,7 @@ start_link() ->
 init(noargs) ->
     create_ets_table(erldns_zones_table, set, #zone.labels),
     create_ets_table(erldns_zone_records_typed, ordered_set),
+    create_ets_table(erlds_ent_labels, ordered_set),
     create_ets_table(erldns_sync_counters, set),
     {ok, nostate}.
 
