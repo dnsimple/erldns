@@ -19,7 +19,8 @@ For more details about its subsections, see:
         path => "zones.json",
         strict => true,
         codecs => [sample_custom_zone_codec],
-        context_options => #{match_empty => true, allow => [<<"anycast">>, <<"AMS">>, <<"TKO">>]}
+        context_options => #{match_empty => true, allow => [<<"anycast">>, <<"AMS">>, <<"TKO">>],
+        rfc_compliant_ent => true}
     }},
 ]}
 ```
@@ -38,6 +39,10 @@ Codecs are a list of modules that implement the `m:erldns_zone_codec` behaviour.
 
 Context options allow you to filter loading certain records in a zone depending on configuration
 details. See [`ZONES`](priv/zones/ZONES.md) for more details.
+
+`rfc_compliant_ent` updates the handling of empty non-terminals ENTs to be complaint with RFC 4592.
+When set to `true`, ENTs will be used as the source of wildcard synthesis if applicable. Defaults to
+`false` in order to keep the old behaviour.
 """.
 -type config() :: #{
     path => undefined | file:name(),
@@ -46,7 +51,8 @@ details. See [`ZONES`](priv/zones/ZONES.md) for more details.
     context_options => #{
         match_empty => boolean(),
         allow => [binary()]
-    }
+    },
+    rfc_compliant_ent => boolean()
 }.
 -type version() :: binary().
 -export_type([config/0, version/0]).
