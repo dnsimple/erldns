@@ -9,7 +9,7 @@ As the client might need to call multiple points of this API, the client can ens
 once and use multiple times.
 """.
 
-%% This module's gen_server holds three tables:
+%% This module's gen_server holds four tables:
 %%
 %% 1. `erldns_zones_table`:
 %% Holds the zones themselves as `#zone{}` records,
@@ -27,6 +27,21 @@ once and use multiple times.
 %%
 %% 3. `erldns_sync_counters`:
 %% Holds a counter of updates for each RR.
+%% 4. `erlds_ent_labels`:
+%% Holds empty non terminal records (ENTs - see RFC 4592: §2.2.2 and §3.3.1).
+%% The table is a bag, and holds records with the following structure:
+%% {
+%%   {<zone labels>, <reverse record path up to the zone for ENT>},
+%%   <reverse record path up to the zone for the record creating the ENT>
+%% }
+%% For example if there is a record at `c.b.a.example.com`, and `b.a.example.com` is an ENT, its
+%% entry would look like this:
+%% {{[<<"example">>, <<"com">>], [<<"a">>, <<"b">>]}, [<<"a">>, <<"b">>, <<"c">>]}
+%%
+%% The table is a bag, as an ENT can have many records that would result in it existing. For example
+%% c.b.a.example.com and d.b.a.example.com could create the b.a.example.com ENT. We need to keep
+%% track of this fact in order to correctly handle record deletes (in the example deleting only
+%% c.b.a.example.com shouldn't delete the b.a.example.com ENT).
 
 -behaviour(gen_server).
 
@@ -445,7 +460,7 @@ delete_zone(ZoneLabels) when is_list(ZoneLabels) ->
 
 -doc #{group => ~"API: Mutations"}.
 -doc "Remove zone RRSet".
--spec delete_zone_rrset(dns:dname(), erldns_zones:version(), dns:dname(), integer(), integer()) ->
+-spec delete_zone_rrset(dns:dname(), erldns_zones:version(), dns:dname(), dns:type(), integer()) ->
     ok | zone_not_found.
 delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
     NormalizedZoneName = dns:dname_to_lower(ZoneName),
@@ -547,21 +562,33 @@ delete_zone_records(ZoneLabels) ->
 
 -spec delete_zone_ents(dns:labels()) -> non_neg_integer().
 delete_zone_ents(ZoneLabels) ->
-    pattern_ents_delete(ZoneLabels).
+    pattern_zone_ents_delete(ZoneLabels).
 
 %% Checks if deleting records from RecordLabels removed any ENTs as well.
 %% Expects name to be already normalized
--spec update_ents_on_delete(dns:labels(), dns:labels()) -> non_neg_integer().
+-spec update_ents_on_delete(dns:labels(), dns:labels()) -> ok.
 update_ents_on_delete(ZoneLabels, RecordLabels) ->
-    PossibleNewENTs = all_path_prefixes(RecordLabels),
-    % check if any of possible new ENTs has any records - if they do, they are not ENTs
-    NewENTs = lists:filter(
+    Prefixes = all_path_prefixes(RecordLabels),
+    % Check if any of possible new ENTs has any records - if they do, they are not ENTs,
+    % Cannot drop the leaf label here, as it could become an ENT.
+    % Note that removing a record can:
+    %   - create ENTs (record removed from b.a.example.com could create an ENT at reduced labels a,
+    % b.a, for example if there is a record at c.b.a.example.com) % todo for this we need to go to children...
+    %   - _delete_ ENTs (removing the only record at b.a.example.com removes ENT at a as well)
+    {ENTLabels, NotENTLabels} = lists:splitwith(
         fun(PossibleENT) ->
-            pattern_zone_dname_count(ZoneLabels, PossibleENT) == 0
+            % todo has to do the other thing - remove by RecordLabel...
+            pattern_zone_dname_count(ZoneLabels, PossibleENT) ==
+                0 andalso is_record_name_in_zone_with_descendants(ZoneLabels, PossibleENT)
         end,
-        PossibleNewENTs
+        Prefixes
     ),
-    put_ents(ZoneLabels, NewENTs).
+    [
+        pattern_zone_dname_recordlabels_ents_delete(ZoneLabels, NotENT, RecordLabels)
+     || NotENT <- NotENTLabels
+    ],
+    ENTsRecords = lists:map(fun(Prefix) -> {Prefix, RecordLabels} end, ENTLabels),
+    put_ents(ZoneLabels, ENTsRecords).
 
 %% expects name to be already normalized
 -spec prepare_zone_records(dns:labels(), #{dns:dname() => [dns:rr()]}) ->
@@ -589,20 +616,27 @@ prepare_zone_records_typed_entry(ZoneLabels, RecordLabels, ListTypedRecords) ->
         ListTypedRecords
     ).
 
--doc "Takes a list typed zone records entries, and returns labels for empty non terminals (ENTs).".
+-doc """
+Takes a list typed zone records entries that are being inserted, and returns labels for empty non
+terminals (ENTs) with the record to which the ENT belongs (on path to which node it is located).
+""".
 -spec prepare_ents([{dns:labels(), dns:labels(), dns:type(), [dns:rr()]}]) ->
-    [{dns:labels(), dns:labels(), dns:type(), [dns:rr()]}].
+    [{dns:labels(), dns:labels()}].
 prepare_ents(TypedRecords) ->
-    PossibleENTs = lists:uniq(
-        lists:append([
-            % Remove leaf node, we know it has record data; check all prefixes, as all could be ENTs
-            all_path_prefixes(lists:droplast(ReducedLabels))
-         || {_, ReducedLabels, _, _} <- TypedRecords, ReducedLabels =/= []
-        ])
-    ),
-    RecordLabels = lists:uniq([Labels || {_, Labels, _, _} <- TypedRecords]),
+    AllRecordLabels = lists:uniq([Labels || {_, Labels, _, _} <- TypedRecords, Labels =/= []]),
+    % list of lists
+    PossibleENTsPerLabel = lists:map(fun labels_to_possible_ent_helper/1, AllRecordLabels),
+    PossibleENTs = lists:append(PossibleENTsPerLabel),
     % All nodes which have records are by definition not ENTs.
-    PossibleENTs -- RecordLabels.
+    lists:filter(
+        fun({ENT, _RecordLabels}) -> not lists:member(ENT, AllRecordLabels) end, PossibleENTs
+    ).
+
+labels_to_possible_ent_helper(ReducedLabels) ->
+    % Remove leaf node, we know it has record data; check all prefixes, as all could be ENTs
+    Prefixes = all_path_prefixes(lists:droplast(ReducedLabels)),
+    % Combine possible ENT prefix with the labels of node it is on the way to
+    lists:map(fun(Prefix) -> {Prefix, ReducedLabels} end, Prefixes).
 
 %% Expects record labels to be already reduced
 -spec put_zone_records([{dns:labels(), dns:labels(), dns:type(), [dns:rr()]}]) -> ok.
@@ -614,12 +648,13 @@ put_zone_records(RecordsByName) ->
         RecordsByName
     ).
 
-put_ents(ZoneLabels, ENTs) ->
+-spec put_ents(dns:labels(), [{dns:labels(), dns:labels()}]) -> ok.
+put_ents(ZoneLabels, ENTsWithRecords) ->
     lists:foreach(
-        fun(ENTLabels) ->
-            ets:insert(erlds_ent_labels, {{ZoneLabels, ENTLabels}, ENTLabels})
+        fun({ENTLabels, RecordLabels}) ->
+            ets:insert(erlds_ent_labels, {{ZoneLabels, ENTLabels}, RecordLabels})
         end,
-        ENTs
+        ENTsWithRecords
     ).
 
 %% Expects record labels to be already reduced
@@ -853,9 +888,14 @@ pattern_zone_delete(ZoneLabels) ->
     Pattern = {{{ZoneLabels, '_', '_'}, '_'}, [], [true]},
     ets:select_delete(erldns_zone_records_typed, [Pattern]).
 
-pattern_ents_delete(ZoneLabels) ->
+pattern_zone_ents_delete(ZoneLabels) ->
     Pattern = {{{ZoneLabels, '_'}, '_'}, [], [true]},
     ets:select_delete(erlds_ent_labels, [Pattern]).
+
+pattern_zone_dname_recordlabels_ents_delete(ZoneLabels, ENTLabels, RecordLabels) ->
+    %%    Pattern = {{{ZoneLabels, ENTLabels}, '_'}, [], [true]},
+    ?LOG_WARNING(#{what => deleting, zl => ZoneLabels, entl => ENTLabels, rl => RecordLabels}),
+    ets:delete_object(erlds_ent_labels, {{ZoneLabels, ENTLabels}, RecordLabels}).
 
 pattern_ent_dname_count(ZoneLabels, Labels) ->
     Pattern = {{{ZoneLabels, Labels}, '_'}, [], [true]},
@@ -879,7 +919,7 @@ start_link() ->
 init(noargs) ->
     create_ets_table(erldns_zones_table, set, #zone.labels),
     create_ets_table(erldns_zone_records_typed, ordered_set),
-    create_ets_table(erlds_ent_labels, ordered_set),
+    create_ets_table(erlds_ent_labels, bag),
     create_ets_table(erldns_sync_counters, set),
     {ok, nostate}.
 
