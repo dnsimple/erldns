@@ -462,9 +462,18 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                             erldns_records:match_type_covered(Type),
                             get_records_by_name_and_type(Zone, RecordLabels, ?DNS_TYPE_RRSIG)
                         ),
-                    do_put_zone_records_typed_entry(
-                        ZoneLabels, ReducedLabels, ?DNS_TYPE_RRSIG, RRSigsNotCovering
-                    ),
+                    % Don't put an empty RRSIG in the cache
+                    case RRSigsNotCovering of
+                        [] ->
+                            % nothing left - delete the RRSIG record
+                            pattern_zone_dname_type_delete(
+                                ZoneLabels, ReducedLabels, ?DNS_TYPE_RRSIG
+                            );
+                        _ ->
+                            do_put_zone_records_typed_entry(
+                                ZoneLabels, ReducedLabels, ?DNS_TYPE_RRSIG, RRSigsNotCovering
+                            )
+                    end,
                     % only write counter if called explicitly with Counter value i.e.
                     % different than 0. this will not write the counter if called by
                     % put_zone_rrset/3 as it will prevent subsequent delete ops
