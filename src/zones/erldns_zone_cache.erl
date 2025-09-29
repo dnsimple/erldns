@@ -750,18 +750,18 @@ is_record_name_in_zone_traverse_wildcard(ZoneLabels, Path, ParentPath) ->
     case pattern_zone_dname_count(ZoneLabels, Path) of
         0 ->
             UseCompliantENT = rfc_compliant_ent(),
-            traverse_wildcard(UseCompliantENT, ZoneLabels, ParentPath);
+            is_record_name_in_zone_do_traverse_wildcard(UseCompliantENT, ZoneLabels, ParentPath);
         _ ->
             true
     end.
 
-traverse_wildcard(true = _UseCompliantENT, ZoneLabels, ParentPath) ->
+is_record_name_in_zone_do_traverse_wildcard(true = _UseCompliantENT, ZoneLabels, ParentPath) ->
     % Since there are no records at path, if is_record_name_in_zone_with_descendants at
     % ParentPath, ParentPath is an ENT, and we don't synthesise the wildcard.
     % See RFC 4592: §2.2.2, and §3.3.1 for details.
     not is_record_name_in_zone_with_descendants(ZoneLabels, ParentPath) andalso
         is_record_name_in_zone_with_wildcard(ZoneLabels, ParentPath);
-traverse_wildcard(false = _UseCompliantENT, ZoneLabels, ParentPath) ->
+is_record_name_in_zone_do_traverse_wildcard(false = _UseCompliantENT, ZoneLabels, ParentPath) ->
     % old behaviour, answers for ENTs can be synthesised from wildcards
     is_record_name_in_zone_with_wildcard(ZoneLabels, ParentPath).
 
