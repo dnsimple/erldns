@@ -59,7 +59,7 @@ When set to `true`, ENTs will be used as the source of wildcard synthesis if app
 
 -behaviour(supervisor).
 
--export([start_link/0, init/1]).
+-export([start_link/0, init/1, rfc_compliant_ent_enabled/0]).
 
 -doc false.
 -spec start_link() -> supervisor:startlink_ret().
@@ -77,6 +77,13 @@ init(noargs) ->
             worker(erldns_zone_loader)
         ],
     {ok, {SupFlags, Children}}.
+
+-spec rfc_compliant_ent_enabled() -> boolean().
+rfc_compliant_ent_enabled() ->
+    case application:get_env(erldns, zones, #{}) of
+        #{rfc_compliant_ent := Val} when is_boolean(Val) -> Val;
+        #{} -> false
+    end.
 
 worker(Module) ->
     #{id => Module, start => {Module, start_link, []}, type => worker}.

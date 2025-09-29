@@ -749,7 +749,7 @@ is_record_name_in_zone_with_wildcard(ZoneLabels, QLabels) ->
 is_record_name_in_zone_traverse_wildcard(ZoneLabels, Path, ParentPath) ->
     case pattern_zone_dname_count(ZoneLabels, Path) of
         0 ->
-            UseCompliantENT = rfc_compliant_ent(),
+            UseCompliantENT = erldns_zones:rfc_compliant_ent_enabled(),
             is_record_name_in_zone_do_traverse_wildcard(UseCompliantENT, ZoneLabels, ParentPath);
         _ ->
             true
@@ -845,9 +845,3 @@ create_ets_table(TableName, Type, Pos) ->
     ],
     TableName = ets:new(TableName, Opts),
     ok.
-
-rfc_compliant_ent() ->
-    case application:get_env(erldns, zones, #{}) of
-        #{rfc_compliant_ent := Val} when is_boolean(Val) -> Val;
-        #{} -> false
-    end.
