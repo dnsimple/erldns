@@ -166,6 +166,9 @@ get_records_by_name_ent(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(La
 -doc #{group => ~"API: Lookups"}.
 -doc """
 Return the record set for the given dname in the given zone, including parent wildcard matches.
+
+Note that this helper is not RFC compliant with ENT handling - they will get expanded if covered by
+wildcards. Whether a node is an ENT has to be checked beforehand by `is_record_name_in_zone/2`.
 """.
 -spec get_records_by_name_wildcard(erldns:zone(), dns:dname() | dns:labels()) -> [dns:rr()].
 get_records_by_name_wildcard(Zone, Name) when is_binary(Name) ->
