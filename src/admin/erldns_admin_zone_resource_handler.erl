@@ -14,7 +14,7 @@
 
 -module(erldns_admin_zone_resource_handler).
 -moduledoc false.
-%% Cowbow handler that handles Admin API requests to /zones/:name.
+%% Cowboy handler that handles Admin API requests to /zones/:name.
 
 -export([init/2]).
 -export([

@@ -166,6 +166,9 @@ get_records_by_name_ent(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(La
 -doc #{group => ~"API: Lookups"}.
 -doc """
 Return the record set for the given dname in the given zone, including parent wildcard matches.
+
+Note that this helper is not RFC compliant with ENT handling - they will get expanded if covered by
+wildcards. Whether a node is an ENT has to be checked beforehand by `is_record_name_in_zone/2`.
 """.
 -spec get_records_by_name_wildcard(erldns:zone(), dns:dname() | dns:labels()) -> [dns:rr()].
 get_records_by_name_wildcard(Zone, Name) when is_binary(Name) ->
@@ -747,8 +750,23 @@ is_record_name_in_zone_with_wildcard(ZoneLabels, QLabels) ->
     is_record_name_in_zone_traverse_wildcard(ZoneLabels, WildcardPath, Parent).
 
 is_record_name_in_zone_traverse_wildcard(ZoneLabels, Path, ParentPath) ->
-    0 =/= pattern_zone_dname_count(ZoneLabels, Path) orelse
-        is_record_name_in_zone_with_wildcard(ZoneLabels, ParentPath).
+    case pattern_zone_dname_count(ZoneLabels, Path) of
+        0 ->
+            UseCompliantENT = erldns_zones:rfc_compliant_ent_enabled(),
+            is_record_name_in_zone_do_traverse_wildcard(UseCompliantENT, ZoneLabels, ParentPath);
+        _ ->
+            true
+    end.
+
+is_record_name_in_zone_do_traverse_wildcard(true = _UseCompliantENT, ZoneLabels, ParentPath) ->
+    % Since there are no records at path, if is_record_name_in_zone_with_descendants at
+    % ParentPath, ParentPath is an ENT, and we don't synthesise the wildcard.
+    % See RFC 4592: §2.2.2, and §3.3.1 for details.
+    not is_record_name_in_zone_with_descendants(ZoneLabels, ParentPath) andalso
+        is_record_name_in_zone_with_wildcard(ZoneLabels, ParentPath);
+is_record_name_in_zone_do_traverse_wildcard(false = _UseCompliantENT, ZoneLabels, ParentPath) ->
+    % old behaviour, answers for ENTs can be synthesised from wildcards
+    is_record_name_in_zone_with_wildcard(ZoneLabels, ParentPath).
 
 is_record_name_in_zone_with_descendants(ZoneLabels, QLabels) ->
     % eqwalizer:ignore this needs to be an improper list for tree traversal

@@ -230,9 +230,9 @@ find_unsigned_records(Records) ->
     ).
 
 %% compact-denial-of-existence-07
-record_types_for_name(_Zone, Name) ->
+record_types_for_name(Zone, Name) ->
     Labels = dns:dname_to_lower_labels(Name),
-    case best_match_at_node(Labels) of
+    case best_match_at_node(Zone, Labels) of
         ent ->
             lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]);
         [] ->
@@ -245,12 +245,12 @@ record_types_for_name(_Zone, Name) ->
 % Find the best match records for the given QName in the given zone.
 % This will look for both exact and wildcard matches AT the QNAME label count
 % without attempting to walk down to the root.
--spec best_match_at_node(dns:labels()) -> ent | [dns:rr()].
-best_match_at_node(Labels) ->
+-spec best_match_at_node(erldns:zone(), dns:labels()) -> ent | [dns:rr()].
+best_match_at_node(Zone, Labels) ->
+    UseCompliantENT = erldns_zones:rfc_compliant_ent_enabled(),
     maybe
-        #zone{} = Zone ?= erldns_zone_cache:get_authoritative_zone(Labels),
         [] ?= erldns_zone_cache:get_records_by_name(Zone, Labels),
-        [] ?= erldns_zone_cache:get_records_by_name_wildcard(Zone, Labels),
+        [] ?= get_wildcard_records_without_ent(UseCompliantENT, Zone, Labels),
         true ?= erldns_zone_cache:is_record_name_in_zone_strict(Zone, Labels),
         ent
     else
@@ -259,3 +259,14 @@ best_match_at_node(Labels) ->
         _ ->
             []
     end.
+
+% Prevent wildcard expansion for ENTs, or old behaviour, based on a flag
+get_wildcard_records_without_ent(true = _UseCompliantENT, Zone, Labels) ->
+    case erldns_zone_cache:is_record_name_in_zone(Zone, Labels) of
+        true ->
+            erldns_zone_cache:get_records_by_name_wildcard(Zone, Labels);
+        false ->
+            []
+    end;
+get_wildcard_records_without_ent(false = _UseCompliantENT, Zone, Labels) ->
+    erldns_zone_cache:get_records_by_name_wildcard(Zone, Labels).
