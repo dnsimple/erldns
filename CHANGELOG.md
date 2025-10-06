@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Add ENT support for wildcard synthesis meeting RFC 4592 specification requirements ([#279](https://github.com/dnsimple/erldns/pull/279)).
-  The behaviour is currently opt-in using the `rfc_compliant_ent` option in *erdns.zones* config.
+  The behaviour is currently opt-in using the `rfc_compliant_ent` option in _erdns.zones_ config.
 
 ## v8.0.0
 
