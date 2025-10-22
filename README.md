@@ -93,7 +93,6 @@ dig -p 8053 @127.0.0.1 example.com a
 dig -p 8053 @127.0.0.1 example.com cname
 dig -p 8053 @127.0.0.1 example.com ns
 dig -p 8053 @127.0.0.1 example.com mx
-dig -p 8053 @127.0.0.1 example.com spf
 dig -p 8053 @127.0.0.1 example.com txt
 dig -p 8053 @127.0.0.1 example.com sshfp
 dig -p 8053 @127.0.0.1 example.com soa
