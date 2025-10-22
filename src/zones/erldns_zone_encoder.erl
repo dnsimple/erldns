@@ -90,8 +90,6 @@ encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_HINFO, ttl = Ttl, dat
     encode_record(Name, Type, Ttl, Data);
 encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_TXT, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
-encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_SPF, ttl = Ttl, data = Data}) ->
-    encode_record(Name, Type, Ttl, Data);
 encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_SSHFP, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
 encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_SRV, ttl = Ttl, data = Data}) ->
@@ -167,8 +165,6 @@ encode_data(#dns_rrdata_hinfo{cpu = Cpu, os = Os}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~w", [Cpu, Os]));
 encode_data(#dns_rrdata_txt{txt = Text}) ->
     erlang:iolist_to_binary(io_lib:format("~s", [Text]));
-encode_data(#dns_rrdata_spf{spf = Data}) ->
-    erlang:iolist_to_binary(io_lib:format("~s", [Data]));
 encode_data(#dns_rrdata_sshfp{alg = Alg, fp_type = Fptype, fp = Fp}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~w ~s", [Alg, Fptype, Fp]));
 encode_data(#dns_rrdata_srv{priority = Priority, weight = Weight, port = Port, target = Dname}) ->

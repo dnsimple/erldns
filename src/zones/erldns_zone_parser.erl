@@ -242,10 +242,6 @@ json_record_to_erlang(#{
     ~"name" := Name, ~"type" := ~"TXT", ~"ttl" := Ttl, ~"data" := #{~"txts" := Txts}
 }) when is_list(Txts) ->
     #dns_rr{name = Name, type = ?DNS_TYPE_TXT, data = #dns_rrdata_txt{txt = Txts}, ttl = Ttl};
-json_record_to_erlang(#{
-    ~"name" := Name, ~"type" := ~"SPF", ~"ttl" := Ttl, ~"data" := #{~"txts" := Txts}
-}) when is_list(Txts) ->
-    #dns_rr{name = Name, type = ?DNS_TYPE_SPF, data = #dns_rrdata_spf{spf = Txts}, ttl = Ttl};
 json_record_to_erlang(#{~"name" := Name, ~"type" := ~"PTR", ~"ttl" := Ttl, ~"data" := Data}) ->
     #dns_rr{
         name = Name,
