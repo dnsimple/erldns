@@ -225,15 +225,6 @@ json_to_erlang_txt_spf_records(_) ->
           "name": "example.com",
           "ttl": 3600,
           "type": "TXT"
-        },
-        {
-          "context": [],
-          "data": {
-            "txts": ["v=spf1 a mx ~all"]
-          },
-          "name": "example.com",
-          "ttl": 3600,
-          "type": "SPF"
         }
       ],
       "sha": "10ea56ad7be9d3e6e75be3a15ef0dfabe9facafba486d74914e7baf8fb36638e"
@@ -248,13 +239,6 @@ json_to_erlang_txt_spf_records(_) ->
             class = 1,
             ttl = 3600,
             data = #dns_rrdata_txt{txt = [~"this is a test"]}
-        },
-        #dns_rr{
-            name = ~"example.com",
-            type = 99,
-            class = 1,
-            ttl = 3600,
-            data = #dns_rrdata_spf{spf = [~"v=spf1 a mx ~all"]}
         }
     ],
     ?assertMatch(
@@ -1169,15 +1153,6 @@ input() ->
           "name": "example.com",
           "ttl": 3600,
           "type": "TXT"
-        },
-        {
-          "context": [],
-          "data": {
-            "txts": ["v=spf1 a mx ~all"]
-          },
-          "name": "example.com",
-          "ttl": 3600,
-          "type": "SPF"
         },
         {
           "context": [],
