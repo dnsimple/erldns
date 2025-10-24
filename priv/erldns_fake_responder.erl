@@ -14,7 +14,6 @@ answer(Qname, Qtype) ->
     <<"SRV">>     -> fake_srv_records(Qname);
     <<"NAPTR">>   -> fake_naptr_records(Qname);
     <<"PTR">>     -> fake_ptr_records(Qname);
-    <<"SPF">>     -> fake_spf_records(Qname);
     <<"SSHFP">>   -> fake_sshfp_records(Qname);
     <<"RP">>      -> fake_rp_records(Qname);
     <<"HINFO">>   -> fake_hinfo_records(Qname);
@@ -148,16 +147,6 @@ fake_ptr_records(Qname) ->
       type = 12,
       ttl = 3600,
       data = #dns_rrdata_ptr{dname = "foo.example.com"}
-    }
-  ].
-
-fake_spf_records(Qname) ->
-  [
-    #dns_rr {
-      name = Qname,
-      type = 99,
-      ttl = 3600,
-      data = #dns_rrdata_spf{spf = "v=spf1 +mx a:colo.example.com/28 -all"}
     }
   ].
 
