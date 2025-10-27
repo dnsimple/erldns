@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v9.0.0-rc1
+
 ### Removed
 
 - Support for encoding/decoding records of type SPF.
