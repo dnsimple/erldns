@@ -113,6 +113,35 @@ resolve_authoritative(Message, Zone, QLabels, QName, QType, CnameChain) ->
                         )
                 end
         end,
+    foo(Zone, QLabels, Result, Message, QType).
+    % case detect_zonecut(Zone, QLabels) of
+    %     [] ->
+    %         Result;
+    %     ZonecutRecords ->
+    %         CnameAnswers = lists:filter(
+    %             erldns_records:match_type(?DNS_TYPE_CNAME), Result#dns_message.answers
+    %         ),
+    %         FilteredCnameAnswers =
+    %             lists:filter(
+    %                 fun(RR) ->
+    %                     case detect_zonecut(Zone, RR#dns_rr.data#dns_rrdata_cname.dname) of
+    %                         [] -> false;
+    %                         _ -> true
+    %                     end
+    %                 end,
+    %                 CnameAnswers
+    %             ),
+    %         Message#dns_message{
+    %             aa = false,
+    %             rc = ?DNS_RCODE_NOERROR,
+    %             authority = ZonecutRecords,
+    %             answers = FilteredCnameAnswers
+    %         }
+    % end.
+
+foo(_, _, Result, _, ?DNS_TYPE_DS) ->
+    Result;
+foo(Zone, QLabels, Result, Message, _QType) ->
     case detect_zonecut(Zone, QLabels) of
         [] ->
             Result;
