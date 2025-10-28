@@ -215,6 +215,10 @@ resolve_exact_match(Message, Zone, QLabels, QType, CnameChain, MatchedRecords) -
             % There are no exact type matches and no referrals,
             % return NOERROR with the authority set
             Message#dns_message{aa = true, authority = Zone#zone.authority};
+        {[], _} when QType == ?DNS_TYPE_DS ->
+            % There were no exact type matches, but since the query type
+            % was DS we still return NOERROR with the authority set
+            Message#dns_message{aa = true, authority = Zone#zone.authority};
         {[], _} ->
             % There were no exact type matches,
             % but there were other name matches and there are NS records,
