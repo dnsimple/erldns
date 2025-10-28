@@ -113,6 +113,11 @@ resolve_authoritative(Message, Zone, QLabels, QName, QType, CnameChain) ->
                         )
                 end
         end,
+    maybe_add_zonecut_records(Zone, QLabels, Result, Message, QType).
+
+maybe_add_zonecut_records(_, _, Result, _, ?DNS_TYPE_DS) ->
+    Result;
+maybe_add_zonecut_records(Zone, QLabels, Result, Message, _QType) ->
     case detect_zonecut(Zone, QLabels) of
         [] ->
             Result;
