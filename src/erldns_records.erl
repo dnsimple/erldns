@@ -133,167 +133,272 @@ match_type_covered(Qtype) ->
 replace_name(Name) ->
     fun(#dns_rr{} = R) -> R#dns_rr{name = Name} end.
 
+-doc """
+Root DNS server hints with NS and glue records.
+
+Returns authority section (NS records) and additional section (A and AAAA glue records)
+for all 13 root DNS servers. Updated from https://www.iana.org/domains/root/servers.
+""".
 -spec root_hints() -> {[dns:rr()], [dns:rr()]}.
 root_hints() ->
     {
-        [
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"a.root-servers.net"}
-            },
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"b.root-servers.net"}
-            },
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"c.root-servers.net"}
-            },
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"d.root-servers.net"}
-            },
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"e.root-servers.net"}
-            },
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"f.root-servers.net"}
-            },
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"g.root-servers.net"}
-            },
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"h.root-servers.net"}
-            },
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"i.root-servers.net"}
-            },
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"j.root-servers.net"}
-            },
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"k.root-servers.net"}
-            },
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"l.root-servers.net"}
-            },
-            #dns_rr{
-                name = ~"",
-                type = ?DNS_TYPE_NS,
-                ttl = 518400,
-                data = #dns_rrdata_ns{dname = ~"m.root-servers.net"}
-            }
-        ],
-        [
-            #dns_rr{
-                name = ~"a.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {198, 41, 0, 4}}
-            },
-            #dns_rr{
-                name = ~"b.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {192, 228, 79, 201}}
-            },
-            #dns_rr{
-                name = ~"c.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {192, 33, 4, 12}}
-            },
-            #dns_rr{
-                name = ~"d.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {128, 8, 10, 90}}
-            },
-            #dns_rr{
-                name = ~"e.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {192, 203, 230, 10}}
-            },
-            #dns_rr{
-                name = ~"f.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {192, 5, 5, 241}}
-            },
-            #dns_rr{
-                name = ~"g.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {192, 112, 36, 4}}
-            },
-            #dns_rr{
-                name = ~"h.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {128, 63, 2, 53}}
-            },
-            #dns_rr{
-                name = ~"i.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {192, 36, 148, 17}}
-            },
-            #dns_rr{
-                name = ~"j.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {192, 58, 128, 30}}
-            },
-            #dns_rr{
-                name = ~"k.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {193, 0, 14, 129}}
-            },
-            #dns_rr{
-                name = ~"l.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {198, 32, 64, 12}}
-            },
-            #dns_rr{
-                name = ~"m.root-servers.net",
-                type = ?DNS_TYPE_A,
-                ttl = 3600000,
-                data = #dns_rrdata_a{ip = {202, 12, 27, 33}}
-            }
-        ]
+        root_hint_delegations(),
+        root_hints_addresses()
     }.
+
+%% Authority section: NS records for root zone
+root_hint_delegations() ->
+    [
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"a.root-servers.net"}
+        },
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"b.root-servers.net"}
+        },
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"c.root-servers.net"}
+        },
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"d.root-servers.net"}
+        },
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"e.root-servers.net"}
+        },
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"f.root-servers.net"}
+        },
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"g.root-servers.net"}
+        },
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"h.root-servers.net"}
+        },
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"i.root-servers.net"}
+        },
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"j.root-servers.net"}
+        },
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"k.root-servers.net"}
+        },
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"l.root-servers.net"}
+        },
+        #dns_rr{
+            name = ~"",
+            type = ?DNS_TYPE_NS,
+            ttl = 3600000,
+            data = #dns_rrdata_ns{dname = ~"m.root-servers.net"}
+        }
+    ].
+
+%% Additional section: Glue records (A and AAAA) for root servers
+root_hints_addresses() ->
+    [
+        %% a.root-servers.net - Verisign, Inc.
+        #dns_rr{
+            name = ~"a.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {198, 41, 0, 4}}
+        },
+        #dns_rr{
+            name = ~"a.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {8193, 1283, 47678, 0, 0, 0, 2, 48}}
+        },
+        %% b.root-servers.net - University of Southern California, ISI
+        #dns_rr{
+            name = ~"b.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {170, 247, 170, 2}}
+        },
+        #dns_rr{
+            name = ~"b.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {10241, 440, 16, 0, 0, 0, 0, 11}}
+        },
+        %% c.root-servers.net - Cogent Communications
+        #dns_rr{
+            name = ~"c.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {192, 33, 4, 12}}
+        },
+        #dns_rr{
+            name = ~"c.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {8193, 1280, 2, 0, 0, 0, 0, 12}}
+        },
+        %% d.root-servers.net - University of Maryland
+        #dns_rr{
+            name = ~"d.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {199, 7, 91, 13}}
+        },
+        #dns_rr{
+            name = ~"d.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {8193, 1280, 45, 0, 0, 0, 0, 13}}
+        },
+        %% e.root-servers.net - NASA (Ames Research Center)
+        #dns_rr{
+            name = ~"e.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {192, 203, 230, 10}}
+        },
+        #dns_rr{
+            name = ~"e.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {8193, 1280, 168, 0, 0, 0, 0, 14}}
+        },
+        %% f.root-servers.net - Internet Systems Consortium, Inc.
+        #dns_rr{
+            name = ~"f.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {192, 5, 5, 241}}
+        },
+        #dns_rr{
+            name = ~"f.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {8193, 1280, 47, 0, 0, 0, 0, 15}}
+        },
+        %% g.root-servers.net - US Dept. of Defense (NIC)
+        #dns_rr{
+            name = ~"g.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {192, 112, 36, 4}}
+        },
+        #dns_rr{
+            name = ~"g.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {8193, 1280, 18, 0, 0, 0, 0, 3341}}
+        },
+        %% h.root-servers.net - US Army (Research Lab)
+        #dns_rr{
+            name = ~"h.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {198, 97, 190, 53}}
+        },
+        #dns_rr{
+            name = ~"h.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {8193, 1280, 1, 0, 0, 0, 0, 83}}
+        },
+        %% i.root-servers.net - Netnod
+        #dns_rr{
+            name = ~"i.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {192, 36, 148, 17}}
+        },
+        #dns_rr{
+            name = ~"i.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {8193, 2046, 0, 0, 0, 0, 0, 83}}
+        },
+        %% j.root-servers.net - Verisign, Inc.
+        #dns_rr{
+            name = ~"j.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {192, 58, 128, 30}}
+        },
+        #dns_rr{
+            name = ~"j.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {8193, 1283, 3111, 0, 0, 0, 2, 48}}
+        },
+        %% k.root-servers.net - RIPE NCC
+        #dns_rr{
+            name = ~"k.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {193, 0, 14, 129}}
+        },
+        #dns_rr{
+            name = ~"k.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {8193, 2045, 0, 0, 0, 0, 0, 1}}
+        },
+        %% l.root-servers.net - ICANN
+        #dns_rr{
+            name = ~"l.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {199, 7, 83, 42}}
+        },
+        #dns_rr{
+            name = ~"l.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {8193, 1280, 159, 0, 0, 0, 0, 66}}
+        },
+        %% m.root-servers.net - WIDE Project
+        #dns_rr{
+            name = ~"m.root-servers.net",
+            type = ?DNS_TYPE_A,
+            ttl = 3600000,
+            data = #dns_rrdata_a{ip = {202, 12, 27, 33}}
+        },
+        #dns_rr{
+            name = ~"m.root-servers.net",
+            type = ?DNS_TYPE_AAAA,
+            ttl = 3600000,
+            data = #dns_rrdata_aaaa{ip = {8193, 3523, 0, 0, 0, 0, 0, 53}}
+        }
+    ].
