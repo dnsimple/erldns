@@ -92,8 +92,9 @@ resolve_question(Msg, Zone, QLabels, QName, QType) ->
     QType :: dns:type(),
     CnameChain :: [dns:rr()].
 resolve_authoritative(Message, Zone, QLabels, QName, QType, CnameChain) ->
+    IsRecordNameInZone = erldns_zone_cache:is_record_name_in_zone(Zone, QLabels),
     Result =
-        case {erldns_zone_cache:is_record_name_in_zone(Zone, QLabels), CnameChain} of
+        case {IsRecordNameInZone, CnameChain} of
             {false, []} ->
                 resolve_ent(Message, Zone, QLabels);
             _ ->
@@ -113,11 +114,11 @@ resolve_authoritative(Message, Zone, QLabels, QName, QType, CnameChain) ->
                         )
                 end
         end,
-    maybe_add_zonecut_records(Zone, QLabels, Result, Message, QType).
+    maybe_add_zonecut_records(Zone, QLabels, Result, Message, QType, IsRecordNameInZone).
 
-maybe_add_zonecut_records(_, _, Result, _, ?DNS_TYPE_DS) ->
+maybe_add_zonecut_records(_, _, Result, _, ?DNS_TYPE_DS, true) ->
     Result;
-maybe_add_zonecut_records(Zone, QLabels, Result, Message, _QType) ->
+maybe_add_zonecut_records(Zone, QLabels, Result, Message, _QType, _) ->
     case detect_zonecut(Zone, QLabels) of
         [] ->
             Result;
