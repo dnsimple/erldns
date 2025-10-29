@@ -29,7 +29,7 @@ prepare(Opts) ->
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
 call(Msg, #{resolved := false, query_labels := QLabels, query_type := QType} = Opts) ->
     %% Search the available zones for the zone which is the nearest ancestor to QLabels
-    case erldns_zone_cache:get_authoritative_zone(QLabels) of
+    case erldns_zone_cache:get_authoritative_zone(QLabels, QType) of
         #zone{} = Zone ->
             #dns_message{questions = [#dns_query{name = QName}]} = Msg,
             Msg1 = resolve(Msg, Zone, QLabels, QName, QType),
