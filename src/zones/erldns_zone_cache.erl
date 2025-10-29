@@ -47,6 +47,7 @@ once and use multiple times.
     get_records_by_name_wildcard/2,
     get_records_by_name_wildcard_strict/2,
     get_authoritative_zone/1,
+    get_authoritative_zone/2,
     get_delegations/1,
     get_rrset_sync_counter/3,
     is_in_any_zone/1,
@@ -200,6 +201,15 @@ get_authoritative_zone(Name) when is_binary(Name) ->
     find_authoritative_zone_in_cache(Labels);
 get_authoritative_zone(Labels) when is_list(Labels) ->
     find_authoritative_zone_in_cache(Labels).
+
+-doc #{group => ~"API: Lookups"}.
+-doc "Find an authoritative zone for a given qname and qtype.".
+-spec get_authoritative_zone(dns:labels(), dns:type()) ->
+    erldns:zone() | zone_not_found | not_authoritative.
+get_authoritative_zone(Labels, ?DNS_TYPE_DS) ->
+    find_authoritative_zone_in_cache_ds(Labels);
+get_authoritative_zone(Labels, _) ->
+    get_authoritative_zone(Labels).
 
 -doc #{group => ~"API: Lookups"}.
 -doc """
@@ -619,6 +629,14 @@ find_authoritative_zone_in_cache([_ | Tail] = Labels) ->
             not_authoritative;
         _ ->
             find_authoritative_zone_in_cache(Tail)
+    end.
+
+find_authoritative_zone_in_cache_ds([_ | Tail] = Labels) ->
+    case find_authoritative_zone_in_cache(Tail) of
+        #zone{authority = [_ | _]} = Zone ->
+            Zone;
+        _ ->
+            find_authoritative_zone_in_cache(Labels)
     end.
 
 get_delegations(Name, Labels) ->
