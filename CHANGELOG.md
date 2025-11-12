@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v9.0.0-rc2
+
+### Changed
+
+- Logic for handling DS type queries is changed to be RFC compliant, see: [#285](https://github.com/dnsimple/erldns/pull/285).
+
 ## v9.0.0-rc1
 
 ### Removed
