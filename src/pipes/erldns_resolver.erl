@@ -29,7 +29,7 @@ prepare(Opts) ->
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
 call(Msg, #{resolved := false, query_labels := QLabels, query_type := QType} = Opts) ->
     %% Search the available zones for the zone which is the nearest ancestor to QLabels
-    case erldns_zone_cache:get_authoritative_zone(QLabels) of
+    case erldns_zone_cache:get_authoritative_zone(QLabels, QType) of
         #zone{} = Zone ->
             #dns_message{questions = [#dns_query{name = QName}]} = Msg,
             Msg1 = resolve(Msg, Zone, QLabels, QName, QType),
@@ -92,8 +92,9 @@ resolve_question(Msg, Zone, QLabels, QName, QType) ->
     QType :: dns:type(),
     CnameChain :: [dns:rr()].
 resolve_authoritative(Message, Zone, QLabels, QName, QType, CnameChain) ->
+    IsRecordNameInZone = erldns_zone_cache:is_record_name_in_zone(Zone, QLabels),
     Result =
-        case {erldns_zone_cache:is_record_name_in_zone(Zone, QLabels), CnameChain} of
+        case {IsRecordNameInZone, CnameChain} of
             {false, []} ->
                 resolve_ent(Message, Zone, QLabels);
             _ ->
@@ -113,6 +114,11 @@ resolve_authoritative(Message, Zone, QLabels, QName, QType, CnameChain) ->
                         )
                 end
         end,
+    maybe_add_zonecut_records(Zone, QLabels, Result, Message, QType, IsRecordNameInZone).
+
+maybe_add_zonecut_records(_, _, Result, _, ?DNS_TYPE_DS, true) ->
+    Result;
+maybe_add_zonecut_records(Zone, QLabels, Result, Message, _QType, _) ->
     case detect_zonecut(Zone, QLabels) of
         [] ->
             Result;
@@ -209,6 +215,10 @@ resolve_exact_match(Message, Zone, QLabels, QType, CnameChain, MatchedRecords) -
         {[], []} ->
             % There are no exact type matches and no referrals,
             % return NOERROR with the authority set
+            Message#dns_message{aa = true, authority = Zone#zone.authority};
+        {[], _} when QType == ?DNS_TYPE_DS ->
+            % There were no exact type matches, but since the query type
+            % was DS we still return NOERROR with the authority set
             Message#dns_message{aa = true, authority = Zone#zone.authority};
         {[], _} ->
             % There were no exact type matches,

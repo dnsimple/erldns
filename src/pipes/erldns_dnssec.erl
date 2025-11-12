@@ -159,9 +159,7 @@ handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, QName, QTyp
     Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
     ApexRecords = erldns_zone_cache:get_records_by_name(Zone#zone.name),
     ApexRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), ApexRecords),
-    SoaRRSigRecords = lists:filter(
-        erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords
-    ),
+    SoaRRSigRecords = maybe_get_soa_rrsig_records(ApexRRSigRecords, MsgAuths),
     NameToNormalise = dns:labels_to_dname([?NEXT_DNAME_PART | dns:dname_to_labels(QName)]),
     NextDname = dns:dname_to_lower(NameToNormalise),
     RecordTypesForQname = record_types_for_name(Zone, QName),
@@ -196,6 +194,15 @@ handle(Msg, Zone, _, _, true, true) ->
         authority = Msg#dns_message.authority ++ AuthoritySignatures
     },
     sign_unsigned(Msg1, Zone).
+
+% Find RRSIG record in Apex RRSIG records covering SOA record,
+% but only if SOA is in the Authority Section to begin with
+-spec maybe_get_soa_rrsig_records([dns:rr()], [dns:rr()]) -> [dns:rr()].
+maybe_get_soa_rrsig_records(ApexRRSigRecords, MsgAuths) ->
+    case lists:any(erldns_records:match_type(?DNS_TYPE_SOA), MsgAuths) of
+        true -> lists:filter(erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords);
+        false -> []
+    end.
 
 % Find all RRSIG records that cover the records in the provided record list.
 -spec find_rrsigs([dns:rr()]) -> [dns:rr()].
