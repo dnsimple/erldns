@@ -76,7 +76,9 @@ to_crypto_key(RsaKeyBin) ->
     extract_key(DecodedKey).
 
 extract_key(#'RSAPrivateKey'{publicExponent = E, modulus = M, privateExponent = N}) ->
-    [E, M, N].
+    [E, M, N];
+extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'secp256r1'}}) ->
+    Key.
 
 record_filter() ->
     fun(R) -> R =/= not_implemented end.
