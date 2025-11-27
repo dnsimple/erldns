@@ -4,6 +4,7 @@
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
 -include_lib("erldns/include/erldns.hrl").
+-include_lib("public_key/include/public_key.hrl").
 
 -export([decode/2]).
 
@@ -71,10 +72,10 @@ parse_keysets([Key | Rest], Keys) ->
     parse_keysets(Rest, [KeySet | Keys]).
 
 to_crypto_key(RsaKeyBin) ->
-    % Where E is the public exponent, N is public modulus and D is the private exponent
-    [_, _, M, E, N | _] = tuple_to_list(
-        public_key:pem_entry_decode(lists:last(public_key:pem_decode(RsaKeyBin)))
-    ),
+    DecodedKey = public_key:pem_entry_decode(lists:last(public_key:pem_decode(RsaKeyBin))),
+    extract_key(DecodedKey).
+
+extract_key(#'RSAPrivateKey'{publicExponent = E, modulus = M, privateExponent = N}) ->
     [E, M, N].
 
 record_filter() ->
