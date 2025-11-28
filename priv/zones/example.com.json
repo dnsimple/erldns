@@ -169,5 +169,69 @@
         "until": "2046-02-12T11:36:58.849384Z"
       }
     ]
+  },
+  {
+    "name": "example-dnssec1.com",
+    "records": [
+      {
+        "name": "example-dnssec1.com",
+        "type": "SOA",
+        "data": {
+          "mname": "ns1.example-dnssec1.com",
+          "rname": "ahu.example-dnssec1.com",
+          "serial": 2000081501,
+          "refresh": 28800,
+          "retry": 7200,
+          "expire": 604800,
+          "minimum": 86400
+        },
+        "ttl": 100000
+      },
+      {
+        "name": "example-dnssec1.com",
+        "type": "CDS",
+        "ttl": 120,
+        "data": {
+          "keytag": 57270,
+          "alg": 13,
+          "digest_type": 2,
+          "digest": "240D52C69E20328DF0FB99FB4FB2DB80796F43F2D9B84DDA3BEC5A5D7FAA3A63"
+        }
+      },
+      {
+        "name": "example-dnssec1.com",
+        "type": "CDNSKEY",
+        "ttl": 120,
+        "data": {
+          "flags": 257,
+          "protocol": 3,
+          "alg": 13,
+          "public_key": "BM0NPLNq6hlHxK+IKz6JXCtOwuB8xX9v0Q0XPB476ES3Kn7Td6XO0AZthEFoiVV906TJnaTytGuPq+sWOdTZo10="
+        }
+      },
+      {
+        "name": "example-dnssec1.com",
+        "type": "DNSKEY",
+        "ttl": 120,
+        "data": {
+          "flags": 257,
+          "protocol": 3,
+          "alg": 13,
+          "public_key": "BM0NPLNq6hlHxK+IKz6JXCtOwuB8xX9v0Q0XPB476ES3Kn7Td6XO0AZthEFoiVV906TJnaTytGuPq+sWOdTZo10="
+        }
+      }
+    ],
+    "keys": [
+      {
+        "ksk": "-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEIK7ZSvj4zd/eZXDPQ6oiHSss1ua3Mm7gIJvXxD9ukcwNoAoGCCqGSM49\nAwEHoUQDQgAEzQ08s2rqGUfEr4grPolcK07C4HzFf2/RDRc8HjvoRLcqftN3pc7Q\nBm2EQWiJVX3TpMmdpPK0a4+r6xY51NmjXQ==\n-----END EC PRIVATE KEY-----\n",
+        "ksk_keytag": 57270,
+        "ksk_alg": 13,
+        "zsk": "-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEID6nKyoN9wDOpCmjySdS1zijJczCosxPimsrqkCX6jnioAoGCCqGSM49\nAwEHoUQDQgAEtjEh+xFSgYj3Ka7+XD4zd99sqO9AscQR3a1cgPf8uNK+Z5NkhjEt\nxzSUQaMKj4lKQAC2CdlJr8ZKL+oI5E1+3g==\n-----END EC PRIVATE KEY-----\n",
+        "zsk_keytag": 25428,
+        "zsk_alg": 13,
+        "inception": "2025-11-27T14:06:38Z",
+        "until": "2026-11-27T14:06:38Z"
+      }
+    ]
   }
 ]

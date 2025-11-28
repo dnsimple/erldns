@@ -85,7 +85,7 @@ get_zones(CtConfig) ->
                     <<"erldns">> :=
                         #{
                             <<"zones">> :=
-                                #{<<"count">> := 2, <<"versions">> := _}
+                                #{<<"count">> := 3, <<"versions">> := _}
                         }
                 },
                 Body

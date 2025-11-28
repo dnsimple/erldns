@@ -11,7 +11,9 @@
 all() ->
     [
         verify_ksk_signed,
+        verify_ksk_signed_alg13,
         verify_zsk_signed,
+        verify_zsk_signed_alg13,
         test_signer_selection_logic,
         test_requires_key_signing_key_function
     ].
@@ -70,6 +72,37 @@ verify_ksk_signed(_) ->
         Msg1
     ).
 
+verify_ksk_signed_alg13(_) ->
+    Name = dns:dname_to_lower(~"example-dnssec1.com"),
+    Labels = dns:dname_to_labels(Name),
+    QType = ?DNS_TYPE_A,
+    Q = #dns_query{name = Name, type = QType},
+    A = #dns_rr{name = Name, type = QType, data = #dns_rrdata_a{ip = {1, 2, 3, 4}}},
+    Ad = #dns_optrr{dnssec = true},
+    Msg0 = #dns_message{
+        qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
+    },
+    Zone = erldns_zone_cache:get_authoritative_zone(Labels),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    ct:pal("msg: ~p~n", [Msg1]),
+    ?assertMatch(
+        #dns_message{
+            answers =
+                [
+                    A,
+                    #dns_rr{
+                        name = Name,
+                        type = ?DNS_TYPE_RRSIG,
+                        data = #dns_rrdata_rrsig{
+                            keytag = 25428,
+                            signers_name = Name
+                        }
+                    }
+                ]
+        },
+        Msg1
+    ).
+
 verify_zsk_signed(_) ->
     Name = dns:dname_to_lower(~"example-dnssec0.com"),
     Labels = dns:dname_to_labels(Name),
@@ -104,6 +137,48 @@ verify_zsk_signed(_) ->
                         type = ?DNS_TYPE_RRSIG,
                         data = #dns_rrdata_rrsig{
                             keytag = 37440,
+                            signers_name = Name
+                        }
+                    }
+                ]
+        },
+        Msg1
+    ).
+
+verify_zsk_signed_alg13(_) ->
+    Name = dns:dname_to_lower(~"example-dnssec1.com"),
+    Labels = dns:dname_to_labels(Name),
+    QType = ?DNS_TYPE_CDNSKEY,
+    CDSRecord = #dns_rr{
+        name = ~"example.com",
+        type = ?DNS_TYPE_CDNSKEY,
+        ttl = 120,
+        data = #dns_rrdata_cds{
+            keytag = 57270,
+            alg = 13,
+            digest_type = 2,
+            digest = ~"240D52C69E20328DF0FB99FB4FB2DB80796F43F2D9B84DDA3BEC5A5D7FAA3A63"
+        }
+    },
+
+    Q = #dns_query{name = Name, type = QType},
+    A = #dns_rr{name = Name, type = QType, data = CDSRecord},
+    Ad = #dns_optrr{dnssec = true},
+    Msg0 = #dns_message{
+        qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
+    },
+    Zone = erldns_zone_cache:get_authoritative_zone(Labels),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    ?assertMatch(
+        #dns_message{
+            answers =
+                [
+                    A,
+                    #dns_rr{
+                        name = Name,
+                        type = ?DNS_TYPE_RRSIG,
+                        data = #dns_rrdata_rrsig{
+                            keytag = 57270,
                             signers_name = Name
                         }
                     }
