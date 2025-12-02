@@ -71,13 +71,15 @@ parse_keysets([Key | Rest], Keys) ->
         },
     parse_keysets(Rest, [KeySet | Keys]).
 
-to_crypto_key(RsaKeyBin) ->
-    DecodedKey = public_key:pem_entry_decode(lists:last(public_key:pem_decode(RsaKeyBin))),
+to_crypto_key(KeyBin) ->
+    DecodedKey = public_key:pem_entry_decode(lists:last(public_key:pem_decode(KeyBin))),
     extract_key(DecodedKey).
 
 extract_key(#'RSAPrivateKey'{publicExponent = E, modulus = M, privateExponent = N}) ->
     [E, M, N];
 extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'secp256r1'}}) ->
+    Key;
+extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'secp384r1'}}) ->
     Key.
 
 record_filter() ->
