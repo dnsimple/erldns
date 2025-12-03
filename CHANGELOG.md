@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+- Add support for ECDSA DNSSEC signing (dnsimple/erldns#288)
+
 ## v9.0.0-rc2
 
 ### Changed
