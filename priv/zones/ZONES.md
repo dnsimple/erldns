@@ -40,6 +40,7 @@ A zone can also declare a set of keys, as stated in the example below. In such c
 pre-signed during loading with the given keys.
 
 Supported DNSSEC algorithms:
+
 - RSA (algorithm 5, 7, 8)
 - ECDSA P-256 (algorithm 13, ECDSAP256SHA256)
 - ECDSA P-384 (algorithm 14, ECDSAP384SHA384)
