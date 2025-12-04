@@ -156,7 +156,7 @@ handle(Msg, _, _, _, false, true) ->
 handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, QName, QType, true, true) ->
     % No answers found, return NSEC.
     Authority = lists:last(Zone#zone.authority),
-    Ttl = Authority#dns_rr.data#dns_rrdata_soa.minimum,
+    Ttl = minimum_soa_ttl(Authority),
     ApexRecords = erldns_zone_cache:get_records_by_name(Zone#zone.name),
     ApexRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), ApexRecords),
     SoaRRSigRecords = maybe_get_soa_rrsig_records(ApexRRSigRecords, MsgAuths),
@@ -277,3 +277,7 @@ get_wildcard_records_without_ent(true = _UseCompliantENT, Zone, Labels) ->
     end;
 get_wildcard_records_without_ent(false = _UseCompliantENT, Zone, Labels) ->
     erldns_zone_cache:get_records_by_name_wildcard(Zone, Labels).
+
+-spec minimum_soa_ttl(dns:rr()) -> dns:ttl().
+minimum_soa_ttl(#dns_rr{type = ?DNS_TYPE_SOA, ttl = Rec, data = #dns_rrdata_soa{minimum = Min}}) ->
+    erlang:min(Min, Rec).
