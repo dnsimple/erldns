@@ -80,6 +80,10 @@ extract_key(#'RSAPrivateKey'{publicExponent = E, modulus = M, privateExponent = 
 extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'secp256r1'}}) ->
     Key;
 extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'secp384r1'}}) ->
+    Key;
+extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'id-Ed25519'}}) ->
+    Key;
+extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'id-Ed448'}}) ->
     Key.
 
 record_filter() ->
