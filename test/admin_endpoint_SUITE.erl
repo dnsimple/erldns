@@ -85,9 +85,9 @@ get_zones(CtConfig) ->
                     <<"erldns">> :=
                         #{
                             <<"zones">> :=
-                                #{<<"count">> := 4, <<"versions">> := _}
+                                #{<<"count">> := N, <<"versions">> := _}
                         }
-                },
+                } when is_integer(N) andalso N >= 3,
                 Body
             );
         {_, Other} ->

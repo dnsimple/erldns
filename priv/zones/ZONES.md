@@ -39,6 +39,16 @@ Note that these strings are opaque to `erldns`, and you can use any string you w
 A zone can also declare a set of keys, as stated in the example below. In such case, records will be
 pre-signed during loading with the given keys.
 
+Supported DNSSEC algorithms:
+
+- RSA (algorithm 5, 7, 8)
+- ECDSA P-256 (algorithm 13, ECDSAP256SHA256)
+- ECDSA P-384 (algorithm 14, ECDSAP384SHA384)
+- Ed25519 (algorithm 15)
+- Ed448 (algorithm 16)
+
+Private keys must be provided in PEM format. For Ed25519 and Ed448, use `-----BEGIN PRIVATE KEY-----` format.
+
 ### Example
 
 The follow is an example of a collection of zones with a single zone in the collection:

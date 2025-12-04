@@ -297,5 +297,133 @@
         "until": "2026-11-27T14:06:38Z"
       }
     ]
+  },
+  {
+    "name": "example-dnssec-15.com",
+    "records": [
+      {
+        "name": "example-dnssec-15.com",
+        "type": "SOA",
+        "data": {
+          "mname": "ns1.example-dnssec-15.com",
+          "rname": "ahu.example-dnssec-15.com",
+          "serial": 2000081501,
+          "refresh": 28800,
+          "retry": 7200,
+          "expire": 604800,
+          "minimum": 86400
+        },
+        "ttl": 100000
+      },
+      {
+        "name": "example-dnssec-15.com",
+        "type": "CDS",
+        "ttl": 120,
+        "data": {
+          "keytag": 57270,
+          "alg": 15,
+          "digest_type": 2,
+          "digest": "240D52C69E20328DF0FB99FB4FB2DB80796F43F2D9B84DDA3BEC5A5D7FAA3A63"
+        }
+      },
+      {
+        "name": "example-dnssec-15.com",
+        "type": "CDNSKEY",
+        "ttl": 120,
+        "data": {
+          "flags": 257,
+          "protocol": 3,
+          "alg": 15,
+          "public_key": "zQ08s2rqGUfEr4grPolcK07C4HzFf2/RDRc8HjvoRLcqftN3pc7QBm2EQWiJVX3TpMmdpPK0a4+r6xY51NmjXQ=="
+        }
+      },
+      {
+        "name": "example-dnssec-15.com",
+        "type": "DNSKEY",
+        "ttl": 120,
+        "data": {
+          "flags": 257,
+          "protocol": 3,
+          "alg": 15,
+          "public_key": "zQ08s2rqGUfEr4grPolcK07C4HzFf2/RDRc8HjvoRLcqftN3pc7QBm2EQWiJVX3TpMmdpPK0a4+r6xY51NmjXQ=="
+        }
+      }
+    ],
+    "keys": [
+      {
+        "ksk": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEICgRNZcjEkoiJDGyk/JNxp4xTmYuwQm63xxBJuCHDYc7\n-----END PRIVATE KEY-----\n",
+        "ksk_keytag": 57270,
+        "ksk_alg": 15,
+        "zsk": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIJovlbXQf/WsWkQ9VN+BWMOnm6lrDymhCcW/W72uEERL\n-----END PRIVATE KEY-----\n",
+        "zsk_keytag": 25428,
+        "zsk_alg": 15,
+        "inception": "2025-11-27T14:06:38Z",
+        "until": "2026-11-27T14:06:38Z"
+      }
+    ]
+  },
+  {
+    "name": "example-dnssec-16.com",
+    "records": [
+      {
+        "name": "example-dnssec-16.com",
+        "type": "SOA",
+        "data": {
+          "mname": "ns1.example-dnssec-16.com",
+          "rname": "ahu.example-dnssec-16.com",
+          "serial": 2000081501,
+          "refresh": 28800,
+          "retry": 7200,
+          "expire": 604800,
+          "minimum": 86400
+        },
+        "ttl": 100000
+      },
+      {
+        "name": "example-dnssec-16.com",
+        "type": "CDS",
+        "ttl": 120,
+        "data": {
+          "keytag": 57270,
+          "alg": 16,
+          "digest_type": 2,
+          "digest": "240D52C69E20328DF0FB99FB4FB2DB80796F43F2D9B84DDA3BEC5A5D7FAA3A63"
+        }
+      },
+      {
+        "name": "example-dnssec-16.com",
+        "type": "CDNSKEY",
+        "ttl": 120,
+        "data": {
+          "flags": 257,
+          "protocol": 3,
+          "alg": 16,
+          "public_key": "BJjnzxJ1vMBolAdEw3pvq1KG2pTy3xMXqMuBddl3EE1z5CsOWNr6z67pd4O+lcIJrMGZ+cuLRQxb5+7GB19b77Kb+m3r7ZoYS9qT2YlE3W8rL9j7GaFK0M3jgRb5pyOn8w=="
+        }
+      },
+      {
+        "name": "example-dnssec-16.com",
+        "type": "DNSKEY",
+        "ttl": 120,
+        "data": {
+          "flags": 257,
+          "protocol": 3,
+          "alg": 16,
+          "public_key": "BJjnzxJ1vMBolAdEw3pvq1KG2pTy3xMXqMuBddl3EE1z5CsOWNr6z67pd4O+lcIJrMGZ+cuLRQxb5+7GB19b77Kb+m3r7ZoYS9qT2YlE3W8rL9j7GaFK0M3jgRb5pyOn8w=="
+        }
+      }
+    ],
+    "keys": [
+      {
+        "ksk": "-----BEGIN PRIVATE KEY-----\nMEcCAQAwBQYDK2VxBDsEOVaqlfF+ziu31IkHpq7Zz70WfW4S7jYzEWMFdU7vk5jK\nkAwt0J5GeUvQxAjD/kyEc7QjcmS8Ltbl0Q==\n-----END PRIVATE KEY-----\n",
+        "ksk_keytag": 57270,
+        "ksk_alg": 16,
+        "zsk": "-----BEGIN PRIVATE KEY-----\nMEcCAQAwBQYDK2VxBDsEObWIzK5qF6S3oPL3z3e24cVnSKJqMRtE1upH2x6OEgm/\nGXIxnRaNqrukuyD8cC08U1thANstL+aiaA==\n-----END PRIVATE KEY-----\n",
+        "zsk_keytag": 25428,
+        "zsk_alg": 16,
+        "inception": "2025-11-27T14:06:38Z",
+        "until": "2026-11-27T14:06:38Z"
+      }
+    ]
   }
 ]
