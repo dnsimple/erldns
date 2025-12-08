@@ -7,23 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v9.0.0
+
 ### Added
 
 - Add support for [RFC6605](https://datatracker.ietf.org/doc/rfc6605/): ECDSA for DNSSEC.
 - Add support for [RFC8080](https://datatracker.ietf.org/doc/rfc8080/): Ed22519/Ed448 for DNSSEC.
 - Add support for [RFC9077](https://datatracker.ietf.org/doc/rfc9077/): NSEC/NSEC3 TTLs.
 
-## v9.0.0-rc2
-
 ### Changed
 
 - Logic for handling DS type queries is changed to be RFC compliant, see: [#285](https://github.com/dnsimple/erldns/pull/285).
 
-## v9.0.0-rc1
-
 ### Removed
 
 - Support for encoding/decoding records of type SPF.
+
+### Fixed
+
+- Implement ENTs compliant with [RFC4592](https://datatracker.ietf.org/doc/rfc4592/)
 
 ## v8.1.0
 
