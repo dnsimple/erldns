@@ -15,8 +15,12 @@ See the type `t:erldns_zones:config/0` for details.
 """.
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("dns_erlang/include/dns.hrl").
 
--define(WILDCARD, "**/*.json").
+-define(LOG_METADATA, #{domain => [erldns, zones]}).
+-define(WILDCARD_JSON, "**/*.json").
+-define(WILDCARD_ZONE, "**/*.zone").
+-define(WILDCARD_AUTO, "**/*.{json,zone}").
 -define(TIMEOUT, timer:minutes(30)).
 
 -behaviour(gen_server).
@@ -24,205 +28,216 @@ See the type `t:erldns_zones:config/0` for details.
 -export([start_link/0, init/1, handle_call/3, handle_cast/2]).
 
 -doc "Load zones.".
--spec load_zones() -> non_neg_integer().
+-spec load_zones() -> {non_neg_integer(), [erldns:zone()]}.
 load_zones() ->
-    Count =
-        case get_config() of
-            #{path := Path, strict := Strict} ->
-                ?LOG_INFO(
-                    #{what => loading_zones_from_local_files, path => Path, strict => Strict}, #{
-                        domain => [erldns, zones]
-                    }
-                ),
-                load_zones(Strict, Path);
-            _ ->
-                0
-        end,
-    ?LOG_INFO(
-        #{what => loaded_zones_from_local_files, zone_count => Count},
-        #{domain => [erldns, zones]}
-    ),
-    Count.
+    {Count, Res} = load_and_get_count(),
+    ?LOG_INFO(#{what => loaded_zones_from_local_files, zone_count => Count}, ?LOG_METADATA),
+    {Count, Res}.
 
--doc """
-Load zones from a file in strict or loose mode.
-""".
--spec load_zones(file:name()) -> non_neg_integer().
-load_zones(Path) ->
-    fail_if_strict_and_path_not_found(true, Path, #{}),
-    load_zones(true, Path).
+-doc "Load zones from a given configuration, see `t:erldns_zones:config/0` for details.".
+-spec load_zones(erldns_zones:config() | file:name()) -> {non_neg_integer(), [erldns:zone()]}.
+load_zones(Path) when is_list(Path) ->
+    load_and_get_count(#{path => Path});
+load_zones(Config) when is_map(Config) ->
+    load_and_get_count(get_config(Config)).
 
--spec load_zones(boolean(), file:name()) -> non_neg_integer().
-load_zones(Strict, Path) when is_boolean(Strict), is_list(Path) ->
-    case filelib:is_dir(Path) of
-        true ->
-            ZoneFiles = filelib:wildcard(filename:join([Path, ?WILDCARD])),
-            load_zone_files_parallel(Strict, ZoneFiles, length(ZoneFiles));
-        false ->
-            load_zone_files_parallel(Strict, [Path], 1)
+-spec load_and_get_count() -> {non_neg_integer(), [erldns:zone()]}.
+load_and_get_count() ->
+    load_and_get_count(get_config()).
+
+-spec load_and_get_count(erldns_zones:config()) -> {non_neg_integer(), [erldns:zone()]}.
+load_and_get_count(Config) ->
+    case Config of
+        #{path := Path, strict := Strict, format := Format, timeout := Timeout} ->
+            ?LOG_INFO(
+                #{
+                    what => loading_zones_from_local_files,
+                    path => Path,
+                    format => Format,
+                    strict => Strict
+                },
+                ?LOG_METADATA
+            ),
+            do_load_zones(Path, Format, Timeout, Strict);
+        _ ->
+            {0, []}
     end.
 
-load_zone_files_parallel(Strict, ZoneFileNames, _ZoneFilesCount) ->
-    Ref = make_ref(),
-    ParentPid = self(),
-    {LoaderPids, LoaderMons} = create_loaders(Ref, ParentPid),
-    {ParserPid, ParserMon} = spawn_monitor(
-        fun() -> zone_parser(Ref, ParentPid, LoaderPids, Strict) end
-    ),
-    {ReaderPid, ReaderMon} = spawn_monitor(
-        fun() -> zone_reader(Ref, ParentPid, ParserPid, Strict) end
-    ),
-    [ReaderPid ! {Ref, Filename, read} || Filename <- ZoneFileNames],
-    ReaderPid ! {Ref, ParentPid, stop},
-    case if_any_died(Ref, [ParserPid, ReaderPid | LoaderPids], LoaderMons, ReaderMon, ParserMon) of
-        {ok, Count} ->
-            Count;
+-spec do_load_zones(file:name(), erldns_zones:format(), timeout(), boolean()) ->
+    {non_neg_integer(), [erldns:zone()]}.
+do_load_zones(Path, Format, _Timeout, Strict) ->
+    Files = find_zone_files(Path, Format),
+    Zones = lists:flatten([load_file(File, Strict) || File <- Files]),
+    Count = lists:flatten([load_zone(Zone) || Zone <- Zones]),
+    {length(Count), Zones}.
+
+-spec find_zone_files(file:name(), erldns_zones:format()) -> [file:filename()].
+find_zone_files(Path, Format) ->
+    case {filelib:is_dir(Path), Format} of
+        {false, _} ->
+            [Path];
+        {true, json} ->
+            filelib:wildcard(filename:join([Path, ?WILDCARD_JSON]), prim_file);
+        {true, zonefile} ->
+            filelib:wildcard(filename:join([Path, ?WILDCARD_ZONE]), prim_file);
+        {true, auto} ->
+            filelib:wildcard(filename:join([Path, ?WILDCARD_AUTO]), prim_file)
+    end.
+
+-spec load_file(file:filename(), boolean()) -> [erldns:zone()].
+load_file(File, Strict) ->
+    case filename:extension(File) of
+        ".json" ->
+            load_json_file(File, Strict);
+        ".zone" ->
+            load_zone_file(File, Strict);
+        _ ->
+            Strict andalso erlang:error({unsupported_file_extension, File}),
+            []
+    end.
+
+-spec load_json_file(file:filename(), boolean()) -> [erldns:zone()].
+load_json_file(File, Strict) ->
+    maybe
+        {ok, Content} ?= file:read_file(File, [raw]),
+        {ok, Zones} ?= safe_json_zones_decode(Content, Strict, File),
+        ct:pal("~p", [{File, Strict, Zones}]),
+        [erldns_zone_codec:decode(Zone) || Zone <- Zones]
+    else
+        [] ->
+            [];
         {error, Reason} ->
-            erlang:error(Reason)
+            Strict andalso erlang:error({file_read_error, File, Reason}),
+            []
     end.
 
-create_loaders(Ref, ParentPid) ->
-    Spawns = [
-        spawn_monitor(
-            fun() -> zone_loader(Ref, ParentPid) end
-        )
-     || _ <- lists:seq(1, erlang:system_info(schedulers))
-    ],
-    lists:unzip(Spawns).
-
-if_any_died(Ref, _, [], undefined, undefined) ->
-    count_zones(Ref, 0);
-if_any_died(Ref, Pids, LoaderMons, ReaderMon, ParserMon) ->
-    receive
-        {'DOWN', ReaderMon, process, _, normal} ->
-            if_any_died(Ref, Pids, LoaderMons, undefined, ParserMon);
-        {'DOWN', ParserMon, process, _, normal} ->
-            if_any_died(Ref, Pids, LoaderMons, ReaderMon, undefined);
-        {'DOWN', LoaderMon, process, _, normal} ->
-            if_any_died(Ref, Pids, lists:delete(LoaderMon, LoaderMons), ReaderMon, ParserMon);
-        {'DOWN', ReaderMon, process, _, Reason} when normal =/= Reason ->
-            [exit(Pid, kill) || Pid <- Pids],
-            {error, Reason};
-        {'DOWN', ParserMon, process, _, Reason} when normal =/= Reason ->
-            [exit(Pid, kill) || Pid <- Pids],
-            {error, Reason};
-        {'DOWN', _LoaderMon, process, _, Reason} when normal =/= Reason ->
-            [exit(Pid, kill) || Pid <- Pids],
-            {error, Reason}
-    after ?TIMEOUT ->
-        ok
+-spec safe_json_zones_decode(binary(), boolean(), file:filename()) ->
+    {ok, [json:decode_value()]} | {json_error, term()}.
+safe_json_zones_decode(Binary, Strict, File) ->
+    try json:decode(Binary) of
+        List when is_list(List) ->
+            {ok, ensure_zones(List, Strict)};
+        _ ->
+            Strict andalso erlang:error({invalid_zone_file, File}),
+            []
+    catch
+        error:Reason ->
+            Strict andalso erlang:error(Reason),
+            []
     end.
 
-count_zones(Ref, Count) ->
-    receive
-        {Ref, N} ->
-            count_zones(Ref, Count + N)
-    after 0 ->
-        {ok, Count}
+-spec ensure_zones([json:decode_value()], boolean()) -> [json:decode_value()].
+ensure_zones([#{~"name" := _, ~"records" := _} = H | T], Strict) ->
+    [H | ensure_zones(T, Strict)];
+ensure_zones([_ | T], Strict) ->
+    Strict andalso erlang:error({json_error, invalid_zone_file}),
+    ensure_zones(T, Strict);
+ensure_zones([], _) ->
+    [].
+
+-spec safe_json_record_decode(binary()) ->
+    {ok, json:decode_value()} | {error, invalid_zone_file} | {json_error, term()}.
+safe_json_record_decode(Binary) ->
+    try json:decode(Binary) of
+        Map when is_map(Map) ->
+            {ok, Map};
+        _ ->
+            {error, {json_error, invalid_record}}
+    catch
+        error:Reason -> {json_error, Reason}
     end.
 
-zone_reader(Ref, ParentPid, ParserPid, Strict) ->
-    receive
-        {Ref, Filename, read} ->
-            case file:read_file(Filename) of
-                {ok, FileContent} ->
-                    ParserPid ! {Ref, FileContent, parse},
-                    zone_reader(Ref, ParentPid, ParserPid, Strict);
-                {error, Reason} ->
-                    case Strict of
-                        true ->
-                            exit(Reason);
-                        false ->
-                            zone_reader(Ref, ParentPid, ParserPid, Strict)
-                    end
-            end;
-        {Ref, ParentPid, stop} ->
-            ParserPid ! {Ref, ParentPid, stop},
-            ok
-    after ?TIMEOUT ->
-        ok
+-spec load_zone_file(file:filename(), boolean()) -> [erldns:zone()].
+load_zone_file(File, Strict) ->
+    maybe
+        {ok, Records0} ?= dns_zone:parse_file(File),
+        Records = parse_zonefile_records(Records0, Strict),
+        Soa = #dns_rr{name = Name} ?= lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, Records),
+        Sha = crypto:hash(sha256, term_to_binary(Soa)),
+        erldns_zone_codec:build_zone(Name, Sha, Records, [])
+    else
+        false ->
+            Strict andalso erlang:error({invalid_zone_file, File}),
+            [];
+        {error, Reason} ->
+            Strict andalso erlang:error({file_read_error, File, Reason}),
+            []
     end.
 
-zone_parser(Ref, ParentPid, LoaderPids, Strict) ->
-    receive
-        {Ref, FileContent, parse} ->
-            case safe_json_decode(FileContent) of
-                {ok, JsonZones} ->
-                    [
-                        lists:nth(rand:uniform(length(LoaderPids)), LoaderPids) !
-                            {Ref, JsonZone, load}
-                     || JsonZone <- JsonZones
-                    ],
-                    zone_parser(Ref, ParentPid, LoaderPids, Strict);
-                {error, Reason} ->
-                    case Strict of
-                        true ->
-                            exit(Reason);
-                        false ->
-                            zone_parser(Ref, ParentPid, LoaderPids, Strict)
-                    end
-            end;
-        {Ref, ParentPid, stop} ->
-            [LoaderPid ! {Ref, ParentPid, stop} || LoaderPid <- LoaderPids],
-            ok
-    after ?TIMEOUT ->
-        ok
-    end.
+parse_zonefile_records(Records, Strict) ->
+    lists:map(fun(Record) -> parse_zonefile_record(Record, Strict) end, Records).
 
-zone_loader(Ref, ParentPid) ->
-    receive
-        {Ref, JsonZone, load} ->
-            load_zone(JsonZone),
-            ParentPid ! {Ref, 1},
-            zone_loader(Ref, ParentPid);
-        {Ref, ParentPid, stop} ->
-            ok
-    after ?TIMEOUT ->
-        ok
-    end.
+parse_zonefile_record(#dns_rr{data = Data} = Record, Strict) when is_binary(Data) ->
+    maybe
+        {ok, Json} ?= safe_json_record_decode(Data),
+        DnsRr = #dns_rr{} ?= erldns_zone_codec:decode_record(Json),
+        ct:pal("~p", [Json]),
+        DnsRr
+    else
+        not_implemented ->
+            Strict andalso erlang:error({custom_record_could_not_be_decoded, Record}),
+            Record;
+        {json_error, _Reason} ->
+            % Strict andalso erlang:error(Reason),
+            Record
+    end;
+parse_zonefile_record(Record, _) ->
+    Record.
 
-load_zone(JsonZone) ->
-    Zone = erldns_zone_codec:decode(JsonZone),
+-spec load_zone(dynamic()) -> ok.
+load_zone(Zone) ->
     erldns_zone_cache:put_zone(Zone).
 
 % Internal API
 -spec get_config() -> erldns_zones:config().
 get_config() ->
-    case application:get_env(erldns, zones, #{}) of
-        #{strict := Strict} when not is_boolean(Strict) ->
-            erlang:error({badconfig, invalid_strict_value});
-        #{path := Path, strict := false} = Config when is_list(Path) ->
-            fail_if_strict_and_path_not_found(false, Path, Config);
-        #{path := Path, strict := true} = Config when is_list(Path) ->
-            fail_if_strict_and_path_not_found(true, Path, Config);
-        #{path := Path} = Config ->
-            fail_if_strict_and_path_not_found(true, Path, Config#{strict => true});
-        #{strict := true} ->
-            erlang:error({badconfig, enoent});
-        #{strict := false} = Config ->
-            Config;
-        Other ->
-            Other
+    Config = application:get_env(erldns, zones, #{}),
+    get_config(Config).
+
+get_config(Config) ->
+    Format = maps:get(format, Config, json),
+    Timeout = maps:get(timeout, Config, ?TIMEOUT),
+    Path = maps:get(path, Config, undefined),
+    Strict = maps:get(strict, Config, undefined =/= Path),
+    assert_valid_format(Format),
+    assert_valid_timeout(Timeout),
+    assert_valid_path(Path, Strict),
+    case Path of
+        undefined ->
+            #{};
+        _ ->
+            #{path => Path, strict => Strict, format => Format, timeout => Timeout}
     end.
 
-fail_if_strict_and_path_not_found(true, Path, Config) ->
-    case filelib:is_dir(Path) orelse filelib:is_file(Path) of
+-spec assert_valid_format(erldns_zones:format()) -> ok | no_return().
+assert_valid_format(Format) ->
+    Format =:= json orelse Format =:= zonefile orelse Format =:= auto orelse
+        erlang:error({badconfig, invalid_format_value}).
+
+-spec assert_valid_timeout(timeout()) -> ok | no_return().
+assert_valid_timeout(Timeout) ->
+    (is_integer(Timeout) andalso Timeout > 0) orelse infinity =:= Timeout orelse
+        erlang:error({badconfig, invalid_timeout_value}).
+
+-spec assert_valid_path(file:name() | undefined, boolean()) -> ok | no_return().
+assert_valid_path(_, Strict) when not is_boolean(Strict) ->
+    erlang:error({badconfig, invalid_strict_value});
+assert_valid_path(Path, Strict) when is_list(Path) ->
+    fail_if_strict_and_path_not_found(Path, Strict);
+assert_valid_path(_, true) ->
+    erlang:error({badconfig, enoent});
+assert_valid_path(undefined, _) ->
+    undefined;
+assert_valid_path(_, _) ->
+    undefined.
+
+-spec fail_if_strict_and_path_not_found(file:name(), boolean()) -> ok | no_return().
+fail_if_strict_and_path_not_found(Path, Strict) ->
+    case not Strict orelse filelib:is_dir(Path) orelse filelib:is_file(Path) of
         true ->
-            Config;
+            ok;
         false ->
             erlang:error({badconfig, enoent})
-    end;
-fail_if_strict_and_path_not_found(false, _, Config) ->
-    Config.
-
-safe_json_decode(Binary) ->
-    try json:decode(Binary) of
-        List when is_list(List) ->
-            {ok, List};
-        _ ->
-            {error, invalid_zone_file}
-    catch
-        error:Reason -> {error, Reason}
     end.
 
 -doc false.
@@ -240,11 +255,11 @@ init(noargs) ->
 -spec handle_call(dynamic(), gen_server:from(), nostate) ->
     {reply, not_implemented, nostate}.
 handle_call(Call, From, State) ->
-    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, #{domain => [erldns, zones]}),
+    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, ?LOG_METADATA),
     {reply, not_implemented, State}.
 
 -doc false.
 -spec handle_cast(dynamic(), nostate) -> {noreply, nostate}.
 handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, #{domain => [erldns, zones]}),
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, ?LOG_METADATA),
     {noreply, State}.

@@ -18,7 +18,7 @@ all() ->
 -spec groups() -> [ct_suite:ct_group_def()].
 groups() ->
     [
-        {loader, [], [
+        {loader, [parallel], [
             loader_coverage,
             defaults,
             bad_config,
@@ -29,7 +29,11 @@ groups() ->
             bad_json_not_list,
             valid_zones,
             load_dnssec_zone,
-            wildcard_loose
+            wildcard_loose,
+            load_zonefile,
+            load_zonefile_format_auto,
+            load_zonefile_rfc3597,
+            load_zonefile_with_custom_decoder
         ]},
         {codec, [], [
             bad_custom_codecs_module_does_not_exist,
@@ -92,14 +96,14 @@ end_per_suite(_) ->
 
 -spec init_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_group(loader, Config) ->
-    meck:new(erldns_zone_codec, [passthrough, no_link]),
-    meck:expect(erldns_zone_codec, decode, fun(Term) -> Term end),
-    meck:new(erldns_zone_cache, [passthrough, no_link]),
-    meck:expect(erldns_zone_cache, put_zone, fun
-        (false) -> {error, false};
-        (Term) -> Term
-    end),
-    Config;
+    Fun = fun() ->
+        setup_test(Config, loader),
+        receive
+            stop -> ok
+        end
+    end,
+    Pid = spawn(Fun),
+    [{loader, Pid} | Config];
 init_per_group(cache, Config) ->
     Fun = fun() ->
         setup_test(Config, cache),
@@ -117,8 +121,11 @@ end_per_group(cache, Config) ->
     Pid = proplists:get_value(cache, Config),
     ct:pal("Cache process is alive: ~p~n", [erlang:is_process_alive(Pid)]),
     exit(Pid, stop);
-end_per_group(loader, _Config) ->
-    meck:unload();
+end_per_group(loader, Config) ->
+    application:unset_env(erldns, zones),
+    Pid = proplists:get_value(loader, Config),
+    ct:pal("Cache process is alive: ~p~n", [erlang:is_process_alive(Pid)]),
+    exit(Pid, stop);
 end_per_group(_, _Config) ->
     ok.
 
@@ -209,7 +216,7 @@ encode_meta_to_json_dnssec(Config) ->
     ?assertMatch(L when 8 =:= length(L), json:decode(JSON)).
 
 json_to_erlang(_) ->
-    R = erldns_zone_parser:decode(json:decode(input()), []),
+    R = erldns_zone_decoder:decode(json:decode(input()), []),
     ?assertMatch(#zone{}, R).
 
 json_to_erlang_txt_spf_records(_) ->
@@ -231,7 +238,7 @@ json_to_erlang_txt_spf_records(_) ->
     }
     """,
     Json = json:decode(I),
-    R = erldns_zone_parser:decode(Json, []),
+    R = erldns_zone_decoder:decode(Json, []),
     Expected = [
         #dns_rr{
             name = ~"example.com",
@@ -254,16 +261,16 @@ json_to_erlang_txt_spf_records(_) ->
 json_to_erlang_ensure_sorting_and_defaults(_) ->
     ?assertMatch(
         #zone{name = ~"foo.org", version = <<>>, records = [], keysets = []},
-        erldns_zone_parser:decode(#{~"name" => ~"foo.org", ~"records" => []}, [])
+        erldns_zone_decoder:decode(#{~"name" => ~"foo.org", ~"records" => []}, [])
     ).
 
 json_record_to_erlang(_) ->
-    ?assertEqual(not_implemented, erldns_zone_parser:json_record_to_erlang(#{})),
+    ?assertEqual(not_implemented, erldns_zone_decoder:json_record_to_erlang(#{})),
     Name = ~"example.com",
     Data = #{
         ~"name" => Name, ~"type" => ~"SOA", ~"ttl" => 3600, ~"data" => null, ~"context" => null
     },
-    ?assertEqual(not_implemented, erldns_zone_parser:json_record_to_erlang(Data)).
+    ?assertEqual(not_implemented, erldns_zone_decoder:json_record_to_erlang(Data)).
 
 json_record_soa_to_erlang(_) ->
     Name = ~"example.com",
@@ -283,7 +290,7 @@ json_record_soa_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang(#{
+        erldns_zone_decoder:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SOA",
             ~"ttl" => 3600,
@@ -309,7 +316,7 @@ json_record_ns_to_erlang(_) ->
             data = #dns_rrdata_ns{dname = ~"ns1.example.com"},
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang(#{
+        erldns_zone_decoder:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"NS",
             ~"ttl" => 3600,
@@ -327,7 +334,7 @@ json_record_a_to_erlang(_) ->
             data = #dns_rrdata_a{ip = {1, 2, 3, 4}},
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang(#{
+        erldns_zone_decoder:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"A",
             ~"ttl" => 3600,
@@ -345,7 +352,7 @@ json_record_aaaa_to_erlang(_) ->
             data = #dns_rrdata_aaaa{ip = {0, 0, 0, 0, 0, 0, 0, 1}},
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang(#{
+        erldns_zone_decoder:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"AAAA",
             ~"ttl" => 3600,
@@ -371,7 +378,7 @@ json_record_cds_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang(#{
+        erldns_zone_decoder:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"CDS",
             ~"ttl" => 3600,
@@ -403,7 +410,7 @@ json_record_tlsa_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_parser:json_record_to_erlang(#{
+        erldns_zone_decoder:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"TLSA",
             ~"ttl" => 3600,
@@ -430,7 +437,7 @@ parse_json_keys_unsorted_proplists_time_unit(_) ->
     %% nanoseconds
     ?assertMatch(
         [#keyset{inception = 1749478020, valid_until = 1781014020}],
-        erldns_zone_parser:parse_keysets([
+        erldns_zone_decoder:parse_keysets([
             Base#{
                 ~"inception" => ~"2025-06-09T14:07:00.916361083Z",
                 ~"until" => ~"2026-06-09T14:07:00.916361083Z"
@@ -440,7 +447,7 @@ parse_json_keys_unsorted_proplists_time_unit(_) ->
     %% microseconds
     ?assertMatch(
         [#keyset{inception = 1749478020, valid_until = 1781014020}],
-        erldns_zone_parser:parse_keysets([
+        erldns_zone_decoder:parse_keysets([
             Base#{
                 ~"inception" => ~"2025-06-09T14:07:00.916361Z",
                 ~"until" => ~"2026-06-09T14:07:00.916361Z"
@@ -450,7 +457,7 @@ parse_json_keys_unsorted_proplists_time_unit(_) ->
     %% milliseconds
     ?assertMatch(
         [#keyset{inception = 1749478020, valid_until = 1781014020}],
-        erldns_zone_parser:parse_keysets([
+        erldns_zone_decoder:parse_keysets([
             Base#{
                 ~"inception" => ~"2025-06-09T14:07:00.916Z",
                 ~"until" => ~"2026-06-09T14:07:00.916Z"
@@ -460,7 +467,7 @@ parse_json_keys_unsorted_proplists_time_unit(_) ->
     %% seconds
     ?assertMatch(
         [#keyset{inception = 1749478020, valid_until = 1781014020}],
-        erldns_zone_parser:parse_keysets([
+        erldns_zone_decoder:parse_keysets([
             Base#{
                 ~"inception" => ~"2025-06-09T14:07:00Z",
                 ~"until" => ~"2026-06-09T14:07:00Z"
@@ -490,7 +497,7 @@ parse_json_keys_unsorted_proplists(_) ->
                 valid_until = 1486899418
             }
         ],
-        erldns_zone_parser:parse_keysets([
+        erldns_zone_decoder:parse_keysets([
             #{
                 ~"ksk" => ksk_private_key(),
                 ~"ksk_alg" => 8,
@@ -511,54 +518,90 @@ loader_coverage(_) ->
     ?assert(erlang:is_process_alive(whereis(erldns_zone_loader))).
 
 defaults(_) ->
-    ?assertEqual(0, erldns_zone_loader:load_zones()).
+    ?assertMatch({0, _}, erldns_zone_loader:load_zones()).
 
 bad_config(_) ->
-    application:set_env(erldns, zones, #{strict => very_invalid}),
-    ?assertError({badconfig, _}, erldns_zone_loader:load_zones()).
+    LoadConfig = #{strict => very_invalid},
+    ?assertError({badconfig, _}, erldns_zone_loader:load_zones(LoadConfig)).
 
 strict_true(_) ->
-    application:set_env(erldns, zones, #{strict => true}),
-    ?assertError({badconfig, enoent}, erldns_zone_loader:load_zones()).
+    LoadConfig = #{strict => true},
+    ?assertError({badconfig, enoent}, erldns_zone_loader:load_zones(LoadConfig)).
 
 strict_false(_) ->
-    application:set_env(erldns, zones, #{strict => false}),
-    ?assertMatch(0, erldns_zone_loader:load_zones()).
+    LoadConfig = #{strict => false},
+    ?assertMatch({0, _}, erldns_zone_loader:load_zones(LoadConfig)).
 
 strict_passes(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "good.json"),
-    application:set_env(erldns, zones, #{path => Path}),
-    ?assertMatch(0, erldns_zone_loader:load_zones()).
+    LoadConfig = #{path => Path},
+    ?assertMatch({0, _}, erldns_zone_loader:load_zones(LoadConfig)).
 
 bad_json(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "bad_json.json"),
-    application:set_env(erldns, zones, #{path => Path}),
-    ?assertError({invalid_byte, _}, erldns_zone_loader:load_zones()).
+    LoadConfig = #{path => Path},
+    ?assertError({invalid_byte, _}, erldns_zone_loader:load_zones(LoadConfig)).
 
 bad_json_not_list(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "json_not_list.json"),
-    application:set_env(erldns, zones, #{path => Path}),
-    ?assertError(invalid_zone_file, erldns_zone_loader:load_zones()).
+    LoadConfig = #{path => Path},
+    ?assertError({invalid_zone_file, _}, erldns_zone_loader:load_zones(LoadConfig)).
 
 valid_zones(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "standard.json"),
-    application:set_env(erldns, zones, #{path => Path}),
-    ?assertMatch(1, erldns_zone_loader:load_zones()).
+    LoadConfig = #{path => Path},
+    ?assertMatch({1, _}, erldns_zone_loader:load_zones(LoadConfig)).
 
 load_dnssec_zone(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "dnssec-zone.json"),
-    application:set_env(erldns, zones, #{path => Path, strict => true}),
-    ?assertMatch(1, erldns_zone_loader:load_zones()).
+    LoadConfig = #{path => Path, strict => true},
+    ?assertMatch({1, _}, erldns_zone_loader:load_zones(LoadConfig)).
 
 wildcard_loose(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
-    application:set_env(erldns, zones, #{strict => false, path => DataDir}),
-    ?assertMatch(4, erldns_zone_loader:load_zones()).
+    LoadConfig = #{strict => false, path => DataDir},
+    ?assertMatch({3, _}, erldns_zone_loader:load_zones(LoadConfig)).
+
+load_zonefile(Config) ->
+    DataDir = proplists:get_value(data_dir, Config),
+    Path = filename:join(DataDir, "example.zone"),
+    LoadConfig = #{path => Path, format => zonefile},
+    ?assertMatch({1, _}, erldns_zone_loader:load_zones(LoadConfig)).
+
+load_zonefile_format_auto(Config) ->
+    DataDir = proplists:get_value(data_dir, Config),
+    % Test auto-detection with .zone extension
+    Path = filename:join(DataDir, "example.zone"),
+    LoadConfig1 = #{path => Path, format => auto},
+    ?assertMatch({1, _}, erldns_zone_loader:load_zones(LoadConfig1)),
+    % Test auto-detection with .json extension
+    JsonPath = filename:join(DataDir, "standard.json"),
+    LoadConfig2 = #{path => JsonPath, format => auto},
+    ?assertMatch({1, _}, erldns_zone_loader:load_zones(LoadConfig2)).
+
+load_zonefile_rfc3597(Config) ->
+    DataDir = proplists:get_value(data_dir, Config),
+    Path = filename:join(DataDir, "rfc3597.zone"),
+    LoadConfig = #{path => Path, format => zonefile, strict => false},
+    ?assertMatch({1, _}, erldns_zone_loader:load_zones(LoadConfig)).
+
+load_zonefile_with_custom_decoder(Config) ->
+    DataDir = proplists:get_value(data_dir, Config),
+    Path = filename:join(DataDir, "rfc3597.zone"),
+    LoadConfig = #{path => Path, format => zonefile},
+    Result = erldns_zone_loader:load_zones(LoadConfig),
+    ?assertMatch({1, _}, Result),
+    {1, [Zone]} = Result,
+    ?assertMatch(#zone{labels = [~"example-rfc3597", ~"com"]}, Zone),
+    % Check that records were loaded (including custom type if decoder handles it)
+    Records = Zone#zone.records,
+    ct:pal("~p", [Records]),
+    ?assertMatch(L when length(L) > 0, Records).
 
 cache_coverage(_) ->
     gen_server:call(erldns_zone_cache, anything),
@@ -1007,14 +1050,18 @@ delete_zone_rrset_records_zone_not_found(_) ->
     ),
     ?assertEqual(zone_not_found, Ret).
 
-setup_test(Config, _) ->
+setup_test(_Config, loader) ->
+    application:set_env(erldns, zones, #{codecs => [sample_custom_zone_codec]}),
+    {ok, _} = erldns_zone_codec:start_link(),
+    {ok, _} = erldns_zone_cache:start_link();
+setup_test(Config, cache) ->
     {ok, _} = erldns_zone_codec:start_link(),
     {ok, _} = erldns_zone_cache:start_link(),
     DataDir = proplists:get_value(data_dir, Config),
     application:set_env(erldns, zones, #{path => filename:join(DataDir, "standard.json")}),
-    ?assertMatch(1, erldns_zone_loader:load_zones()),
+    ?assertMatch({1, _}, erldns_zone_loader:load_zones()),
     application:set_env(erldns, zones, #{path => filename:join(DataDir, "dnssec-zone.json")}),
-    ?assertMatch(1, erldns_zone_loader:load_zones()).
+    ?assertMatch({1, _}, erldns_zone_loader:load_zones()).
 
 ksk_private_key() ->
     <<

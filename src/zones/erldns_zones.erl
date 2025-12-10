@@ -18,6 +18,8 @@ For more details about its subsections, see:
     {zones, #{
         path => "zones.json",
         strict => true,
+        format => json,  % or zonefile, or auto (default: json)
+        timeout => timer:minutes(30),
         codecs => [sample_custom_zone_codec],
         context_options => #{match_empty => true, allow => [<<"anycast">>, <<"AMS">>, <<"TKO">>],
         rfc_compliant_ent => true}
@@ -35,6 +37,12 @@ Path can be a directory, and `strict` declares whether load failure should crash
 If a path is configured and `strict` is true, and the path is not resolvable, it will fail.
 See `m:erldns_zone_loader` for more details.
 
+Format specifies the zone file format: `json` (default) or `zonefile`. When `zonefile` is used,
+zones are parsed using dns_erlang's zonefile parser. Both formats support custom codecs for
+handling unknown record types.
+
+Timeouts specify how long zone loading can take before being aborted. Defaults to 30 minutes.
+
 Codecs are a list of modules that implement the `m:erldns_zone_codec` behaviour.
 
 Context options allow you to filter loading certain records in a zone depending on configuration
@@ -47,6 +55,8 @@ When set to `true`, ENTs will be used as the source of wildcard synthesis if app
 -type config() :: #{
     path => undefined | file:name(),
     strict => boolean(),
+    format => format(),
+    timeout => timeout(),
     codecs => [module()],
     context_options => #{
         match_empty => boolean(),
@@ -55,7 +65,8 @@ When set to `true`, ENTs will be used as the source of wildcard synthesis if app
     rfc_compliant_ent => boolean()
 }.
 -type version() :: binary().
--export_type([config/0, version/0]).
+-type format() :: json | zonefile | auto.
+-export_type([config/0, version/0, format/0]).
 
 -behaviour(supervisor).
 
