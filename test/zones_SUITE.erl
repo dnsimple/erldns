@@ -19,7 +19,6 @@ all() ->
 groups() ->
     [
         {loader, [parallel], [
-            loader_coverage,
             defaults,
             bad_config,
             strict_true,
@@ -33,7 +32,15 @@ groups() ->
             load_zonefile,
             load_zonefile_format_auto,
             load_zonefile_rfc3597,
-            load_zonefile_with_custom_decoder
+            load_zonefile_with_custom_decoder,
+            empty_directory,
+            zonefile_format_directory,
+            auto_format_directory,
+            error_handling_strict,
+            error_handling_non_strict,
+            multiple_errors,
+            queued_requests,
+            getter_coverage
         ]},
         {codec, [], [
             bad_custom_codecs_module_does_not_exist,
@@ -96,28 +103,15 @@ end_per_suite(_) ->
 
 -spec init_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_group(loader, Config) ->
-    Fun = fun() ->
-        setup_test(Config, loader),
-        receive
-            stop -> ok
-        end
-    end,
-    Pid = spawn(Fun),
-    [{loader, Pid} | Config];
+    [init_supervision_tree(Config, loader) | Config];
 init_per_group(cache, Config) ->
-    Fun = fun() ->
-        setup_test(Config, cache),
-        receive
-            stop -> ok
-        end
-    end,
-    Pid = spawn(Fun),
-    [{cache, Pid} | Config];
+    [init_supervision_tree(Config, cache) | Config];
 init_per_group(_, Config) ->
     Config.
 
 -spec end_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> term().
 end_per_group(cache, Config) ->
+    application:unset_env(erldns, zones),
     Pid = proplists:get_value(cache, Config),
     ct:pal("Cache process is alive: ~p~n", [erlang:is_process_alive(Pid)]),
     exit(Pid, stop);
@@ -127,7 +121,7 @@ end_per_group(loader, Config) ->
     ct:pal("Cache process is alive: ~p~n", [erlang:is_process_alive(Pid)]),
     exit(Pid, stop);
 end_per_group(_, _Config) ->
-    ok.
+    application:unset_env(erldns, zones).
 
 -spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_testcase(_, Config) ->
@@ -200,16 +194,12 @@ encode_meta_to_json(_) ->
 encode_meta_to_json_dnssec(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "dnssec-zone.json"),
-    application:set_env(erldns, zones, #{
-        path => Path,
-        codecs => [sample_custom_zone_codec]
-    }),
-    {ok, _} = erldns_zone_cache:start_link(),
-    {ok, _} = erldns_zone_codec:start_link(),
-    {ok, _} = erldns_zone_loader:start_link(),
+    application:set_env(erldns, zones, #{path => Path, codecs => [sample_custom_zone_codec]}),
+    {ok, _} = erldns_zones:start_link(),
     ZoneName = ~"example-dnssec.com",
     RecordName = ~"example-dnssec.com",
-    Z = erldns_zone_codec:build_zone(ZoneName, ~"", [], []),
+    Records = erldns_zone_cache:get_zone_records(ZoneName),
+    Z = erldns_zone_codec:build_zone(ZoneName, ~"", Records, []),
     Data = erldns_zone_codec:encode(Z, #{mode => {zone_records_to_json, RecordName}}),
     JSON = iolist_to_binary(json:encode(Data)),
     ?assert(is_binary(JSON)),
@@ -511,14 +501,8 @@ parse_json_keys_unsorted_proplists(_) ->
         ])
     ).
 
-loader_coverage(_) ->
-    erldns_zone_loader:start_link(),
-    gen_server:call(erldns_zone_loader, anything),
-    gen_server:cast(erldns_zone_loader, anything),
-    ?assert(erlang:is_process_alive(whereis(erldns_zone_loader))).
-
 defaults(_) ->
-    ?assertMatch({0, _}, erldns_zone_loader:load_zones()).
+    ?assertMatch(0, erldns_zone_loader:load_zones()).
 
 bad_config(_) ->
     LoadConfig = #{strict => very_invalid},
@@ -530,19 +514,19 @@ strict_true(_) ->
 
 strict_false(_) ->
     LoadConfig = #{strict => false},
-    ?assertMatch({0, _}, erldns_zone_loader:load_zones(LoadConfig)).
+    ?assertMatch(0, erldns_zone_loader:load_zones(LoadConfig)).
 
 strict_passes(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "good.json"),
     LoadConfig = #{path => Path},
-    ?assertMatch({0, _}, erldns_zone_loader:load_zones(LoadConfig)).
+    ?assertMatch(0, erldns_zone_loader:load_zones(LoadConfig)).
 
 bad_json(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "bad_json.json"),
     LoadConfig = #{path => Path},
-    ?assertError({invalid_byte, _}, erldns_zone_loader:load_zones(LoadConfig)).
+    ?assertError({json_error, _}, erldns_zone_loader:load_zones(LoadConfig)).
 
 bad_json_not_list(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
@@ -554,54 +538,153 @@ valid_zones(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "standard.json"),
     LoadConfig = #{path => Path},
-    ?assertMatch({1, _}, erldns_zone_loader:load_zones(LoadConfig)).
+    ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig)).
 
 load_dnssec_zone(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "dnssec-zone.json"),
     LoadConfig = #{path => Path, strict => true},
-    ?assertMatch({1, _}, erldns_zone_loader:load_zones(LoadConfig)).
+    ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig)).
 
 wildcard_loose(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     LoadConfig = #{strict => false, path => DataDir},
-    ?assertMatch({3, _}, erldns_zone_loader:load_zones(LoadConfig)).
+    ?assertMatch(3, erldns_zone_loader:load_zones(LoadConfig)).
 
 load_zonefile(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "example.zone"),
     LoadConfig = #{path => Path, format => zonefile},
-    ?assertMatch({1, _}, erldns_zone_loader:load_zones(LoadConfig)).
+    ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig)).
 
 load_zonefile_format_auto(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     % Test auto-detection with .zone extension
     Path = filename:join(DataDir, "example.zone"),
     LoadConfig1 = #{path => Path, format => auto},
-    ?assertMatch({1, _}, erldns_zone_loader:load_zones(LoadConfig1)),
+    ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig1)),
     % Test auto-detection with .json extension
     JsonPath = filename:join(DataDir, "standard.json"),
     LoadConfig2 = #{path => JsonPath, format => auto},
-    ?assertMatch({1, _}, erldns_zone_loader:load_zones(LoadConfig2)).
+    ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig2)).
 
 load_zonefile_rfc3597(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "rfc3597.zone"),
     LoadConfig = #{path => Path, format => zonefile, strict => false},
-    ?assertMatch({1, _}, erldns_zone_loader:load_zones(LoadConfig)).
+    ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig)).
 
 load_zonefile_with_custom_decoder(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "rfc3597.zone"),
     LoadConfig = #{path => Path, format => zonefile},
     Result = erldns_zone_loader:load_zones(LoadConfig),
-    ?assertMatch({1, _}, Result),
-    {1, [Zone]} = Result,
-    ?assertMatch(#zone{labels = [~"example-rfc3597", ~"com"]}, Zone),
-    % Check that records were loaded (including custom type if decoder handles it)
-    Records = Zone#zone.records,
-    ct:pal("~p", [Records]),
-    ?assertMatch(L when length(L) > 0, Records).
+    ?assertMatch(1, Result),
+    Records = erldns_zone_cache:get_zone_records(~"example-rfc3597.com"),
+    ?assert(lists:any(fun(#dns_rr{data = Data}) -> ~"example.net" =:= Data end, Records)).
+
+empty_directory(Config) ->
+    PrivDir = proplists:get_value(priv_dir, Config),
+    EmptyDir = filename:join(PrivDir, "empty_dir"),
+    ok = filelib:ensure_dir(filename:join(EmptyDir, "dummy")),
+    LoadConfig = #{path => EmptyDir, strict => false},
+    Result = erldns_zone_loader:load_zones(LoadConfig),
+    ?assertMatch(0, Result).
+
+zonefile_format_directory(Config) ->
+    DataDir = proplists:get_value(data_dir, Config),
+    LoadConfig = #{path => DataDir, format => zonefile, strict => false},
+    Result = erldns_zone_loader:load_zones(LoadConfig),
+    % Should find at least example.zone, rfc3597.zone
+    ?assertMatch(N when N >= 2, Result).
+
+auto_format_directory(Config) ->
+    % Test auto format with directory - should find both .json and .zone files
+    DataDir = proplists:get_value(data_dir, Config),
+    LoadConfig = #{path => DataDir, format => auto, strict => false},
+    Result = erldns_zone_loader:load_zones(LoadConfig),
+    % Should find multiple files (both json and zone)
+    ?assertMatch(N when N >= 3, Result).
+
+error_handling_strict(Config) ->
+    % Test error handling in strict mode - should return error
+    DataDir = proplists:get_value(data_dir, Config),
+    BadPath = filename:join(DataDir, "nonexistent.json"),
+    LoadConfig = #{path => BadPath, strict => true},
+    ?assertError({badconfig, _}, erldns_zone_loader:load_zones(LoadConfig)).
+
+error_handling_non_strict(Config) ->
+    % Test error handling in non-strict mode - should return count (0) even with errors
+    % This tests lines 169-175 (non-strict error handling path)
+    PrivDir = proplists:get_value(priv_dir, Config),
+    % Create a directory with an invalid file
+    TestDir = filename:join(PrivDir, "non_strict_error_test"),
+    ok = filelib:ensure_dir(filename:join(TestDir, "dummy")),
+    InvalidFile = filename:join(TestDir, "invalid.json"),
+    ok = file:write_file(InvalidFile, ~"{invalid json"),
+    LoadConfig = #{path => TestDir, format => json, strict => false},
+    Result = erldns_zone_loader:load_zones(LoadConfig),
+    % In non-strict mode, should return 0 instead of error
+    ?assertMatch(0, Result).
+
+multiple_errors(Config) ->
+    % Test multiple error handling - second error should preserve first error
+    % This tests the case where CurrentError is already set (line 153)
+    % and the "still waiting for more replies" path (lines 187-190)
+    PrivDir = proplists:get_value(priv_dir, Config),
+    % Create a directory with multiple invalid files to trigger multiple errors
+    TestDir = filename:join(PrivDir, "multi_error_test"),
+    ok = filelib:ensure_dir(filename:join(TestDir, "dummy")),
+    % Create multiple invalid JSON files - this will cause parallel processing
+    % where multiple workers fail, testing the error accumulation logic
+    InvalidFile1 = filename:join(TestDir, "invalid1.json"),
+    InvalidFile2 = filename:join(TestDir, "invalid2.json"),
+    ok = file:write_file(InvalidFile1, ~"{invalid json 1"),
+    ok = file:write_file(InvalidFile2, ~"{invalid json 2"),
+    LoadConfig = #{path => TestDir, format => json, strict => true},
+    ?assertError({json_error, _}, erldns_zone_loader:load_zones(LoadConfig)).
+
+queued_requests(Config) ->
+    erlang:process_flag(trap_exit, true),
+    % Test queuing behavior when a request is already running
+    % This tests lines 217-219 (queuing when running_call is not undefined)
+    DataDir = proplists:get_value(data_dir, Config),
+    Path = filename:join(DataDir, "standard.json"),
+    LoadConfig = #{path => Path, strict => false},
+    % Start first request in a separate process
+    Self = self(),
+    Ref1 = make_ref(),
+    Ref2 = make_ref(),
+    spawn_link(fun() ->
+        Result1 = erldns_zone_loader:load_zones(LoadConfig),
+        Self ! {Ref1, Result1}
+    end),
+    % Start second request immediately (should be queued)
+    spawn_link(fun() ->
+        Result2 = erldns_zone_loader:load_zones(LoadConfig),
+        Self ! {Ref2, Result2}
+    end),
+    % Wait for both results
+    receive
+        {Ref1, R1} ->
+            ?assertMatch(1, R1),
+            ok
+    after 10000 -> ct:fail("First request timed out")
+    end,
+    receive
+        {Ref2, R2} ->
+            ?assertMatch(1, R2),
+            ok
+    after 10000 -> ct:fail("Second request timed out")
+    end.
+
+% Test handling of unexpected gen_server calls
+getter_coverage(_) ->
+    Result = gen_server:call(erldns_zone_loader_getter, unexpected_message),
+    ?assertMatch({error, not_implemented}, Result),
+    gen_server:cast(erldns_zone_loader_getter, unexpected_message),
+    timer:sleep(100),
+    ?assert(erlang:is_process_alive(whereis(erldns_zone_loader_getter))).
 
 cache_coverage(_) ->
     gen_server:call(erldns_zone_cache, anything),
@@ -1050,18 +1133,31 @@ delete_zone_rrset_records_zone_not_found(_) ->
     ),
     ?assertEqual(zone_not_found, Ret).
 
+init_supervision_tree(Config, Role) ->
+    Self = self(),
+    Fun = fun() ->
+        setup_test(Config, Role),
+        Self ! continue,
+        receive
+            stop -> ok
+        end
+    end,
+    Pid = spawn(Fun),
+    receive
+        continue -> ok
+    end,
+    {Role, Pid}.
+
 setup_test(_Config, loader) ->
     application:set_env(erldns, zones, #{codecs => [sample_custom_zone_codec]}),
-    {ok, _} = erldns_zone_codec:start_link(),
-    {ok, _} = erldns_zone_cache:start_link();
+    {ok, _} = erldns_zones:start_link();
 setup_test(Config, cache) ->
-    {ok, _} = erldns_zone_codec:start_link(),
-    {ok, _} = erldns_zone_cache:start_link(),
+    {ok, _} = erldns_zones:start_link(),
     DataDir = proplists:get_value(data_dir, Config),
-    application:set_env(erldns, zones, #{path => filename:join(DataDir, "standard.json")}),
-    ?assertMatch({1, _}, erldns_zone_loader:load_zones()),
-    application:set_env(erldns, zones, #{path => filename:join(DataDir, "dnssec-zone.json")}),
-    ?assertMatch({1, _}, erldns_zone_loader:load_zones()).
+    LoadConfig1 = #{path => filename:join(DataDir, "standard.json")},
+    ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig1)),
+    LoadConfig2 = #{path => filename:join(DataDir, "dnssec-zone.json")},
+    ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig2)).
 
 ksk_private_key() ->
     <<

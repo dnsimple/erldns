@@ -85,10 +85,11 @@ init(noargs) ->
         [
             worker(erldns_zone_cache),
             worker(erldns_zone_codec),
-            worker(erldns_zone_loader)
+            supervisor(erldns_zone_loader_sup)
         ],
     {ok, {SupFlags, Children}}.
 
+-doc false.
 -spec rfc_compliant_ent_enabled() -> boolean().
 rfc_compliant_ent_enabled() ->
     case application:get_env(erldns, zones, #{}) of
@@ -96,5 +97,10 @@ rfc_compliant_ent_enabled() ->
         #{} -> false
     end.
 
+-spec worker(module()) -> supervisor:child_spec().
 worker(Module) ->
     #{id => Module, start => {Module, start_link, []}, type => worker}.
+
+-spec supervisor(module()) -> supervisor:child_spec().
+supervisor(Module) ->
+    #{id => Module, start => {Module, start_link, []}, type => supervisor}.
