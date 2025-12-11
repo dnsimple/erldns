@@ -37,14 +37,13 @@ end_per_suite(_Config) ->
 init_per_testcase(_, Config) ->
     FileName = filename:join([code:priv_dir(erldns), "zones/example.com.json"]),
     application:set_env(erldns, zones, #{path => FileName, strict => true}),
-    erldns_zone_cache:start_link(),
-    erldns_zone_codec:start_link(),
-    erldns_zone_loader:start_link(),
+    erldns_zones:start_link(),
     erldns_handler:start_link(),
     Config.
 
 -spec end_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> term().
 end_per_testcase(_, _Config) ->
+    application:unset_env(erldns, zones),
     ok.
 
 verify_ksk_signed(_) ->

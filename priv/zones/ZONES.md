@@ -1,6 +1,6 @@
 # Zones
 
-erldns reads zone files from this folder, and loads them on start. Zones must be formatted as JSON, and stored in `.json` files.
+erldns reads zone files from this folder, and loads them on start. Zones can be formatted as JSON (`.json` files) or as standard DNS zonefiles (`.zone` files).
 
 ## Default zones
 
@@ -10,9 +10,29 @@ All `.json` files within this folder are default zones, packaged with the defaul
 
 You can place your custom zones files inside the `priv/zones/local` directory. The content of this folder is not tracked by version control, and you can use it freely to add more zones for any purpose.
 
-## JSON files
+## Zone File Formats
+
+### JSON Format
 
 A JSON zone file contains an array of 1 or more zones. Each zone has a name and an array of records. Each record has a name, type, ttl and data field. The data field contains a JSON object with one or more attributes that are appropriate for the specific record type.
+
+### Zonefile Format
+
+Zonefiles follow the standard DNS zonefile format as defined in RFC 1035 and RFC 3597. Unknown record types are represented using the RFC3597 `TYPE<number>` format with hex-encoded data. Custom codecs can be used to handle these unknown types, similar to JSON format.
+
+The format can be configured in `erldns.config`:
+
+```erlang
+{erldns, [
+    {zones, #{
+        path => "priv/zones",
+        format => zonefile,  % or json (default), or auto
+        codecs => [sample_custom_zone_codec]
+    }},
+]}
+```
+
+When `format` is set to `auto`, erldns will automatically detect the format based on file extension (`.json` for JSON, `.zone` for zonefiles).
 
 ### Contexts
 

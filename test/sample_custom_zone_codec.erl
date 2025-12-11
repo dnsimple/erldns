@@ -4,8 +4,6 @@
 
 -include_lib("dns_erlang/include/dns.hrl").
 
--include("erldns.hrl").
-
 -export([decode/1, encode/1]).
 
 -define(DNS_TYPE_SAMPLE, 40000).

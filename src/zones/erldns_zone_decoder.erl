@@ -1,4 +1,4 @@
--module(erldns_zone_parser).
+-module(erldns_zone_decoder).
 -moduledoc false.
 
 -include_lib("dns_erlang/include/dns.hrl").
@@ -6,41 +6,41 @@
 -include_lib("erldns/include/erldns.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
--export([decode/2]).
+-export([decode/2, decode_record/2, parse_keysets/1]).
 
 -ifdef(TEST).
--export([json_record_to_erlang/1, parse_keysets/1]).
+-export([json_record_to_erlang/1]).
 -endif.
 
 -spec decode(json:decode_value(), [erldns_zone_codec:decoder()]) -> erldns:zone().
 decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Decoders) ->
     Sha = maps:get(~"sha", Zone, ~""),
     JsonKeys = maps:get(~"keys", Zone, []),
-    Records =
-        lists:map(
-            fun(JsonRecord) ->
-                maybe
-                    true ?= apply_context_options(JsonRecord),
-                    not_implemented ?= json_record_to_erlang(JsonRecord),
-                    not_implemented ?= try_custom_decoders(JsonRecord, Decoders),
-                    ?LOG_WARNING(
-                        #{what => unsupported_record, record => JsonRecord},
-                        #{domain => [erldns, zones]}
-                    ),
-                    not_implemented
-                else
-                    false ->
-                        not_implemented;
-                    Value ->
-                        Value
-                end
-            end,
-            JsonRecords
-        ),
+    Records = lists:map(fun(JsonRecord) -> decode_record(JsonRecord, Decoders) end, JsonRecords),
     FilteredRecords = lists:filter(record_filter(), Records),
     DistinctRecords = lists:usort(FilteredRecords),
     erldns_zone_codec:build_zone(Name, Sha, DistinctRecords, parse_keysets(JsonKeys)).
 
+-spec decode_record(#{binary() => json:decode_value()}, [erldns_zone_codec:decoder()]) ->
+    not_implemented | dns:rr().
+decode_record(JsonRecord, Decoders) ->
+    maybe
+        true ?= apply_context_options(JsonRecord),
+        not_implemented ?= json_record_to_erlang(JsonRecord),
+        not_implemented ?= try_custom_decoders(JsonRecord, Decoders),
+        ?LOG_WARNING(
+            #{what => unsupported_record, record => JsonRecord},
+            #{domain => [erldns, zones]}
+        ),
+        not_implemented
+    else
+        false ->
+            not_implemented;
+        Value ->
+            Value
+    end.
+
+-spec parse_keysets([json:decode_value()]) -> [erldns:keyset()].
 parse_keysets([]) ->
     [];
 parse_keysets(JsonKeys) ->
