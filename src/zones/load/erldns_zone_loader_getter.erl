@@ -38,30 +38,34 @@ start_link(Config) ->
 
 -spec do_load_zones(state(), tag(), erldns_zones:config()) -> state().
 do_load_zones(State, From, #{
-    path := ConfigPath, format := Format, strict := Strict, timeout := Timeout
+    path := Path,
+    keys_path := KeysPath,
+    format := Format,
+    strict := Strict,
+    timeout := Timeout
 }) ->
-    case find_zone_files(ConfigPath, Format) of
+    case find_zone_files(Path, Format) of
         [] ->
             maybe_reply(From, 0),
             maybe_process_next_request(State);
         Files ->
             State1 = initialize_state(State, From, Strict, Files),
-            State2 = round_robin_files(State1, From, Strict, Files),
+            State2 = round_robin_files(State1, From, Strict, KeysPath, Files),
             get_responses(State2, Timeout)
     end;
 do_load_zones(State, From, _) ->
     maybe_reply(From, 0),
     maybe_process_next_request(State).
 
--spec round_robin_files(state(), tag(), boolean(), [file:filename()]) ->
+-spec round_robin_files(state(), tag(), boolean(), file:name(), [file:filename()]) ->
     state().
-round_robin_files(State, _, _, []) ->
+round_robin_files(State, _, _, _, []) ->
     State;
-round_robin_files(State, Tag, Strict, [File | Rest]) ->
-    {ok, Pid} = erldns_zone_loader_worker:load_file(Tag, File, Strict),
+round_robin_files(State, Tag, Strict, KeysPath, [File | Rest]) ->
+    {ok, Pid} = erldns_zone_loader_worker:load_file(Tag, File, KeysPath, Strict),
     NewPendingRequests = maps:put(Pid, {File, Strict}, State#file_getter.pending_requests),
     NewState = State#file_getter{pending_requests = NewPendingRequests},
-    round_robin_files(NewState, Tag, Strict, Rest).
+    round_robin_files(NewState, Tag, Strict, KeysPath, Rest).
 
 get_responses(#file_getter{pending_requests = P} = State, _) when 0 =:= map_size(P) ->
     State;

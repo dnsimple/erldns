@@ -46,15 +46,23 @@ get_config(Config) when is_map(Config) ->
     Format = maps:get(format, Config, json),
     Timeout = maps:get(timeout, Config, timer:minutes(30)),
     Path = maps:get(path, Config, undefined),
+    KeysPath = maps:get(keys_path, Config, undefined),
     Strict = maps:get(strict, Config, undefined =/= Path),
     assert_valid_format(Format),
     assert_valid_timeout(Timeout),
     assert_valid_path(Path, Strict),
+    assert_valid_keys_path(KeysPath),
     case Path of
         undefined ->
             #{};
         _ ->
-            #{path => Path, strict => Strict, format => Format, timeout => Timeout}
+            #{
+                path => Path,
+                keys_path => KeysPath,
+                strict => Strict,
+                format => Format,
+                timeout => Timeout
+            }
     end.
 
 -spec assert_valid_format(erldns_zones:format()) -> ok | no_return().
@@ -74,6 +82,18 @@ assert_valid_timeout(Timeout) ->
         false ->
             erlang:error({badconfig, invalid_timeout_value})
     end.
+
+assert_valid_keys_path(undefined) ->
+    ok;
+assert_valid_keys_path(KeysPath) when is_list(KeysPath) ->
+    case filelib:is_dir(KeysPath) of
+        true ->
+            ok;
+        false ->
+            erlang:error({badconfig, invalid_keys_path})
+    end;
+assert_valid_keys_path(_) ->
+    erlang:error({badconfig, invalid_keys_path}).
 
 -spec assert_valid_path(file:name() | undefined, boolean()) -> ok | no_return().
 assert_valid_path(_, Strict) when not is_boolean(Strict) ->

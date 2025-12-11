@@ -6,10 +6,10 @@
 -include_lib("erldns/include/erldns.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
--export([decode/2, decode_record/2]).
+-export([decode/2, decode_record/2, parse_keysets/1]).
 
 -ifdef(TEST).
--export([json_record_to_erlang/1, parse_keysets/1]).
+-export([json_record_to_erlang/1]).
 -endif.
 
 -spec decode(json:decode_value(), [erldns_zone_codec:decoder()]) -> erldns:zone().
@@ -40,6 +40,7 @@ decode_record(JsonRecord, Decoders) ->
             Value
     end.
 
+-spec parse_keysets([json:decode_value()]) -> [erldns:keyset()].
 parse_keysets([]) ->
     [];
 parse_keysets(JsonKeys) ->

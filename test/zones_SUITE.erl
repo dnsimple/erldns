@@ -33,6 +33,7 @@ groups() ->
             load_zonefile_format_auto,
             load_zonefile_rfc3597,
             load_zonefile_with_custom_decoder,
+            load_zonefile_with_dnssec,
             empty_directory,
             zonefile_format_directory,
             auto_format_directory,
@@ -582,6 +583,15 @@ load_zonefile_with_custom_decoder(Config) ->
     ?assertMatch(1, Result),
     Records = erldns_zone_cache:get_zone_records(~"example-rfc3597.com"),
     ?assert(lists:any(fun(#dns_rr{data = Data}) -> ~"example.net" =:= Data end, Records)).
+
+load_zonefile_with_dnssec(Config) ->
+    DataDir = proplists:get_value(data_dir, Config),
+    Path = filename:join(DataDir, "dnssec.zone"),
+    LoadConfig = #{path => Path, keys_path => DataDir, format => zonefile},
+    Result = erldns_zone_loader:load_zones(LoadConfig),
+    ?assertMatch(1, Result),
+    Zone = erldns_zone_cache:lookup_zone(~"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11.com"),
+    ?assertMatch([_ | _], Zone#zone.keysets).
 
 empty_directory(Config) ->
     PrivDir = proplists:get_value(priv_dir, Config),

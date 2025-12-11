@@ -54,6 +54,7 @@ When set to `true`, ENTs will be used as the source of wildcard synthesis if app
 """.
 -type config() :: #{
     path => undefined | file:name(),
+    keys_path => undefined | file:name(),
     strict => boolean(),
     format => format(),
     timeout => timeout(),
