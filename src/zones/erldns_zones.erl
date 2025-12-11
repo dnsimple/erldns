@@ -13,13 +13,15 @@ For more details about its subsections, see:
 - `m:erldns_zone_loader`
 
 ## Configuration
+
 ```erlang
 {erldns, [
     {zones, #{
         path => "zones.json",
+        keys_path => "/root/dnssec/",
         strict => true,
-        format => json,  % or zonefile, or auto (default: json)
-        timeout => timer:minutes(30),
+        format => auto,
+        timeout => timer:minutes(5),
         codecs => [sample_custom_zone_codec],
         context_options => #{match_empty => true, allow => [<<"anycast">>, <<"AMS">>, <<"TKO">>],
         rfc_compliant_ent => true}
@@ -33,24 +35,37 @@ See the type `t:config/0` for details.
 -doc """
 Zone configuration.
 
-Path can be a directory, and `strict` declares whether load failure should crash or be ignored.
-If a path is configured and `strict` is true, and the path is not resolvable, it will fail.
+- `path`: can be a file or a directory:
+  - If it is a file, `format` will be ignored
+  - If it is a directory, it will find all nested files matching the format specified in `format`
+
+- `strict`: declares whether any loading error should crash the whole loading process or be ignored.
+
+- `keys_path`: specifies the path to DNSSEC keys used for signing and validating zones.
+  These file should be named after the zone name with the `.private` file extension
+  (i.e.: "example.com.private") and should contain a JSON formatted list of keysets as in the
+  [`JSON`](priv/zones/ZONES.md#json-format) zone format documentation.
+
+- `format`: specifies the zone file format to look for.
+  Both formats support custom codecs for handling unknown record types.
+  Valid values are:
+  - `json`: zones are parsed using `erldns`'s [`JSON`](priv/zones/ZONES.md#json-format) zone format.
+  - `zonefile`: zones are parsed using the [`zone`](priv/zones/ZONES.md#zonefile-format) format.
+  - `auto`:  both filetypes will be loaded depending on their file extension.
+
+- `timeout`: specify how long zone loading can take before being aborted. Defaults to 30 minutes.
+
+- `codecs`: a list of modules that implement the `m:erldns_zone_codec` behaviour.
+
+- `context_options`: allow you to filter loading certain records in a zone
+  depending on configuration details. See [`ZONES`](priv/zones/ZONES.md) for more details.
+
+- `rfc_compliant_ent`: updates the handling of empty non-terminals ENTs
+  to be complaint with [RFC4592](https://datatracker.ietf.org/doc/html/rfc4592).
+  When set to `true`, ENTs will be used as the source of wildcard synthesis if applicable.
+  Defaults to `false` in order to keep the old behaviour.
+
 See `m:erldns_zone_loader` for more details.
-
-Format specifies the zone file format: `json` (default) or `zonefile`. When `zonefile` is used,
-zones are parsed using dns_erlang's zonefile parser. Both formats support custom codecs for
-handling unknown record types.
-
-Timeouts specify how long zone loading can take before being aborted. Defaults to 30 minutes.
-
-Codecs are a list of modules that implement the `m:erldns_zone_codec` behaviour.
-
-Context options allow you to filter loading certain records in a zone depending on configuration
-details. See [`ZONES`](priv/zones/ZONES.md) for more details.
-
-`rfc_compliant_ent` updates the handling of empty non-terminals ENTs to be complaint with RFC 4592.
-When set to `true`, ENTs will be used as the source of wildcard synthesis if applicable. Defaults to
-`false` in order to keep the old behaviour.
 """.
 -type config() :: #{
     path => undefined | file:name(),
