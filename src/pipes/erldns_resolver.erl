@@ -18,7 +18,15 @@ Emits the following telemetry events:
 
 -behaviour(erldns_pipeline).
 
--export([prepare/1, call/2]).
+-export([prepare/1, call/2, deps/0]).
+
+-doc "`c:erldns_pipeline:deps/0` callback.".
+-spec deps() -> erldns_pipeline:deps().
+deps() ->
+    #{
+        prerequisites => [erldns_questions],
+        dependents => [erldns_sorter, erldns_section_counter]
+    }.
 
 -doc "`c:erldns_pipeline:prepare/1` callback.".
 -spec prepare(erldns_pipeline:opts()) -> erldns_pipeline:opts().

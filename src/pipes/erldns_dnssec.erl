@@ -16,7 +16,7 @@ see [`ZONES`](priv/zones/ZONES.md) for more details.
 
 -behaviour(erldns_pipeline).
 
--export([prepare/1, call/2]).
+-export([prepare/1, call/2, deps/0]).
 -export([get_signed_records/1, get_signed_zone_records/1]).
 -export([rrsig_for_zone_rrset/2]).
 
@@ -25,6 +25,11 @@ see [`ZONES`](priv/zones/ZONES.md) for more details.
 -endif.
 
 -define(NEXT_DNAME_PART, <<"\000">>).
+
+-doc "`c:erldns_pipeline:deps/0` callback.".
+-spec deps() -> erldns_pipeline:deps().
+deps() ->
+    #{prerequisites => [erldns_resolver]}.
 
 -doc "`c:erldns_pipeline:prepare/1` callback.".
 -spec prepare(erldns_pipeline:opts()) -> erldns_pipeline:opts().
