@@ -243,7 +243,7 @@ root_hints_addresses() ->
             name = ~"a.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {8193, 1283, 47678, 0, 0, 0, 2, 48}}
+            data = #dns_rrdata_aaaa{ip = {16#2001, 16#503, 16#BA3E, 16#0, 16#0, 16#0, 16#2, 16#30}}
         },
         %% b.root-servers.net - University of Southern California, ISI
         #dns_rr{
@@ -256,7 +256,7 @@ root_hints_addresses() ->
             name = ~"b.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {10241, 440, 16, 0, 0, 0, 0, 11}}
+            data = #dns_rrdata_aaaa{ip = {16#2801, 16#1B8, 16#10, 16#0, 16#0, 16#0, 16#0, 16#B}}
         },
         %% c.root-servers.net - Cogent Communications
         #dns_rr{
@@ -269,7 +269,7 @@ root_hints_addresses() ->
             name = ~"c.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {8193, 1280, 2, 0, 0, 0, 0, 12}}
+            data = #dns_rrdata_aaaa{ip = {16#2001, 16#500, 16#2, 16#0, 16#0, 16#0, 16#0, 16#C}}
         },
         %% d.root-servers.net - University of Maryland
         #dns_rr{
@@ -282,7 +282,7 @@ root_hints_addresses() ->
             name = ~"d.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {8193, 1280, 45, 0, 0, 0, 0, 13}}
+            data = #dns_rrdata_aaaa{ip = {16#2001, 16#500, 16#2D, 16#0, 16#0, 16#0, 16#0, 16#D}}
         },
         %% e.root-servers.net - NASA (Ames Research Center)
         #dns_rr{
@@ -295,7 +295,7 @@ root_hints_addresses() ->
             name = ~"e.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {8193, 1280, 168, 0, 0, 0, 0, 14}}
+            data = #dns_rrdata_aaaa{ip = {16#2001, 16#500, 16#A8, 16#0, 16#0, 16#0, 16#0, 16#E}}
         },
         %% f.root-servers.net - Internet Systems Consortium, Inc.
         #dns_rr{
@@ -308,7 +308,7 @@ root_hints_addresses() ->
             name = ~"f.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {8193, 1280, 47, 0, 0, 0, 0, 15}}
+            data = #dns_rrdata_aaaa{ip = {16#2001, 16#500, 16#2F, 16#0, 16#0, 16#0, 16#0, 16#F}}
         },
         %% g.root-servers.net - US Dept. of Defense (NIC)
         #dns_rr{
@@ -321,7 +321,7 @@ root_hints_addresses() ->
             name = ~"g.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {8193, 1280, 18, 0, 0, 0, 0, 3341}}
+            data = #dns_rrdata_aaaa{ip = {16#2001, 16#500, 16#12, 16#0, 16#0, 16#0, 16#0, 16#D0D}}
         },
         %% h.root-servers.net - US Army (Research Lab)
         #dns_rr{
@@ -334,7 +334,7 @@ root_hints_addresses() ->
             name = ~"h.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {8193, 1280, 1, 0, 0, 0, 0, 83}}
+            data = #dns_rrdata_aaaa{ip = {16#2001, 16#500, 16#1, 16#0, 16#0, 16#0, 16#0, 16#53}}
         },
         %% i.root-servers.net - Netnod
         #dns_rr{
@@ -347,7 +347,7 @@ root_hints_addresses() ->
             name = ~"i.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {8193, 2046, 0, 0, 0, 0, 0, 83}}
+            data = #dns_rrdata_aaaa{ip = {16#2001, 16#7FE, 16#0, 16#0, 16#0, 16#0, 16#0, 16#53}}
         },
         %% j.root-servers.net - Verisign, Inc.
         #dns_rr{
@@ -360,7 +360,7 @@ root_hints_addresses() ->
             name = ~"j.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {8193, 1283, 3111, 0, 0, 0, 2, 48}}
+            data = #dns_rrdata_aaaa{ip = {16#2001, 16#503, 16#C27, 16#0, 16#0, 16#0, 16#2, 16#30}}
         },
         %% k.root-servers.net - RIPE NCC
         #dns_rr{
@@ -373,7 +373,7 @@ root_hints_addresses() ->
             name = ~"k.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {8193, 2045, 0, 0, 0, 0, 0, 1}}
+            data = #dns_rrdata_aaaa{ip = {16#2001, 16#7FD, 16#0, 16#0, 16#0, 16#0, 16#0, 16#1}}
         },
         %% l.root-servers.net - ICANN
         #dns_rr{
@@ -386,7 +386,7 @@ root_hints_addresses() ->
             name = ~"l.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {8193, 1280, 159, 0, 0, 0, 0, 66}}
+            data = #dns_rrdata_aaaa{ip = {16#2001, 16#500, 16#9F, 16#0, 16#0, 16#0, 16#0, 16#42}}
         },
         %% m.root-servers.net - WIDE Project
         #dns_rr{
@@ -399,6 +399,6 @@ root_hints_addresses() ->
             name = ~"m.root-servers.net",
             type = ?DNS_TYPE_AAAA,
             ttl = 3600000,
-            data = #dns_rrdata_aaaa{ip = {8193, 3523, 0, 0, 0, 0, 0, 53}}
+            data = #dns_rrdata_aaaa{ip = {16#2001, 16#DC3, 16#0, 16#0, 16#0, 16#0, 16#0, 16#35}}
         }
     ].
