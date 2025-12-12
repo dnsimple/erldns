@@ -7,25 +7,38 @@ This application will read from your `sys.config` the following example:
 ```erlang
 {erldns, [
     {admin, [
-        {credentials, {<<"username">>, <<"password">>}},
         {port, 8083},
-        {middleware, [my_custom_middleware, another_middleware]}
+        {tls, false},
+        {credentials, {~"username", ~"password"}},
+        {middleware, [my_custom_middleware, another_middleware]},
+        {routes, [{~"/custom/:action", my_custom_route_handler, #{}}]}
     ]}
 ]}
 ```
-where `credentials` is a tuple of `username` and `password` as either strings or binaries,
-`port` is a valid Unix port to listen on, and `middleware` is an optional list of
-middleware modules that will be applied to all admin API requests.
+
+The accepted values are:
+- `port`: an integer between `1` and `65535` indicating the port to listen on
+    (default: `8083` without TLS and `8483` when TLS is enabled).
+- `tls`: `false`, or `{true, SslOpts}` where `SslOpts` is a list of `t:ssl:tls_server_option/0`,
+    indicating whether to use TLS (default: `false`).
+- `credentials`: `false` if no authentication is required, or a tuple of `{Username, Password}`
+    binary strings. If configured, all routes will require authentication (default: `false`).
+- `middleware`: an optional list of cowboy compliant middleware modules to apply
+    to all admin API requests (default: `[]`).
+- `routes`: an optional list of additional routes to add to the admin API.
+    This is a list of `cowboy_router:route_path()` elements that will be prepended
+    to the default routes (default: `[]`).
 """.
 
--define(DEFAULT_PORT, 8083).
+-define(DEFAULT_CLEAR_PORT, 8083).
+-define(DEFAULT_TLS_PORT, 8483).
+-define(LOG_METADATA, #{domain => [erldns, admin]}).
 
 -include_lib("kernel/include/logger.hrl").
 
--export([maybe_start/0, is_authorized/2]).
+-export([maybe_start/0]).
 
 -ifdef(TEST).
--export([middleware/1]).
 -export_type([env/0]).
 -endif.
 
@@ -34,17 +47,11 @@ Configuration parameters, see the module documentation for details.
 """.
 -type config() :: #{
     port := 0..65535,
-    username := binary(),
-    password := binary(),
-    middleware => [module()]
+    tls := false | [ssl:tls_server_option()],
+    credentials := false | {binary(), binary()},
+    middleware => [module()],
+    routes => cowboy_router:routes()
 }.
-
--doc "Common state for all handlers".
--opaque handler_state() :: #{
-    username := binary(),
-    password := binary()
-}.
--export_type([config/0, handler_state/0]).
 
 -type env() :: [{atom(), term()}].
 
@@ -53,121 +60,174 @@ maybe_start() ->
     case ensure_valid_config() of
         disabled ->
             ok;
-        false ->
+        error ->
             error(bad_configuration);
         Config ->
             start(Config)
     end.
 
 -spec start(config()) -> {ok, pid()} | {error, term()}.
-start(#{port := Port, username := Username, password := Password} = Config) ->
-    State = #{username => Username, password => Password},
-    Dispatch = cowboy_router:compile(
-        [
-            {'_', [
-                {"/", erldns_admin_root_handler, State},
-                {"/zones/:zone_name", erldns_admin_zone_resource_handler, State},
-                {"/zones/:zone_name/records[/:record_name]",
-                    erldns_admin_zone_records_resource_handler, State},
-                {"/zones/:zone_name/:action", erldns_admin_zone_control_handler, State}
-            ]}
-        ]
-    ),
-    TransportOpts = #{socket_opts => [inet, {ip, {0, 0, 0, 0}}, {port, Port}]},
-    Middleware = maps:get(middleware, Config, []),
+start(
+    #{
+        tls := Tls,
+        port := Port,
+        credentials := Credentials,
+        middleware := Middleware,
+        routes := AdditionalRoutes
+    }
+) ->
+    Dispatch = cowboy_router:compile(default_routes(AdditionalRoutes)),
+    persistent_term:put(?MODULE, Dispatch),
     ProtocolOpts = #{
-        env => #{dispatch => Dispatch},
-        middlewares => [cowboy_router] ++ Middleware ++ [cowboy_handler]
+        env => #{dispatch => {persistent_term, ?MODULE}, credentials => Credentials},
+        middlewares => middlewares(Middleware, Credentials)
     },
-    cowboy:start_clear(?MODULE, TransportOpts, ProtocolOpts).
-
--doc false.
--spec is_authorized(cowboy_req:req(), handler_state()) ->
-    {true | {false, iodata()}, cowboy_req:req(), handler_state()}
-    | {stop, cowboy_req:req(), handler_state()}.
-is_authorized(Req, #{username := ValidUsername, password := ValidPassword} = State) ->
-    maybe
-        {basic, GivenUsername, GivenPassword} ?= cowboy_req:parse_header(<<"authorization">>, Req),
-        true ?= is_binary_of_equal_size(GivenUsername, ValidUsername),
-        true ?= is_binary_of_equal_size(GivenPassword, ValidPassword),
-        true ?= crypto:hash_equals(GivenUsername, ValidUsername) andalso
-            crypto:hash_equals(GivenPassword, ValidPassword),
-        {true, Req, State}
-    else
-        _ ->
-            {{false, <<"Basic realm=\"erldns admin\"">>}, Req, State}
+    case Tls of
+        false ->
+            TransportOpts = socket_opts(Port),
+            cowboy:start_clear(?MODULE, #{socket_opts => TransportOpts}, ProtocolOpts);
+        SslOpts ->
+            TransportOpts = socket_opts(Port) ++ SslOpts,
+            cowboy:start_tls(?MODULE, #{socket_opts => TransportOpts}, ProtocolOpts)
     end.
 
--spec is_binary_of_equal_size(term(), term()) -> boolean().
-is_binary_of_equal_size(Bin1, Bin2) ->
-    is_binary(Bin1) andalso is_binary(Bin2) andalso byte_size(Bin1) =:= byte_size(Bin2).
+-spec middlewares([module()], false | dynamic()) -> [module()].
+middlewares(Middleware, false) ->
+    [cowboy_router] ++ Middleware ++ [cowboy_handler];
+middlewares(Middleware, _) ->
+    [erldns_admin_auth_middleware, cowboy_router] ++ Middleware ++ [cowboy_handler].
 
--spec ensure_valid_config() -> false | disabled | config().
+-spec default_routes([dynamic()]) -> cowboy_router:routes().
+default_routes(AdditionalRoutes) ->
+    DefaultRoutes = [
+        {~"/", erldns_admin_root_handler, #{}},
+        {~"/zones/:zonename", erldns_admin_zone_handler, #{}},
+        {~"/zones/:zonename/records[/:record_name]", erldns_admin_zone_records_handler, #{}}
+    ],
+    [{'_', AdditionalRoutes ++ DefaultRoutes}].
+
+-spec ensure_valid_config() -> error | disabled | config().
 ensure_valid_config() ->
     maybe
-        {true, Env} ?= env(),
-        {true, Port} ?= port(Env),
-        {true, Username, Password} ?= credentials(Env),
-        {true, Middleware} ?= middleware(Env),
-        #{port => Port, username => Username, password => Password, middleware => Middleware}
+        {ok, Env} ?= env(),
+        {ok, Tls} ?= config_tls(Env),
+        {ok, Port} ?= config_port(Env, Tls),
+        {ok, Credentials} ?= config_credentials(Env),
+        {ok, Middleware} ?= config_middleware(Env),
+        {ok, Routes} ?= config_routes(Env),
+        #{
+            port => Port,
+            tls => Tls,
+            credentials => Credentials,
+            middleware => Middleware,
+            routes => Routes
+        }
     end.
 
--spec port(env()) -> {true, 1..65535} | false.
-port(Env) ->
-    case proplists:get_value(port, Env, ?DEFAULT_PORT) of
+-spec socket_opts(inet:port_number()) -> [gen_tcp:option()].
+socket_opts(Port) ->
+    [
+        inet6,
+        {ipv6_v6only, false},
+        {ip, any},
+        {port, Port},
+        {nodelay, true},
+        {keepalive, true},
+        {reuseport, true},
+        {reuseport_lb, true}
+    ].
+
+-spec config_port(env(), false | {true, dynamic()}) -> {ok, 1..65535} | error.
+config_port(Env, MaybeTls) ->
+    DefaultPort =
+        case MaybeTls of
+            false -> ?DEFAULT_CLEAR_PORT;
+            _ -> ?DEFAULT_TLS_PORT
+        end,
+    case proplists:get_value(port, Env, DefaultPort) of
         Port when is_integer(Port), 0 < Port, Port =< 65535 ->
-            {true, Port};
+            {ok, Port};
         OtherPort ->
             ?LOG_ERROR(
                 #{what => erldns_admin_bad_config, port => OtherPort},
-                #{domain => [erldns, admin]}
+                ?LOG_METADATA
             ),
-            false
+            error
     end.
 
--spec credentials(env()) -> {true, binary(), binary()} | false.
-credentials(Env) ->
+-spec config_tls(env()) -> {ok, false | [ssl:tls_server_option()]} | error.
+config_tls(Env) ->
+    case proplists:get_value(tls, Env, false) of
+        false ->
+            {ok, false};
+        {true, Opts} when is_list(Opts) ->
+            {ok, Opts};
+        Other ->
+            ?LOG_ERROR(
+                #{what => erldns_admin_bad_config, tls => Other},
+                ?LOG_METADATA
+            ),
+            error
+    end.
+
+-spec config_credentials(env()) -> {ok, false | {binary(), binary()}} | error.
+config_credentials(Env) ->
     case lists:keyfind(credentials, 1, Env) of
-        {credentials, {Username, Password}} when is_list(Username), is_list(Password) ->
-            {true, list_to_binary(Username), list_to_binary(Password)};
+        false ->
+            {ok, false};
         {credentials, {Username, Password}} when is_binary(Username), is_binary(Password) ->
-            {true, Username, Password};
+            {ok, {Username, Password}};
         OtherValue ->
             ?LOG_ERROR(
                 #{what => erldns_admin_bad_config, credentials => OtherValue},
-                #{domain => [erldns, admin]}
+                ?LOG_METADATA
             ),
-            false
+            error
     end.
 
--spec middleware(env()) -> {true, [module()]}.
-middleware(Env) ->
-    case lists:keyfind(middleware, 1, Env) of
-        {middleware, Modules} when is_list(Modules) ->
-            case lists:all(fun is_atom/1, Modules) of
-                true ->
-                    {true, Modules};
-                false ->
-                    ?LOG_ERROR(
-                        #{what => erldns_admin_bad_config, middleware => Modules},
-                        #{domain => [erldns, admin]}
-                    ),
-                    {true, []}
-            end;
+-spec config_middleware(env()) -> {ok, [module()]} | error.
+config_middleware(Env) ->
+    maybe
+        {middleware, Modules} ?= lists:keyfind(middleware, 1, Env),
+        [] ?= lists:filter(fun is_not_middleware/1, Modules),
+        {ok, Modules}
+    else
         false ->
-            {true, []};
+            {ok, []};
         OtherValue ->
             ?LOG_ERROR(
                 #{what => erldns_admin_bad_config, middleware => OtherValue},
-                #{domain => [erldns, admin]}
+                ?LOG_METADATA
             ),
-            {true, []}
+            error
     end.
 
--spec env() -> {true, env()} | false | disabled.
+-spec is_not_middleware(module()) -> boolean().
+is_not_middleware(Module) when is_atom(Module) ->
+    not (is_atom(Module) andalso {module, Module} =:= code:ensure_loaded(Module) andalso
+        erlang:function_exported(Module, execute, 2)).
+
+-spec config_routes(env()) -> {ok, cowboy_router:routes()} | error.
+config_routes(Env) ->
+    maybe
+        {routes, Routes} ?= lists:keyfind(routes, 1, Env),
+        true ?= is_list(Routes),
+        {ok, Routes}
+    else
+        false ->
+            {ok, []};
+        OtherValue ->
+            ?LOG_ERROR(
+                #{what => erldns_admin_bad_config, routes => OtherValue},
+                ?LOG_METADATA
+            ),
+            error
+    end.
+
+-spec env() -> {ok, env()} | error | disabled.
 env() ->
     case application:get_env(erldns, admin) of
-        {ok, Env} when is_list(Env) -> {true, Env};
-        {ok, _} -> false;
+        {ok, Env} when is_list(Env) -> {ok, Env};
+        {ok, _} -> error;
         _ -> disabled
     end.
