@@ -48,7 +48,7 @@ jobs:
       # We can always run this step because the action will exit silently if there are no changes.
       # See: https://github.com/marketplace/actions/create-pull-request#action-behaviour
       - name: Create PR
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           # By always using the same branch name, we can keep pushing to
           # the same branch if there are new changes.
