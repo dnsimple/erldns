@@ -1,0 +1,15 @@
+$ORIGIN a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11.com.
+$TTL 3600
+@       IN  SOA   ns1.dnsimple.com. admin.dnsimple.com. (
+                    2023101201 ; Serial
+                    3600       ; Refresh
+                    1800       ; Retry
+                    604800     ; Expire
+                    86400 )    ; Minimum TTL
+        IN  NS    ns1.dnsimple.com.
+        IN  NS    ns2.dnsimple.com.
+; KSK (Flag 257)
+@       IN  DNSKEY  257 3 13 mdsswUyr3DPW132mOi8V9xESWE8jTo0dxCjjnopKl+GqJxpVXckHAeF+KkxLbxILfDLUT0rAK9iUzy1L53eKGQ==
+; ZSK (Flag 256)
+@       IN  DNSKEY  256 3 13 ojm02QDktWo+6FjvUcbPZmbk+2Ilj7j95eeSc8c/2a4e2i9Yvj8k0a5Ij2R7X7G2Z8l9X1X9X1X9X1X9X1X9XQ==
+www     IN  A     1.2.3.4

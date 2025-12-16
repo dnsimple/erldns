@@ -63,6 +63,7 @@ encode(_) ->
     encode/1,
     encode/2,
     decode/1,
+    decode_record/1,
     register_codecs/1,
     register_codec/1,
     list_codecs/0
@@ -113,7 +114,13 @@ encode(Zone, Opts) ->
 -spec decode(json:decode_value()) -> erldns:zone().
 decode(Zone) ->
     {_, Decoders} = list_codecs(),
-    erldns_zone_parser:decode(Zone, Decoders).
+    erldns_zone_decoder:decode(Zone, Decoders).
+
+-doc "Takes a JSON record and turns it into a `t:dns:rr/0`.".
+-spec decode_record(#{binary() => json:decode_value()}) -> not_implemented | dns:rr().
+decode_record(Record) ->
+    {_, Decoders} = list_codecs(),
+    erldns_zone_decoder:decode_record(Record, Decoders).
 
 -doc "Register a custom parser module.".
 -spec register_codec(module()) -> ok.
