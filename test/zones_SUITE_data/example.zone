@@ -1,0 +1,19 @@
+$ORIGIN example.com.
+$TTL 3600
+
+@   IN  SOA ns1.example.com. admin.example.com. (
+    2024010101  ; serial
+    3600        ; refresh
+    1800        ; retry
+    604800      ; expire
+    86400       ; minimum
+    )
+
+@   IN  NS  ns1.example.com.
+@   IN  NS  ns2.example.com.
+@   IN  A   1.2.3.4
+@   IN  AAAA    2001:db8::1
+www IN  CNAME   example.com.
+@   IN  MX  10  mail.example.com.
+@   IN  TXT "v=spf1 a mx ~all"
+@   IN  CAA 0   issue "letsencrypt.org"
