@@ -1,0 +1,35 @@
+$ORIGIN example-rfc3597.com.
+$TTL 3600
+
+@   IN  SOA ns1.example-rfc3597.com. admin.example-rfc3597.com. (
+    2024010101  ; serial
+    3600        ; refresh
+    1800        ; retry
+    604800      ; expire
+    86400       ; minimum
+    )
+
+@   IN  NS  ns1.example-rfc3597.com.
+@   IN  A   1.2.3.4
+@   IN  TYPE99999 \# 93 7B22636F6E74657874223A6E756C6C2C2264617461223A7B22646E616D65223A226578616D706C652E6E6574227D2C226E616D65223A226578616D706C652E636F6D222C2274746C223A36302C2274797065223A2253414D504C45227D
+
+; this record is the output of
+; ```erl
+; Record = #{
+;     ~"name" => ~"example.com",
+;     ~"type" => ~"SAMPLE",
+;     ~"ttl" => 60,
+;     ~"data" => #{~"dname" => ~"example.net"},
+;     ~"context" => null
+; }
+; binary:encode_hex(iolist_to_binary(json:encode(Record))).
+; ```
+; and therefore decoding with `sample_custom_zone_codec` should return:
+; ```erl
+; #dns_rr{
+;     name = ~"example.com",
+;     type = ?DNS_TYPE_SAMPLE,
+;     data = ~"example.net",
+;     ttl = Ttl
+; };
+; ```
