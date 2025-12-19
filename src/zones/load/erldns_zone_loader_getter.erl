@@ -10,20 +10,19 @@
 -define(WILDCARD_AUTO, "**/*.{json,zone}").
 -define(LOG_METADATA, #{domain => [erldns, zones, load]}).
 
--export([respond/3]).
 -export([load_zones/1]).
 -export([start_link/1, init/1, handle_call/3, handle_cast/2]).
 
 -record(file_getter, {
     running_call :: tag(),
-    pending_requests = #{} :: #{gen_server:request_id() => {file:filename(), boolean()}},
+    pending_requests = sets:new() :: sets:set(reference()),
     pending_calls = queue:new() :: queue:queue({gen_server:from(), erldns_zones:config()}),
     zones_loaded = 0 :: non_neg_integer(),
     strict = false :: boolean(),
-    error :: undefined | term()
+    error = [] :: [term()]
 }).
 -type state() :: #file_getter{}.
--type tag() :: undefined | gen_server:from().
+-type tag() :: initial | undefined | gen_server:from().
 -export_type([tag/0]).
 
 -spec load_zones(erldns_zones:config()) -> non_neg_integer() | {error, term()}.
@@ -62,31 +61,33 @@ do_load_zones(State, From, _) ->
 round_robin_files(State, _, _, _, []) ->
     State;
 round_robin_files(State, Tag, Strict, KeysPath, [File | Rest]) ->
-    {ok, Pid} = erldns_zone_loader_worker:load_file(Tag, File, KeysPath, Strict),
-    NewPendingRequests = maps:put(Pid, {File, Strict}, State#file_getter.pending_requests),
+    AliasMon = erldns_zone_loader_worker:load_file(Tag, File, KeysPath, Strict),
+    NewPendingRequests = sets:add_element(AliasMon, State#file_getter.pending_requests),
     NewState = State#file_getter{pending_requests = NewPendingRequests},
     round_robin_files(NewState, Tag, Strict, KeysPath, Rest).
 
-get_responses(#file_getter{pending_requests = P} = State, _) when 0 =:= map_size(P) ->
-    State;
-get_responses(#file_getter{running_call = Tag} = State, Timeout) ->
-    receive
-        {Tag, From, Reply} ->
-            NewState = handle_request_reply(From, Reply, State),
-            get_responses(NewState, Timeout)
-    after Timeout ->
-        erlang:error(timeout)
+-spec get_responses(state(), timeout()) -> state().
+get_responses(#file_getter{pending_requests = P, running_call = Tag} = State, Timeout) ->
+    case sets:size(P) of
+        0 ->
+            State;
+        _ ->
+            receive
+                {Tag, AliasMon, Count} ->
+                    NewState = handle_request_reply_ok(State, AliasMon, Count),
+                    get_responses(NewState, Timeout);
+                {Tag, AliasMon, error, Reason} ->
+                    NewState = handle_request_reply_error(State, AliasMon, Reason),
+                    get_responses(NewState, Timeout);
+                {'DOWN', AliasMon, process, _Pid, Reason} ->
+                    NewState = handle_request_reply_error(State, AliasMon, Reason),
+                    get_responses(NewState, Timeout)
+            after Timeout ->
+                erlang:error(timeout)
+            end
     end.
 
--spec respond(tag(), pid(), term()) -> dynamic().
-respond(Tag, From, Reply) ->
-    whereis(?MODULE) ! {Tag, From, Reply}.
-
-maybe_reply(undefined, _) ->
-    ok;
-maybe_reply(From, Reply) ->
-    gen_server:reply(From, Reply).
-
+-spec initialize_state(state(), tag(), boolean(), [file:filename()]) -> state().
 initialize_state(State0, From, Strict, Files) ->
     ?LOG_INFO(
         #{
@@ -99,8 +100,8 @@ initialize_state(State0, From, Strict, Files) ->
     State0#file_getter{
         strict = Strict,
         running_call = From,
-        pending_requests = #{},
-        error = undefined
+        pending_requests = sets:new([{version, 2}]),
+        error = []
     }.
 
 -spec find_zone_files(file:name(), erldns_zones:format()) -> [file:filename()].
@@ -116,78 +117,87 @@ find_zone_files(Path, Format) ->
             filelib:wildcard(filename:join([Path, ?WILDCARD_AUTO]), prim_file)
     end.
 
-handle_request_reply(From, {ok, ZCount}, #file_getter{running_call = RunningCall} = State) ->
-    #file_getter{pending_requests = PendingRequests, zones_loaded = ZonesLoaded} = State,
-    NewPendingRequests = maps:remove(From, PendingRequests),
+handle_request_reply_ok(State, AliasMon, ZCount) ->
+    #file_getter{
+        running_call = RunningCall,
+        pending_requests = PendingRequests,
+        zones_loaded = ZonesLoaded,
+        strict = Strict,
+        error = Errors
+    } = State,
+    NewPendingRequests = sets:del_element(AliasMon, PendingRequests),
     NewZonesLoaded = ZonesLoaded + ZCount,
     % Check if all requests are complete
-    case maps:size(NewPendingRequests) =:= 0 of
+    case sets:size(NewPendingRequests) =:= 0 of
         true ->
-            maybe_reply(RunningCall, NewZonesLoaded),
-            ?LOG_INFO(
-                #{what => parallel_zone_load_completed, zones_loaded => NewZonesLoaded},
-                ?LOG_METADATA
-            ),
-            NewState = maybe_process_next_request(State#file_getter{
-                running_call = undefined,
-                pending_requests = #{},
-                zones_loaded = 0,
-                error = undefined
-            }),
-            NewState;
+            finalize(Strict, NewZonesLoaded, Errors, RunningCall),
+            maybe_process_next_request(restart_state(State));
         false ->
             NewState = State#file_getter{
                 pending_requests = NewPendingRequests,
                 zones_loaded = NewZonesLoaded
             },
             NewState
-    end;
-handle_request_reply(From, {error, Error}, #file_getter{running_call = RunningCall} = State) ->
-    #file_getter{pending_requests = PendingRequests, strict = Strict, error = CurrentError} = State,
-    NewPendingRequests = maps:remove(From, PendingRequests),
-    % Track the first error
-    NewError =
-        case CurrentError of
-            undefined -> Error;
-            _ -> CurrentError
-        end,
-    % Check if all requests are complete
-    case maps:size(NewPendingRequests) =:= 0 of
+    end.
+
+finalize(Strict, FinalCount, Errors, RunningCall) ->
+    case Strict andalso Errors =/= [] of
         true ->
-            % All files processed
-            case Strict andalso NewError =/= undefined of
-                true ->
-                    % Strict mode and error occurred - reply with error
-                    maybe_reply(RunningCall, {error, NewError}),
-                    ?LOG_ERROR(
-                        #{what => parallel_zone_load_failed, error => NewError},
-                        ?LOG_METADATA
-                    );
-                false ->
-                    % Non-strict or no error - reply with count
-                    maybe_reply(RunningCall, State#file_getter.zones_loaded),
-                    ?LOG_INFO(
-                        #{
-                            what => parallel_zone_load_completed,
-                            zones_loaded => State#file_getter.zones_loaded
-                        },
-                        ?LOG_METADATA
-                    )
-            end,
-            % Process next queued request if any
-            maybe_process_next_request(State#file_getter{
-                running_call = undefined,
-                pending_requests = #{},
-                zones_loaded = 0,
-                error = undefined
-            });
+            % Strict mode and error occurred - reply with error
+            maybe_reply(RunningCall, {error, Errors}),
+            ?LOG_ERROR(
+                #{what => parallel_zone_load_failed, error => hd(Errors)},
+                ?LOG_METADATA
+            );
         false ->
-            % Still waiting for more replies
+            % Non-strict or no error - reply with count
+            maybe_reply(RunningCall, FinalCount),
+            ?LOG_INFO(
+                #{
+                    what => parallel_zone_load_completed,
+                    zones_loaded => FinalCount
+                },
+                ?LOG_METADATA
+            )
+    end.
+
+handle_request_reply_error(#file_getter{running_call = RunningCall} = State, AliasMon, Reason) ->
+    #file_getter{
+        running_call = RunningCall,
+        pending_requests = PendingRequests,
+        zones_loaded = ZonesLoaded,
+        strict = Strict,
+        error = Errors
+    } = State,
+    NewErrors = [Reason | Errors],
+    NewPendingRequests = sets:del_element(AliasMon, PendingRequests),
+    % Check if all requests are complete
+    case sets:size(NewPendingRequests) =:= 0 of
+        true ->
+            finalize(Strict, ZonesLoaded, NewErrors, RunningCall),
+            maybe_process_next_request(restart_state(State));
+        false ->
             State#file_getter{
                 pending_requests = NewPendingRequests,
-                error = NewError
+                error = NewErrors
             }
     end.
+
+-spec restart_state(state()) -> state().
+restart_state(State) ->
+    State#file_getter{
+        running_call = undefined,
+        pending_requests = sets:new([{version, 2}]),
+        zones_loaded = 0,
+        error = []
+    }.
+
+maybe_reply(initial, {error, Reason}) ->
+    erlang:error(Reason);
+maybe_reply({_, _} = From, Reply) ->
+    gen_server:reply(From, Reply);
+maybe_reply(_, _) ->
+    ok.
 
 -spec maybe_process_next_request(state()) -> state().
 maybe_process_next_request(#file_getter{pending_calls = Queue} = State) ->
@@ -201,7 +211,7 @@ maybe_process_next_request(#file_getter{pending_calls = Queue} = State) ->
 
 -spec init(erldns_zones:config()) -> {ok, state()}.
 init(Config) ->
-    State = do_load_zones(#file_getter{}, undefined, Config),
+    State = do_load_zones(#file_getter{}, initial, Config),
     {ok, State}.
 
 -spec handle_call
