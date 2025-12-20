@@ -12,6 +12,11 @@ The handler can be configured through application configuration:
 
 ```erlang
 {erldns, [
+    {packet_pipeline, [
+        ...,
+        erldns_edns_ede,
+        ...
+    ]},
     {edns_ede, #{
         enabled => true, %% Enable/disable EDE support (default: true)
         add_text => true %% Include EXTRA-TEXT in EDE (default: false)
