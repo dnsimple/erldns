@@ -19,7 +19,7 @@
     pending_calls = queue:new() :: queue:queue({gen_server:from(), erldns_zones:config()}),
     zones_loaded = 0 :: non_neg_integer(),
     strict = false :: boolean(),
-    error = [] :: [term()]
+    errors = [] :: [term()]
 }).
 -type state() :: #file_getter{}.
 -type tag() :: initial | undefined | gen_server:from().
@@ -101,7 +101,7 @@ initialize_state(State0, From, Strict, Files) ->
         strict = Strict,
         running_call = From,
         pending_requests = sets:new([{version, 2}]),
-        error = []
+        errors = []
     }.
 
 -spec find_zone_files(file:name(), erldns_zones:format()) -> [file:filename()].
@@ -117,22 +117,23 @@ find_zone_files(Path, Format) ->
             filelib:wildcard(filename:join([Path, ?WILDCARD_AUTO]), prim_file)
     end.
 
+-spec handle_request_reply_ok(state(), reference(), non_neg_integer()) -> state().
 handle_request_reply_ok(State, AliasMon, ZCount) ->
     #file_getter{
         running_call = RunningCall,
         pending_requests = PendingRequests,
         zones_loaded = ZonesLoaded,
         strict = Strict,
-        error = Errors
+        errors = Errors
     } = State,
     NewPendingRequests = sets:del_element(AliasMon, PendingRequests),
     NewZonesLoaded = ZonesLoaded + ZCount,
     % Check if all requests are complete
-    case sets:size(NewPendingRequests) =:= 0 of
-        true ->
+    case sets:size(NewPendingRequests) of
+        0 ->
             finalize(Strict, NewZonesLoaded, Errors, RunningCall),
             maybe_process_next_request(restart_state(State));
-        false ->
+        _ ->
             NewState = State#file_getter{
                 pending_requests = NewPendingRequests,
                 zones_loaded = NewZonesLoaded
@@ -140,6 +141,30 @@ handle_request_reply_ok(State, AliasMon, ZCount) ->
             NewState
     end.
 
+-spec handle_request_reply_error(state(), reference(), term()) -> state().
+handle_request_reply_error(State, AliasMon, Reason) ->
+    #file_getter{
+        running_call = RunningCall,
+        pending_requests = PendingRequests,
+        zones_loaded = ZonesLoaded,
+        strict = Strict,
+        errors = Errors
+    } = State,
+    NewErrors = [Reason | Errors],
+    NewPendingRequests = sets:del_element(AliasMon, PendingRequests),
+    % Check if all requests are complete
+    case sets:size(NewPendingRequests) of
+        0 ->
+            finalize(Strict, ZonesLoaded, NewErrors, RunningCall),
+            maybe_process_next_request(restart_state(State));
+        _ ->
+            State#file_getter{
+                pending_requests = NewPendingRequests,
+                errors = NewErrors
+            }
+    end.
+
+-spec finalize(boolean(), non_neg_integer(), [term()], tag()) -> ok.
 finalize(Strict, FinalCount, Errors, RunningCall) ->
     case Strict andalso Errors =/= [] of
         true ->
@@ -161,35 +186,13 @@ finalize(Strict, FinalCount, Errors, RunningCall) ->
             )
     end.
 
-handle_request_reply_error(#file_getter{running_call = RunningCall} = State, AliasMon, Reason) ->
-    #file_getter{
-        running_call = RunningCall,
-        pending_requests = PendingRequests,
-        zones_loaded = ZonesLoaded,
-        strict = Strict,
-        error = Errors
-    } = State,
-    NewErrors = [Reason | Errors],
-    NewPendingRequests = sets:del_element(AliasMon, PendingRequests),
-    % Check if all requests are complete
-    case sets:size(NewPendingRequests) =:= 0 of
-        true ->
-            finalize(Strict, ZonesLoaded, NewErrors, RunningCall),
-            maybe_process_next_request(restart_state(State));
-        false ->
-            State#file_getter{
-                pending_requests = NewPendingRequests,
-                error = NewErrors
-            }
-    end.
-
 -spec restart_state(state()) -> state().
 restart_state(State) ->
     State#file_getter{
         running_call = undefined,
         pending_requests = sets:new([{version, 2}]),
         zones_loaded = 0,
-        error = []
+        errors = []
     }.
 
 maybe_reply(initial, {error, Reason}) ->
