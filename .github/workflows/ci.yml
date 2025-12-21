@@ -52,7 +52,7 @@ jobs:
           path: |
             ~/.cache/rebar3
             _build
-          key: ${{ runner.os }}-erlang-${{ matrix.otp }}-rebar3-${{ matrix.rebar3 }}-hash-${{hashFiles('rebar.lock')}}-${{hashFiles('rebar.config')}}
+          key: v2-${{ runner.os }}-erlang-${{ matrix.otp }}-rebar3-${{ matrix.rebar3 }}-hash-${{hashFiles('rebar.lock')}}-${{hashFiles('rebar.config')}}
       - run: make build
       - run: make test
       - name: Coveralls
