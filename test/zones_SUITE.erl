@@ -24,6 +24,7 @@ groups() ->
             strict_true,
             strict_false,
             strict_passes,
+            one_bad_zone,
             bad_json,
             bad_json_not_list,
             valid_zones,
@@ -523,17 +524,22 @@ strict_passes(Config) ->
     LoadConfig = #{path => Path},
     ?assertMatch(0, erldns_zone_loader:load_zones(LoadConfig)).
 
+one_bad_zone(Config) ->
+    DataDir = proplists:get_value(data_dir, Config),
+    LoadConfig = #{path => DataDir},
+    ?assertError(_, erldns_zone_loader:load_zones(LoadConfig)).
+
 bad_json(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "bad_json.json"),
     LoadConfig = #{path => Path},
-    ?assertError({json_error, _}, erldns_zone_loader:load_zones(LoadConfig)).
+    ?assertError([{json_error, _}], erldns_zone_loader:load_zones(LoadConfig)).
 
 bad_json_not_list(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "json_not_list.json"),
     LoadConfig = #{path => Path},
-    ?assertError({invalid_zone_file, _}, erldns_zone_loader:load_zones(LoadConfig)).
+    ?assertError([{invalid_zone_file, _}], erldns_zone_loader:load_zones(LoadConfig)).
 
 valid_zones(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
@@ -652,7 +658,7 @@ multiple_errors(Config) ->
     ok = file:write_file(InvalidFile1, ~"{invalid json 1"),
     ok = file:write_file(InvalidFile2, ~"{invalid json 2"),
     LoadConfig = #{path => TestDir, format => json, strict => true},
-    ?assertError({json_error, _}, erldns_zone_loader:load_zones(LoadConfig)).
+    ?assertError([{json_error, _}, {json_error, _}], erldns_zone_loader:load_zones(LoadConfig)).
 
 queued_requests(Config) ->
     erlang:process_flag(trap_exit, true),

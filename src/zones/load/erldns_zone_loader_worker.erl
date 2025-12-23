@@ -5,10 +5,13 @@
 
 -export([load_file/4, start_link/4, init/4]).
 
--spec load_file(gen_server:from(), file:filename(), file:name(), boolean()) ->
-    supervisor:startlink_ret().
+-spec load_file(erldns_zone_loader_getter:tag(), file:filename(), file:name(), boolean()) ->
+    reference().
 load_file(Tag, File, KeysPath, Strict) ->
-    erldns_zone_loader_worker_sup:start_child([Tag, File, KeysPath, Strict]).
+    {ok, Pid} = erldns_zone_loader_worker_sup:start_child([Tag, File, KeysPath, Strict]),
+    AliasMon = erlang:monitor(process, Pid, [{alias, reply_demonitor}]),
+    Pid ! {?MODULE, AliasMon},
+    AliasMon.
 
 -spec start_link(erldns_zone_loader_getter:tag(), file:filename(), file:name(), boolean()) ->
     dynamic().
@@ -17,26 +20,30 @@ start_link(Tag, File, KeysPath, Strict) ->
 
 -spec init(erldns_zone_loader_getter:tag(), file:filename(), file:name(), boolean()) -> no_return().
 init(Tag, File, KeysPath, Strict) ->
-    Self = self(),
-    proc_lib:init_ack({ok, Self}),
-    run(Tag, File, KeysPath, Strict, Self).
+    proc_lib:init_ack({ok, self()}),
+    receive
+        {?MODULE, AliasMon} ->
+            run(Tag, File, KeysPath, Strict, AliasMon)
+    after 1000 ->
+        exit(timeout)
+    end.
 
-run(Tag, File, KeysPath, Strict, Self) ->
+run(Tag, File, KeysPath, Strict, AliasMon) ->
     try
         Zones = do_load_file(File, KeysPath, Strict),
         lists:map(fun erldns_zone_cache:put_zone/1, Zones),
-        erldns_zone_loader_getter:respond(Tag, Self, {ok, length(Zones)})
+        AliasMon ! {Tag, AliasMon, length(Zones)}
     catch
         throw:Reason ->
-            erldns_zone_loader_getter:respond(Tag, Self, {error, Reason});
+            AliasMon ! {Tag, AliasMon, error, Reason};
         error:unexpected_end = Error ->
-            erldns_zone_loader_getter:respond(Tag, Self, {error, {json_error, Error}});
+            AliasMon ! {Tag, AliasMon, error, {json_error, Error}};
         error:{invalid_byte, _} = Error ->
-            erldns_zone_loader_getter:respond(Tag, Self, {error, {json_error, Error}});
+            AliasMon ! {Tag, AliasMon, error, {json_error, Error}};
         error:{unexpected_sequence, _} = Error ->
-            erldns_zone_loader_getter:respond(Tag, Self, {error, {json_error, Error}});
+            AliasMon ! {Tag, AliasMon, error, {json_error, Error}};
         error:Reason:StackTrace ->
-            erldns_zone_loader_getter:respond(Tag, Self, {error, {Reason, StackTrace}})
+            AliasMon ! {Tag, AliasMon, error, {Reason, StackTrace}}
     end.
 
 -spec do_load_file(file:filename(), file:name(), boolean()) -> [erldns:zone()].
