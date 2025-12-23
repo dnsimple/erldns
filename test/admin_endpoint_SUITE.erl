@@ -166,20 +166,20 @@ get_zone_record_resource(CtConfig) ->
     end.
 
 get_zone_record_resource_name(CtConfig) ->
-    Request = {endpoint(CtConfig, "/zones/example.com/records/example.com"), headers(good)},
+    Request = {endpoint(CtConfig, "/zones/example.com/records/www.example.com"), headers(good)},
     case httpc:request(get, Request, [], []) of
         {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Payload}} ->
-            Records = json:decode(iolist_to_binary(Payload)),
-            Soa = lists:filter(fun(#{~"type" := Type}) -> ~"SOA" =:= Type end, Records),
+            Body = json:decode(iolist_to_binary(Payload)),
             ?assertMatch(
                 [
                     #{
-                        ~"name" := ~"example.com",
-                        ~"ttl" := 3600,
-                        ~"data" := #{~"serial" := 2013022001}
+                        <<"content">> := <<"example.com.">>,
+                        <<"name">> := <<"www.example.com.">>,
+                        <<"ttl">> := 120,
+                        <<"type">> := <<"CNAME">>
                     }
                 ],
-                Soa
+                Body
             );
         {_, Other} ->
             ct:fail(Other)
@@ -187,23 +187,21 @@ get_zone_record_resource_name(CtConfig) ->
 
 get_zone_record_resource_name_type(CtConfig) ->
     Request = {
-        endpoint(CtConfig, "/zones/example.com/records/example.com?type=A"), headers(good)
+        endpoint(CtConfig, "/zones/example.com/records/www.example.com?type=CNAME"), headers(good)
     },
     case httpc:request(get, Request, [], []) of
         {ok, {{_Version, 200, _ReasonPhrase}, _Headers, Payload}} ->
-            RRSet = json:decode(iolist_to_binary(Payload)),
+            Body = json:decode(iolist_to_binary(Payload)),
             ?assertMatch(
                 [
                     #{
-                        ~"name" := ~"example.com",
-                        ~"ttl" := 3600,
-                        ~"type" := ~"A",
-                        ~"data" := #{
-                            ~"ip" := ~"1.2.3.4"
-                        }
+                        <<"content">> := <<"example.com.">>,
+                        <<"name">> := <<"www.example.com.">>,
+                        <<"ttl">> := 120,
+                        <<"type">> := <<"CNAME">>
                     }
                 ],
-                RRSet
+                Body
             );
         {_, Other} ->
             ct:fail(Other)

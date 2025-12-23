@@ -18,20 +18,16 @@ The following is implemented:
           "records_count": 11,
           "records": [
             {
-              "name": "example.com",
+              "name": "example.com.",
               "type": "A",
               "ttl": 3600,
-              "data": {
-                "ip": "1.2.3.4"
-              }
+              "content": "1.2.3.4"
             },
             {
-              "name": "example.com",
+              "name": "example.com.",
               "type": "AAAA",
               "ttl": 3600,
-              "data": {
-                "ip": "2001:6A8:0:1:210:4BFF:FE4B:4C61"
-              }
+              "content": "2001:6A8:0:1:210:4BFF:FE4B:4C61"
             },
             ...
           ]
