@@ -119,15 +119,15 @@ to_json(Req, State) ->
             Resp = "Error getting zone: zone not found",
             {stop, cowboy_req:reply(400, #{}, Resp, Req), State};
         Zone ->
-            MaybeMetaOnly = lists:keyfind(~"metaonly", 1, Params),
+            MaybeMetaOnly = lists:keymember(~"metaonly", 1, Params),
             Mode = choose_mode(MaybeMetaOnly),
             Json = erldns_zone_codec:encode(Zone, #{mode => Mode}),
             Body = json:encode(Json),
             {Body, Req, State}
     end.
 
--spec choose_mode(false | {binary(), binary()}) -> atom().
-choose_mode({~"metaonly", ~"true"}) ->
+-spec choose_mode(boolean()) -> atom().
+choose_mode(true) ->
     zone_meta_to_json;
-choose_mode(_) ->
+choose_mode(false) ->
     zone_to_json.
