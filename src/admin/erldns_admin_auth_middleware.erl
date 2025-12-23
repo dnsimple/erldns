@@ -23,16 +23,21 @@ execute(Req0, #{credentials := {Username, Password}} = Env) ->
 is_authorized(Req, ValidUsername, ValidPassword) ->
     case cowboy_req:parse_header(~"authorization", Req) of
         {basic, GivenUsername, GivenPassword} ->
-            is_binary_of_equal_size(GivenUsername, ValidUsername) andalso
-                is_binary_of_equal_size(GivenPassword, ValidPassword) andalso
-                crypto:hash_equals(GivenUsername, ValidUsername) andalso
-                crypto:hash_equals(GivenPassword, ValidPassword) orelse
+            is_authorized(GivenUsername, GivenPassword, ValidUsername, ValidPassword) orelse
                 {false, ~"basic realm=\"erldns admin\""};
         _ ->
             {false, ~"basic realm=\"erldns admin\""}
     end.
 
--spec is_binary_of_equal_size(term(), term()) -> boolean().
+-spec is_authorized(dynamic(), dynamic(), dynamic(), dynamic()) -> boolean().
+is_authorized(GivenUsername, GivenPassword, ValidUsername, ValidPassword) ->
+    is_binary_of_equal_size(GivenUsername, ValidUsername) andalso
+        is_binary_of_equal_size(GivenPassword, ValidPassword) andalso
+        crypto:hash_equals(GivenUsername, ValidUsername) andalso
+        crypto:hash_equals(GivenPassword, ValidPassword).
+
+-compile({inline, [is_binary_of_equal_size/2]}).
+-spec is_binary_of_equal_size(dynamic(), dynamic()) -> boolean().
 is_binary_of_equal_size(Bin1, Bin2) ->
     is_binary(Bin1) andalso is_binary(Bin2) andalso byte_size(Bin1) =:= byte_size(Bin2).
 
