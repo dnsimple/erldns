@@ -173,10 +173,10 @@ get_zone_record_resource_name(CtConfig) ->
             ?assertMatch(
                 [
                     #{
-                        <<"content">> := <<"example.com.">>,
-                        <<"name">> := <<"www.example.com.">>,
-                        <<"ttl">> := 120,
-                        <<"type">> := <<"CNAME">>
+                        ~"content" := ~"example.com.",
+                        ~"name" := ~"www.example.com.",
+                        ~"ttl" := 120,
+                        ~"type" := ~"CNAME"
                     }
                 ],
                 Body
@@ -195,10 +195,10 @@ get_zone_record_resource_name_type(CtConfig) ->
             ?assertMatch(
                 [
                     #{
-                        <<"content">> := <<"example.com.">>,
-                        <<"name">> := <<"www.example.com.">>,
-                        <<"ttl">> := 120,
-                        <<"type">> := <<"CNAME">>
+                        ~"content" := ~"example.com.",
+                        ~"name" := ~"www.example.com.",
+                        ~"ttl" := 120,
+                        ~"type" := ~"CNAME"
                     }
                 ],
                 Body
