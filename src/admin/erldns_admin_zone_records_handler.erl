@@ -15,9 +15,11 @@ The following is implemented:
         },
         {
             "name": "mail.example.com.",
-            "type": "A",
-            "ttl": 300,
-            "content": "
+            "type": "MX",
+            "ttl": 3600,
+            "content": "10 mail.example.com."
+        }
+    ]
     ```
 """.
 
