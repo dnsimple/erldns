@@ -89,9 +89,10 @@ transport := udp | tcp
 
 -include_lib("kernel/include/logger.hrl").
 
--define(DEFAULT_TCP_INGRESS_TIMEOUT, 500).
--define(DEFAULT_IDLE_TIMEOUT_MS, 1000).
--define(DEFAULT_REQUEST_TIMEOUT_MS, 5000).
+-define(DEFAULT_UDP_INGRESS_TIMEOUT, 500).
+-define(DEFAULT_TCP_INGRESS_TIMEOUT, 1000).
+-define(DEFAULT_IDLE_TIMEOUT_MS, 2000).
+-define(DEFAULT_REQUEST_TIMEOUT_MS, 1000).
 -define(DEF_MAX_TCP_WORKERS, 50).
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_IP, any).
@@ -130,10 +131,10 @@ It can contain the following keys:
         - `max_concurrent_queries` (optional): Maximum number of parallel request
           workers per connection. Defaults to 50 workers.
         - `idle_timeout_ms` (optional): Timeout in milliseconds for idle connections
-          (no data in buffer). Defaults to 1s.
+          (no data in buffer). Defaults to 2s.
         - `request_timeout_ms` (optional): Timeout in milliseconds for individual
           request processing. If a request exceeds this timeout, it will be killed and
-          a SERVFAIL response will be sent to the client. Defaults to 5000ms.
+          a SERVFAIL response will be sent to the client. Defaults to 1000ms.
         - `tcp_opts` (optional): List of TCP socket options (e.g., `[{nodelay, true}]`).
           These are passed directly to `gen_tcp` and merged with the default socket options.
     - For TLS listeners (when `transport => tls`):
@@ -147,6 +148,8 @@ It can contain the following keys:
           - `{reuse_sessions, true}` - Enable session reuse
           - See `m:ssl` module documentation for the complete list of SSL options.
     - For UDP listeners:
+        - `ingress_request_timeout` (optional): Timeout in milliseconds for receiving
+          a complete request packet. Defaults to 500ms.
         - `udp_opts` (optional): List of UDP socket options (e.g., `[{recbuf, 65536}]`).
           These are passed directly to `gen_udp` and merged with the default socket options.
 - `ParallelFactor` is a multiplying factor for parallelisation. Default is `1`.
@@ -297,10 +300,11 @@ child_spec_for_transport(Name, PFactor, udp, SocketOpts, Opts) ->
     % Extract UDP-specific socket options from opts if any
     UdpExtraOpts = maps:get(udp_opts, Opts, []),
     UdpSocketOpts = udp_opts(SocketOpts ++ UdpExtraOpts),
+    Timeout = get_udp_timeout(Opts),
     [
         #{
             id => {Name, udp},
-            start => {erldns_proto_udp_sup, start_link, [Name, PFactor, UdpSocketOpts]},
+            start => {erldns_proto_udp_sup, start_link, [Name, PFactor, Timeout, UdpSocketOpts]},
             type => supervisor
         }
     ];
@@ -367,6 +371,15 @@ build_tcp_tls_child_spec(Name, PFactor, Transport, SocketOpts0, Opts, RanchModul
     },
     RanchRef = {?MODULE, {Name, Transport}},
     [ranch:child_spec(RanchRef, RanchModule, TransOpts, erldns_proto_tcp, ProtoOpts)].
+
+-spec get_udp_timeout(map()) -> non_neg_integer().
+get_udp_timeout(ListenerOpts) ->
+    case maps:get(ingress_request_timeout, ListenerOpts, ?DEFAULT_UDP_INGRESS_TIMEOUT) of
+        Timeout when is_integer(Timeout), Timeout > 0 ->
+            Timeout;
+        Invalid ->
+            error({invalid_option, ingress_request_timeout, Invalid})
+    end.
 
 -spec get_tcp_timeout(map()) -> non_neg_integer().
 get_tcp_timeout(ListenerOpts) ->

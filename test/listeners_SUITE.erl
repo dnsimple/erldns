@@ -76,7 +76,6 @@ init_per_suite(Config) ->
 -spec end_per_suite(ct_suite:ct_config()) -> term().
 end_per_suite(_) ->
     [application:stop(App) || App <- [ranch, worker_pool, telemetry]],
-    application:unset_env(erldns, ingress_udp_request_timeout),
     application:unset_env(erldns, packet_pipeline),
     application:unset_env(erldns, listeners).
 
@@ -725,8 +724,7 @@ sched_mon_coverage(Config) ->
     AppConfig = [
         {erldns, [
             {listeners, []},
-            {packet_pipeline, []},
-            {ingress_udp_request_timeout, ?INGRESS_TIMEOUT}
+            {packet_pipeline, []}
         ]}
     ],
     Config1 = app_helper:start_erldns(Config, AppConfig),
@@ -772,8 +770,7 @@ reset_queues(Config) ->
                     opts => #{ingress_request_timeout => ?INGRESS_TIMEOUT}
                 }
             ]},
-            {packet_pipeline, [fun sleeping_pipe/2]},
-            {ingress_udp_request_timeout, ?INGRESS_TIMEOUT}
+            {packet_pipeline, [fun sleeping_pipe/2]}
         ]}
     ],
     Config1 = app_helper:start_erldns(Config, AppConfig),
@@ -1000,8 +997,7 @@ prepare_test(Config, Name, Transport, TelemetryEvent, Pipeline, CustomOpts) ->
                     opts => ListenerOpts
                 }
             ]},
-            {packet_pipeline, Pipeline},
-            {ingress_udp_request_timeout, ?INGRESS_TIMEOUT}
+            {packet_pipeline, Pipeline}
         ]}
     ],
     Config1 = app_helper:start_erldns(Config, AppConfig),
