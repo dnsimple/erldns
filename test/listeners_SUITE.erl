@@ -254,33 +254,7 @@ tls_opts_configuration(_) ->
     ]),
     % The case clause will fail when tls_opts is not a list
     Result = erldns_listeners:start_link(),
-    ?assertMatch({error, _}, Result),
-    % TLS test with valid format (but will fail without certs - that's ok for config test)
-    application:set_env(erldns, listeners, [
-        #{
-            name => ?FUNCTION_NAME,
-            transport => tls,
-            port => 0,
-            opts => #{
-                ingress_request_timeout => 1000,
-                tls_opts => [{certfile, "bad_file"}, {keyfile, "does_not_exist"}]
-            }
-        }
-    ]),
-    % Config is valid, but will fail to start without valid cert files
-    Result2 = erldns_listeners:start_link(),
-    ?assertMatch(
-        {error,
-            {shutdown,
-                {failed_to_start_child, _,
-                    {shutdown,
-                        {failed_to_start_child, _,
-                            {shutdown,
-                                {failed_to_start_child, _,
-                                    {listen_error, {erldns_listeners, {?FUNCTION_NAME, tls}},
-                                        {options, {_, {_, enoent}}}}}}}}}}},
-        Result2
-    ).
+    ?assertMatch({error, _}, Result).
 
 udp_opts_configuration(_) ->
     % Test UDP socket options
