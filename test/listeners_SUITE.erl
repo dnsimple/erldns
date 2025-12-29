@@ -33,6 +33,7 @@ groups() ->
             ip_must_be_inet_parseable,
             tcp_defaults,
             tcp_opts_configuration,
+            tcp_max_connections_configuration,
             tls_opts_configuration,
             udp_opts_configuration,
             standard_transport_creates_both
@@ -188,6 +189,45 @@ tcp_opts_configuration(_) ->
     ]),
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     gen_server:stop(erldns_listeners).
+
+tcp_max_connections_configuration(_) ->
+    % Test max_connections configuration
+    application:set_env(erldns, listeners, [
+        #{
+            name => ?FUNCTION_NAME,
+            transport => tcp,
+            port => 0,
+            opts => #{max_connections => 500}
+        }
+    ]),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    gen_server:stop(erldns_listeners),
+    % Test invalid max_connections (must be positive integer)
+    application:set_env(erldns, listeners, [
+        #{
+            name => ?FUNCTION_NAME,
+            transport => tcp,
+            port => 0,
+            opts => #{max_connections => 0}
+        }
+    ]),
+    ?assertMatch(
+        {error, {{invalid_option, max_connections, 0}, _}},
+        erldns_listeners:start_link()
+    ),
+    % Test invalid max_connections (must be integer)
+    application:set_env(erldns, listeners, [
+        #{
+            name => ?FUNCTION_NAME,
+            transport => tcp,
+            port => 0,
+            opts => #{max_connections => bad}
+        }
+    ]),
+    ?assertMatch(
+        {error, {{invalid_option, max_connections, bad}, _}},
+        erldns_listeners:start_link()
+    ).
 
 tls_opts_configuration(_) ->
     % Test that TLS requires tls_opts
@@ -545,10 +585,10 @@ worker_timeout(Config) ->
 %% Test TCP/TLS load shedding via Ranch connection limit alarms.
 %% When system load is high and connection limit is reached, Ranch triggers
 %% an alarm that causes delayed events.
-%% Note: max_connections is set to ingress_request_timeout (100ms), which is very low.
+%% Note: max_connections is set to 50, which is very low.
 load_shedding_max_number_of_connections(Config) ->
     Transport = proplists:get_value(transport, Config),
-    CustomOpts = #{ingress_request_timeout => 100},
+    CustomOpts = #{max_connections => 50},
     #{port := Port} = prepare_test(
         Config, ?FUNCTION_NAME, Transport, delayed, [fun sleeping_pipe/2], CustomOpts
     ),

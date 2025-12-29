@@ -93,6 +93,7 @@ transport := udp | tcp
 -define(DEFAULT_TCP_INGRESS_TIMEOUT, 1000).
 -define(DEFAULT_IDLE_TIMEOUT_MS, 2000).
 -define(DEFAULT_REQUEST_TIMEOUT_MS, 1000).
+-define(DEFAULT_MAX_CONNECTIONS, 1000).
 -define(DEF_MAX_TCP_WORKERS, 50).
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_IP, any).
@@ -135,6 +136,8 @@ It can contain the following keys:
         - `request_timeout_ms` (optional): Timeout in milliseconds for individual
           request processing. If a request exceeds this timeout, it will be killed and
           a SERVFAIL response will be sent to the client. Defaults to 1000ms.
+        - `max_connections` (optional): Maximum number of concurrent TCP/TLS connections.
+          When this limit is reached, new connections trigger load shedding. Defaults to 1000.
         - `tcp_opts` (optional): List of TCP socket options (e.g., `[{nodelay, true}]`).
           These are passed directly to `gen_tcp` and merged with the default socket options.
     - For TLS listeners (when `transport => tls`):
@@ -333,6 +336,7 @@ child_spec_for_transport(Name, PFactor, tls, SocketOpts0, Opts) ->
 build_tcp_tls_child_spec(Name, PFactor, Transport, SocketOpts0, Opts, RanchModule, SslOpts) ->
     Timeout = get_tcp_timeout(Opts),
     MaxParallelWorkers = get_tcp_max_parallel_workers(Opts),
+    MaxConnections = get_tcp_max_connections(Opts),
     % Extract TCP-specific socket options from opts if any
     TcpExtraOpts = maps:get(tcp_opts, Opts, []),
     TcpSocketOpts = tcp_opts(SocketOpts0 ++ TcpExtraOpts, Timeout),
@@ -349,12 +353,12 @@ build_tcp_tls_child_spec(Name, PFactor, Transport, SocketOpts0, Opts, RanchModul
         alarms => #{
             first_alarm => #{
                 type => num_connections,
-                threshold => Timeout,
+                threshold => MaxConnections,
                 cooldown => Timeout,
                 callback => fun trigger_delayed/4
             }
         },
-        max_connections => Timeout,
+        max_connections => MaxConnections,
         num_acceptors => PFactor * Parallelism,
         num_conns_sups => PFactor * Parallelism,
         num_listen_sockets => Parallelism,
@@ -415,6 +419,15 @@ get_tcp_request_timeout(ListenerOpts) ->
             Timeout;
         Invalid ->
             error({invalid_option, request_timeout_ms, Invalid})
+    end.
+
+-spec get_tcp_max_connections(map()) -> non_neg_integer().
+get_tcp_max_connections(ListenerOpts) ->
+    case maps:get(max_connections, ListenerOpts, ?DEFAULT_MAX_CONNECTIONS) of
+        Max when is_integer(Max), Max > 0 ->
+            Max;
+        Invalid ->
+            error({invalid_option, max_connections, Invalid})
     end.
 
 tcp_opts(SocketOpts0, Timeout) ->
