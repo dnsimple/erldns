@@ -7,6 +7,7 @@
 -include_lib("dns_erlang/include/dns.hrl").
 
 -define(INGRESS_TIMEOUT, 50).
+-define(BIGGER_INGRESS_TIMEOUT, 200).
 -define(PAUSE_PIPE_TIMEOUT, 50).
 -define(SLEEP_PIPE_TIMEOUT, 500).
 
@@ -58,6 +59,7 @@ tcp_tls_tests() ->
         encoder_failure,
         closed_when_client_closes,
         ingress_timeout,
+        worker_timeout,
         load_shedding_max_number_of_connections,
         packet_arrives_in_pieces,
         pipelining_requests,
@@ -517,6 +519,26 @@ ingress_timeout(Config) ->
     assert_telemetry_event(dropped),
     close_socket(Transport, Socket1).
 
+%% Test that TCP/TLS listener handles worker timeouts correctly.
+%% When a worker exceeds the request_timeout_ms, it should be killed and
+%% a SERVFAIL response should be sent to the client.
+worker_timeout(Config) ->
+    Transport = proplists:get_value(transport, Config),
+    % Set worker timeout to 50ms, and use sleeping_pipe which delays 500ms
+    % This ensures the worker will timeout before completing
+    CustomOpts = #{request_timeout_ms => 50},
+    #{port := Port} = prepare_test(
+        Config, ?FUNCTION_NAME, Transport, timeout, [fun sleeping_pipe/2], CustomOpts
+    ),
+    Packet = packet(),
+    Socket = connect_socket(Transport, {127, 0, 0, 1}, Port),
+    send_data(Transport, Socket, [<<(byte_size(Packet)):16>>, Packet]),
+    {ok, <<Len:16, ResponseBin:Len/binary>>} = recv_data(Transport, Socket, 0, 1000),
+    Response = dns:decode_message(ResponseBin),
+    ?assertEqual(?DNS_RCODE_SERVFAIL, Response#dns_message.rc, Response),
+    ?assertEqual(true, Response#dns_message.qr, "Should be a response"),
+    close_socket(Transport, Socket).
+
 %% Test TCP/TLS load shedding via Ranch connection limit alarms.
 %% When system load is high and connection limit is reached, Ranch triggers
 %% an alarm that causes delayed events.
@@ -614,9 +636,9 @@ max_workers_fragmented(Config) ->
 
 do_max_workers_configuration(Config, FunctionCallback) ->
     Transport = proplists:get_value(transport, Config),
-    CustomOpts = #{max_concurrent_queries => 2},
+    CustomOpts = #{max_concurrent_queries => 2, ingress_request_timeout => ?BIGGER_INGRESS_TIMEOUT},
     #{port := Port} = prepare_test(
-        Config, ?FUNCTION_NAME, Transport, timeout, [fun sleeping_pipe/2], CustomOpts
+        Config, ?FUNCTION_NAME, Transport, [timeout, error], [fun sleeping_pipe/2], CustomOpts
     ),
     Packet = packet(),
     StartTime = erlang:monotonic_time(millisecond),
@@ -633,7 +655,8 @@ do_max_workers_configuration(Config, FunctionCallback) ->
     % (first batch: 2 workers for ~500ms, second batch: 2 workers for ~500ms, last: 1 worker for ~500ms)
     ?assert(TotalTime > 2 * ?SLEEP_PIPE_TIMEOUT, #{
         total_time => TotalTime, responses => length(Responses)
-    }).
+    }),
+    assert_no_telemetry_event().
 
 %% Transport abstraction helpers
 -spec connect_socket(tcp | tls, inet:ip_address(), inet:port_number()) ->

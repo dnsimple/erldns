@@ -91,6 +91,7 @@ transport := udp | tcp
 
 -define(DEFAULT_TCP_INGRESS_TIMEOUT, 500).
 -define(DEFAULT_IDLE_TIMEOUT_MS, 1000).
+-define(DEFAULT_REQUEST_TIMEOUT_MS, 5000).
 -define(DEF_MAX_TCP_WORKERS, 50).
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_IP, any).
@@ -130,6 +131,9 @@ It can contain the following keys:
           workers per connection. Defaults to 50 workers.
         - `idle_timeout_ms` (optional): Timeout in milliseconds for idle connections
           (no data in buffer). Defaults to 1s.
+        - `request_timeout_ms` (optional): Timeout in milliseconds for individual
+          request processing. If a request exceeds this timeout, it will be killed and
+          a SERVFAIL response will be sent to the client. Defaults to 5000ms.
         - `tcp_opts` (optional): List of TCP socket options (e.g., `[{nodelay, true}]`).
           These are passed directly to `gen_tcp` and merged with the default socket options.
     - For TLS listeners (when `transport => tls`):
@@ -354,10 +358,12 @@ build_tcp_tls_child_spec(Name, PFactor, Transport, SocketOpts0, Opts, RanchModul
         socket_opts => FinalSocketOpts
     },
     IdleTimeout = get_tcp_idle_timeout(Opts),
+    RequestTimeout = get_tcp_request_timeout(Opts),
     ProtoOpts = #{
         ingress_request_timeout => Timeout,
         idle_timeout_ms => IdleTimeout,
-        max_concurrent_queries => MaxParallelWorkers
+        max_concurrent_queries => MaxParallelWorkers,
+        request_timeout_ms => RequestTimeout
     },
     RanchRef = {?MODULE, {Name, Transport}},
     [ranch:child_spec(RanchRef, RanchModule, TransOpts, erldns_proto_tcp, ProtoOpts)].
@@ -387,6 +393,15 @@ get_tcp_idle_timeout(ListenerOpts) ->
             Timeout;
         _ ->
             ?DEFAULT_IDLE_TIMEOUT_MS
+    end.
+
+-spec get_tcp_request_timeout(map()) -> non_neg_integer().
+get_tcp_request_timeout(ListenerOpts) ->
+    case maps:get(request_timeout_ms, ListenerOpts, ?DEFAULT_REQUEST_TIMEOUT_MS) of
+        Timeout when infinity =:= Timeout orelse (is_integer(Timeout) andalso Timeout > 0) ->
+            Timeout;
+        Invalid ->
+            error({invalid_option, request_timeout_ms, Invalid})
     end.
 
 tcp_opts(SocketOpts0, Timeout) ->

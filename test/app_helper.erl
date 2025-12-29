@@ -46,7 +46,7 @@ stop(Config) ->
     Pid ! stop.
 
 %% Attach telemetry handler on peer node that forwards events to test node
-attach_telemetry_remote(Node, Name, Type, TestPid) ->
+attach_telemetry_remote(Node, Name, Types, TestPid) when is_list(Types) ->
     % Create handler function on remote node to avoid serialization issues
     % with closures. The handler forwards events to the test node's Pid.
     ok = erpc:call(Node, fun() ->
@@ -54,5 +54,8 @@ attach_telemetry_remote(Node, Name, Type, TestPid) ->
             % Forward event to test node
             TestPid ! {EventName, Measurements, Metadata}
         end,
-        telemetry:attach(Name, [erldns, request, Type], Handler, [])
-    end).
+        Events = [[erldns, request, Type] || Type <- Types],
+        telemetry:attach_many(Name, Events, Handler, [])
+    end);
+attach_telemetry_remote(Node, Name, Type, TestPid) ->
+    attach_telemetry_remote(Node, Name, [Type], TestPid).

@@ -26,16 +26,24 @@
 -type ts() :: integer().
 -export_type([socket/0, socket_type/0, ts/0]).
 
+-record(request, {
+    start_time :: ts(),
+    request_bin :: dns:message_bin(),
+    timeout_timer :: reference()
+}).
+-type request() :: #request{}.
+
 -record(state, {
     socket :: socket(),
     socket_type :: socket_type(),
     connection_start_time :: ts(),
     ingress_timeout_ms :: non_neg_integer(),
     idle_timeout_ms :: non_neg_integer(),
+    request_timeout_ms :: non_neg_integer(),
     max_concurrent_queries :: non_neg_integer(),
     ip_address :: inet:ip_address(),
     port :: inet:port_number(),
-    active_workers = #{} :: #{pid() => true},
+    active_workers = #{} :: #{pid() => request()},
     timer_ref :: undefined | reference(),
     buffer = <<>> :: binary()
 }).
@@ -53,9 +61,12 @@ init({Ref, Transport, Opts, StartTime}) ->
     process_flag(trap_exit, true),
     try
         SocketType = detect_socket_type(Transport),
-        MaxConcurrentQueries = maps:get(max_concurrent_queries, Opts),
-        IngressTimeoutMs = maps:get(ingress_request_timeout, Opts),
-        IdleTimeoutMs = maps:get(idle_timeout_ms, Opts),
+        #{
+            max_concurrent_queries := MaxConcurrentQueries,
+            ingress_request_timeout := IngressTimeoutMs,
+            idle_timeout_ms := IdleTimeoutMs,
+            request_timeout_ms := RequestTimeoutMs
+        } = Opts,
         {ok, Socket} = ranch:handshake(Ref),
         {ok, {IpAddr, Port}} = get_peername(Socket, SocketType),
         ok = set_socket_active(Socket, SocketType),
@@ -65,6 +76,7 @@ init({Ref, Transport, Opts, StartTime}) ->
             connection_start_time = StartTime,
             ingress_timeout_ms = IngressTimeoutMs,
             idle_timeout_ms = IdleTimeoutMs,
+            request_timeout_ms = RequestTimeoutMs,
             max_concurrent_queries = MaxConcurrentQueries,
             ip_address = IpAddr,
             port = Port,
@@ -73,15 +85,14 @@ init({Ref, Transport, Opts, StartTime}) ->
         gen_server:enter_loop(?MODULE, [], State0)
     catch
         Class:Reason:Stacktrace ->
-            ?LOG_ERROR(
-                #{
-                    what => tcp_connection_init_failed,
-                    class => Class,
-                    reason => Reason,
-                    stacktrace => Stacktrace
-                },
-                ?LOG_METADATA
-            ),
+            ExceptionMetadata = #{
+                what => connection_init_failed,
+                transport => tcp,
+                kind => Class,
+                reason => Reason,
+                stacktrace => Stacktrace
+            },
+            telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata),
             {stop, {init_failed, Class, Reason}}
     end.
 
@@ -98,28 +109,24 @@ handle_info({timeout, TimerRef, idle}, #state{timer_ref = TimerRef} = State) ->
     ?LOG_INFO(#{what => connection_idle_timeout, transport => tcp}, ?LOG_METADATA),
     {stop, normal, State};
 handle_info({timeout, TimerRef, ingress}, #state{timer_ref = TimerRef} = State) ->
-    ?LOG_WARNING(
-        #{
-            what => request_timeout,
-            transport => tcp,
-            buffer_size => byte_size(State#state.buffer),
-            timeout_type => ingress
-        },
-        ?LOG_METADATA
-    ),
     Count = 1 + maps:size(State#state.active_workers),
-    telemetry:execute([erldns, request, dropped], #{count => Count}, #{transport => tcp}),
+    Metadata = #{transport => tcp, timeout_type => ingress, buffer => State#state.buffer},
+    telemetry:execute([erldns, request, dropped], #{count => Count}, Metadata),
     {stop, normal, State};
+handle_info({timeout, TimerRef, {request_timeout, WorkerPid}}, State) ->
+    handle_worker_timeout(WorkerPid, TimerRef, State);
 handle_info({timeout, _, _}, State) ->
     % Timer was cancelled/replaced, ignore
     {noreply, State};
 handle_info({'EXIT', Pid, normal}, #state{active_workers = ActiveWorkers} = State) ->
-    NewActiveWorkers = maps:remove(Pid, ActiveWorkers),
+    {RequestInfo, NewActiveWorkers} = maps:take(Pid, ActiveWorkers),
+    cancel_timer(RequestInfo#request.timeout_timer),
     State1 = State#state{active_workers = NewActiveWorkers},
     handle_process_buffer(State1);
 handle_info({'EXIT', Pid, Reason}, #state{active_workers = ActiveWorkers} = State) ->
     ?LOG_WARNING(#{what => tcp_worker_crashed, pid => Pid, reason => Reason}, ?LOG_METADATA),
-    NewActiveWorkers = maps:remove(Pid, ActiveWorkers),
+    {RequestInfo, NewActiveWorkers} = maps:take(Pid, ActiveWorkers),
+    cancel_timer(RequestInfo#request.timeout_timer),
     State1 = State#state{active_workers = NewActiveWorkers},
     handle_process_buffer(State1);
 handle_info({SocketType, Socket, Bin}, #state{socket = Socket, socket_type = SocketType} = State) ->
@@ -184,6 +191,7 @@ spawn_tcp_worker_and_recurse(
         ip_address = IpAddr,
         port = Port,
         active_workers = ActiveWorkers,
+        request_timeout_ms = RequestTimeoutMs,
         timer_ref = TimerRef
     } = State,
     RequestBin,
@@ -193,13 +201,19 @@ spawn_tcp_worker_and_recurse(
     WorkerPid = erldns_proto_tcp_request:start_link(
         RequestBin, TS, Socket, SocketType, IpAddr, Port
     ),
-    NewActiveWorkers = ActiveWorkers#{WorkerPid => true},
+    TimeoutTimer = erlang:start_timer(RequestTimeoutMs, self(), {request_timeout, WorkerPid}),
     cancel_timer(TimerRef),
-    handle_process_buffer(State#state{
+    RequestInfo = #request{
+        start_time = TS,
+        request_bin = RequestBin,
+        timeout_timer = TimeoutTimer
+    },
+    State1 = State#state{
         buffer = Rest,
-        active_workers = NewActiveWorkers,
+        active_workers = ActiveWorkers#{WorkerPid => RequestInfo},
         timer_ref = undefined
-    }).
+    },
+    handle_process_buffer(State1).
 
 -spec start_idle_timer(state()) -> {noreply, state()}.
 start_idle_timer(#state{idle_timeout_ms = IdleTimeoutMs, timer_ref = TimerRef} = State) ->
@@ -223,9 +237,58 @@ cancel_timer(undefined) ->
 cancel_timer(TimerRef) ->
     erlang:cancel_timer(TimerRef).
 
+-spec handle_worker_timeout(pid(), reference(), state()) -> {noreply, state()}.
+handle_worker_timeout(WorkerPid, TimerRef, #state{active_workers = ActiveWorkers} = State) ->
+    case maps:take(WorkerPid, ActiveWorkers) of
+        {#request{request_bin = RequestBin, timeout_timer = TimerRef}, NewActiveWorkers} ->
+            % Worker is still alive and timer matches, kill it and send SERVFAIL
+            exit(WorkerPid, kill),
+            Metadata = #{transport => tcp, pid => WorkerPid, timeout_type => worker},
+            telemetry:execute([erldns, request, timeout], #{count => 1}, Metadata),
+            % Send SERVFAIL response
+            send_servfail_response(State, RequestBin),
+            State1 = State#state{active_workers = NewActiveWorkers},
+            handle_process_buffer(State1);
+        _ ->
+            % Worker already finished, timer was stale, worker was restarted, or timer was cancelled
+            {noreply, State}
+    end.
+
+-spec send_servfail_response(state(), dns:message_bin()) -> term().
+send_servfail_response(#state{socket = Socket, socket_type = SocketType}, RequestBin) ->
+    try
+        Decoded = dns:decode_message(RequestBin),
+        ServfailMsg = erldns_encoder:build_error_response(Decoded),
+        EncodedResponse = dns:encode_message(ServfailMsg),
+        Payload = [<<(byte_size(EncodedResponse)):16>>, EncodedResponse],
+        send_data(Socket, SocketType, Payload)
+    catch
+        Class:Reason:Stacktrace ->
+            ExceptionMetadata = #{
+                what => connection_init_failed,
+                transport => tcp,
+                kind => Class,
+                reason => Reason,
+                stacktrace => Stacktrace
+            },
+            telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata)
+    end.
+
+-spec send_data(socket(), socket_type(), iodata()) -> ok | {error, term()}.
+send_data(Socket, tcp, Data) ->
+    gen_tcp:send(Socket, Data);
+send_data(Socket, ssl, Data) ->
+    ssl:send(Socket, Data).
+
 -spec shutdown(state()) -> ok.
 shutdown(#state{socket = Socket, socket_type = SocketType, active_workers = ActiveWorkers}) ->
-    maps:foreach(fun(Pid, _) -> exit(Pid, kill) end, ActiveWorkers),
+    maps:foreach(
+        fun(Pid, RequestInfo) ->
+            cancel_timer(RequestInfo#request.timeout_timer),
+            exit(Pid, kill)
+        end,
+        ActiveWorkers
+    ),
     close_socket(Socket, SocketType).
 
 -spec get_peername(socket(), socket_type()) ->
