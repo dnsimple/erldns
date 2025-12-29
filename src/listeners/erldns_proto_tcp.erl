@@ -239,16 +239,16 @@ cancel_timer(TimerRef) ->
 
 -spec handle_worker_timeout(pid(), reference(), state()) -> {noreply, state()}.
 handle_worker_timeout(WorkerPid, TimerRef, #state{active_workers = ActiveWorkers} = State) ->
-    case maps:take(WorkerPid, ActiveWorkers) of
-        {#request{request_bin = RequestBin, timeout_timer = TimerRef}, NewActiveWorkers} ->
+    case maps:get(WorkerPid, ActiveWorkers, undefined) of
+        #request{request_bin = RequestBin, timeout_timer = TimerRef} ->
             % Worker is still alive and timer matches, kill it and send SERVFAIL
+            % We don't remove it from the active_workers because the kill will send an EXIT signal
             exit(WorkerPid, kill),
             Metadata = #{transport => tcp, pid => WorkerPid, timeout_type => worker},
             telemetry:execute([erldns, request, timeout], #{count => 1}, Metadata),
             % Send SERVFAIL response
             send_servfail_response(State, RequestBin),
-            State1 = State#state{active_workers = NewActiveWorkers},
-            handle_process_buffer(State1);
+            handle_process_buffer(State);
         _ ->
             % Worker already finished, timer was stale, worker was restarted, or timer was cancelled
             {noreply, State}
