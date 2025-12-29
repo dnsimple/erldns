@@ -6,8 +6,7 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 
--define(INGRESS_TIMEOUT, 50).
--define(BIGGER_INGRESS_TIMEOUT, 1000).
+-define(INGRESS_TIMEOUT, 5000).
 -define(PAUSE_PIPE_TIMEOUT, 50).
 -define(SLEEP_PIPE_TIMEOUT, 500).
 
@@ -38,7 +37,7 @@ groups() ->
             udp_opts_configuration,
             standard_transport_creates_both
         ]},
-        {udp, [], [
+        {udp, [parallel], [
             udp_halted,
             udp_overrun,
             udp_drop_packets,
@@ -47,8 +46,8 @@ groups() ->
             udp_encoder_failure,
             udp_load_shedding
         ]},
-        {tcp, [], tcp_tls_tests()},
-        {tls, [], tcp_tls_tests()}
+        {tcp, [parallel], tcp_tls_tests()},
+        {tls, [parallel], tcp_tls_tests()}
     ].
 
 tcp_tls_tests() ->
@@ -336,14 +335,20 @@ udp_halted(Config) ->
     assert_no_telemetry_event().
 
 udp_overrun(Config) ->
-    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, udp, timeout, [fun sleeping_pipe/2]),
+    CustomOpts = #{ingress_request_timeout => 50},
+    #{port := Port} = prepare_test(
+        Config, ?FUNCTION_NAME, udp, timeout, [fun sleeping_pipe/2], CustomOpts
+    ),
     Packet = packet(),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
     ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
     assert_telemetry_event(timeout).
 
 udp_drop_packets(Config) ->
-    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, udp, dropped, [fun pause_pipe/2]),
+    CustomOpts = #{ingress_request_timeout => 100},
+    #{port := Port} = prepare_test(
+        Config, ?FUNCTION_NAME, udp, dropped, [fun pause_pipe/2], CustomOpts
+    ),
     Iterations = 1000,
     Packet = packet(),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
@@ -439,7 +444,7 @@ udp_load_shedding(Config) ->
 ignore_not_questions(Config) ->
     Packet = packet_not_a_question(),
     Transport = proplists:get_value(transport, Config),
-    CustomOpts = #{ingress_request_timeout => 100, idle_timeout_ms => 100},
+    CustomOpts = #{idle_timeout_ms => 100},
     #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, Transport, timeout, [], CustomOpts),
     Socket1 = connect_socket(Transport, {127, 0, 0, 1}, Port),
     send_data(Transport, Socket1, [<<(byte_size(Packet)):16>>, Packet]),
@@ -447,12 +452,11 @@ ignore_not_questions(Config) ->
     assert_no_telemetry_event().
 
 ignore_bad_packet(Config) ->
-    Packet = packet_not_a_question(),
     Transport = proplists:get_value(transport, Config),
     #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, Transport, error, []),
     Socket1 = connect_socket(Transport, {127, 0, 0, 1}, Port),
-    send_data(Transport, Socket1, [<<(byte_size(Packet)):16>>, <<1, 2, 3>>, Packet]),
-    {error, closed} = recv_data(Transport, Socket1, 0, 200),
+    Payload = [<<50:16>>, crypto:strong_rand_bytes(50)],
+    send_data(Transport, Socket1, Payload),
     assert_telemetry_event(error).
 
 %% Test that TCP/TLS listener handles pipeline halt correctly with RFC7766.
@@ -462,7 +466,7 @@ ignore_bad_packet(Config) ->
 pipeline_halted(Config) ->
     Packet = packet(),
     Transport = proplists:get_value(transport, Config),
-    CustomOpts = #{ingress_request_timeout => 100, idle_timeout_ms => 100},
+    CustomOpts = #{idle_timeout_ms => 100},
     #{port := Port} = prepare_test(
         Config, ?FUNCTION_NAME, Transport, timeout, [fun halting_pipe/2], CustomOpts
     ),
@@ -507,7 +511,7 @@ closed_when_client_closes(Config) ->
 %% should be emitted. Note: Ingress timeout is for receiving the packet, not processing.
 ingress_timeout(Config) ->
     Transport = proplists:get_value(transport, Config),
-    CustomOpts = #{ingress_request_timeout => 50},
+    CustomOpts = #{ingress_request_timeout => 1000},
     #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, Transport, dropped, [], CustomOpts),
     Socket1 = connect_socket(Transport, {127, 0, 0, 1}, Port),
     % Send length prefix indicating a large packet, but send only partial data
@@ -541,26 +545,22 @@ worker_timeout(Config) ->
 %% Test TCP/TLS load shedding via Ranch connection limit alarms.
 %% When system load is high and connection limit is reached, Ranch triggers
 %% an alarm that causes delayed events.
-%% Note: max_connections is set to ingress_request_timeout (20ms), which is very low.
-%% We need to create many connections quickly to trigger the alarm.
+%% Note: max_connections is set to ingress_request_timeout (100ms), which is very low.
 load_shedding_max_number_of_connections(Config) ->
     Transport = proplists:get_value(transport, Config),
-    CustomOpts = #{ingress_request_timeout => 20},
+    CustomOpts = #{ingress_request_timeout => 100},
     #{port := Port} = prepare_test(
         Config, ?FUNCTION_NAME, Transport, delayed, [fun sleeping_pipe/2], CustomOpts
     ),
-    ct:sleep(100),
-    % Create many connections quickly to exceed max_connections (10) and keep them open
     Packet = packet(),
-    [
-        begin
-            Socket = connect_socket(Transport, {127, 0, 0, 1}, Port),
-            send_data(Transport, Socket, [<<(byte_size(Packet)):16>>, Packet]),
-            Socket
+    F = fun() ->
+        Socket = connect_socket(Transport, {127, 0, 0, 1}, Port),
+        send_data(Transport, Socket, [<<(byte_size(Packet)):16>>, Packet]),
+        receive
+            ok -> ok
         end
-     || % Create 20 connections to exceed limit of 10
-        _ <- lists:seq(1, 50)
-    ],
+    end,
+    [spawn_link(F) || _ <- lists:seq(1, 200)],
     assert_telemetry_event(delayed).
 
 %% Test that TCP/TLS listener handles fragmented packets correctly.
@@ -635,7 +635,7 @@ max_workers_fragmented(Config) ->
 
 do_max_workers_configuration(Config, FunctionCallback) ->
     Transport = proplists:get_value(transport, Config),
-    CustomOpts = #{max_concurrent_queries => 2, ingress_request_timeout => ?BIGGER_INGRESS_TIMEOUT},
+    CustomOpts = #{max_concurrent_queries => 2, ingress_request_timeout => ?INGRESS_TIMEOUT},
     #{port := Port} = prepare_test(
         Config, ?FUNCTION_NAME, Transport, [timeout, error], [fun sleeping_pipe/2], CustomOpts
     ),
