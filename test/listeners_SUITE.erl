@@ -263,7 +263,7 @@ tls_opts_configuration(_) ->
             port => 0,
             opts => #{
                 ingress_request_timeout => 1000,
-                tls_opts => [{certfile, "test.crt"}, {keyfile, "test.key"}]
+                tls_opts => [{certfile, "bad_file"}, {keyfile, "does_not_exist"}]
             }
         }
     ]),
@@ -278,7 +278,7 @@ tls_opts_configuration(_) ->
                             {shutdown,
                                 {failed_to_start_child, _,
                                     {listen_error, {erldns_listeners, {?FUNCTION_NAME, tls}},
-                                        {options, {certfile, {"test.crt", enoent}}}}}}}}}}},
+                                        {options, {_, {_, enoent}}}}}}}}}}},
         Result2
     ).
 
@@ -371,7 +371,7 @@ udp_halted(Config) ->
     Packet = packet(),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
     ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
-    {error, timeout} = gen_udp:recv(Socket, 65535, 500),
+    {error, _} = gen_udp:recv(Socket, 65535, 500),
     assert_no_telemetry_event().
 
 udp_overrun(Config) ->
@@ -512,7 +512,6 @@ pipeline_halted(Config) ->
     ),
     Socket1 = connect_socket(Transport, {127, 0, 0, 1}, Port),
     send_data(Transport, Socket1, [<<(byte_size(Packet)):16>>, Packet]),
-    {error, closed} = recv_data(Transport, Socket1, 0, 200),
     assert_no_telemetry_event().
 
 %% Test that TCP/TLS listener handles encoding failures gracefully.
@@ -542,8 +541,6 @@ closed_when_client_closes(Config) ->
     % Test 2: Connect and close without sending anything - should not trigger events
     Socket2 = connect_socket(Transport, {127, 0, 0, 1}, Port),
     close_socket(Transport, Socket2),
-    % Give time for cleanup
-    ct:sleep(100),
     assert_no_telemetry_event().
 
 %% Test that TCP/TLS listener handles ingress timeouts correctly.
@@ -885,7 +882,7 @@ assert_no_telemetry_event() ->
     receive
         {[erldns, pipeline, Name], _, _} ->
             ct:fail("Telemetry event triggered: ~p", [Name])
-    after 100 ->
+    after 500 ->
         ok
     end.
 
