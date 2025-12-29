@@ -7,7 +7,7 @@
 -include_lib("dns_erlang/include/dns.hrl").
 
 -define(INGRESS_TIMEOUT, 50).
--define(BIGGER_INGRESS_TIMEOUT, 200).
+-define(BIGGER_INGRESS_TIMEOUT, 1000).
 -define(PAUSE_PIPE_TIMEOUT, 50).
 -define(SLEEP_PIPE_TIMEOUT, 500).
 
@@ -699,9 +699,6 @@ recv_data(tcp, Socket, Length, Timeout) ->
 recv_data(tls, Socket, Length, Timeout) ->
     ssl:recv(Socket, Length, Timeout).
 
-%% Helper function to generate split points that don't break length prefixes
-%% Each packet starts with a 2-byte length prefix, so we avoid splitting
-%% in the first 2 bytes of any packet
 split_bin(Bin, 1) ->
     [Bin];
 split_bin(Bin, N) when N > 1 ->
