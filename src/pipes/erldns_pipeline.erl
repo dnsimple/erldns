@@ -131,6 +131,7 @@ call(Msg, _Opts) ->
     monotonic_time := integer(),
     resolved := boolean(),
     transport := transport(),
+    port := inet:port_number(),
     host := host(),
     socket := gen_tcp:socket() | {gen_udp:socket(), inet:port_number()},
     atom() => dynamic()
@@ -370,6 +371,7 @@ def_opts() ->
         monotonic_time => 0,
         resolved => false,
         transport => udp,
+        port => undefined,
         host => undefined,
         socket => undefined
     }.
