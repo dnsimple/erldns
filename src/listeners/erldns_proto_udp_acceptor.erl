@@ -4,6 +4,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 -define(ACTIVE, 100).
+-define(LOG_METADATA, #{domain => [erldns, listeners, udp]}).
 
 -behaviour(gen_server).
 
@@ -29,21 +30,18 @@ init({Name, SocketOpts}) ->
 
 -spec handle_call(term(), gen_server:from(), state()) -> {reply, not_implemented, state()}.
 handle_call(Call, From, State) ->
-    ?LOG_INFO(
-        #{what => unexpected_call, from => From, call => Call},
-        #{domain => [erldns, listeners]}
-    ),
+    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, ?LOG_METADATA),
     {reply, not_implemented, State}.
 
 -spec handle_cast(term(), state()) -> {noreply, state()}.
 handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, #{domain => [erldns, listeners]}),
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, ?LOG_METADATA),
     {noreply, State}.
 
 -spec handle_info(term(), state()) -> {noreply, state()} | {stop, term(), state()}.
 handle_info({udp, Socket, Ip, Port, Packet}, #udp_acceptor{name = Name, socket = Socket} = State) ->
     TS = erlang:monotonic_time(),
-    Task = {Socket, Ip, Port, TS, Packet},
+    Task = {udp_work, Socket, Ip, Port, TS, Packet},
     wpool:cast(Name, Task, random_worker),
     {noreply, State};
 handle_info({udp_passive, Socket}, #udp_acceptor{socket = Socket} = State) ->
@@ -51,7 +49,7 @@ handle_info({udp_passive, Socket}, #udp_acceptor{socket = Socket} = State) ->
 handle_info({udp_error, Socket, Reason}, #udp_acceptor{socket = Socket} = State) ->
     {stop, {udp_error, Reason}, State};
 handle_info(Info, State) ->
-    ?LOG_INFO(#{what => unexpected_info, info => Info}, #{domain => [erldns, listeners]}),
+    ?LOG_INFO(#{what => unexpected_info, info => Info}, ?LOG_METADATA),
     {noreply, State}.
 
 -spec create_socket([gen_udp:open_option()]) -> inet:socket().
@@ -85,10 +83,7 @@ maybe_shed_load(Socket, State) ->
         Utilization = erldns_sch_mon:get_total_scheduler_utilization(),
         false ?= Utilization =< 9000,
         false ?= maybe_continue(Utilization),
-        ?LOG_WARNING(
-            #{what => udp_acceptor_delayed, transport => udp},
-            #{domain => [erldns, listeners]}
-        ),
+        ?LOG_WARNING(#{what => udp_acceptor_delayed, transport => udp}, ?LOG_METADATA),
         telemetry:execute([erldns, request, delayed], #{count => 1}, #{transport => udp}),
         start_timer(Socket),
         {noreply, State}

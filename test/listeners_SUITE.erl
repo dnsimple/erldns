@@ -29,7 +29,8 @@ groups() ->
             port_must_be_inet_port,
             transport_must_be_tcp_udp_or_both,
             p_factor_must_be_positive,
-            ip_must_be_inet_parseable
+            ip_must_be_inet_parseable,
+            codel
         ]},
         {udp, [], [
             udp_halted,
@@ -148,6 +149,171 @@ transport_must_be_tcp_udp_or_both(_) ->
     gen_server:stop(erldns_listeners),
     application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, transport => both, port => 0}]),
     ?assertMatch({ok, _}, erldns_listeners:start_link()).
+
+codel(_) ->
+    %% Test 1: Initialization variants
+    C1 = erldns_codel:new(),
+    ?assert(is_tuple(C1)),
+    C2 = erldns_codel:new(200),
+    ?assert(is_tuple(C2)),
+    C3 = erldns_codel:new(200, 10),
+    ?assert(is_tuple(C3)),
+    %% Test 2: Empty queue - should always continue and reset first_above_time
+    Now = erlang:monotonic_time(),
+    {continue, C4} = erldns_codel:dequeue(C1, Now, Now - 1000, 0),
+    %% Verify empty queue resets first_above_time by checking behavior
+    %% If first_above_time was reset, next call with high sojourn time should set it again
+    {continue, C4a} = erldns_codel:dequeue(C4, Now, Now - 1000000, 10),
+    %% Should have set first_above_time (not continue immediately to drop)
+    {continue, C4b} = erldns_codel:dequeue(C4a, Now + 1, Now - 1000000, 10),
+    ?assertMatch({continue, _}, erldns_codel:dequeue(C4b, Now + 2, Now - 1000000, 10)),
+    %% Test 3: Normal operation - sojourn time below target
+    %% Target is 5ms (in native time units after conversion)
+    TargetMs = 5,
+    TargetNative = erlang:convert_time_unit(TargetMs, millisecond, native),
+    %% Half of target
+    IngressTs = Now - (TargetNative div 2),
+    {continue, C5} = erldns_codel:dequeue(C1, Now, IngressTs, 10),
+    %% Verify not dropping by checking it doesn't drop on next call
+    {continue, C5a} = erldns_codel:dequeue(C5, Now + 1, IngressTs, 10),
+    ?assertMatch({continue, _}, erldns_codel:dequeue(C5a, Now + 2, IngressTs, 10)),
+    %% Test 4: Sojourn time below target but queue > MAX_PACKET
+    %% Should continue and reset first_above_time
+    {continue, C6} = erldns_codel:dequeue(C1, Now, IngressTs, 2),
+    %% Verify first_above_time was reset by checking it sets again on high sojourn
+    {continue, C6a} = erldns_codel:dequeue(C6, Now, Now - 1000000, 10),
+    ?assertMatch({continue, _}, erldns_codel:dequeue(C6a, Now + 1, Now - 1000000, 10)),
+    %% Test 5: Entering drop state - sojourn time above target for interval
+    IntervalMs = 100,
+    IntervalNative = erlang:convert_time_unit(IntervalMs, millisecond, native),
+    %% Create a packet that's been in queue for target + interval
+    OldIngressTs = Now - TargetNative - IntervalNative - 1000,
+    %% First call: should set first_above_time
+    {continue, C7} = erldns_codel:dequeue(C1, Now, OldIngressTs, 10),
+    %% Verify first_above_time was set by waiting and checking drop occurs
+    %% Estimate first_above_time: Now + IntervalNative
+    FutureNow = Now + IntervalNative + 1000,
+    Result8 = erldns_codel:dequeue(C7, FutureNow, OldIngressTs, 10),
+    {drop, C8} = Result8,
+    ?assertMatch({drop, _}, Result8),
+    %% Test 6: Dropping state - drop when drop_next_time <= Now
+    %% First drop should happen immediately (drop_next_time was just set to FutureNow + IntervalNative)
+    %% So we need to wait until drop_next_time
+    DropNextTime = FutureNow + IntervalNative,
+    Result9 = erldns_codel:dequeue(C8, DropNextTime, OldIngressTs, 10),
+    {drop, C9} = Result9,
+    ?assertMatch({drop, _}, Result9),
+    %% Test 7: Dropping state - continue when drop_next_time > Now
+    %% drop_next_time is in the future, so we should continue
+    Result10 = erldns_codel:dequeue(C9, DropNextTime + 1, OldIngressTs, 10),
+    {continue, C10} = Result10,
+    ?assertMatch({continue, _}, Result10),
+    %% Test 8: Leaving drop state - sojourn time goes below target
+    GoodIngressTs = FutureNow + 1000 - (TargetNative div 2),
+    {continue, C11} = erldns_codel:dequeue(C10, FutureNow + 1000, GoodIngressTs, 10),
+    %% Verify left drop state by checking it doesn't drop immediately on next high sojourn
+    Result11a = erldns_codel:dequeue(C11, FutureNow + 2000, OldIngressTs, 10),
+    ?assertMatch({continue, _}, Result11a),
+    %% Test 9: Hysteresis - re-entering drop state soon after leaving
+    %% To test hysteresis, we need to simulate having dropped before
+    %% Start fresh and enter drop state twice to build up count
+    C12 = erldns_codel:new(),
+    BadIngressTs2 = Now - TargetNative - IntervalNative - 1000,
+    {continue, C12a} = erldns_codel:dequeue(C12, Now, BadIngressTs2, 10),
+    EnterNow1 = Now + IntervalNative + 1000,
+    {drop, C12b} = erldns_codel:dequeue(C12a, EnterNow1, BadIngressTs2, 10),
+    %% Drop a few packets to build up count
+    DropTime1 = EnterNow1 + IntervalNative,
+    {drop, C12c} = erldns_codel:dequeue(C12b, DropTime1, BadIngressTs2, 10),
+    DropTime2 = DropTime1 + round(IntervalNative / math:sqrt(2)),
+    {drop, C12d} = erldns_codel:dequeue(C12c, DropTime2, BadIngressTs2, 10),
+    DropTime3 = DropTime2 + round(IntervalNative / math:sqrt(3)),
+    {drop, C12e} = erldns_codel:dequeue(C12d, DropTime3, BadIngressTs2, 10),
+    %% Now leave drop state
+    GoodIngressTs2 = DropTime3 + 1000 - (TargetNative div 2),
+    {continue, C12f} = erldns_codel:dequeue(C12e, DropTime3 + 1000, GoodIngressTs2, 10),
+    %% Re-enter drop state within hysteresis window (16 * interval)
+    HysteresisWindow = 16 * IntervalNative,
+    NearFutureNow = DropTime3 + 1000 + (HysteresisWindow div 2),
+    BadIngressTs3 = NearFutureNow - TargetNative - IntervalNative - 1000,
+    Result13 = erldns_codel:dequeue(C12f, NearFutureNow, BadIngressTs3, 10),
+    {continue, C13} = Result13,
+    ?assertMatch({continue, _}, Result13),
+    %% Wait for interval to pass and enter drop state
+    HysteresisFutureNow = NearFutureNow + IntervalNative + 1000,
+    Result14 = erldns_codel:dequeue(C13, HysteresisFutureNow, BadIngressTs3, 10),
+    ?assertMatch({drop, _}, Result14),
+    %% Test 10: Control law - count = 1
+    %% Need to enter drop state first, which sets count = 1
+    C15 = erldns_codel:new(),
+    {continue, C15a} = erldns_codel:dequeue(C15, Now, OldIngressTs, 10),
+    EnterDropNow2 = Now + IntervalNative + 1000,
+    Result16 = erldns_codel:dequeue(C15a, EnterDropNow2, OldIngressTs, 10),
+    {drop, C16} = Result16,
+    ?assertMatch({drop, _}, Result16),
+    %% drop_next_time should be Now + Interval for count = 1
+    %% Verify by checking next drop happens at that time
+    ExpectedDropNext1 = EnterDropNow2 + IntervalNative,
+    Result16a = erldns_codel:dequeue(C16, ExpectedDropNext1, OldIngressTs, 10),
+    {drop, C16a} = Result16a,
+    ?assertMatch({drop, _}, Result16a),
+    %% Test 11: Control law - count > 1
+    %% Continue dropping to build up count
+    DropTime4 = ExpectedDropNext1 + round(IntervalNative / math:sqrt(2)),
+    Result17 = erldns_codel:dequeue(C16a, DropTime4, OldIngressTs, 10),
+    {drop, C17} = Result17,
+    ?assertMatch({drop, _}, Result17),
+    DropTime5 = DropTime4 + round(IntervalNative / math:sqrt(3)),
+    Result18 = erldns_codel:dequeue(C17, DropTime5, OldIngressTs, 10),
+    ?assertMatch({drop, _}, Result18),
+    %% Test 12: Edge case - sojourn time exactly at target
+    ExactTargetIngressTs = Now - TargetNative,
+    {continue, C19} = erldns_codel:dequeue(C1, Now, ExactTargetIngressTs, 10),
+    %% Should not drop (sojourn time is at target, not above)
+    Result19a = erldns_codel:dequeue(C19, Now + 1, ExactTargetIngressTs, 10),
+    ?assertMatch({continue, _}, Result19a),
+    %% Test 13: Edge case - sojourn time just above target but not for full interval
+    JustAboveIngressTs = Now - TargetNative - 100,
+    {continue, C20} = erldns_codel:dequeue(C1, Now, JustAboveIngressTs, 10),
+    %% Should not drop yet (need to wait for interval)
+    Result20a = erldns_codel:dequeue(C20, Now + 1, JustAboveIngressTs, 10),
+    ?assertMatch({continue, _}, Result20a),
+    %% Test 14: Edge case - queue length exactly at MAX_PACKET (1)
+    Result21 = erldns_codel:dequeue(C1, Now, IngressTs, 1),
+    ?assertMatch({continue, _}, Result21),
+    %% Test 15: Multiple drops in sequence
+    %% Create a state that's dropping with drop_next_time = Now
+    C22 = erldns_codel:new(),
+    {continue, C22a} = erldns_codel:dequeue(C22, Now, OldIngressTs, 10),
+    EnterDropNow3 = Now + IntervalNative + 1000,
+    {drop, C22b} = erldns_codel:dequeue(C22a, EnterDropNow3, OldIngressTs, 10),
+    %% Now drop_next_time should be EnterDropNow3 + IntervalNative
+    DropTime6 = EnterDropNow3 + IntervalNative,
+    Result23 = erldns_codel:dequeue(C22b, DropTime6, OldIngressTs, 10),
+    ?assertMatch({drop, _}, Result23),
+    %% Test 16: Verify state transitions
+    %% Start normal -> enter drop -> drop packets -> leave drop
+    C24 = erldns_codel:new(),
+    StartNow = erlang:monotonic_time(),
+    VeryOldIngressTs = StartNow - (2 * IntervalNative) - TargetNative,
+    %% First: normal operation
+    Result25 = erldns_codel:dequeue(C24, StartNow, VeryOldIngressTs, 10),
+    {continue, C25} = Result25,
+    ?assertMatch({continue, _}, Result25),
+    %% Second: enter drop state
+    EnterDropNow4 = StartNow + IntervalNative + 1000,
+    Result26 = erldns_codel:dequeue(C25, EnterDropNow4, VeryOldIngressTs, 10),
+    {drop, C26} = Result26,
+    ?assertMatch({drop, _}, Result26),
+    %% Third: drop a packet
+    DropTime7 = EnterDropNow4 + IntervalNative,
+    Result27 = erldns_codel:dequeue(C26, DropTime7, VeryOldIngressTs, 10),
+    {drop, C27} = Result27,
+    ?assertMatch({drop, _}, Result27),
+    %% Fourth: sojourn time goes below target, leave drop state
+    GoodIngressTs3 = DropTime7 + 1000 - (TargetNative div 2),
+    Result28 = erldns_codel:dequeue(C27, DropTime7 + 1000, GoodIngressTs3, 10),
+    ?assertMatch({continue, _}, Result28).
 
 p_factor_must_be_positive(_) ->
     application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, parallel_factor => bad}]),
