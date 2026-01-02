@@ -9,8 +9,6 @@
 %% - https://queue.acm.org/appendices/codel.html
 %% - https://pollere.net/CoDelnotes.html
 
--export([new/0, new/1, new/2, dequeue/4]).
-
 %% 5ms: Acceptable standing queue delay
 -define(TARGET, 5).
 %% 100ms: Rolling window to find the minimum
@@ -24,11 +22,11 @@
     %% -- Estimator State (Tracking the Minimum) --
     %% First above time tracks when we first began seeing too much delay imposed by the queue.
     %% This value may be 0 in which case it means we have not seen such a delay.
-    first_above_time = 0 :: time(),
+    first_above_time = 0 :: timestamp(),
     %% -- Control Law State (The Dropping Schedule) --
     %% If we are dropping, this value tracks the point in time where the next packet
     %% should be dropped from the queue.
-    drop_next_time = 0 :: time(),
+    drop_next_time = 0 :: timestamp(),
     %% This variable tracks how many packets/jobs were recently dropped from the queue.
     %% The value decays over time if no packets are dropped and is used to manipulate
     %% the control law of the queue.
@@ -46,9 +44,20 @@
 -type flag() :: continue | drop.
 -type dodequeue_result() :: {flag(), codel()}.
 -type time() :: non_neg_integer().
+-type timestamp() :: integer().
 -type sojourn_time() :: non_neg_integer().
 -type queue_length() :: non_neg_integer().
--export_type([codel/0, interval/0, target/0, dodequeue_result/0, time/0, queue_length/0]).
+-export_type([
+    codel/0,
+    interval/0,
+    target/0,
+    dodequeue_result/0,
+    time/0,
+    timestamp/0,
+    queue_length/0
+]).
+
+-export([new/0, new/1, new/2, dequeue/4]).
 
 -spec new() -> codel().
 new() ->
@@ -66,7 +75,7 @@ new(Interval, Target) ->
     }.
 
 %% https://datatracker.ietf.org/doc/html/rfc8289#section-5.5 Dequeue Routine
--spec dequeue(codel(), time(), time(), queue_length()) -> dodequeue_result().
+-spec dequeue(codel(), timestamp(), timestamp(), queue_length()) -> dodequeue_result().
 dequeue(#codel{} = Codel, Now, IngressTimestamp, QueueLen) when
     is_integer(Now), is_integer(IngressTimestamp), is_integer(QueueLen)
 ->
@@ -133,14 +142,14 @@ dequeue_start_drop(#codel{interval = Interval} = Codel, Now) ->
 %% (sojourn time goes below TARGET).  This is the control law that
 %% governs the servo.  It has this form because of the sqrt(p)
 %% dependence of TCP throughput on drop probability.
--spec control_law(time(), interval(), count()) -> time().
+-spec control_law(timestamp(), interval(), count()) -> timestamp().
 control_law(TS, Interval, 1) ->
     TS + Interval;
 control_law(TS, Interval, Count) when 1 < Count ->
     TS + round(Interval / math:sqrt(Count)).
 
 %% queue is empty - we can't be above TARGET
--spec dodequeue(codel(), time(), sojourn_time(), queue_length()) -> dodequeue_result().
+-spec dodequeue(codel(), timestamp(), sojourn_time(), queue_length()) -> dodequeue_result().
 dodequeue(#codel{} = Codel, _Now, _SojournTime, 0) ->
     {continue, Codel#codel{first_above_time = 0}};
 %% To span a large range of bandwidths, CoDel runs two
