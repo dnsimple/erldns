@@ -50,6 +50,9 @@ handle_info({udp_passive, Socket}, #udp_acceptor{socket = Socket} = State) ->
     maybe_shed_load(Socket, State);
 handle_info({udp_error, Socket, Reason}, #udp_acceptor{socket = Socket} = State) ->
     {stop, {udp_error, Reason}, State};
+handle_info({set_batch, Socket}, #udp_acceptor{socket = Socket} = State) ->
+    set_batch(Socket),
+    {noreply, State};
 handle_info(Info, State) ->
     ?LOG_INFO(#{what => unexpected_info, info => Info}, ?LOG_METADATA),
     {noreply, State}.
@@ -91,7 +94,7 @@ maybe_shed_load(Socket, State) ->
         {noreply, State}
     else
         true ->
-            inet:setopts(Socket, [{active, ?ACTIVE}]),
+            set_batch(Socket),
             {noreply, State}
     end.
 
@@ -103,4 +106,7 @@ maybe_continue(Utilization) when 9000 < Utilization, Utilization =< 10000 ->
 
 -spec start_timer(gen_udp:socket(), non_neg_integer()) -> reference().
 start_timer(Socket, Timeout) ->
-    erlang:send_after(Timeout, self(), {udp_passive, Socket}).
+    erlang:send_after(Timeout, self(), {set_batch, Socket}).
+
+set_batch(Socket) ->
+    inet:setopts(Socket, [{active, ?ACTIVE}]).
