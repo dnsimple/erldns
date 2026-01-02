@@ -6,7 +6,7 @@
 
 -compile({inline, [process_packet/7, handle/5]}).
 % How many drops before checking system messages.
--define(DRAIN_BUDGET, 100).
+-define(DRAIN_BUDGET, 500).
 -define(LOG_METADATA, #{domain => [erldns, listeners, udp]}).
 
 -behaviour(gen_server).
@@ -61,6 +61,7 @@ process_packet(Codel, Budget, Socket, IpAddr, Port, IngressTs, Bin) ->
             handle(Socket, IpAddr, Port, IngressTs, Bin),
             {noreply, Codel1};
         {drop, Codel1} ->
+            ?LOG_WARNING(#{what => request_dropped, transport => udp}, ?LOG_METADATA),
             telemetry:execute([erldns, request, dropped], #{count => 1}, #{transport => udp}),
             drop_loop(Codel1, Budget)
     end.

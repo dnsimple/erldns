@@ -65,7 +65,8 @@ new() ->
 
 -spec new(interval()) -> codel().
 new(Interval) ->
-    new(Interval, round(0.05 * Interval)).
+    Target = round(0.1 * Interval),
+    new(Interval, Target).
 
 -spec new(interval(), target()) -> codel().
 new(Interval, Target) ->
