@@ -35,8 +35,9 @@
 %% Beta: Multiplicative Decrease Factor.
 %% When we hit stress, we cut the rate to Rate * Beta.
 %% TCP CUBIC uses 0.7. TCP Reno uses 0.5.
-%% 0.7 is gentle braking. 0.5 is a hard stop.
--define(BETA, 0.7).
+%% We use 0.8 to be a bit more gentle than TCP CUBIC,
+%% as in reality we're correlating CUBIC's inverse
+-define(BETA, 0.8).
 %% Never stop completely (1 batch/sec)
 -define(MIN_RATE, 1.0).
 %% =============================================================================
@@ -50,17 +51,22 @@
 %% against transient stress spikes. We must shed this momentum before the brake
 %% physically engages (i.e., before rate drops below 1000).
 %%
-%% Calculation for Scenario "React after 2 consecutive congestion events":
+%% Calculation for Scenario "React after 3 consecutive congestion events":
 %%    Threshold = 1000.0 (1ms sleep)
-%%    Beta      = 0.7
-%%    Formula   = Threshold / (Beta * Beta)
-%%    Result    = 1000 / 0.49 = 2040.8
+%%    Beta      = 0.8
+%%    Formula   = Threshold / (Beta * Beta * Beta)
+%%    Result    = 1000 / 0.512 = 1953.125
 %%
-%% We set this to 2000.0.
-%% - If Rate is 2000, Drop 1 -> 1400 (Still 0ms Sleep).
+%% We set this to 1950.0. Built-in hysteresis:
+%% - If Rate is 1950, Drop 1 -> 1400 (Still 0ms Sleep).
 %% - If Stress persists, Drop 2 -> 980 (Brake Engages: 1ms Sleep).
+%%
+%% - Rate > 1000 = 0ms sleep (full speed)
+%% - First congestion: 1950 * 0.8 = 1560 (still 0ms sleep)
+%% - Second congestion: 1560 * 0.8 = 1248 (still 0ms sleep)
+%% - Third congestion: 1248 * 0.8 = 998 (now 1ms sleep - brake engages)
 %% =============================================================================
--define(MAX_RATE, 2000.0).
+-define(MAX_RATE, 1950.0).
 
 -record(cubic, {
     %% WMax: The "Ceiling". The rate at which we last experienced overload.
@@ -74,10 +80,6 @@
     %% All 't' calculations are relative to this moment.
     epoch_start = erlang:monotonic_time() :: integer(),
     %% Current Rate: The actual output of the servo (Batches/Sec).
-    %% Start at MAX_RATE (2000) for full speed initially. Built-in hysteresis:
-    %% - Rate > 1000 = 0ms sleep (full speed)
-    %% - First congestion: 2000 * 0.7 = 1400 (still 0ms sleep)
-    %% - Second congestion: 1400 * 0.7 = 980 (now 1ms sleep - brake engages)
     current_rate = ?MAX_RATE :: float()
 }).
 -opaque cubic() :: #cubic{}.
