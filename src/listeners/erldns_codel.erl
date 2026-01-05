@@ -9,8 +9,9 @@
 %% - https://queue.acm.org/appendices/codel.html
 %% - https://pollere.net/CoDelnotes.html
 
-%% 5ms: Acceptable standing queue delay
--define(TARGET, 5).
+%% 10ms: Acceptable standing queue delay, this takes the higher end of the recommended limit
+%% according to the rfc8289
+-define(TARGET, 10).
 %% 100ms: Rolling window to find the minimum
 -define(INTERVAL, 100).
 %% Logic proxy for "MTU size check" (1 item)
