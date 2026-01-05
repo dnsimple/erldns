@@ -4,60 +4,78 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 
--compile({inline, [handle_if_within_time/6, handle/5]}).
+-compile({inline, [process_packet/7, handle/5]}).
+% How many drops before checking system messages.
+-define(DRAIN_BUDGET, 500).
+-define(LOG_METADATA, #{domain => [erldns, listeners, udp]}).
 
 -behaviour(gen_server).
 
 -export([overrun_handler/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
--type task() :: {gen_udp:socket(), inet:ip_address(), inet:port_number(), integer(), binary()}.
--opaque state() :: non_neg_integer().
--export_type([task/0, state/0]).
+-type task() ::
+    {udp_work, gen_udp:socket(), inet:ip_address(), inet:port_number(), integer(), binary()}.
+-opaque codel() :: erldns_codel:codel().
+-export_type([task/0, codel/0]).
 
 -spec overrun_handler([{atom(), term()}, ...]) -> term().
 overrun_handler(Args) ->
-    ?LOG_WARNING(
-        maps:from_list([{what, request_timeout}, {transport, udp} | Args]),
-        #{domain => [erldns, listeners]}
-    ),
+    ?LOG_WARNING(maps:from_list([{what, request_timeout}, {transport, udp} | Args]), ?LOG_METADATA),
     telemetry:execute([erldns, request, timeout], #{count => 1}, #{transport => udp}).
 
--spec init(non_neg_integer()) -> {ok, state()}.
-init(IngressTimeoutNative) ->
-    {ok, IngressTimeoutNative}.
+-spec init(non_neg_integer()) -> {ok, codel()}.
+init(IngressTimeoutMs) ->
+    {ok, erldns_codel:new(IngressTimeoutMs)}.
 
--spec handle_call(term(), gen_server:from(), state()) -> {reply, not_implemented, state()}.
-handle_call(Call, From, State) ->
-    ?LOG_INFO(
-        #{what => unexpected_call, from => From, call => Call},
-        #{domain => [erldns, listeners]}
-    ),
-    {reply, not_implemented, State}.
+-spec handle_call(term(), gen_server:from(), codel()) -> {reply, not_implemented, codel()}.
+handle_call(Call, From, Codel) ->
+    ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, ?LOG_METADATA),
+    {reply, not_implemented, Codel}.
 
--spec handle_cast(task(), state()) -> {noreply, state()}.
-handle_cast({Socket, IpAddr, Port, TS, Bin}, IngressTimeoutNative) ->
-    handle_if_within_time(Socket, IpAddr, Port, TS, Bin, IngressTimeoutNative),
-    {noreply, IngressTimeoutNative};
-handle_cast(Cast, State) ->
-    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, #{domain => [erldns, listeners]}),
-    {noreply, State}.
+-spec handle_cast(task(), codel()) -> {noreply, codel()}.
+handle_cast({udp_work, Socket, IpAddr, Port, IngressTs, Bin}, Codel) ->
+    process_packet(Codel, ?DRAIN_BUDGET, Socket, IpAddr, Port, IngressTs, Bin);
+handle_cast(Cast, Codel) ->
+    ?LOG_INFO(#{what => unexpected_cast, cast => Cast}, ?LOG_METADATA),
+    {noreply, Codel}.
 
--spec handle_info(term(), state()) -> {noreply, state()}.
-handle_info(Info, State) ->
-    ?LOG_INFO(#{what => unexpected_info, info => Info}, #{domain => [erldns, listeners]}),
-    {noreply, State}.
+-spec handle_info(term(), codel()) -> {noreply, codel()}.
+handle_info(Info, Codel) ->
+    ?LOG_INFO(#{what => unexpected_info, info => Info}, ?LOG_METADATA),
+    {noreply, Codel}.
 
-handle_if_within_time(Socket, IpAddr, Port, TS, Bin, IngressTimeoutNative) ->
-    case IngressTimeoutNative =< erlang:monotonic_time() - TS of
-        false ->
-            handle(Socket, IpAddr, Port, TS, Bin);
-        true ->
-            ?LOG_WARNING(
-                #{what => request_timeout, transport => udp},
-                #{domain => [erldns, listeners]}
-            ),
-            telemetry:execute([erldns, request, dropped], #{count => 1}, #{transport => udp})
+-spec process_packet(Codel, Budget, Socket, IpAddr, Port, IngressTs, Bin) -> {noreply, Codel} when
+    Socket :: inet:socket(),
+    IpAddr :: inet:ip_address(),
+    Port :: inet:port_number(),
+    IngressTs :: integer(),
+    Bin :: dns:message_bin(),
+    Budget :: integer(),
+    Codel :: codel().
+process_packet(Codel, Budget, Socket, IpAddr, Port, IngressTs, Bin) ->
+    Now = erlang:monotonic_time(),
+    {message_queue_len, QueueLen} = process_info(self(), message_queue_len),
+    case erldns_codel:dequeue(Codel, Now, IngressTs, QueueLen) of
+        {continue, Codel1} ->
+            handle(Socket, IpAddr, Port, IngressTs, Bin),
+            {noreply, Codel1};
+        {drop, Codel1} ->
+            ?LOG_WARNING(#{what => request_dropped, transport => udp}, ?LOG_METADATA),
+            telemetry:execute([erldns, request, dropped], #{count => 1}, #{transport => udp}),
+            drop_loop(Codel1, Budget)
+    end.
+
+%% The Recursive Loop (RFC "while" Loop equivalent)
+%% Budget exhausted, we must yield to let the gen_server handle system messages.
+drop_loop(Codel, 0) ->
+    {noreply, Codel};
+drop_loop(Codel, Budget) ->
+    receive
+        {udp_work, Socket, IpAddr, Port, IngressTs, Bin} ->
+            process_packet(Codel, Budget - 1, Socket, IpAddr, Port, IngressTs, Bin)
+    after 0 ->
+        {noreply, Codel}
     end.
 
 -spec handle(inet:socket(), inet:ip_address(), inet:port_number(), integer(), binary()) ->
@@ -71,7 +89,7 @@ handle(Socket, IpAddr, Port, TS, Bin) ->
             {trailing_garbage, DecodedMessage, TrailingGarbage} ->
                 ?LOG_INFO(
                     #{what => trailing_garbage, trailing_garbage => TrailingGarbage},
-                    #{domain => [erldns, listeners]}
+                    ?LOG_METADATA
                 ),
                 handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS);
             {Error, Message, _} ->
@@ -120,10 +138,7 @@ request_error_event(Metadata) ->
     telemetry:execute([erldns, request, error], #{count => 1}, Metadata).
 
 measure_time(Response, EncodedResponse, TS0) ->
-    ?LOG_DEBUG(
-        #{what => udp_request_finished, dns_message => Response},
-        #{domain => [erldns, listeners]}
-    ),
+    ?LOG_DEBUG(#{what => udp_request_finished, dns_message => Response}, ?LOG_METADATA),
     TS1 = erlang:monotonic_time(),
     Measurements = #{
         monotonic_time => TS1,

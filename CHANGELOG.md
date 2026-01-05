@@ -22,6 +22,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Global `ingress_tcp_request_timeout` and `ingress_udp_request_timeout` application environment variables ([#300](https://github.com/dnsimple/erldns/pull/300))
 
+## v9.1.0
+
+### Added
+
+- Implement basic [RFC8914](https://datatracker.ietf.org/doc/rfc8914/) extended errors ([#290](https://github.com/dnsimple/erldns/pull/290))
+- Add support for standard DNS zone files (RFC-style) in addition to JSON format, this also improves loading times and initialisation ([#291](https://github.com/dnsimple/erldns/pull/291))
+- Admin API now adds extensibility points to include custom HTTP handlers and TLS configuration ([#294](https://github.com/dnsimple/erldns/pull/294))
+
+### Updated
+
+- Update root hints with current values and IPv6 records ([#292](https://github.com/dnsimple/erldns/pull/292))
+- Update dependencies ([#299](https://github.com/dnsimple/erldns/pull/299))
+
 ## v9.0.0
 
 ### Added

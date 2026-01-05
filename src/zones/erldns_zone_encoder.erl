@@ -9,42 +9,29 @@
 
 -spec encode(erldns:zone(), #{atom() => dynamic()}, [erldns_zone_codec:encoder()]) ->
     not_implemented | json:encode_value().
-encode(Zone, #{mode := zone_meta_to_json}, _) ->
-    zone_meta_to_json(Zone);
 encode(Zone, #{mode := zone_records_to_json}, Encoders) ->
     encode_zone_records_to_json(Zone, Encoders);
 encode(Zone, #{mode := {zone_records_to_json, RecordName}}, Encoders) ->
     encode_zone_records_to_json(Zone, RecordName, Encoders);
 encode(Zone, #{mode := {zone_records_to_json, RecordName, RecordType}}, Encoders) ->
     encode_zone_records_to_json(Zone, RecordName, RecordType, Encoders);
+encode(Zone, #{mode := zone_meta_to_json}, _) ->
+    zone_meta_to_json(Zone, #{});
 encode(Zone, #{mode := zone_to_json}, Encoders) ->
     Records = records_to_json(Zone, Encoders),
-    #{
-        ~"erldns" =>
-            #{
-                ~"zone" => #{
-                    ~"name" => Zone#zone.name,
-                    ~"version" => Zone#zone.version,
-                    ~"records_count" => length(Records),
-                    % Note: Private key material is purposely omitted
-                    ~"records" => Records
-                }
-            }
-    }.
+    Extra = #{~"records" => Records},
+    zone_meta_to_json(Zone, Extra).
 
--spec zone_meta_to_json(erldns:zone()) -> json:encode_value().
-zone_meta_to_json(Zone) ->
-    #{
-        ~"erldns" =>
-            #{
-                % Note: Private key material is purposely omitted
-                ~"zone" => #{
-                    ~"name" => Zone#zone.name,
-                    ~"version" => Zone#zone.version,
-                    ~"records_count" => Zone#zone.record_count
-                }
-            }
-    }.
+% Note: Private key material is purposely omitted
+-spec zone_meta_to_json(erldns:zone(), dynamic()) -> json:encode_value().
+zone_meta_to_json(Zone, MaybeRecords) ->
+    Zone0 = #{
+        ~"name" => Zone#zone.name,
+        ~"version" => Zone#zone.version,
+        ~"records_count" => Zone#zone.record_count
+    },
+    ZoneJson = maps:merge(Zone0, MaybeRecords),
+    #{~"erldns" => #{~"zone" => ZoneJson}}.
 
 % Internal API
 encode_zone_records_to_json(Zone, Encoders) ->
