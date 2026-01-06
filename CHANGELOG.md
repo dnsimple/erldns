@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Added
+
+- RFC7766 pipelining support for TCP/TLS with concurrent request processing ([#300](https://github.com/dnsimple/erldns/pull/300))
+- DNS over TLS (DoT) support per RFC 7858 ([#300](https://github.com/dnsimple/erldns/pull/300))
+- Configurable request timeout monitoring for TCP workers with SERVFAIL responses ([#300](https://github.com/dnsimple/erldns/pull/300))
+
+### Changed
+
+- Move TCP and UDP ingress timeout configuration to per-listener `opts` map ([#300](https://github.com/dnsimple/erldns/pull/300))
+- Rename transport type `both` to `standard` for clarity ([#300](https://github.com/dnsimple/erldns/pull/300))
+
+### Removed
+
+- Global `ingress_tcp_request_timeout` and `ingress_udp_request_timeout` application environment variables ([#300](https://github.com/dnsimple/erldns/pull/300))
+
 ## v9.1.0
 
 ### Added

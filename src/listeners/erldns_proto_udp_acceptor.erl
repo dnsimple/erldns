@@ -8,25 +8,27 @@
 
 -behaviour(gen_server).
 
--export([start_link/2, init/1, handle_call/3, handle_cast/2, handle_info/2]).
+-export([start_link/3, init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -record(udp_acceptor, {
     name :: atom(),
-    socket :: gen_udp:socket()
+    socket :: gen_udp:socket(),
+    timeout :: non_neg_integer()
 }).
 -opaque state() :: #udp_acceptor{}.
 -export_type([state/0]).
 
--spec start_link(erldns_listeners:name(), [gen_udp:option()]) -> gen_server:start_ret().
-start_link(Name, SocketOpts) ->
-    gen_server:start_link(?MODULE, {Name, SocketOpts}, []).
+-spec start_link(erldns_listeners:name(), non_neg_integer(), [gen_udp:option()]) ->
+    gen_server:start_ret().
+start_link(Name, Timeout, SocketOpts) ->
+    gen_server:start_link(?MODULE, {Name, Timeout, SocketOpts}, []).
 
--spec init({atom(), [gen_udp:open_option()]}) -> {ok, state()}.
-init({Name, SocketOpts}) ->
+-spec init({atom(), non_neg_integer(), [gen_udp:open_option()]}) -> {ok, state()}.
+init({Name, Timeout, SocketOpts}) ->
     process_flag(trap_exit, true),
     proc_lib:set_label(?MODULE),
     Socket = create_socket(SocketOpts),
-    {ok, #udp_acceptor{name = Name, socket = Socket}}.
+    {ok, #udp_acceptor{name = Name, socket = Socket, timeout = Timeout}}.
 
 -spec handle_call(term(), gen_server:from(), state()) -> {reply, not_implemented, state()}.
 handle_call(Call, From, State) ->
@@ -85,7 +87,7 @@ maybe_shed_load(Socket, State) ->
         false ?= maybe_continue(Utilization),
         ?LOG_WARNING(#{what => udp_acceptor_delayed, transport => udp}, ?LOG_METADATA),
         telemetry:execute([erldns, request, delayed], #{count => 1}, #{transport => udp}),
-        start_timer(Socket),
+        start_timer(Socket, State#udp_acceptor.timeout),
         {noreply, State}
     else
         true ->
@@ -99,7 +101,6 @@ maybe_continue(Utilization) when 9000 < Utilization, Utilization =< 10000 ->
     Rand = rand:uniform(10000),
     Rand > Dec.
 
--spec start_timer(gen_udp:socket()) -> reference().
-start_timer(Socket) ->
-    Timeout = erldns_config:ingress_udp_request_timeout(),
+-spec start_timer(gen_udp:socket(), non_neg_integer()) -> reference().
+start_timer(Socket, Timeout) ->
     erlang:send_after(Timeout, self(), {udp_passive, Socket}).

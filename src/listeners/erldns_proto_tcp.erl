@@ -2,176 +2,314 @@
 -moduledoc false.
 
 -include_lib("kernel/include/logger.hrl").
--include_lib("dns_erlang/include/dns.hrl").
 
--compile({inline, [maybe_receive_params/0, forward_dp_to_timer/2, get_dnssec/1, get_query/1]}).
+-define(LOG_METADATA, #{domain => [erldns, pipeline]}).
+
+-define(SOCKET_ERROR(State),
+    ((Error =:= tcp_error andalso State#state.socket_type =:= tcp) orelse
+        (Error =:= ssl_error andalso State#state.socket_type =:= ssl))
+).
+
+-define(SOCKET_CLOSED(State),
+    ((Closed =:= tcp_closed andalso State#state.socket_type =:= tcp) orelse
+        (Closed =:= ssl_closed andalso State#state.socket_type =:= ssl))
+).
 
 -behaviour(ranch_protocol).
 -export([start_link/3]).
--export([init/2]).
--export([init_timer/2]).
 
--spec start_link(ranch:ref(), module(), non_neg_integer()) -> dynamic().
-start_link(Ref, _Transport, IngressTimeoutMs) ->
-    SpawnOpts = [{min_heap_size, 500}],
-    proc_lib:start_link(?MODULE, init, [Ref, IngressTimeoutMs], 5000, SpawnOpts).
+-behaviour(gen_server).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
--spec init(ranch:ref(), non_neg_integer()) -> dynamic().
-init(Ref, IngressTimeoutMs) ->
-    Self = self(),
-    proc_lib:init_ack({ok, Self}),
-    proc_lib:set_label(?MODULE),
-    TS = erlang:monotonic_time(),
-    TimerArgs = [IngressTimeoutMs, Self],
-    TimerOpts = [monitor, {priority, low}],
-    {TimerPid, _Ref} = proc_lib:spawn_opt(?MODULE, init_timer, TimerArgs, TimerOpts),
-    {ok, Socket} = ranch:handshake(Ref),
-    loop(Socket, TimerPid, TS, IngressTimeoutMs).
+-type socket() :: inet:socket() | ssl:sslsocket().
+-type socket_type() :: tcp | ssl.
+-type ts() :: integer().
+-export_type([socket/0, socket_type/0, ts/0]).
 
--spec loop(dynamic(), pid(), integer(), integer()) -> dynamic().
-loop(Socket, TimerPid, TS, IngressTimeoutMs) ->
-    inet:setopts(Socket, [{active, once}]),
-    receive
-        {tcp, Socket, <<Len:16, Bin/binary>>} ->
-            loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, Bin);
-        {tcp_error, Socket, Reason} ->
-            ?LOG_INFO(#{what => tcp_error, reason => Reason}, #{domain => [erldns, listeners]});
-        {tcp_closed, Socket} ->
-            ok
-    after IngressTimeoutMs ->
-        gen_tcp:close(Socket)
-    end.
+-record(request, {
+    start_time :: ts(),
+    request_bin :: dns:message_bin(),
+    timeout_timer :: reference()
+}).
+-type request() :: #request{}.
 
--spec loop(inet:socket(), pid(), integer(), integer(), non_neg_integer(), binary()) -> dynamic().
-loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, Acc) when Len =:= byte_size(Acc) ->
-    handle_if_within_time(Socket, TimerPid, TS, IngressTimeoutMs, Acc);
-loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, Acc) ->
-    inet:setopts(Socket, [{active, once}]),
-    receive
-        {tcp, Socket, Bin} ->
-            loop(Socket, TimerPid, TS, IngressTimeoutMs, Len, <<Acc/binary, Bin/binary>>);
-        {tcp_error, Socket, Reason} ->
-            ?LOG_INFO(#{what => tcp_error, reason => Reason}, #{domain => [erldns, listeners]});
-        {tcp_closed, Socket} ->
-            ok
-    after IngressTimeoutMs ->
-        gen_tcp:close(Socket)
-    end.
+-record(state, {
+    socket :: socket(),
+    socket_type :: socket_type(),
+    connection_start_time :: ts(),
+    ingress_timeout_ms :: non_neg_integer(),
+    idle_timeout_ms :: non_neg_integer(),
+    request_timeout_ms :: non_neg_integer(),
+    max_concurrent_queries :: non_neg_integer(),
+    ip_address :: inet:ip_address(),
+    port :: inet:port_number(),
+    active_workers = #{} :: #{pid() => request()},
+    timer_ref :: undefined | reference(),
+    buffer = <<>> :: binary()
+}).
+-type state() :: #state{}.
 
-handle_if_within_time(Socket, TimerPid, TS, IngressTimeoutMs, Bin) ->
-    IngressTimeoutNative = erlang:convert_time_unit(IngressTimeoutMs, millisecond, native),
-    case IngressTimeoutNative =< erlang:monotonic_time() - TS of
-        false ->
-            handle(Socket, TimerPid, TS, Bin);
-        true ->
-            ?LOG_WARNING(
-                #{what => request_timeout, transport => tcp},
-                #{domain => [erldns, listeners]}
-            ),
-            telemetry:execute([erldns, request, dropped], #{count => 1}, #{transport => tcp})
-    end.
+-spec start_link(ranch:ref(), module(), #{atom() => term()}) -> {ok, pid()}.
+start_link(Ref, Transport, Opts) ->
+    SpawnOpts = [link],
+    Params = [{Ref, Transport, Opts, erlang:monotonic_time()}],
+    Pid = proc_lib:spawn_opt(?MODULE, init, Params, SpawnOpts),
+    {ok, Pid}.
 
--spec handle(inet:socket(), pid(), integer(), binary()) -> dynamic().
-handle(Socket, TimerPid, TS, Bin) ->
-    Measurements = #{monotonic_time => TS, request_size => byte_size(Bin)},
-    InitMetadata = #{transport => tcp},
-    telemetry:execute([erldns, request, start], Measurements, InitMetadata),
+-spec init({ranch:ref(), module(), #{atom() => term()}, ts()}) -> {ok, state()} | {stop, term()}.
+init({Ref, Transport, Opts, StartTime}) ->
+    process_flag(trap_exit, true),
     try
-        {ok, {IpAddr, _Port}} = inet:peername(Socket),
-        case dns:decode_message(Bin) of
-            {trailing_garbage, #dns_message{} = DecodedMessage, TrailingGarbage} ->
-                ?LOG_INFO(
-                    #{what => trailing_garbage, trailing_garbage => TrailingGarbage},
-                    #{domain => [erldns, listeners]}
-                ),
-                handle_decoded(Socket, TimerPid, TS, DecodedMessage, IpAddr);
-            {Error, Message, _} ->
-                ErrorMetadata = #{transport => tcp, reason => Error, message => Message},
-                request_error_event(ErrorMetadata);
-            DecodedMessage ->
-                handle_decoded(Socket, TimerPid, TS, DecodedMessage, IpAddr)
-        end
+        SocketType = detect_socket_type(Transport),
+        #{
+            max_concurrent_queries := MaxConcurrentQueries,
+            ingress_request_timeout := IngressTimeoutMs,
+            idle_timeout_ms := IdleTimeoutMs,
+            request_timeout_ms := RequestTimeoutMs
+        } = Opts,
+        {ok, Socket} = ranch:handshake(Ref),
+        {ok, {IpAddr, Port}} = get_peername(Socket, SocketType),
+        ok = set_socket_active(Socket, SocketType),
+        State0 = #state{
+            socket = Socket,
+            socket_type = SocketType,
+            connection_start_time = StartTime,
+            ingress_timeout_ms = IngressTimeoutMs,
+            idle_timeout_ms = IdleTimeoutMs,
+            request_timeout_ms = RequestTimeoutMs,
+            max_concurrent_queries = MaxConcurrentQueries,
+            ip_address = IpAddr,
+            port = Port,
+            timer_ref = erlang:start_timer(IngressTimeoutMs, self(), ingress)
+        },
+        gen_server:enter_loop(?MODULE, [], State0)
     catch
         Class:Reason:Stacktrace ->
             ExceptionMetadata = #{
-                transport => tcp, kind => Class, reason => Reason, stacktrace => Stacktrace
+                what => connection_init_failed,
+                transport => tcp,
+                kind => Class,
+                reason => Reason,
+                stacktrace => Stacktrace
             },
-            request_error_event(ExceptionMetadata)
+            telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata),
+            {stop, {init_failed, Class, Reason}}
     end.
 
--spec handle_decoded(inet:socket(), pid(), integer(), dns:message(), dynamic()) -> dynamic().
-handle_decoded(_, _, _, #dns_message{qr = true}, _) ->
-    {error, not_a_question};
-handle_decoded(Socket, TimerPid, TS0, DecodedMessage, IpAddr) ->
-    forward_dp_to_timer(DecodedMessage, TimerPid),
-    InitOpts = #{monotonic_time => TS0, transport => tcp, socket => Socket, host => IpAddr},
-    Response = erldns_pipeline:call(DecodedMessage, InitOpts),
-    handle_pipeline_response(Socket, TimerPid, TS0, Response).
+-spec handle_call(dynamic(), gen_server:from(), state()) -> {reply, dynamic(), state()}.
+handle_call(_Request, _From, State) ->
+    {reply, {error, not_implemented}, State}.
 
-handle_pipeline_response(_, _, _, halt) ->
-    ok;
-handle_pipeline_response(Socket, TimerPid, TS0, #dns_message{} = Response) ->
-    EncodedResponse = erldns_encoder:encode_message(Response),
-    exit(TimerPid, kill),
-    ok = gen_tcp:send(Socket, [<<(byte_size(EncodedResponse)):16>>, EncodedResponse]),
-    measure_time(Response, EncodedResponse, TS0),
-    gen_tcp:close(Socket).
+-spec handle_cast(dynamic(), state()) -> {noreply, state()}.
+handle_cast(_Msg, State) ->
+    {noreply, State}.
 
-request_error_event(Metadata) ->
-    telemetry:execute([erldns, request, error], #{count => 1}, Metadata).
+-spec handle_info(dynamic(), state()) -> {noreply, state()} | {stop, normal | term(), state()}.
+handle_info({timeout, TimerRef, idle}, #state{timer_ref = TimerRef} = State) ->
+    ?LOG_INFO(#{what => connection_idle_timeout, transport => tcp}, ?LOG_METADATA),
+    {stop, normal, State};
+handle_info({timeout, TimerRef, ingress}, #state{timer_ref = TimerRef} = State) ->
+    Count = 1 + maps:size(State#state.active_workers),
+    Metadata = #{transport => tcp, timeout_type => ingress, buffer => State#state.buffer},
+    telemetry:execute([erldns, request, dropped], #{count => Count}, Metadata),
+    {stop, normal, State};
+handle_info({timeout, TimerRef, {request_timeout, WorkerPid}}, State) ->
+    handle_worker_timeout(WorkerPid, TimerRef, State);
+handle_info({timeout, _, _}, State) ->
+    % Timer was cancelled/replaced, ignore
+    {noreply, State};
+handle_info({'EXIT', Pid, normal}, #state{active_workers = ActiveWorkers} = State) ->
+    {RequestInfo, NewActiveWorkers} = maps:take(Pid, ActiveWorkers),
+    cancel_timer(RequestInfo#request.timeout_timer),
+    State1 = State#state{active_workers = NewActiveWorkers},
+    handle_process_buffer(State1);
+handle_info({'EXIT', Pid, Reason}, #state{active_workers = ActiveWorkers} = State) ->
+    ?LOG_WARNING(#{what => tcp_worker_crashed, pid => Pid, reason => Reason}, ?LOG_METADATA),
+    {RequestInfo, NewActiveWorkers} = maps:take(Pid, ActiveWorkers),
+    cancel_timer(RequestInfo#request.timeout_timer),
+    State1 = State#state{active_workers = NewActiveWorkers},
+    handle_process_buffer(State1);
+handle_info({SocketType, Socket, Bin}, #state{socket = Socket, socket_type = SocketType} = State) ->
+    % Placeholder for future Active Queue Management implementations
+    NewBuffer = <<(State#state.buffer)/binary, Bin/binary>>,
+    handle_process_buffer(State#state{buffer = NewBuffer});
+handle_info({Error, Socket, Reason}, #state{socket = Socket} = State) when ?SOCKET_ERROR(State) ->
+    ?LOG_INFO(#{what => socket_error, reason => Reason}, ?LOG_METADATA),
+    {stop, normal, State};
+handle_info({Closed, Socket}, #state{socket = Socket} = State) when ?SOCKET_CLOSED(State) ->
+    {stop, normal, State};
+handle_info(Info, State) ->
+    ?LOG_INFO(#{what => unexpected_info, info => Info}, ?LOG_METADATA),
+    {noreply, State}.
 
-measure_time(Response, EncodedResponse, TS0) ->
-    ?LOG_DEBUG(
-        #{what => tcp_request_finished, dns_message => Response},
-        #{domain => [erldns, listeners]}
+-spec terminate(term(), state()) -> ok.
+terminate(_Reason, State) ->
+    shutdown(State).
+
+-define(CONCURRENT_QUERIES_EMPTY(S),
+    0 =:= map_size(S#state.active_workers)
+).
+-define(CONCURRENT_QUERIES_FULL(S),
+    S#state.max_concurrent_queries =:= map_size(S#state.active_workers)
+).
+-define(CONCURRENT_QUERIES_NOT_FULL(S),
+    S#state.max_concurrent_queries =/= map_size(S#state.active_workers)
+).
+
+-spec handle_process_buffer(state()) -> {noreply, state()}.
+%% If we have a full packet, we spawn only if there is available concurrency, otherwise we do
+%% nothing, no timer nor socket reads, we just wait for a worker to finish and free a slot
+handle_process_buffer(#state{buffer = <<Len:16, RequestBin:Len/binary, Rest/binary>>} = State) when
+    ?CONCURRENT_QUERIES_NOT_FULL(State)
+->
+    spawn_tcp_worker_and_recurse(State, RequestBin, Rest);
+handle_process_buffer(#state{buffer = <<Len:16, _:Len/binary, _/binary>>} = State) ->
+    {noreply, State};
+%% If we have a non-empty piece of a packet, we can assume the sender has sent all of it
+%% and we'll try to read it in order to avoid more TCP replays than needed, until we hit either the
+%% cases above (full packet and maybe spawn) and eventually the cases below, with no pending packet
+handle_process_buffer(#state{buffer = <<_, _/binary>>} = State) ->
+    set_socket_active(State#state.socket, State#state.socket_type),
+    ensure_ingress_timer(State);
+%% If the buffer is empty, it is because we've already triggered all pending requests:
+%% - We'll become idle only if there's no pending active workers
+%% - Or we'll set the socket active if the active workers is not full
+handle_process_buffer(#state{buffer = <<>>} = State) when ?CONCURRENT_QUERIES_EMPTY(State) ->
+    set_socket_active(State#state.socket, State#state.socket_type),
+    start_idle_timer(State);
+handle_process_buffer(#state{buffer = <<>>} = State) when ?CONCURRENT_QUERIES_NOT_FULL(State) ->
+    set_socket_active(State#state.socket, State#state.socket_type),
+    {noreply, State};
+handle_process_buffer(#state{buffer = <<>>} = State) when ?CONCURRENT_QUERIES_FULL(State) ->
+    {noreply, State}.
+
+-spec spawn_tcp_worker_and_recurse(state(), dns:message_bin(), binary()) -> {noreply, state()}.
+spawn_tcp_worker_and_recurse(
+    #state{
+        socket = Socket,
+        socket_type = SocketType,
+        ip_address = IpAddr,
+        port = Port,
+        active_workers = ActiveWorkers,
+        request_timeout_ms = RequestTimeoutMs,
+        timer_ref = TimerRef
+    } = State,
+    RequestBin,
+    Rest
+) ->
+    TS = erlang:monotonic_time(),
+    WorkerPid = erldns_proto_tcp_request:start_link(
+        RequestBin, TS, Socket, SocketType, IpAddr, Port
     ),
-    TS1 = erlang:monotonic_time(),
-    Measurements = #{
-        monotonic_time => TS1,
-        duration => TS1 - TS0,
-        response_size => byte_size(EncodedResponse)
+    TimeoutTimer = erlang:start_timer(RequestTimeoutMs, self(), {request_timeout, WorkerPid}),
+    cancel_timer(TimerRef),
+    RequestInfo = #request{
+        start_time = TS,
+        request_bin = RequestBin,
+        timeout_timer = TimeoutTimer
     },
-    DnsSec = proplists:get_bool(dnssec, erldns_edns:get_opts(Response)),
-    Metadata = #{
-        transport => tcp,
-        dnssec => DnsSec,
-        dns_message => Response
+    State1 = State#state{
+        buffer = Rest,
+        active_workers = ActiveWorkers#{WorkerPid => RequestInfo},
+        timer_ref = undefined
     },
-    telemetry:execute([erldns, request, stop], Measurements, Metadata).
+    handle_process_buffer(State1).
 
--spec init_timer(integer(), pid()) -> term().
-init_timer(IngressTimeoutMs, Parent) ->
-    Ref = erlang:monitor(process, Parent),
-    receive
-        {'DOWN', Ref, process, Parent, _} ->
-            ok
-    after IngressTimeoutMs ->
-        exit(Parent, kill),
-        Params = maybe_receive_params(),
-        ?LOG_WARNING(
-            Params#{what => request_timeout, transport => tcp, worker => Parent},
-            #{domain => [erldns, listeners]}
-        ),
-        telemetry:execute([erldns, request, timeout], #{count => 1}, #{transport => tcp})
+-spec start_idle_timer(state()) -> {noreply, state()}.
+start_idle_timer(#state{idle_timeout_ms = IdleTimeoutMs, timer_ref = TimerRef} = State) ->
+    cancel_timer(TimerRef),
+    NewTimerRef = erlang:start_timer(IdleTimeoutMs, self(), idle),
+    {noreply, State#state{timer_ref = NewTimerRef}}.
+
+%% In order to avoid slow-read attacks, we enforce a timeout for receiving a whole packet
+-spec ensure_ingress_timer(state()) -> {noreply, state()}.
+ensure_ingress_timer(
+    #state{ingress_timeout_ms = Timeout, timer_ref = undefined} = State
+) ->
+    TimerRef = erlang:start_timer(Timeout, self(), ingress),
+    {noreply, State#state{timer_ref = TimerRef}};
+ensure_ingress_timer(#state{} = State) ->
+    {noreply, State}.
+
+-spec cancel_timer(undefined | reference()) -> term().
+cancel_timer(undefined) ->
+    undefined;
+cancel_timer(TimerRef) ->
+    erlang:cancel_timer(TimerRef).
+
+-spec handle_worker_timeout(pid(), reference(), state()) -> {noreply, state()}.
+handle_worker_timeout(WorkerPid, TimerRef, #state{active_workers = ActiveWorkers} = State) ->
+    case maps:get(WorkerPid, ActiveWorkers, undefined) of
+        #request{request_bin = RequestBin, timeout_timer = TimerRef} ->
+            % Worker is still alive and timer matches, kill it and send SERVFAIL
+            % We don't remove it from the active_workers because the kill will send an EXIT signal
+            exit(WorkerPid, kill),
+            Metadata = #{transport => tcp, pid => WorkerPid, timeout_type => worker},
+            telemetry:execute([erldns, request, timeout], #{count => 1}, Metadata),
+            % Send SERVFAIL response
+            send_servfail_response(State, RequestBin),
+            handle_process_buffer(State);
+        _ ->
+            % Worker already finished, timer was stale, worker was restarted, or timer was cancelled
+            {noreply, State}
     end.
 
-maybe_receive_params() ->
-    receive
-        P when is_map(P) ->
-            P
-    after 0 ->
-        #{}
+-spec send_servfail_response(state(), dns:message_bin()) -> term().
+send_servfail_response(#state{socket = Socket, socket_type = SocketType}, RequestBin) ->
+    try
+        Decoded = dns:decode_message(RequestBin),
+        ServfailMsg = erldns_encoder:build_error_response(Decoded),
+        EncodedResponse = dns:encode_message(ServfailMsg),
+        Payload = [<<(byte_size(EncodedResponse)):16>>, EncodedResponse],
+        send_data(Socket, SocketType, Payload)
+    catch
+        Class:Reason:Stacktrace ->
+            ExceptionMetadata = #{
+                what => connection_init_failed,
+                transport => tcp,
+                kind => Class,
+                reason => Reason,
+                stacktrace => Stacktrace
+            },
+            telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata)
     end.
 
-forward_dp_to_timer(Msg, TimerPid) ->
-    TimerPid ! #{query => get_query(Msg), dnssec => get_dnssec(Msg)}.
+-spec send_data(socket(), socket_type(), iodata()) -> ok | {error, term()}.
+send_data(Socket, tcp, Data) ->
+    gen_tcp:send(Socket, Data);
+send_data(Socket, ssl, Data) ->
+    ssl:send(Socket, Data).
 
-get_query(#dns_message{questions = [#dns_query{name = QName, type = QType} | Rest]}) ->
-    #{name => QName, type => QType, extra_queries => ([] =:= Rest)};
-get_query(#dns_message{questions = []}) ->
-    none.
+-spec shutdown(state()) -> ok.
+shutdown(#state{socket = Socket, socket_type = SocketType, active_workers = ActiveWorkers}) ->
+    maps:foreach(
+        fun(Pid, RequestInfo) ->
+            cancel_timer(RequestInfo#request.timeout_timer),
+            exit(Pid, kill)
+        end,
+        ActiveWorkers
+    ),
+    close_socket(Socket, SocketType).
 
-get_dnssec(#dns_message{additional = [#dns_optrr{dnssec = true} | _]}) ->
-    true;
-get_dnssec(#dns_message{additional = _}) ->
-    false.
+-spec get_peername(socket(), socket_type()) ->
+    {ok, {inet:ip_address(), inet:port_number()}} | {error, term()}.
+get_peername(Socket, tcp) ->
+    inet:peername(Socket);
+get_peername(Socket, ssl) ->
+    ssl:peername(Socket).
+
+-spec close_socket(socket(), socket_type()) -> ok.
+close_socket(Socket, tcp) ->
+    gen_tcp:close(Socket);
+close_socket(Socket, ssl) ->
+    ssl:close(Socket).
+
+-spec set_socket_active(socket(), socket_type()) -> ok.
+set_socket_active(Socket, tcp) ->
+    inet:setopts(Socket, [{active, once}]);
+set_socket_active(Socket, ssl) ->
+    ssl:setopts(Socket, [{active, once}]).
+
+-spec detect_socket_type(module()) -> tcp | ssl.
+detect_socket_type(ranch_tcp) -> tcp;
+detect_socket_type(ranch_ssl) -> ssl.

@@ -21,7 +21,7 @@ init({WorkersName, NumAcceptors, Timeout, SocketOpts}) ->
     Acceptors = [
         #{
             id => {erldns_proto_udp_acceptor, N},
-            start => {erldns_proto_udp_acceptor, start_link, [WorkersName, SocketOpts]},
+            start => {erldns_proto_udp_acceptor, start_link, [WorkersName, Timeout, SocketOpts]},
             shutdown => Timeout,
             type => worker
         }
