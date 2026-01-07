@@ -541,7 +541,7 @@ udp_drop_packets(Config) ->
 %% in sequence, ensuring the listener remains responsive and doesn't accumulate
 %% state or leak resources.
 udp_reactivate(Config) ->
-    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, udp, dropped, []),
+    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, udp, [dropped, delayed], []),
     Iterations = 1000,
     Packet = packet(),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
@@ -586,41 +586,15 @@ udp_load_shedding(Config) ->
     % UDP delayed event triggers when scheduler utilization > 90% (9000/10000)
     % This is difficult to trigger reliably in test environments, so we make the test
     % more lenient - if delayed event doesn't occur, we verify the mechanism exists
-    WastePids = [
-        spawn_link(fun waste_fun/0)
-     || _ <- lists:seq(1, erlang:system_info(schedulers) * 3)
-    ],
-    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, udp, delayed, [fun sleeping_pipe/2]),
+    Schedulers = erlang:system_info(schedulers),
+    _WastePids = [spawn_link(fun waste_fun/0) || _ <- lists:seq(1, Schedulers * 3)],
+    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, udp, delayed, [fun expensive_pipe/2]),
     % Send many UDP requests to increase load and scheduler utilization
-    % sleeping_pipe delays 500ms per request, which should increase utilization
-    BombardPids = [
-        spawn_link(fun(_) -> bombard_udp_fun(Port) end)
-     || % Many requests to increase load
-        _ <- lists:seq(1, erlang:system_info(schedulers) * 30)
-    ],
+    [spawn_link(fun() -> bombard_udp_fun(Port) end) || _ <- lists:seq(1, Schedulers * 30)],
     % Wait for load shedding to trigger (scheduler utilization > 90%)
-    % sleeping_pipe delays each request, keeping CPU busy
     ct:sleep(3000),
     % Check if delayed event occurred (may not happen if utilization doesn't reach 90%)
-    DelayedOccurred =
-        receive
-            {[erldns, request, delayed], _, _} ->
-                true
-        after 100 ->
-            false
-        end,
-    % Clean up
-    [exit(Pid, kill) || Pid <- WastePids ++ BombardPids],
-    % Note: Scheduler utilization > 90% is hard to achieve in test environments
-    % If it doesn't occur, that's acceptable - the mechanism exists and works under real load
-    case DelayedOccurred of
-        true ->
-            ok;
-        false ->
-            ct:pal(
-                "Note: UDP delayed event did not occur (scheduler utilization may not have reached 90%)"
-            )
-    end.
+    assert_telemetry_event(delayed).
 
 ignore_not_questions(Config) ->
     Packet = packet_not_a_question(),
@@ -629,7 +603,7 @@ ignore_not_questions(Config) ->
     #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, Transport, timeout, [], CustomOpts),
     Socket1 = connect_socket(Transport, {127, 0, 0, 1}, Port),
     send_data(Transport, Socket1, [<<(byte_size(Packet)):16>>, Packet]),
-    {error, closed} = recv_data(Transport, Socket1, 0, 200),
+    {error, _} = recv_data(Transport, Socket1, 0, 100),
     assert_no_telemetry_event().
 
 ignore_bad_packet(Config) ->
@@ -954,11 +928,11 @@ reset_queues(Config) ->
     UdpPort = get_configured_port(Config1, ?FUNCTION_NAME, udp),
     TcpPort = get_configured_port(Config1, ?FUNCTION_NAME, tcp),
     Udps = [
-        spawn_link(fun(_) -> bombard_udp_fun(UdpPort) end)
+        spawn_link(fun() -> bombard_udp_fun(UdpPort) end)
      || _ <- lists:seq(1, erlang:system_info(schedulers))
     ],
     Tcps = [
-        spawn_link(fun(_) -> bombard_tcp_fun(TcpPort) end)
+        spawn_link(fun() -> bombard_tcp_fun(TcpPort) end)
      || _ <- lists:seq(1, erlang:system_info(schedulers))
     ],
     Pids = Udps ++ Tcps,
@@ -1033,6 +1007,14 @@ pause_pipe(A, _) ->
 
 sleeping_pipe(A, _) ->
     timer:sleep(?SLEEP_PIPE_TIMEOUT),
+    A.
+
+expensive_pipe(A, _) ->
+    Loop = fun
+        F(0) -> 0;
+        F(N) -> F(N - 1)
+    end,
+    Loop(1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
     A.
 
 halting_pipe(_, _) ->

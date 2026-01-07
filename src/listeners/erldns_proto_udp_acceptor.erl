@@ -4,31 +4,35 @@
 -include_lib("kernel/include/logger.hrl").
 
 -define(ACTIVE, 100).
+-define(STRESS_LIMIT, 9000).
+% Jitter as percentage of sleep time (e.g., 0.15 = 15% variation)
+% This gives ±7.5% jitter to break synchronization
+-define(JITTER_PERCENT, 0.15).
 -define(LOG_METADATA, #{domain => [erldns, listeners, udp]}).
 
 -behaviour(gen_server).
 
--export([start_link/3, init/1, handle_call/3, handle_cast/2, handle_info/2]).
+-export([start_link/2, init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -record(udp_acceptor, {
     name :: atom(),
     socket :: gen_udp:socket(),
-    timeout :: non_neg_integer()
+    servo = erldns_cubic:new() :: erldns_cubic:cubic()
 }).
 -opaque state() :: #udp_acceptor{}.
 -export_type([state/0]).
 
--spec start_link(erldns_listeners:name(), non_neg_integer(), [gen_udp:option()]) ->
+-spec start_link(erldns_listeners:name(), [gen_udp:option()]) ->
     gen_server:start_ret().
-start_link(Name, Timeout, SocketOpts) ->
-    gen_server:start_link(?MODULE, {Name, Timeout, SocketOpts}, []).
+start_link(Name, SocketOpts) ->
+    gen_server:start_link(?MODULE, {Name, SocketOpts}, []).
 
--spec init({atom(), non_neg_integer(), [gen_udp:open_option()]}) -> {ok, state()}.
-init({Name, Timeout, SocketOpts}) ->
+-spec init({atom(), [gen_udp:open_option()]}) -> {ok, state()}.
+init({Name, SocketOpts}) ->
     process_flag(trap_exit, true),
     proc_lib:set_label(?MODULE),
     Socket = create_socket(SocketOpts),
-    {ok, #udp_acceptor{name = Name, socket = Socket, timeout = Timeout}}.
+    {ok, #udp_acceptor{name = Name, socket = Socket}}.
 
 -spec handle_call(term(), gen_server:from(), state()) -> {reply, not_implemented, state()}.
 handle_call(Call, From, State) ->
@@ -50,6 +54,9 @@ handle_info({udp_passive, Socket}, #udp_acceptor{socket = Socket} = State) ->
     maybe_shed_load(Socket, State);
 handle_info({udp_error, Socket, Reason}, #udp_acceptor{socket = Socket} = State) ->
     {stop, {udp_error, Reason}, State};
+handle_info({set_batch, Socket}, #udp_acceptor{socket = Socket} = State) ->
+    set_batch(Socket),
+    {noreply, State};
 handle_info(Info, State) ->
     ?LOG_INFO(#{what => unexpected_info, info => Info}, ?LOG_METADATA),
     {noreply, State}.
@@ -63,44 +70,34 @@ create_socket(Opts) ->
             exit({could_not_open_socket, Reason})
     end.
 
-%% If scheduler utilisation is above 90%, probabilistically,
-%% introduce delays before activating the socket again.
-%%
-%% A scheduler utilisation near 100% means that processes might face a long delay before being
-%% scheduled again and we might start entering a death spiral were requests are queued only to be
-%% ignored because of delays. If probabilistically we don't accept any more requests, the Kernel's
-%% network stack will start dropping packets without having them enter the BEAM and incurr more CPU
-%% waste in loops and GCs.
-%%
-%% probabilistic delay is proportional to the remaining free utilisation, that is,
-%% - if utilisation is 92%, we have a 20% chance of delaying,
-%% - if utilisation is 95%, we have a 50% chance of delaying.
-%% - if utilisation is 96.23%, we have a 60.23% chance of delaying.
-%% - if utilisation is 100%, we have a 100% chance of delaying.
-%%
-%% The operation will be retried again after `ingress_udp_request_timeout`, again calculating
-%% utilisation and probabilistic delay accordingly.
-maybe_shed_load(Socket, State) ->
-    maybe
-        Utilization = erldns_sch_mon:get_total_scheduler_utilization(),
-        false ?= Utilization =< 9000,
-        false ?= maybe_continue(Utilization),
-        ?LOG_WARNING(#{what => udp_acceptor_delayed, transport => udp}, ?LOG_METADATA),
-        telemetry:execute([erldns, request, delayed], #{count => 1}, #{transport => udp}),
-        start_timer(Socket, State#udp_acceptor.timeout),
-        {noreply, State}
-    else
-        true ->
-            inet:setopts(Socket, [{active, ?ACTIVE}]),
-            {noreply, State}
-    end.
+maybe_shed_load(Socket, #udp_acceptor{servo = Servo} = State) ->
+    Now = erlang:monotonic_time(),
+    Utilization = erldns_sch_mon:get_total_scheduler_utilization(),
+    IsCongested = ?STRESS_LIMIT < Utilization,
+    {SleepMs, NewServo} = erldns_cubic:control(Servo, Now, IsCongested),
+    case SleepMs of
+        0 ->
+            set_batch(Socket);
+        _ ->
+            telemetry:execute([erldns, request, delayed], #{count => 1}, #{transport => udp}),
+            FinalSleep = calculate_jittered_sleep(SleepMs),
+            set_batch_after_timer(Socket, FinalSleep)
+    end,
+    {noreply, State#udp_acceptor{servo = NewServo}}.
 
--spec maybe_continue(erldns_sch_mon:percentage_double_point()) -> boolean().
-maybe_continue(Utilization) when 9000 < Utilization, Utilization =< 10000 ->
-    Dec = (Utilization - 9000) * 1000,
-    Rand = rand:uniform(10000),
-    Rand > Dec.
+calculate_jittered_sleep(SleepMs) ->
+    % Apply proportional jitter to break synchronization
+    % Jitter range: ±JITTER_PERCENT/2 of sleep time
+    % Example: If SleepMs=100ms and JITTER_PERCENT=0.15, jitter is ±7.5ms
+    JitterRange = SleepMs * ?JITTER_PERCENT,
+    Jitter = (rand:uniform() - 0.5) * JitterRange,
+    TotalSleep = SleepMs + Jitter,
+    % Clamp to reasonable range (1ms minimum, 1000ms maximum)
+    max(1, min(1000, round(TotalSleep))).
 
--spec start_timer(gen_udp:socket(), non_neg_integer()) -> reference().
-start_timer(Socket, Timeout) ->
-    erlang:send_after(Timeout, self(), {udp_passive, Socket}).
+-spec set_batch_after_timer(gen_udp:socket(), non_neg_integer()) -> reference().
+set_batch_after_timer(Socket, SleepMs) ->
+    erlang:send_after(SleepMs, self(), {set_batch, Socket}).
+
+set_batch(Socket) ->
+    inet:setopts(Socket, [{active, ?ACTIVE}]).

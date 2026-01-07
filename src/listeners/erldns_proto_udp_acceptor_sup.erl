@@ -20,11 +20,11 @@ init({WorkersName, NumAcceptors, Timeout, SocketOpts}) ->
     },
     Acceptors = [
         #{
-            id => {erldns_proto_udp_acceptor, N},
-            start => {erldns_proto_udp_acceptor, start_link, [WorkersName, Timeout, SocketOpts]},
+            id => {erldns_proto_udp_acceptor, WorkerId},
+            start => {erldns_proto_udp_acceptor, start_link, [WorkersName, SocketOpts]},
             shutdown => Timeout,
             type => worker
         }
-     || N <- lists:seq(1, NumAcceptors)
+     || WorkerId <- lists:seq(1, NumAcceptors)
     ],
     {ok, {Strategy, Acceptors}}.
