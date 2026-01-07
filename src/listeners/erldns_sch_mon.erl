@@ -138,12 +138,15 @@ calculate_adaptive_interval(CurrentUtil, LastUtil, LastInterval) ->
 start_timer(Interval) ->
     erlang:start_timer(Interval, self(), check_schedulers).
 
+% Normal schedulers will have scheduler identifiers in the range 1 =< SchedulerId
+% =<erlang:system_info(schedulers). Dirty CPU schedulers will have scheduler identifiers in the
+% range erlang:system_info(schedulers) < SchedulerId =< erlang:system_info(schedulers)
+% +erlang:system_info(dirty_cpu_schedulers).
 -spec get_scheduler_wall_time() -> scheduler_wall_time().
 get_scheduler_wall_time() ->
-    S0 = erlang:statistics(scheduler_wall_time),
-    true = undefined =/= S0,
     Online = erlang:system_info(schedulers_online),
-    lists:sublist(lists:sort(S0), Online).
+    S0 = erlang:statistics(scheduler_wall_time),
+    lists:filter(fun({Id, _, _}) -> Id =< Online end, S0).
 
 -spec utilization(atomics:atomics_ref(), scheduler_wall_time(), scheduler_wall_time(), float()) ->
     float().

@@ -149,7 +149,7 @@ congestion_event(#cubic{current_rate = CurrentRate} = State, NowNative) ->
     %% Note: We use max/2 to ensure we don't accidentally lock in a tiny WMax.
     WMax = max(?MIN_RATE, CurrentRate),
     %% 2. Calculate New Rate (Fast Reduction)
-    %% Cut the rate by Beta (e.g., reduce to 70%).
+    %% Cut the rate by Beta (e.g., reduce to 80%).
     NewRate = max(?MIN_RATE, WMax * ?BETA),
     %% 3. Calculate K (The Recovery Period)
     %% We need to solve the cubic equation for t = 0 (start of epoch) to find K.
