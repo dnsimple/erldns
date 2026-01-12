@@ -89,12 +89,6 @@ transport := udp | tcp
 
 -include_lib("kernel/include/logger.hrl").
 
--define(DEFAULT_UDP_INGRESS_TIMEOUT, 500).
--define(DEFAULT_TCP_INGRESS_TIMEOUT, 1000).
--define(DEFAULT_IDLE_TIMEOUT_MS, 2000).
--define(DEFAULT_REQUEST_TIMEOUT_MS, 1000).
--define(DEFAULT_MAX_CONNECTIONS, 1000).
--define(DEF_MAX_TCP_WORKERS, 50).
 -define(DEFAULT_PORT, 53).
 -define(DEFAULT_IP, any).
 
@@ -203,7 +197,7 @@ Example TLS listener:
 Statistics about each listener.
 """.
 -type stats() :: #{
-    {name(), tcp | udp} => #{queue_length := non_neg_integer()}
+    {name(), tls | tcp | udp} => #{queue_length := non_neg_integer()}
 }.
 -export_type([name/0, transport/0, parallel_factor/0, config/0, stats/0]).
 
@@ -250,27 +244,12 @@ get_stats() ->
 
 get_stats({erldns_sch_mon, _, _, _}, #{} = Stats) ->
     Stats;
-get_stats({{ranch_embedded_sup, {?MODULE, {Name, Transport}}}, _, _, _}, #{} = Stats) when
-    Transport =:= tcp; Transport =:= tls
-->
-    #{active_connections := ActiveConns} = ranch:info({?MODULE, {Name, Transport}}),
-    Stats#{{Name, Transport} => #{queue_length => ActiveConns}};
-get_stats({{Name, udp}, Sup, _, [erldns_proto_udp_sup]}, Stats) ->
-    [
-        {_, AccSup, _, [erldns_proto_udp_acceptor_sup]},
-        {Pool2, _, _, [wpool]}
-    ] = supervisor:which_children(Sup),
-    TotalPool1 = lists:foldl(
-        fun({_, Worker, _, _}, Acc) ->
-            {_, Count} = erlang:process_info(Worker, message_queue_len),
-            Acc + Count
-        end,
-        0,
-        supervisor:which_children(AccSup)
-    ),
-    StatsPool = wpool:stats(Pool2),
-    {_, TotalPool2} = lists:keyfind(total_message_queue_len, 1, StatsPool),
-    Stats#{{Name, udp} => #{queue_length => TotalPool1 + TotalPool2}}.
+get_stats({{ranch_embedded_sup, {?MODULE, {_, tcp}}}, _, _, _} = Child, Stats) ->
+    erldns_proto_tcp_config:get_stats(Child, Stats);
+get_stats({{ranch_embedded_sup, {?MODULE, {_, tls}}}, _, _, _} = Child, Stats) ->
+    erldns_proto_tcp_config:get_stats(Child, Stats);
+get_stats({{_, udp}, _, _, [erldns_proto_udp_sup]} = Child, Stats) ->
+    erldns_proto_udp_config:get_stats(Child, Stats).
 
 -spec child_specs() -> [supervisor:child_spec()].
 child_specs() ->
@@ -289,168 +268,23 @@ child_spec(Config) ->
     SocketOpts = [{port, Port} | IpConfig],
     case Transport of
         standard ->
-            % Expand to both UDP and TCP
-            [UdpSup] = child_spec_for_transport(Name, PFactor, udp, SocketOpts, Opts),
-            [TcpSup] = child_spec_for_transport(Name, PFactor, tcp, SocketOpts, Opts),
+            [UdpSup] = child_spec_for_transport(udp, Name, PFactor, SocketOpts, Opts),
+            [TcpSup] = child_spec_for_transport(tcp, Name, PFactor, SocketOpts, Opts),
             [UdpSup, TcpSup];
         _ ->
-            child_spec_for_transport(Name, PFactor, Transport, SocketOpts, Opts)
+            child_spec_for_transport(Transport, Name, PFactor, SocketOpts, Opts)
     end.
 
--spec child_spec_for_transport(name(), parallel_factor(), transport(), [dynamic()], map()) ->
+-spec child_spec_for_transport(transport(), name(), parallel_factor(), [dynamic()], map()) ->
     [supervisor:child_spec()].
-child_spec_for_transport(Name, PFactor, udp, SocketOpts, Opts) ->
-    % Extract UDP-specific socket options from opts if any
-    UdpExtraOpts = maps:get(udp_opts, Opts, []),
-    UdpSocketOpts = udp_opts(SocketOpts ++ UdpExtraOpts),
-    Timeout = get_udp_timeout(Opts),
-    [
-        #{
-            id => {Name, udp},
-            start => {erldns_proto_udp_sup, start_link, [Name, PFactor, Timeout, UdpSocketOpts]},
-            type => supervisor
-        }
-    ];
-child_spec_for_transport(Name, PFactor, tcp, SocketOpts0, Opts) ->
-    build_tcp_tls_child_spec(Name, PFactor, tcp, SocketOpts0, Opts, ranch_tcp, undefined);
-child_spec_for_transport(Name, PFactor, tls, SocketOpts0, Opts) ->
-    % Extract TLS options from opts (required for TLS)
-    TlsOpts = maps:get(tls_opts, Opts, undefined),
-    case TlsOpts of
-        undefined ->
-            error({missing_required_option, tls_opts});
-        _ when is_list(TlsOpts) ->
-            ok
-    end,
-    build_tcp_tls_child_spec(Name, PFactor, tls, SocketOpts0, Opts, ranch_ssl, TlsOpts).
+child_spec_for_transport(udp, Name, PFactor, SocketOpts, Opts) ->
+    erldns_proto_udp_config:child_spec(Name, PFactor, SocketOpts, Opts);
+child_spec_for_transport(tcp, Name, PFactor, SocketOpts0, Opts) ->
+    erldns_proto_tcp_config:tcp_child_spec(Name, PFactor, SocketOpts0, Opts);
+child_spec_for_transport(tls, Name, PFactor, SocketOpts0, Opts) ->
+    erldns_proto_tcp_config:tls_child_spec(Name, PFactor, SocketOpts0, Opts).
 
--spec build_tcp_tls_child_spec(
-    name(),
-    parallel_factor(),
-    tcp | tls,
-    [dynamic()],
-    map(),
-    module(),
-    [dynamic()] | undefined
-) -> [supervisor:child_spec()].
-build_tcp_tls_child_spec(Name, PFactor, Transport, SocketOpts0, Opts, RanchModule, SslOpts) ->
-    Timeout = get_tcp_timeout(Opts),
-    MaxParallelWorkers = get_tcp_max_parallel_workers(Opts),
-    MaxConnections = get_tcp_max_connections(Opts),
-    % Extract TCP-specific socket options from opts if any
-    TcpExtraOpts = maps:get(tcp_opts, Opts, []),
-    TcpSocketOpts = tcp_opts(SocketOpts0 ++ TcpExtraOpts, Timeout),
-    % Append SSL options to socket_opts if present
-    FinalSocketOpts =
-        case SslOpts of
-            undefined ->
-                TcpSocketOpts;
-            _ ->
-                TcpSocketOpts ++ SslOpts
-        end,
-    Parallelism = erlang:system_info(schedulers),
-    TransOpts = #{
-        alarms => #{
-            first_alarm => #{
-                type => num_connections,
-                threshold => MaxConnections,
-                cooldown => Timeout,
-                callback => fun trigger_delayed/4
-            }
-        },
-        max_connections => MaxConnections,
-        num_acceptors => PFactor * Parallelism,
-        num_conns_sups => PFactor * Parallelism,
-        num_listen_sockets => Parallelism,
-        handshake_timeout => Timeout,
-        socket_opts => FinalSocketOpts
-    },
-    IdleTimeout = get_tcp_idle_timeout(Opts),
-    RequestTimeout = get_tcp_request_timeout(Opts),
-    ProtoOpts = #{
-        ingress_request_timeout => Timeout,
-        idle_timeout_ms => IdleTimeout,
-        max_concurrent_queries => MaxParallelWorkers,
-        request_timeout_ms => RequestTimeout
-    },
-    RanchRef = {?MODULE, {Name, Transport}},
-    [ranch:child_spec(RanchRef, RanchModule, TransOpts, erldns_proto_tcp, ProtoOpts)].
-
--spec get_udp_timeout(map()) -> non_neg_integer().
-get_udp_timeout(ListenerOpts) ->
-    case maps:get(ingress_request_timeout, ListenerOpts, ?DEFAULT_UDP_INGRESS_TIMEOUT) of
-        Timeout when is_integer(Timeout), Timeout > 0 ->
-            Timeout;
-        Invalid ->
-            error({invalid_option, ingress_request_timeout, Invalid})
-    end.
-
--spec get_tcp_timeout(map()) -> non_neg_integer().
-get_tcp_timeout(ListenerOpts) ->
-    case maps:get(ingress_request_timeout, ListenerOpts, ?DEFAULT_TCP_INGRESS_TIMEOUT) of
-        Timeout when is_integer(Timeout), Timeout > 0 ->
-            Timeout;
-        Invalid ->
-            error({invalid_option, ingress_request_timeout, Invalid})
-    end.
-
--spec get_tcp_max_parallel_workers(map()) -> non_neg_integer().
-get_tcp_max_parallel_workers(ListenerOpts) ->
-    case maps:get(max_concurrent_queries, ListenerOpts, ?DEF_MAX_TCP_WORKERS) of
-        Max when is_integer(Max), Max > 0 ->
-            Max;
-        _ ->
-            ?DEF_MAX_TCP_WORKERS
-    end.
-
--spec get_tcp_idle_timeout(map()) -> non_neg_integer().
-get_tcp_idle_timeout(ListenerOpts) ->
-    case maps:get(idle_timeout_ms, ListenerOpts, ?DEFAULT_IDLE_TIMEOUT_MS) of
-        Timeout when is_integer(Timeout), Timeout > 0 ->
-            Timeout;
-        _ ->
-            ?DEFAULT_IDLE_TIMEOUT_MS
-    end.
-
--spec get_tcp_request_timeout(map()) -> non_neg_integer().
-get_tcp_request_timeout(ListenerOpts) ->
-    case maps:get(request_timeout_ms, ListenerOpts, ?DEFAULT_REQUEST_TIMEOUT_MS) of
-        Timeout when infinity =:= Timeout orelse (is_integer(Timeout) andalso Timeout > 0) ->
-            Timeout;
-        Invalid ->
-            error({invalid_option, request_timeout_ms, Invalid})
-    end.
-
--spec get_tcp_max_connections(map()) -> non_neg_integer().
-get_tcp_max_connections(ListenerOpts) ->
-    case maps:get(max_connections, ListenerOpts, ?DEFAULT_MAX_CONNECTIONS) of
-        Max when is_integer(Max), Max > 0 ->
-            Max;
-        Invalid ->
-            error({invalid_option, max_connections, Invalid})
-    end.
-
-tcp_opts(SocketOpts0, Timeout) ->
-    SocketOpts0 ++
-        [
-            {send_timeout, Timeout},
-            {nodelay, true},
-            {keepalive, true},
-            {reuseport, true},
-            {reuseport_lb, true}
-        ].
-
-udp_opts(SocketOpts0) ->
-    SocketOpts0 ++
-        [
-            binary,
-            {reuseaddr, true},
-            {reuseport, true},
-            {reuseport_lb, true},
-            {read_packets, 1000},
-            {recbuf, 1024 * 1024}
-        ].
-
+-spec get_ip(config()) -> list().
 get_ip(Config) ->
     case maps:get(ip, Config, ?DEFAULT_IP) of
         any ->
@@ -472,11 +306,13 @@ get_ip(Config) ->
             error({invalid_listener, ip, Config})
     end.
 
+-spec get_name(config()) -> name().
 get_name(#{name := Name}) when is_atom(Name) ->
     Name;
 get_name(Config) ->
     error({invalid_listener, name, Config}).
 
+-spec get_port(config()) -> inet:port_number().
 get_port(Config) ->
     case maps:get(port, Config, ?DEFAULT_PORT) of
         Port when is_integer(Port), 0 =< Port, Port =< 65535 ->
@@ -485,6 +321,7 @@ get_port(Config) ->
             error({invalid_listener, port, Config})
     end.
 
+-spec get_transport(config()) -> transport().
 get_transport(Config) ->
     case maps:get(transport, Config, standard) of
         T when T =:= udp; T =:= tcp; T =:= tls; T =:= standard ->
@@ -493,6 +330,7 @@ get_transport(Config) ->
             error({invalid_listener, transport, Config})
     end.
 
+-spec get_pfactor(config()) -> pos_integer().
 get_pfactor(Config) ->
     case maps:get(parallel_factor, Config, 1) of
         PFactor when is_integer(PFactor), 0 < PFactor, PFactor =< 512 ->
@@ -500,10 +338,3 @@ get_pfactor(Config) ->
         _ ->
             error({invalid_listener, parallel_factor, Config})
     end.
-
-trigger_delayed(_Ref, _Alarm, _SupPid, _ConnPids) ->
-    ?LOG_WARNING(
-        #{what => tcp_acceptor_delayed, transport => tcp},
-        #{domain => [erldns, listeners]}
-    ),
-    telemetry:execute([erldns, request, delayed], #{count => 1}, #{transport => tcp}).
