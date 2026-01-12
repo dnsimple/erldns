@@ -34,7 +34,7 @@ request(RequestBinary, TS0, Socket, SocketType, IpAddr, Port) ->
     Measurements = #{monotonic_time => TS0, request_size => byte_size(RequestBinary)},
     InitMetadata = #{transport => tcp},
     telemetry:execute([erldns, request, start], Measurements, InitMetadata),
-    Decoded = dns:decode_message(RequestBinary),
+    Decoded = dns:decode_query(RequestBinary),
     handle_decoded(Decoded, TS0, Socket, SocketType, IpAddr, Port).
 
 -spec handle_decoded(
@@ -46,7 +46,7 @@ request(RequestBinary, TS0, Socket, SocketType, IpAddr, Port) ->
     inet:port_number()
 ) ->
     atom().
-handle_decoded(#dns_message{qr = false} = Msg, TS0, Socket, SocketType, IpAddr, Port) ->
+handle_decoded(#dns_message{} = Msg, TS0, Socket, SocketType, IpAddr, Port) ->
     InitOpts = #{
         monotonic_time => TS0,
         transport => tcp,
@@ -56,11 +56,13 @@ handle_decoded(#dns_message{qr = false} = Msg, TS0, Socket, SocketType, IpAddr, 
     },
     Response = erldns_pipeline:call(Msg, InitOpts),
     handle_pipeline_response(Response, TS0, Socket, SocketType);
-handle_decoded(#dns_message{qr = true}, _, _, _, _, _) ->
-    not_a_question;
-handle_decoded({Error, Message, _}, _, _, _, _, _) ->
-    ErrorMetadata = #{transport => tcp, reason => Error, message => Message},
-    request_error_event(ErrorMetadata).
+handle_decoded({notimp, Msg, _}, TS0, Socket, SocketType, _, _) ->
+    Metadata = #{transport => tcp, reason => notimp, message => Msg, monotonic_time => TS0},
+    request_error_event(Metadata),
+    handle_pipeline_response(Msg, TS0, Socket, SocketType);
+handle_decoded({Error, Msg, _}, TS0, _, _, _, _) ->
+    Metadata = #{transport => tcp, reason => Error, message => Msg, monotonic_time => TS0},
+    request_error_event(Metadata).
 
 -spec handle_pipeline_response(
     halt | dns:message(),

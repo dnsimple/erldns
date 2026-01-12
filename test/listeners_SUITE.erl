@@ -17,6 +17,7 @@ all() ->
         {group, udp},
         {group, tcp},
         {group, tls},
+        build_error_response_tuple_format,
         sched_mon_coverage,
         reset_queues,
         stats
@@ -47,7 +48,10 @@ groups() ->
             udp_reactivate,
             udp_coverage,
             udp_encoder_failure,
-            udp_load_shedding
+            udp_load_shedding,
+            udp_trailing_garbage_raises_error_returns_correct_answer,
+            udp_notimp_raises_error_returns_notimp,
+            udp_not_a_question_raises_error_returns_nothing
         ]},
         {tcp, [parallel], tcp_tls_tests()},
         {tls, [parallel], tcp_tls_tests()}
@@ -55,9 +59,10 @@ groups() ->
 
 tcp_tls_tests() ->
     [
-        ignore_not_questions,
-        ignore_bad_packet,
-        pipeline_halted,
+        tcp_not_a_question_raises_error_returns_nothing,
+        tcp_ignore_bad_packet,
+        tcp_notimp_raises_error_returns_notimp,
+        tcp_pipeline_halted,
         encoder_failure,
         closed_when_client_closes,
         ingress_timeout,
@@ -512,7 +517,7 @@ udp_halted(Config) ->
     Packet = packet(),
     {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
     ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
-    {error, _} = gen_udp:recv(Socket, 65535, 500),
+    {error, _} = recv_data(udp, Socket, 65535, 500),
     assert_no_telemetry_event().
 
 udp_overrun(Config) ->
@@ -596,29 +601,64 @@ udp_load_shedding(Config) ->
     % Check if delayed event occurred (may not happen if utilization doesn't reach 90%)
     assert_telemetry_event(delayed).
 
-ignore_not_questions(Config) ->
+udp_trailing_garbage_raises_error_returns_correct_answer(Config) ->
+    Packet = packet(),
+    PacketWithGarbage = <<Packet/binary, "trailing_garbage_data">>,
+    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, udp, error, []),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    Response = request_response(udp, Socket, PacketWithGarbage, Port),
+    ?assertMatch(#dns_message{}, Response),
+    assert_telemetry_event(error).
+
+udp_notimp_raises_error_returns_notimp(Config) ->
+    Packet = packet_notimp(),
+    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, udp, error, [fun bad_record/2]),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    Response = request_response(udp, Socket, Packet, Port),
+    ?assertMatch(#dns_message{rc = ?DNS_RCODE_NOTIMP}, Response),
+    assert_telemetry_event(error).
+
+udp_not_a_question_raises_error_returns_nothing(Config) ->
+    Packet = packet_not_a_question(),
+    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, udp, error, [fun bad_record/2]),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
+    assert_telemetry_event(error),
+    {error, timeout} = recv_data(udp, Socket, 65535, 100).
+
+tcp_not_a_question_raises_error_returns_nothing(Config) ->
     Packet = packet_not_a_question(),
     Transport = proplists:get_value(transport, Config),
     CustomOpts = #{idle_timeout_ms => 100},
-    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, Transport, timeout, [], CustomOpts),
+    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, Transport, error, [], CustomOpts),
     Socket1 = connect_socket(Transport, {127, 0, 0, 1}, Port),
     send_data(Transport, Socket1, [<<(byte_size(Packet)):16>>, Packet]),
-    {error, _} = recv_data(Transport, Socket1, 0, 100),
-    assert_no_telemetry_event().
+    assert_telemetry_event(error),
+    {error, _} = recv_data(Transport, Socket1, 0, 100).
 
-ignore_bad_packet(Config) ->
+tcp_ignore_bad_packet(Config) ->
     Transport = proplists:get_value(transport, Config),
     #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, Transport, error, []),
     Socket1 = connect_socket(Transport, {127, 0, 0, 1}, Port),
     Payload = [<<50:16>>, crypto:strong_rand_bytes(50)],
     send_data(Transport, Socket1, Payload),
+    assert_telemetry_event(error),
+    {error, _} = recv_data(Transport, Socket1, 0, 100).
+
+tcp_notimp_raises_error_returns_notimp(Config) ->
+    Transport = proplists:get_value(transport, Config),
+    Packet = packet_notimp(),
+    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, Transport, error, []),
+    Socket = connect_socket(Transport, {127, 0, 0, 1}, Port),
+    Response = request_response(Transport, Socket, Packet, Port),
+    ?assertMatch(#dns_message{rc = ?DNS_RCODE_NOTIMP}, Response),
     assert_telemetry_event(error).
 
 %% Test that TCP/TLS listener handles pipeline halt correctly with RFC7766.
 %% When the pipeline returns 'halt', the request is not processed but the
 %% connection stays alive (RFC7766 behavior). The connection should eventually
 %% timeout and close due to the idle timeout if no further requests are sent.
-pipeline_halted(Config) ->
+tcp_pipeline_halted(Config) ->
     Packet = packet(),
     Transport = proplists:get_value(transport, Config),
     CustomOpts = #{idle_timeout_ms => 100},
@@ -846,6 +886,8 @@ transport_module(tls) ->
 
 -spec recv_data(tcp | tls, gen_tcp:socket() | ssl:sslsocket(), non_neg_integer(), timeout()) ->
     {ok, binary()} | {error, term()}.
+recv_data(udp, Socket, Length, Timeout) ->
+    gen_udp:recv(Socket, Length, Timeout);
 recv_data(tcp, Socket, Length, Timeout) ->
     gen_tcp:recv(Socket, Length, Timeout);
 recv_data(tls, Socket, Length, Timeout) ->
@@ -898,6 +940,17 @@ stats(Config) ->
             {stats_2, tcp} := #{queue_length := _}
         },
         erpc:call(Node, erldns_listeners, get_stats, [])
+    ).
+
+build_error_response_tuple_format(_) ->
+    Q = #dns_query{name = ~"example.com", type = ?DNS_TYPE_A},
+    Msg = #dns_message{qc = 1, questions = [Q]},
+    % Test with {_, Msg, _} tuple format
+    ErrorTuple = {some_error, Msg, ~"extra_data"},
+    ErrorResponse = erldns_encoder:build_error_response(ErrorTuple),
+    ?assertMatch(
+        #dns_message{rc = ?DNS_RCODE_SERVFAIL, qr = true, aa = true, anc = 0, auc = 0, adc = 0},
+        ErrorResponse
     ).
 
 %% Test that reset_queues() clears UDP queues and TCP connection stats.
@@ -966,7 +1019,7 @@ def_opts() ->
 
 request_response(udp, Socket, Packet, Port) ->
     ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
-    {ok, {_, _, RecvPacket}} = gen_udp:recv(Socket, 65535, 2000),
+    {ok, {_, _, RecvPacket}} = recv_data(udp, Socket, 65535, 2000),
     Response = dns:decode_message(RecvPacket),
     ?assertMatch(#dns_message{}, Response),
     Response;
@@ -1050,6 +1103,11 @@ waste_fun() ->
 packet() ->
     Q = #dns_query{name = ~"example.com", type = ?DNS_TYPE_A},
     Msg = #dns_message{qc = 1, questions = [Q]},
+    dns:encode_message(Msg).
+
+packet_notimp() ->
+    Q = #dns_query{name = ~"example.com", type = ?DNS_TYPE_A},
+    Msg = #dns_message{oc = ?DNS_OPCODE_IQUERY, qc = 1, questions = [Q]},
     dns:encode_message(Msg).
 
 packet_not_a_question() ->

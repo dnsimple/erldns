@@ -257,7 +257,7 @@ handle_worker_timeout(WorkerPid, TimerRef, #state{active_workers = ActiveWorkers
 -spec send_servfail_response(state(), dns:message_bin()) -> term().
 send_servfail_response(#state{socket = Socket, socket_type = SocketType}, RequestBin) ->
     try
-        Decoded = dns:decode_message(RequestBin),
+        Decoded = dns:decode_query(RequestBin),
         ServfailMsg = erldns_encoder:build_error_response(Decoded),
         EncodedResponse = dns:encode_message(ServfailMsg),
         Payload = [<<(byte_size(EncodedResponse)):16>>, EncodedResponse],
@@ -265,7 +265,7 @@ send_servfail_response(#state{socket = Socket, socket_type = SocketType}, Reques
     catch
         Class:Reason:Stacktrace ->
             ExceptionMetadata = #{
-                what => connection_init_failed,
+                what => send_servfail_failed,
                 transport => tcp,
                 kind => Class,
                 reason => Reason,
