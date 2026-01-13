@@ -65,7 +65,7 @@ tcp_tls_tests() ->
         tcp_pipeline_halted,
         encoder_failure,
         closed_when_client_closes,
-        ingress_timeout,
+        tcp_ingress_timeout,
         worker_timeout,
         load_shedding_max_number_of_connections,
         packet_arrives_in_pieces,
@@ -701,16 +701,13 @@ closed_when_client_closes(Config) ->
 %% Test that TCP/TLS listener handles ingress timeouts correctly.
 %% When ingress timeout occurs (packet not received in time), a 'dropped' event
 %% should be emitted. Note: Ingress timeout is for receiving the packet, not processing.
-ingress_timeout(Config) ->
+tcp_ingress_timeout(Config) ->
     Transport = proplists:get_value(transport, Config),
-    CustomOpts = #{ingress_request_timeout => 1000},
+    CustomOpts = #{ingress_request_timeout => 2000},
     #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, Transport, dropped, [], CustomOpts),
     Socket1 = connect_socket(Transport, {127, 0, 0, 1}, Port),
-    % Send length prefix indicating a large packet, but send only partial data
-    % Ingress timeout is 50ms, so if we send partial data and wait, it should timeout
-    LargePacketSize = 65535,
-    send_data(Transport, Socket1, <<LargePacketSize:16, 0, 0, 0, 0, 0>>),
-    % Wait for ingress timeout to occur (50ms + buffer)
+    send_data(Transport, Socket1, <<65535:16, 0, 0, 0, 0, 0>>),
+    % Wait for ingress timeout to occur
     assert_telemetry_event(dropped),
     close_socket(Transport, Socket1).
 
