@@ -1,6 +1,8 @@
 -module(erldns_proto_udp_sup).
 -moduledoc false.
 
+-define(MIN_HEAP_SIZE, 650).
+
 -behaviour(supervisor).
 
 -export([start_link/4, init/1]).
@@ -39,7 +41,7 @@ workers(WorkersName, NumWorkers, Timeout) ->
     WorkerOpts = #{
         workers => NumWorkers,
         worker => {erldns_proto_udp, Timeout},
-        worker_opt => [],
+        worker_opt => [{spawn_opt, [{min_heap_size, ?MIN_HEAP_SIZE}]}],
         worker_shutdown => timer:seconds(1) + Timeout,
         pool_sup_shutdown => infinity,
         strategy => #{

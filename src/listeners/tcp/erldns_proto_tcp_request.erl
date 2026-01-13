@@ -4,6 +4,8 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 
+-define(MIN_HEAP_SIZE, 650).
+
 -export([start_link/6]).
 -export([request/6]).
 
@@ -17,7 +19,7 @@
 ) ->
     pid().
 start_link(RequestBinary, TS0, Socket, SocketType, IpAddr, Port) ->
-    SpawnOpts = [link, {min_heap_size, 500}],
+    SpawnOpts = [link, {min_heap_size, ?MIN_HEAP_SIZE}],
     Params = [RequestBinary, TS0, Socket, SocketType, IpAddr, Port],
     proc_lib:spawn_opt(?MODULE, request, Params, SpawnOpts).
 
