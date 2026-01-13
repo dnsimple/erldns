@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.0.0-rc1
+
 ### Added
 
 - RFC7766 pipelining support for TCP/TLS with concurrent request processing ([#300](https://github.com/dnsimple/erldns/pull/300))
@@ -21,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - Global `ingress_tcp_request_timeout` and `ingress_udp_request_timeout` application environment variables ([#300](https://github.com/dnsimple/erldns/pull/300))
+
+### Updated
+
+- Upgrade dns_erlang dependency ([#305](https://github.com/dnsimple/erldns/pull/305))
+  - Includes small performance optimisations
+  - Adds support for many new record types
+  - Adds `dns:decode_query/1` for early stop of bad input
 
 ## v9.1.0
 
