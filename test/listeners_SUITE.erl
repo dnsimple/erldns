@@ -640,7 +640,7 @@ tcp_ignore_bad_packet(Config) ->
     Transport = proplists:get_value(transport, Config),
     #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, Transport, error, []),
     Socket1 = connect_socket(Transport, {127, 0, 0, 1}, Port),
-    Payload = [<<50:16>>, crypto:strong_rand_bytes(50)],
+    Payload = [<<50:16>>, <<256:400>>],
     send_data(Transport, Socket1, Payload),
     assert_telemetry_event(error),
     {error, _} = recv_data(Transport, Socket1, 0, 100).
