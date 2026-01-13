@@ -41,7 +41,7 @@ workers(WorkersName, NumWorkers, Timeout) ->
     WorkerOpts = #{
         workers => NumWorkers,
         worker => {erldns_proto_udp, Timeout},
-        worker_opt => [{min_heap_size, ?MIN_HEAP_SIZE}],
+        worker_opt => [{spawn_opt, [{min_heap_size, ?MIN_HEAP_SIZE}]}],
         worker_shutdown => timer:seconds(1) + Timeout,
         pool_sup_shutdown => infinity,
         strategy => #{
