@@ -81,23 +81,12 @@ drop_loop(Codel, Budget) ->
 -spec handle(inet:socket(), inet:ip_address(), inet:port_number(), integer(), binary()) ->
     dynamic().
 handle(Socket, IpAddr, Port, TS, Bin) ->
-    Measurements = #{monotonic_time => TS, request_size => byte_size(Bin)},
-    InitMetadata = #{transport => udp},
-    telemetry:execute([erldns, request, start], Measurements, InitMetadata),
     try
-        case dns:decode_message(Bin) of
-            {trailing_garbage, DecodedMessage, TrailingGarbage} ->
-                ?LOG_INFO(
-                    #{what => trailing_garbage, trailing_garbage => TrailingGarbage},
-                    ?LOG_METADATA
-                ),
-                handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS);
-            {Error, Message, _} ->
-                ErrorMetadata = #{transport => udp, reason => Error, message => Message},
-                request_error_event(ErrorMetadata);
-            DecodedMessage ->
-                handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS)
-        end
+        Measurements = #{monotonic_time => TS, request_size => byte_size(Bin)},
+        InitMetadata = #{transport => udp},
+        telemetry:execute([erldns, request, start], Measurements, InitMetadata),
+        Decoded = dns:decode_query(Bin),
+        handle_decoded(Socket, IpAddr, Port, TS, Decoded)
     catch
         Class:Reason:Stacktrace ->
             ExceptionMetadata = #{
@@ -106,19 +95,34 @@ handle(Socket, IpAddr, Port, TS, Bin) ->
             request_error_event(ExceptionMetadata)
     end.
 
--spec handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS0) -> Result when
+-spec handle_decoded(Socket, IpAddr, Port, TS0, Msg) -> Result when
     Socket :: inet:socket(),
     IpAddr :: inet:ip_address(),
     Port :: inet:port_number(),
-    DecodedMessage :: dns:message(),
     TS0 :: integer(),
+    Msg :: {dns:decode_error(), dns:message() | undefined, binary()} | dns:message(),
     Result :: dynamic().
-handle_decoded(_, _, _, #dns_message{qr = true}, _) ->
-    {error, not_a_question};
-handle_decoded(Socket, IpAddr, Port, DecodedMessage, TS0) ->
+handle_decoded(Socket, IpAddr, Port, TS0, #dns_message{} = Msg) ->
     InitOpts = #{monotonic_time => TS0, transport => udp, socket => {Socket, Port}, host => IpAddr},
-    Response = erldns_pipeline:call(DecodedMessage, InitOpts),
-    handle_pipeline_response(Socket, IpAddr, Port, TS0, Response).
+    Response = erldns_pipeline:call(Msg, InitOpts),
+    handle_pipeline_response(Socket, IpAddr, Port, TS0, Response);
+handle_decoded(Socket, IpAddr, Port, TS0, {trailing_garbage, Msg, TrailingGarbage}) ->
+    Metadata = #{
+        transport => udp,
+        reason => trailing_garbage,
+        trailing_garbage => TrailingGarbage,
+        message => Msg,
+        monotonic_time => TS0
+    },
+    request_error_event(Metadata),
+    handle_decoded(Socket, IpAddr, Port, TS0, Msg);
+handle_decoded(Socket, IpAddr, Port, TS0, {notimp, Msg, _}) ->
+    Metadata = #{transport => udp, reason => notimp, message => Msg, monotonic_time => TS0},
+    request_error_event(Metadata),
+    handle_pipeline_response(Socket, IpAddr, Port, TS0, Msg);
+handle_decoded(_, _, _, TS0, {Error, Msg, _}) ->
+    Metadata = #{transport => udp, reason => Error, message => Msg, monotonic_time => TS0},
+    request_error_event(Metadata).
 
 handle_pipeline_response(_, _, _, _, halt) ->
     ok;

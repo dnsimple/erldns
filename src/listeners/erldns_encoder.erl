@@ -77,10 +77,13 @@ encode_message(Message, Opts) ->
 % Private functions
 
 %% Populate a response with a servfail error
--spec build_error_response(dns:message() | {_, dns:message()}) -> dns:message().
+-spec build_error_response(dns:message() | {_, dns:message()} | {_, dns:message(), _}) ->
+    dns:message().
 build_error_response(#dns_message{} = Message) ->
     build_error_response(Message, ?DNS_RCODE_SERVFAIL);
 build_error_response({_, #dns_message{} = Message}) ->
+    build_error_response(Message, ?DNS_RCODE_SERVFAIL);
+build_error_response({_, #dns_message{} = Message, _}) ->
     build_error_response(Message, ?DNS_RCODE_SERVFAIL).
 
 build_error_response(Message, Rcode) ->
