@@ -165,7 +165,7 @@ See [Module pipes](#module-module-pipes) and [Function pipes](#module-function-p
 
 -type pipeline() :: [fun((dns:message(), opts()) -> return())].
 
--export_type([transport/0, host/0, pipe/0, opts/0, return/0]).
+-export_type([transport/0, host/0, pipe/0, opts/0, deps/0, return/0]).
 
 -doc """
 Initialise the pipe handler, triggering side-effects and preparing any necessary metadata.
