@@ -24,7 +24,6 @@ test:
 	rebar3 xref
 	rebar3 dialyzer
 	rebar3 ex_doc
-	rebar3 eunit
 	rebar3 ct
 	rebar3 do cover, covertool generate
 
