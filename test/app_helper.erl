@@ -3,11 +3,24 @@
 
 -include_lib("common_test/include/ct.hrl").
 
+-define(PEER_ATTEMPTS, 3).
+% 30 seconds for CI environments
+-define(PEER_STARTUP_TIMEOUT, 30000).
+
 start_erldns(Config, Env) ->
+    start_erldns(Config, Env, 1).
+
+start_erldns(_, _, Attempt) when Attempt =:= ?PEER_ATTEMPTS + 1 ->
+    exit({peer, too_many_attempts});
+start_erldns(Config, Env, Attempt) ->
+    ct:pal("Attempting to create peer (attempt ~p/~p)", [Attempt, ?PEER_ATTEMPTS]),
     Self = self(),
     Ref = make_ref(),
     {Pid, MonitorRef} = spawn_monitor(fun() ->
+        StartTime = erlang:monotonic_time(microsecond),
         Res = ?CT_PEER(["-pa" | code:get_path()]),
+        Elapsed = erlang:monotonic_time(microsecond) - StartTime,
+        ct:pal("Peer node created in ~p ms", [Elapsed / 1000]),
         Self ! {Ref, Res},
         receive
             stop ->
@@ -19,12 +32,22 @@ start_erldns(Config, Env) ->
             erlang:demonitor(MonitorRef, [flush]),
             NewConfig = [{pid, Pid}, {peer, Peer}, {node, Node} | Config],
             do_start_erldns(NewConfig, Env);
-        {Ref, Other} ->
-            exit(Other);
-        {'DOWN', MonitorRef, _, _, _} ->
-            exit({peer, died})
-    after 10000 ->
-        exit({peer, timeout})
+        {Ref, {error, Reason}} ->
+            erlang:demonitor(MonitorRef, [flush]),
+            ct:pal("Peer process died: ~p", [Reason]),
+            ct:sleep(1000 * Attempt),
+            start_erldns(Config, Env, Attempt + 1);
+        {'DOWN', MonitorRef, _, Pid, Reason} ->
+            erlang:demonitor(MonitorRef, [flush]),
+            ct:pal("Peer process died: ~p", [Reason]),
+            ct:sleep(1000 * Attempt),
+            start_erldns(Config, Env, Attempt + 1)
+    after ?PEER_STARTUP_TIMEOUT ->
+        erlang:demonitor(MonitorRef, [flush]),
+        erlang:is_process_alive(Pid) andalso exit(Pid, kill),
+        ct:pal("Peer process timed-out"),
+        ct:sleep(1000 * Attempt),
+        start_erldns(Config, Env, Attempt + 1)
     end.
 
 do_start_erldns(Config, Env) ->
