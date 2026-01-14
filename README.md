@@ -123,6 +123,5 @@ This runs the following:
 - [xref](https://www.erlang.org/doc/apps/tools/xref.html)
 - [dialyzer](https://www.erlang.org/doc/apps/dialyzer/dialyzer.html)
 - [ExDoc](https://hexdocs.pm/ex_doc/readme.html)
-- [EUnit](https://www.erlang.org/doc/apps/eunit/chapter.html)
 - [Common Tests](https://www.erlang.org/doc/apps/common_test/ct.html)
 - [Coverage](https://www.erlang.org/doc/apps/tools/cover.html)
