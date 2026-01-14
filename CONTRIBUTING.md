@@ -11,17 +11,20 @@
 ### Setup
 
 1. Clone the repository:
+
    ```sh
    git clone git@github.com:dnsimple/erldns.git
    cd erldns
    ```
 
 2. Install dependencies:
+
    ```sh
    make
    ```
 
    To update dependencies:
+
    ```sh
    rebar3 upgrade --all
    ```
@@ -31,6 +34,7 @@
 ### Formatting
 
 Format code before committing:
+
 ```sh
 make format
 ```
@@ -38,6 +42,7 @@ make format
 ### Linting
 
 Check code style:
+
 ```sh
 make lint
 ```
@@ -45,6 +50,7 @@ make lint
 ### Testing
 
 Run the full test suite:
+
 ```sh
 make test
 ```
@@ -54,6 +60,7 @@ This runs formatting checks, linting, static analysis (xref, dialyzer), document
 ### Interactive Development
 
 Start an Erlang shell with the application loaded:
+
 ```sh
 rebar3 shell
 ```
@@ -65,12 +72,14 @@ rebar3 shell
 1. Update `CHANGELOG.md` - finalize the `## main` section with the version number
 
 1. Use semantic versioning: vMAJOR.MINOR.PATCH:
+
    ```sh
    # Example
    export VERSION=v1.2.3
    ```
 
 1. Commit and push:
+
    ```sh
    git commit -a -m "Release $VERSION"
    git push origin main
@@ -79,6 +88,7 @@ rebar3 shell
 1. Wait for CI to complete successfully
 
 1. Create and push a signed tag:
+
    ```sh
    git tag -a v$VERSION -s -m "Release $VERSION"
    git push origin --tags
@@ -113,8 +123,8 @@ Follow the [Inaka Erlang Guidelines](https://github.com/inaka/erlang_guidelines)
 - Prefer emitting `telemetry` events under the `erldns` list head when needed
 - Emit logs with `logger` sporadically,
   - Use structured logging with contextual keys:
-   - `what`: mandatory, should point to an atom with a short explanation of the issue
-   - `message`: optional, if present should contain a utf8 binary with a human-friendly explanation
+    - `what`: mandatory, should point to an atom with a short explanation of the issue
+    - `message`: optional, if present should contain a utf8 binary with a human-friendly explanation
   - Provide the log domain in the metadata scoped to this repository (`#{domain => [erldns, ...]}`)
 
 ### Commit Messages

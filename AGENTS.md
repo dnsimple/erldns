@@ -15,6 +15,7 @@ Instructions for AI coding agents working on this Erlang DNS server project.
 ## Project Structure
 
 Main subsystems:
+
 - `erldns_zones` - Zone loading and caching
 - `erldns_pipeline` - DNS query processing pipeline
 - `erldns_listeners` - UDP/TCP/TLS listeners for DNS queries
