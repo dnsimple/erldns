@@ -131,7 +131,7 @@ Follow the [Inaka Erlang Guidelines](https://github.com/inaka/erlang_guidelines)
 
 Use conventional, descriptive commit messages:
 
-```
+```gitcommit
 Short summary (<= 72 chars)
 
 Detailed description explaining:
