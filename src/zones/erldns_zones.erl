@@ -23,8 +23,7 @@ For more details about its subsections, see:
         format => auto,
         timeout => timer:minutes(5),
         codecs => [sample_custom_zone_codec],
-        context_options => #{match_empty => true, allow => [<<"anycast">>, <<"AMS">>, <<"TKO">>],
-        rfc_compliant_ent => true}
+        context_options => #{match_empty => true, allow => [<<"anycast">>, <<"AMS">>, <<"TKO">>]}
     }},
 ]}
 ```
@@ -60,11 +59,6 @@ Zone configuration.
 - `context_options`: allow you to filter loading certain records in a zone
   depending on configuration details. See [`ZONES`](priv/zones/ZONES.md) for more details.
 
-- `rfc_compliant_ent`: updates the handling of empty non-terminals ENTs
-  to be complaint with [RFC4592](https://datatracker.ietf.org/doc/html/rfc4592).
-  When set to `true`, ENTs will be used as the source of wildcard synthesis if applicable.
-  Defaults to `false` in order to keep the old behaviour.
-
 See `m:erldns_zone_loader` for more details.
 """.
 -type config() :: #{
@@ -77,8 +71,7 @@ See `m:erldns_zone_loader` for more details.
     context_options => #{
         match_empty => boolean(),
         allow => [binary()]
-    },
-    rfc_compliant_ent => boolean()
+    }
 }.
 -type version() :: binary().
 -type format() :: json | zonefile | auto.
@@ -86,7 +79,7 @@ See `m:erldns_zone_loader` for more details.
 
 -behaviour(supervisor).
 
--export([start_link/0, init/1, rfc_compliant_ent_enabled/0]).
+-export([start_link/0, init/1]).
 
 -doc false.
 -spec start_link() -> supervisor:startlink_ret().
@@ -104,14 +97,6 @@ init(noargs) ->
             supervisor(erldns_zone_loader_sup)
         ],
     {ok, {SupFlags, Children}}.
-
--doc false.
--spec rfc_compliant_ent_enabled() -> boolean().
-rfc_compliant_ent_enabled() ->
-    case application:get_env(erldns, zones, #{}) of
-        #{rfc_compliant_ent := Val} when is_boolean(Val) -> Val;
-        #{} -> false
-    end.
 
 -spec worker(module()) -> supervisor:child_spec().
 worker(Module) ->
