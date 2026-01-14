@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  markdownlint-cli:
+  markdown-lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -25,13 +25,13 @@ jobs:
           files: .
           config_file: ".markdownlint.yaml"
 
-  yamllint:
+  yaml-lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
       - name: Run YAML Lint
-        uses: actionshub/yamllint@main
+        uses: actionshub/yamllint@v1.8.3
 
   test:
     name: OTP:${{matrix.otp}}-OS:${{ matrix.os }}
