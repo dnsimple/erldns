@@ -31,3 +31,7 @@ test:
 .PHONY: format
 format:
 	rebar3 fmt
+
+.PHONY: lint
+lint:
+	rebar3 lint
