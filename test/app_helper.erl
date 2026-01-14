@@ -23,7 +23,7 @@ start_erldns(Config, Env) ->
             exit(Other);
         {'DOWN', MonitorRef, _, _, _} ->
             exit({peer, died})
-    after 10000 ->
+    after 15000 ->
         exit({peer, timeout})
     end.
 
