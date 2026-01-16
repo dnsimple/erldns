@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Removed
+
+- `rfc_compliant_ent` configuration option. RFC 4592 compliant empty non-terminal (ENT) handling is now always enabled.
+
 ## v10.0.0-rc1
 
 ### Added
