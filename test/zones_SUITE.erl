@@ -12,6 +12,7 @@ all() ->
     [
         {group, loader},
         {group, codec},
+        {group, codec_sequential},
         {group, cache}
     ].
 
@@ -44,12 +45,7 @@ groups() ->
             queued_requests,
             getter_coverage
         ]},
-        {codec, [], [
-            bad_custom_codecs_module_does_not_exist,
-            bad_custom_codecs_module_does_not_export_callbacks,
-            custom_decode,
-            encode_meta_to_json,
-            encode_meta_to_json_dnssec,
+        {codec, [parallel], [
             json_to_erlang,
             json_to_erlang_txt_spf_records,
             json_to_erlang_ensure_sorting_and_defaults,
@@ -60,8 +56,35 @@ groups() ->
             json_record_aaaa_to_erlang,
             json_record_cds_to_erlang,
             json_record_tlsa_to_erlang,
+            json_record_svcb_to_erlang,
+            json_record_https_to_erlang,
+            json_record_svcb_mandatory_valid,
+            json_record_svcb_mandatory_self_reference,
+            json_record_svcb_mandatory_missing_keys,
+            json_record_https_mandatory_valid,
+            json_record_svcb_no_mandatory,
+            json_record_svcb_unknown_param,
+            json_record_svcb_ech_param,
+            json_record_svcb_invalid_value_format,
+            json_record_svcb_ipv4hint_binary,
+            json_record_svcb_ipv6hint_binary,
+            json_record_svcb_no_default_alpn_atom,
+            json_record_svcb_ipv4hint_invalid,
+            json_record_svcb_ipv6hint_invalid,
+            json_record_null_data,
+            json_record_unsupported_type,
+            json_record_context_filtered,
+            encode_meta_to_json,
+            encode_decode_svcb,
+            encode_decode_https,
             parse_json_keys_unsorted_proplists_time_unit,
             parse_json_keys_unsorted_proplists
+        ]},
+        {codec_sequential, [], [
+            custom_decode,
+            encode_meta_to_json_dnssec,
+            bad_custom_codecs_module_does_not_exist,
+            bad_custom_codecs_module_does_not_export_callbacks
         ]},
         {cache, [], [
             cache_coverage,
@@ -108,6 +131,8 @@ init_per_group(loader, Config) ->
     [init_supervision_tree(Config, loader) | Config];
 init_per_group(cache, Config) ->
     [init_supervision_tree(Config, cache) | Config];
+init_per_group(codec, Config) ->
+    [init_supervision_tree(Config, codec) | Config];
 init_per_group(_, Config) ->
     Config.
 
@@ -121,6 +146,11 @@ end_per_group(loader, Config) ->
     application:unset_env(erldns, zones),
     Pid = proplists:get_value(loader, Config),
     ct:pal("Cache process is alive: ~p~n", [erlang:is_process_alive(Pid)]),
+    exit(Pid, stop);
+end_per_group(codec, Config) ->
+    application:unset_env(erldns, zones),
+    Pid = proplists:get_value(codec, Config),
+    ct:pal("Codec process is alive: ~p~n", [erlang:is_process_alive(Pid)]),
     exit(Pid, stop);
 end_per_group(_, _Config) ->
     application:unset_env(erldns, zones).
@@ -172,25 +202,24 @@ custom_decode(_) ->
     ?assertEqual(not_implemented, sample_custom_zone_codec:decode(#{})).
 
 encode_meta_to_json(_) ->
-    {ok, _} = erldns_zone_cache:start_link(),
-    {ok, _} = erldns_zone_codec:start_link(),
-    ZoneName = dns:dname_to_lower(~"example.com"),
+    ZoneName = unique_name(?FUNCTION_NAME),
     Z = erldns_zone_codec:build_zone(ZoneName, ~"", [], []),
     erldns_zone_cache:put_zone(Z),
     Data = erldns_zone_codec:encode(Z, #{mode => zone_meta_to_json}),
     JSON = iolist_to_binary(json:encode(Data)),
     ?assert(is_binary(JSON)),
+    Decoded = json:decode(JSON),
     ?assertMatch(
         #{
             ~"erldns" := #{
                 ~"zone" := #{
-                    ~"name" := ~"example.com",
+                    ~"name" := ZoneName,
                     ~"version" := _,
                     ~"records_count" := 0
                 }
             }
         },
-        json:decode(JSON)
+        Decoded
     ).
 
 encode_meta_to_json_dnssec(Config) ->
@@ -198,6 +227,8 @@ encode_meta_to_json_dnssec(Config) ->
     Path = filename:join(DataDir, "dnssec-zone.json"),
     application:set_env(erldns, zones, #{path => Path, codecs => [sample_custom_zone_codec]}),
     {ok, _} = erldns_zones:start_link(),
+    LoadConfig = #{path => Path},
+    ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig)),
     ZoneName = ~"example-dnssec.com",
     RecordName = ~"example-dnssec.com",
     Records = erldns_zone_cache:get_zone_records(ZoneName),
@@ -502,6 +533,549 @@ parse_json_keys_unsorted_proplists(_) ->
             }
         ])
     ).
+
+json_record_svcb_to_erlang(_) ->
+    Name = ~"example.com",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_SVCB,
+            data =
+                #dns_rrdata_svcb{
+                    svc_priority = 0,
+                    target_name = ~"target.example.com",
+                    svc_params = #{?DNS_SVCB_PARAM_PORT => 8080}
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 0,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{~"port" => 8080}
+            },
+            ~"context" => null
+        })
+    ).
+
+json_record_https_to_erlang(_) ->
+    Name = ~"example.com",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_HTTPS,
+            data =
+                #dns_rrdata_https{
+                    svc_priority = 1,
+                    target_name = ~".",
+                    svc_params = #{
+                        ?DNS_SVCB_PARAM_ALPN => [~"h2", ~"h3"],
+                        ?DNS_SVCB_PARAM_NO_DEFAULT_ALPN => none
+                    }
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"HTTPS",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~".",
+                ~"svc_params" => #{
+                    ~"alpn" => [~"h2", ~"h3"],
+                    ~"no-default-alpn" => <<"none">>
+                }
+            },
+            ~"context" => null
+        })
+    ).
+
+json_record_svcb_mandatory_valid(_) ->
+    Name = ~"example.com",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_SVCB,
+            data =
+                #dns_rrdata_svcb{
+                    svc_priority = 1,
+                    target_name = ~"target.example.com",
+                    svc_params = #{
+                        ?DNS_SVCB_PARAM_MANDATORY => [?DNS_SVCB_PARAM_PORT, ?DNS_SVCB_PARAM_ALPN],
+                        ?DNS_SVCB_PARAM_PORT => 8080,
+                        ?DNS_SVCB_PARAM_ALPN => [~"h2"]
+                    }
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"mandatory" => [~"port", ~"alpn"],
+                    ~"port" => 8080,
+                    ~"alpn" => [~"h2"]
+                }
+            }
+        })
+    ).
+
+json_record_svcb_mandatory_self_reference(_) ->
+    Name = ~"example.com",
+    ?assertException(
+        throw,
+        {svcb_mandatory_validation_error, {mandatory_self_reference, ?DNS_SVCB_PARAM_MANDATORY}},
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"mandatory" => [~"mandatory", ~"port"]
+                }
+            }
+        })
+    ).
+
+json_record_svcb_mandatory_missing_keys(_) ->
+    Name = ~"example.com",
+    ?assertException(
+        throw,
+        {svcb_mandatory_validation_error, {missing_mandatory_keys, [?DNS_SVCB_PARAM_PORT]}},
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"mandatory" => [~"port", ~"alpn"],
+                    ~"alpn" => [~"h2"]
+                    %% Missing port parameter
+                }
+            }
+        })
+    ).
+
+json_record_https_mandatory_valid(_) ->
+    Name = ~"example.com",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_HTTPS,
+            data =
+                #dns_rrdata_https{
+                    svc_priority = 1,
+                    target_name = ~"target.example.com",
+                    svc_params = #{
+                        ?DNS_SVCB_PARAM_MANDATORY => [?DNS_SVCB_PARAM_IPV4HINT],
+                        ?DNS_SVCB_PARAM_IPV4HINT => [{192, 0, 2, 1}]
+                    }
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"HTTPS",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"mandatory" => [~"ipv4hint"],
+                    ~"ipv4hint" => [~"192.0.2.1"]
+                }
+            }
+        })
+    ).
+
+json_record_svcb_no_mandatory(_) ->
+    Name = ~"example.com",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_SVCB,
+            data =
+                #dns_rrdata_svcb{
+                    svc_priority = 1,
+                    target_name = ~"target.example.com",
+                    svc_params = #{
+                        ?DNS_SVCB_PARAM_PORT => 443,
+                        ?DNS_SVCB_PARAM_IPV6HINT => [{16#2001, 16#db8, 0, 0, 0, 0, 0, 1}]
+                    }
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"port" => 443,
+                    ~"ipv6hint" => [~"2001:db8::1"]
+                }
+            }
+        })
+    ).
+
+json_record_svcb_unknown_param(_) ->
+    Name = ~"example.com",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_SVCB,
+            data =
+                #dns_rrdata_svcb{
+                    svc_priority = 1,
+                    target_name = ~"target.example.com",
+                    svc_params = #{
+                        ?DNS_SVCB_PARAM_PORT => 8080
+                    }
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"port" => 8080,
+                    ~"unknown_param" => ~"should_be_ignored",
+                    ~"another_unknown" => 123
+                }
+            }
+        })
+    ).
+
+json_record_svcb_ech_param(_) ->
+    Name = ~"example.com",
+    ECHData = <<1, 2, 3, 4, 5>>,
+    %% ECH parameter is stored as binary in the decoder
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_SVCB,
+            data =
+                #dns_rrdata_svcb{
+                    svc_priority = 1,
+                    target_name = ~"target.example.com",
+                    svc_params = #{
+                        ?DNS_SVCB_PARAM_ECH => ECHData
+                    }
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"ech" => ECHData
+                }
+            }
+        })
+    ).
+
+json_record_svcb_invalid_value_format(_) ->
+    Name = ~"example.com",
+    %% Test that invalid value formats for known parameters are skipped
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_SVCB,
+            data =
+                #dns_rrdata_svcb{
+                    svc_priority = 1,
+                    target_name = ~"target.example.com",
+                    svc_params = #{
+                        ?DNS_SVCB_PARAM_PORT => 8080
+                    }
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"port" => 8080,
+                    %% Invalid: should be list
+                    ~"alpn" => <<"not_a_list">>,
+                    %% Invalid: should be list
+                    ~"ipv4hint" => <<"not_a_list">>
+                }
+            }
+        })
+    ).
+
+json_record_svcb_ipv4hint_binary(_) ->
+    Name = ~"example.com",
+    %% Test IPv4 hint with binary IP addresses (should convert to list)
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_SVCB,
+            data =
+                #dns_rrdata_svcb{
+                    svc_priority = 1,
+                    target_name = ~"target.example.com",
+                    svc_params = #{
+                        ?DNS_SVCB_PARAM_IPV4HINT => [{192, 0, 2, 1}, {192, 0, 2, 2}]
+                    }
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"ipv4hint" => [<<"192.0.2.1">>, <<"192.0.2.2">>]
+                }
+            }
+        })
+    ).
+
+json_record_svcb_ipv6hint_binary(_) ->
+    Name = ~"example.com",
+    %% Test IPv6 hint with binary IP addresses (should convert to list)
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_SVCB,
+            data =
+                #dns_rrdata_svcb{
+                    svc_priority = 1,
+                    target_name = ~"target.example.com",
+                    svc_params = #{
+                        ?DNS_SVCB_PARAM_IPV6HINT => [{16#2001, 16#db8, 0, 0, 0, 0, 0, 1}]
+                    }
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"ipv6hint" => [<<"2001:db8::1">>]
+                }
+            }
+        })
+    ).
+
+json_record_svcb_no_default_alpn_atom(_) ->
+    Name = ~"example.com",
+    %% Test NO_DEFAULT_ALPN with atom 'none' (not just <<"none">>)
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_SVCB,
+            data =
+                #dns_rrdata_svcb{
+                    svc_priority = 1,
+                    target_name = ~"target.example.com",
+                    svc_params = #{
+                        ?DNS_SVCB_PARAM_NO_DEFAULT_ALPN => none
+                    }
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"no-default-alpn" => none
+                }
+            }
+        })
+    ).
+
+json_record_svcb_ipv4hint_invalid(_) ->
+    Name = ~"example.com",
+    %% Test that invalid IPv4 addresses throw an error
+    ?assertException(
+        throw,
+        {invalid_ipv4, _},
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"ipv4hint" => [~"invalid.ip.address"]
+                }
+            }
+        })
+    ).
+
+json_record_svcb_ipv6hint_invalid(_) ->
+    Name = ~"example.com",
+    %% Test that invalid IPv6 addresses throw an error
+    ?assertException(
+        throw,
+        {invalid_ipv6, _},
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"ipv6hint" => [~"invalid::ipv6::address"]
+                }
+            }
+        })
+    ).
+
+json_record_null_data(_) ->
+    %% Test that records with null data return not_implemented
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => ~"example.com",
+            ~"type" => ~"A",
+            ~"ttl" => 3600,
+            ~"data" => null
+        })
+    ).
+
+json_record_unsupported_type(_) ->
+    %% Test that unsupported record types return not_implemented
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:decode_record(
+            #{
+                ~"name" => ~"example.com",
+                ~"type" => ~"UNKNOWN_TYPE",
+                ~"ttl" => 3600,
+                ~"data" => #{}
+            },
+            []
+        )
+    ).
+
+json_record_context_filtered(_) ->
+    %% Test that records are filtered by context options
+    application:set_env(erldns, zones, #{
+        context_options => #{
+            match_empty => false,
+            allow => [~"production"]
+        }
+    }),
+    try
+        %% Record with empty context should be filtered out
+        ?assertEqual(
+            not_implemented,
+            erldns_zone_decoder:decode_record(
+                #{
+                    ~"name" => ~"example.com",
+                    ~"type" => ~"A",
+                    ~"ttl" => 3600,
+                    ~"data" => #{~"ip" => ~"192.0.2.1"},
+                    ~"context" => []
+                },
+                []
+            )
+        ),
+        %% Record with matching context should pass
+        ?assertEqual(
+            #dns_rr{
+                name = ~"example.com",
+                type = ?DNS_TYPE_A,
+                data = #dns_rrdata_a{ip = {192, 0, 2, 1}},
+                ttl = 3600
+            },
+            erldns_zone_decoder:decode_record(
+                #{
+                    ~"name" => ~"example.com",
+                    ~"type" => ~"A",
+                    ~"ttl" => 3600,
+                    ~"data" => #{~"ip" => ~"192.0.2.1"},
+                    ~"context" => [~"production"]
+                },
+                []
+            )
+        )
+    after
+        application:unset_env(erldns, zones)
+    end.
+
+encode_decode_svcb(_) ->
+    Name = unique_name(?FUNCTION_NAME),
+    Record = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_SVCB,
+        data =
+            #dns_rrdata_svcb{
+                svc_priority = 0,
+                target_name = ~"target.example.com",
+                svc_params = #{?DNS_SVCB_PARAM_PORT => 8080}
+            },
+        ttl = 3600
+    },
+    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    erldns_zone_cache:put_zone(Zone),
+    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    ?assertMatch([_], Encoded),
+    [EncodedRecord] = Encoded,
+    ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
+
+encode_decode_https(_) ->
+    Name = unique_name(?FUNCTION_NAME),
+    Record = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_HTTPS,
+        data =
+            #dns_rrdata_https{
+                svc_priority = 1,
+                target_name = ~".",
+                svc_params = #{?DNS_SVCB_PARAM_ALPN => [~"h2", ~"h3"]}
+            },
+        ttl = 3600
+    },
+    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    erldns_zone_cache:put_zone(Zone),
+    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    ?assertMatch([_], Encoded),
+    [EncodedRecord] = Encoded,
+    ?assertMatch(#{~"type" := ~"HTTPS", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
 
 defaults(_) ->
     ?assertMatch(0, erldns_zone_loader:load_zones()).
@@ -1173,7 +1747,19 @@ setup_test(Config, cache) ->
     LoadConfig1 = #{path => filename:join(DataDir, "standard.json")},
     ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig1)),
     LoadConfig2 = #{path => filename:join(DataDir, "dnssec-zone.json")},
-    ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig2)).
+    ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig2));
+setup_test(_Config, codec) ->
+    {ok, _CachePid} = erldns_zone_cache:start_link(),
+    {ok, _CodecPid} = erldns_zone_codec:start_link(),
+    case ets:info(erldns_zones_table) of
+        undefined -> erlang:error(ets_table_not_found);
+        _ -> ok
+    end.
+
+unique_name(TestCase) ->
+    Name = atom_to_binary(TestCase),
+    UniqueId = integer_to_binary(erlang:unique_integer([positive, monotonic])),
+    dns:dname_to_lower(erlang:iolist_to_binary([Name, ~".", UniqueId, ~".com"])).
 
 ksk_private_key() ->
     <<
