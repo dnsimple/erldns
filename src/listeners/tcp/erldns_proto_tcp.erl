@@ -59,41 +59,45 @@ start_link(Ref, Transport, Opts) ->
 -spec init({ranch:ref(), module(), #{atom() => term()}, ts()}) -> {ok, state()} | {stop, term()}.
 init({Ref, Transport, Opts, StartTime}) ->
     process_flag(trap_exit, true),
-    try
-        SocketType = detect_socket_type(Transport),
-        #{
-            max_concurrent_queries := MaxConcurrentQueries,
-            ingress_request_timeout := IngressTimeoutMs,
-            idle_timeout_ms := IdleTimeoutMs,
-            request_timeout_ms := RequestTimeoutMs
-        } = Opts,
-        {ok, Socket} = ranch:handshake(Ref),
-        {ok, {IpAddr, Port}} = get_peername(Socket, SocketType),
-        ok = set_socket_active(Socket, SocketType),
-        State0 = #state{
-            socket = Socket,
-            socket_type = SocketType,
-            connection_start_time = StartTime,
-            ingress_timeout_ms = IngressTimeoutMs,
-            idle_timeout_ms = IdleTimeoutMs,
-            request_timeout_ms = RequestTimeoutMs,
-            max_concurrent_queries = MaxConcurrentQueries,
-            ip_address = IpAddr,
-            port = Port,
-            timer_ref = erlang:start_timer(IngressTimeoutMs, self(), ingress)
-        },
-        gen_server:enter_loop(?MODULE, [], State0)
-    catch
-        Class:Reason:Stacktrace ->
-            ExceptionMetadata = #{
-                what => connection_init_failed,
-                transport => tcp,
-                kind => Class,
-                reason => Reason,
-                stacktrace => Stacktrace
-            },
-            telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata),
-            {stop, {init_failed, Class, Reason}}
+    MaybeState =
+        try
+            SocketType = detect_socket_type(Transport),
+            #{
+                max_concurrent_queries := MaxConcurrentQueries,
+                ingress_request_timeout := IngressTimeoutMs,
+                idle_timeout_ms := IdleTimeoutMs,
+                request_timeout_ms := RequestTimeoutMs
+            } = Opts,
+            {ok, Socket} = ranch:handshake(Ref),
+            {ok, {IpAddr, Port}} = get_peername(Socket, SocketType),
+            ok = set_socket_active(Socket, SocketType),
+            #state{
+                socket = Socket,
+                socket_type = SocketType,
+                connection_start_time = StartTime,
+                ingress_timeout_ms = IngressTimeoutMs,
+                idle_timeout_ms = IdleTimeoutMs,
+                request_timeout_ms = RequestTimeoutMs,
+                max_concurrent_queries = MaxConcurrentQueries,
+                ip_address = IpAddr,
+                port = Port,
+                timer_ref = erlang:start_timer(IngressTimeoutMs, self(), ingress)
+            }
+        catch
+            Class:Reason:Stacktrace ->
+                ExceptionMetadata = #{
+                    what => connection_init_failed,
+                    transport => tcp,
+                    kind => Class,
+                    reason => Reason,
+                    stacktrace => Stacktrace
+                },
+                telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata),
+                {stop, {init_failed, Class, Reason}}
+        end,
+    case MaybeState of
+        #state{} -> gen_server:enter_loop(?MODULE, [], MaybeState);
+        _ -> MaybeState
     end.
 
 -spec handle_call(dynamic(), gen_server:from(), state()) -> {reply, dynamic(), state()}.

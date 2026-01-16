@@ -65,6 +65,7 @@ tcp_tls_tests() ->
         tcp_pipeline_halted,
         encoder_failure,
         closed_when_client_closes,
+        normal_client_close_no_init_error,
         tcp_ingress_timeout,
         worker_timeout,
         load_shedding_max_number_of_connections,
@@ -698,6 +699,17 @@ closed_when_client_closes(Config) ->
     close_socket(Transport, Socket2),
     assert_no_telemetry_event().
 
+%% Test that a well-finished TCP/TLS connection (e.g., after client closes)
+%% does not trigger the connection_init_failed telemetry event.
+%% This verifies the fix where gen_server:enter_loop was moved outside the
+%% try-catch block, preventing normal exits from being caught and logged as errors.
+normal_client_close_no_init_error(Config) ->
+    Transport = proplists:get_value(transport, Config),
+    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, Transport, error, []),
+    Socket = connect_socket(Transport, {127, 0, 0, 1}, Port),
+    close_socket(Transport, Socket),
+    assert_no_telemetry_event().
+
 %% Test that TCP/TLS listener handles ingress timeouts correctly.
 %% When ingress timeout occurs (packet not received in time), a 'dropped' event
 %% should be emitted. Note: Ingress timeout is for receiving the packet, not processing.
@@ -1034,11 +1046,8 @@ telemetry_handler(EventName, Measurements, Metadata, Pid) ->
 
 assert_telemetry_event(Type) ->
     receive
-        {[erldns, request, Type], _, _} ->
-            ok;
-        M ->
-            ct:pal("Unexpected message ~p~n", [M]),
-            assert_telemetry_event(Type)
+        {[erldns, request, Type], Measurements, Metadata} ->
+            {Type, Measurements, Metadata}
     after 10000 ->
         ct:fail("Telemetry event '~p' not triggered", [Type])
     end.
