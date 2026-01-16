@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Codec support for SVCB and HTTPS record types
+- Codec support for the many types introduced in `dns_erlang` v4.9.0
 
 ### Removed
 

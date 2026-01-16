@@ -58,6 +58,15 @@ groups() ->
             json_record_tlsa_to_erlang,
             json_record_svcb_to_erlang,
             json_record_https_to_erlang,
+            json_record_openpgpkey_to_erlang,
+            json_record_smimea_to_erlang,
+            json_record_uri_to_erlang,
+            json_record_wallet_to_erlang,
+            json_record_eui48_to_erlang,
+            json_record_eui64_to_erlang,
+            json_record_csync_to_erlang,
+            json_record_dsync_to_erlang,
+            json_record_zonemd_to_erlang,
             json_record_svcb_mandatory_valid,
             json_record_svcb_mandatory_self_reference,
             json_record_svcb_mandatory_missing_keys,
@@ -77,6 +86,15 @@ groups() ->
             encode_meta_to_json,
             encode_decode_svcb,
             encode_decode_https,
+            encode_decode_openpgpkey,
+            encode_decode_smimea,
+            encode_decode_uri,
+            encode_decode_wallet,
+            encode_decode_eui48,
+            encode_decode_eui64,
+            encode_decode_csync,
+            encode_decode_dsync,
+            encode_decode_zonemd,
             parse_json_keys_unsorted_proplists_time_unit,
             parse_json_keys_unsorted_proplists
         ]},
@@ -1037,6 +1055,373 @@ json_record_context_filtered(_) ->
         application:unset_env(erldns, zones)
     end.
 
+json_record_openpgpkey_to_erlang(_) ->
+    Name = ~"_openpgpkey.example.com",
+    PgpData = base64:encode(<<1, 2, 3, 4, 5>>),
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_OPENPGPKEY,
+            data = #dns_rrdata_openpgpkey{data = <<1, 2, 3, 4, 5>>},
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"OPENPGPKEY",
+            ~"ttl" => 3600,
+            ~"data" => #{~"data" => PgpData},
+            ~"context" => null
+        })
+    ),
+    %% Negative case: invalid base64 data
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"OPENPGPKEY",
+            ~"ttl" => 3600,
+            ~"data" => #{~"data" => <<"invalid_base64!!!">>},
+            ~"context" => null
+        })
+    ).
+
+json_record_smimea_to_erlang(_) ->
+    Name = ~"_smimecert.example.com",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_SMIMEA,
+            data =
+                #dns_rrdata_smimea{
+                    usage = 3,
+                    selector = 1,
+                    matching_type = 1,
+                    certificate = binary:decode_hex(
+                        ~"DE38C1C08EB239D76B45DA575C70151CE7DA13A935BF5FB887B4E43664D6F728"
+                    )
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SMIMEA",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"usage" => 3,
+                ~"selector" => 1,
+                ~"matching_type" => 1,
+                ~"certificate" =>
+                    ~"DE38C1C08EB239D76B45DA575C70151CE7DA13A935BF5FB887B4E43664D6F728"
+            },
+            ~"context" => null
+        })
+    ),
+    %% Negative case: invalid base64 data
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"OPENPGPKEY",
+            ~"ttl" => 3600,
+            ~"data" => #{~"data" => <<"invalid_base64!!!">>},
+            ~"context" => null
+        })
+    ),
+    %% Negative case: invalid hex data (odd number of characters)
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SMIMEA",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"usage" => 3,
+                ~"selector" => 1,
+                ~"matching_type" => 1,
+                ~"certificate" => ~"DE38C1C08EB239D76B45DA575C70151CE7DA13A935BF5FB887B4E43664D6F72"
+            },
+            ~"context" => null
+        })
+    ),
+    %% Negative case: invalid hex characters
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SMIMEA",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"usage" => 3,
+                ~"selector" => 1,
+                ~"matching_type" => 1,
+                ~"certificate" => ~"INVALID_HEX_DATA!!!"
+            },
+            ~"context" => null
+        })
+    ).
+
+json_record_uri_to_erlang(_) ->
+    Name = ~"example.com",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_URI,
+            data =
+                #dns_rrdata_uri{
+                    priority = 10,
+                    weight = 5,
+                    target = ~"https://example.com/path"
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"URI",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"priority" => 10,
+                ~"weight" => 5,
+                ~"target" => ~"https://example.com/path"
+            },
+            ~"context" => null
+        })
+    ).
+
+json_record_wallet_to_erlang(_) ->
+    Name = ~"example.com",
+    WalletData = base64:encode(<<1, 2, 3, 4, 5>>),
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_WALLET,
+            data = #dns_rrdata_wallet{data = <<1, 2, 3, 4, 5>>},
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"WALLET",
+            ~"ttl" => 3600,
+            ~"data" => #{~"data" => WalletData},
+            ~"context" => null
+        })
+    ),
+    %% Negative case: invalid base64 data
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"WALLET",
+            ~"ttl" => 3600,
+            ~"data" => #{~"data" => <<"invalid_base64!!!">>},
+            ~"context" => null
+        })
+    ).
+
+json_record_eui48_to_erlang(_) ->
+    Name = ~"example.com",
+    AddressHex = ~"001122334455",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_EUI48,
+            data = #dns_rrdata_eui48{address = <<0, 17, 34, 51, 68, 85>>},
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"EUI48",
+            ~"ttl" => 3600,
+            ~"data" => #{~"address" => AddressHex},
+            ~"context" => null
+        })
+    ),
+    %% Negative case: invalid hex (wrong length - not 12 hex chars = 6 bytes)
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"EUI48",
+            ~"ttl" => 3600,
+            %% 11 chars instead of 12
+            ~"data" => #{~"address" => ~"00112233445"},
+            ~"context" => null
+        })
+    ),
+    %% Negative case: invalid hex characters
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"EUI48",
+            ~"ttl" => 3600,
+            ~"data" => #{~"address" => ~"INVALID_HEX"},
+            ~"context" => null
+        })
+    ).
+
+json_record_eui64_to_erlang(_) ->
+    Name = ~"example.com",
+    AddressHex = ~"0011223344556677",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_EUI64,
+            data = #dns_rrdata_eui64{address = <<0, 17, 34, 51, 68, 85, 102, 119>>},
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"EUI64",
+            ~"ttl" => 3600,
+            ~"data" => #{~"address" => AddressHex},
+            ~"context" => null
+        })
+    ),
+    %% Negative case: invalid hex (wrong length - not 16 hex chars = 8 bytes)
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"EUI64",
+            ~"ttl" => 3600,
+            %% 15 chars instead of 16
+            ~"data" => #{~"address" => ~"001122334455667"},
+            ~"context" => null
+        })
+    ),
+    %% Negative case: invalid hex characters
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"EUI64",
+            ~"ttl" => 3600,
+            ~"data" => #{~"address" => ~"INVALID_HEX_DATA"},
+            ~"context" => null
+        })
+    ).
+
+json_record_csync_to_erlang(_) ->
+    Name = ~"example.com",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_CSYNC,
+            data =
+                #dns_rrdata_csync{
+                    soa_serial = 12345,
+                    flags = 0,
+                    types = [1, 2, 28]
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"CSYNC",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"soa_serial" => 12345,
+                ~"flags" => 0,
+                ~"types" => [1, 2, 28]
+            },
+            ~"context" => null
+        })
+    ).
+
+json_record_dsync_to_erlang(_) ->
+    Name = ~"example.com",
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_DSYNC,
+            data =
+                #dns_rrdata_dsync{
+                    rrtype = 1,
+                    scheme = 1,
+                    port = 443,
+                    target = ~"target.example.com"
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"DSYNC",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"rrtype" => 1,
+                ~"scheme" => 1,
+                ~"port" => 443,
+                ~"target" => ~"target.example.com"
+            },
+            ~"context" => null
+        })
+    ).
+
+json_record_zonemd_to_erlang(_) ->
+    Name = ~"example.com",
+    % SHA384 produces 48 bytes (96 hex chars) - using correct hash from dns_erlang test
+    HashHex =
+        <<"F8857A5A89EF49FFC2EBE05F2718735EE574AC9FE68F473083F0F54BFA39C81801E4367FEFF3DEA0C14F57283A7C66AD">>,
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_ZONEMD,
+            data =
+                #dns_rrdata_zonemd{
+                    serial = 2025121100,
+                    scheme = 1,
+                    algorithm = ?DNS_ZONEMD_ALG_SHA384,
+                    hash = binary:decode_hex(HashHex)
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"ZONEMD",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"serial" => 2025121100,
+                ~"scheme" => 1,
+                ~"algorithm" => ?DNS_ZONEMD_ALG_SHA384,
+                ~"hash" => HashHex
+            },
+            ~"context" => null
+        })
+    ),
+    %% Negative case: invalid hex (odd number of characters)
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"ZONEMD",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"serial" => 2025121100,
+                ~"scheme" => 1,
+                ~"algorithm" => ?DNS_ZONEMD_ALG_SHA384,
+                ~"hash" =>
+                    <<"F8857A5A89EF49FFC2EBE05F2718735EE574AC9FE68F473083F0F54BFA39C81801E4367FEFF3DEA0C14F57283A7C66A">>
+            },
+            ~"context" => null
+        })
+    ),
+    %% Negative case: invalid hex characters
+    ?assertEqual(
+        not_implemented,
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"ZONEMD",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"serial" => 2025121100,
+                ~"scheme" => 1,
+                ~"algorithm" => ?DNS_ZONEMD_ALG_SHA384,
+                ~"hash" => <<"INVALID_HEX_DATA!!!">>
+            },
+            ~"context" => null
+        })
+    ).
+
 encode_decode_svcb(_) ->
     Name = unique_name(?FUNCTION_NAME),
     Record = #dns_rr{
@@ -1076,6 +1461,183 @@ encode_decode_https(_) ->
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"HTTPS", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
+
+encode_decode_openpgpkey(_) ->
+    PidStr = pid_to_list(self()),
+    UniqueId = erlang:phash2(PidStr),
+    Name = erlang:iolist_to_binary([
+        ~"_openpgpkey.encode-decode-openpgpkey-", integer_to_binary(UniqueId), ~".com"
+    ]),
+    Record = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_OPENPGPKEY,
+        data = #dns_rrdata_openpgpkey{data = <<1, 2, 3, 4, 5>>},
+        ttl = 3600
+    },
+    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    erldns_zone_cache:put_zone(Zone),
+    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    ?assertMatch([_], Encoded),
+    [EncodedRecord] = Encoded,
+    ?assertMatch(#{~"type" := ~"OPENPGPKEY", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
+
+encode_decode_smimea(_) ->
+    PidStr = pid_to_list(self()),
+    UniqueId = erlang:phash2(PidStr),
+    Name = erlang:iolist_to_binary([
+        ~"_smimecert.encode-decode-smimea-", integer_to_binary(UniqueId), ~".com"
+    ]),
+    Record = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_SMIMEA,
+        data =
+            #dns_rrdata_smimea{
+                usage = 3,
+                selector = 1,
+                matching_type = 1,
+                certificate = binary:decode_hex(
+                    ~"DE38C1C08EB239D76B45DA575C70151CE7DA13A935BF5FB887B4E43664D6F728"
+                )
+            },
+        ttl = 3600
+    },
+    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    erldns_zone_cache:put_zone(Zone),
+    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    ?assertMatch([_], Encoded),
+    [EncodedRecord] = Encoded,
+    ?assertMatch(#{~"type" := ~"SMIMEA", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
+
+encode_decode_uri(_) ->
+    Name = unique_name(?FUNCTION_NAME),
+    Record = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_URI,
+        data =
+            #dns_rrdata_uri{
+                priority = 10,
+                weight = 5,
+                target = ~"https://example.com/path"
+            },
+        ttl = 3600
+    },
+    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    erldns_zone_cache:put_zone(Zone),
+    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    ?assertMatch([_], Encoded),
+    [EncodedRecord] = Encoded,
+    ?assertMatch(#{~"type" := ~"URI", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
+
+encode_decode_wallet(_) ->
+    Name = unique_name(?FUNCTION_NAME),
+    Record = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_WALLET,
+        data = #dns_rrdata_wallet{data = <<1, 2, 3, 4, 5>>},
+        ttl = 3600
+    },
+    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    erldns_zone_cache:put_zone(Zone),
+    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    ?assertMatch([_], Encoded),
+    [EncodedRecord] = Encoded,
+    ?assertMatch(#{~"type" := ~"WALLET", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
+
+encode_decode_eui48(_) ->
+    Name = unique_name(?FUNCTION_NAME),
+    Record = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_EUI48,
+        data = #dns_rrdata_eui48{address = <<0, 17, 34, 51, 68, 85>>},
+        ttl = 3600
+    },
+    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    erldns_zone_cache:put_zone(Zone),
+    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    ?assertMatch([_], Encoded),
+    [EncodedRecord] = Encoded,
+    ?assertMatch(#{~"type" := ~"EUI48", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
+
+encode_decode_eui64(_) ->
+    Name = unique_name(?FUNCTION_NAME),
+    Record = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_EUI64,
+        data = #dns_rrdata_eui64{address = <<0, 17, 34, 51, 68, 85, 102, 119>>},
+        ttl = 3600
+    },
+    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    erldns_zone_cache:put_zone(Zone),
+    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    ?assertMatch([_], Encoded),
+    [EncodedRecord] = Encoded,
+    ?assertMatch(#{~"type" := ~"EUI64", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
+
+encode_decode_csync(_) ->
+    Name = unique_name(?FUNCTION_NAME),
+    Record = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_CSYNC,
+        data =
+            #dns_rrdata_csync{
+                soa_serial = 12345,
+                flags = 0,
+                types = [1, 2, 28]
+            },
+        ttl = 3600
+    },
+    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    erldns_zone_cache:put_zone(Zone),
+    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    ?assertMatch([_], Encoded),
+    [EncodedRecord] = Encoded,
+    ?assertMatch(#{~"type" := ~"CSYNC", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
+
+encode_decode_dsync(_) ->
+    Name = unique_name(?FUNCTION_NAME),
+    Record = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_DSYNC,
+        data =
+            #dns_rrdata_dsync{
+                rrtype = 1,
+                scheme = 1,
+                port = 443,
+                target = ~"target.example.com"
+            },
+        ttl = 3600
+    },
+    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    erldns_zone_cache:put_zone(Zone),
+    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    ?assertMatch([_], Encoded),
+    [EncodedRecord] = Encoded,
+    ?assertMatch(#{~"type" := ~"DSYNC", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
+
+encode_decode_zonemd(_) ->
+    Name = unique_name(?FUNCTION_NAME),
+    % SHA384 produces 48 bytes (96 hex chars) - using correct hash from dns_erlang test
+    HashHex =
+        <<"F8857A5A89EF49FFC2EBE05F2718735EE574AC9FE68F473083F0F54BFA39C81801E4367FEFF3DEA0C14F57283A7C66AD">>,
+    Hash = binary:decode_hex(HashHex),
+    Record = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_ZONEMD,
+        data =
+            #dns_rrdata_zonemd{
+                serial = 2025121100,
+                scheme = 1,
+                algorithm = ?DNS_ZONEMD_ALG_SHA384,
+                hash = Hash
+            },
+        ttl = 3600
+    },
+    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    erldns_zone_cache:put_zone(Zone),
+    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    ?assertMatch([_], Encoded),
+    [EncodedRecord] = Encoded,
+    ?assertMatch(#{~"type" := ~"ZONEMD", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
 
 defaults(_) ->
     ?assertMatch(0, erldns_zone_loader:load_zones()).

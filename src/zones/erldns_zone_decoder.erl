@@ -514,6 +514,263 @@ json_record_to_erlang(#{~"name" := Name, ~"type" := ~"HTTPS", ~"ttl" := Ttl, ~"d
             },
         ttl = Ttl
     };
+json_record_to_erlang(#{
+    ~"name" := Name,
+    ~"type" := Type = ~"OPENPGPKEY",
+    ~"ttl" := Ttl,
+    ~"data" := Data
+}) ->
+    try base64:decode(maps:get(~"data", Data)) of
+        PgpData ->
+            #dns_rr{
+                name = Name,
+                type = ?DNS_TYPE_OPENPGPKEY,
+                data = #dns_rrdata_openpgpkey{data = PgpData},
+                ttl = Ttl
+            }
+    catch
+        Class:Reason ->
+            ?LOG_ERROR(
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => Type,
+                    data => Data,
+                    class => Class,
+                    reason => Reason
+                },
+                ?LOG_METADATA
+            ),
+            not_implemented
+    end;
+json_record_to_erlang(#{
+    ~"name" := Name,
+    ~"type" := Type = ~"SMIMEA",
+    ~"ttl" := Ttl,
+    ~"data" := Data
+}) ->
+    try binary:decode_hex(maps:get(~"certificate", Data)) of
+        Certificate ->
+            #dns_rr{
+                name = Name,
+                type = ?DNS_TYPE_SMIMEA,
+                data =
+                    #dns_rrdata_smimea{
+                        usage = maps:get(~"usage", Data),
+                        selector = maps:get(~"selector", Data),
+                        matching_type = maps:get(~"matching_type", Data),
+                        certificate = Certificate
+                    },
+                ttl = Ttl
+            }
+    catch
+        Class:Reason ->
+            ?LOG_ERROR(
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => Type,
+                    data => Data,
+                    class => Class,
+                    reason => Reason
+                },
+                ?LOG_METADATA
+            ),
+            not_implemented
+    end;
+json_record_to_erlang(#{~"name" := Name, ~"type" := ~"URI", ~"ttl" := Ttl, ~"data" := Data}) ->
+    #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_URI,
+        data =
+            #dns_rrdata_uri{
+                priority = maps:get(~"priority", Data),
+                weight = maps:get(~"weight", Data),
+                target = maps:get(~"target", Data)
+            },
+        ttl = Ttl
+    };
+json_record_to_erlang(#{
+    ~"name" := Name,
+    ~"type" := Type = ~"WALLET",
+    ~"ttl" := Ttl,
+    ~"data" := Data
+}) ->
+    try base64:decode(maps:get(~"data", Data)) of
+        WalletData ->
+            #dns_rr{
+                name = Name,
+                type = ?DNS_TYPE_WALLET,
+                data = #dns_rrdata_wallet{data = WalletData},
+                ttl = Ttl
+            }
+    catch
+        Class:Reason ->
+            ?LOG_ERROR(
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => Type,
+                    data => Data,
+                    class => Class,
+                    reason => Reason
+                },
+                ?LOG_METADATA
+            ),
+            not_implemented
+    end;
+json_record_to_erlang(#{
+    ~"name" := Name,
+    ~"type" := Type = ~"EUI48",
+    ~"ttl" := Ttl,
+    ~"data" := Data
+}) ->
+    try
+        AddressHex = maps:get(~"address", Data),
+        AddressBin = binary:decode_hex(AddressHex),
+        case byte_size(AddressBin) of
+            6 ->
+                <<Address:48>> = AddressBin,
+                #dns_rr{
+                    name = Name,
+                    type = ?DNS_TYPE_EUI48,
+                    data = #dns_rrdata_eui48{address = <<Address:48>>},
+                    ttl = Ttl
+                };
+            _ ->
+                ?LOG_ERROR(
+                    #{
+                        what => error_parsing_record,
+                        name => Name,
+                        type => Type,
+                        data => Data,
+                        reason => invalid_eui48_length
+                    },
+                    ?LOG_METADATA
+                ),
+                not_implemented
+        end
+    catch
+        Class:Reason ->
+            ?LOG_ERROR(
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => Type,
+                    data => Data,
+                    class => Class,
+                    reason => Reason
+                },
+                ?LOG_METADATA
+            ),
+            not_implemented
+    end;
+json_record_to_erlang(#{
+    ~"name" := Name,
+    ~"type" := Type = ~"EUI64",
+    ~"ttl" := Ttl,
+    ~"data" := Data
+}) ->
+    try
+        AddressHex = maps:get(~"address", Data),
+        AddressBin = binary:decode_hex(AddressHex),
+        case byte_size(AddressBin) of
+            8 ->
+                <<Address:64>> = AddressBin,
+                #dns_rr{
+                    name = Name,
+                    type = ?DNS_TYPE_EUI64,
+                    data = #dns_rrdata_eui64{address = <<Address:64>>},
+                    ttl = Ttl
+                };
+            _ ->
+                ?LOG_ERROR(
+                    #{
+                        what => error_parsing_record,
+                        name => Name,
+                        type => Type,
+                        data => Data,
+                        reason => invalid_eui64_length
+                    },
+                    ?LOG_METADATA
+                ),
+                not_implemented
+        end
+    catch
+        Class:Reason ->
+            ?LOG_ERROR(
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => Type,
+                    data => Data,
+                    class => Class,
+                    reason => Reason
+                },
+                ?LOG_METADATA
+            ),
+            not_implemented
+    end;
+json_record_to_erlang(#{~"name" := Name, ~"type" := ~"CSYNC", ~"ttl" := Ttl, ~"data" := Data}) ->
+    #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_CSYNC,
+        data =
+            #dns_rrdata_csync{
+                soa_serial = maps:get(~"soa_serial", Data),
+                flags = maps:get(~"flags", Data),
+                types = maps:get(~"types", Data, [])
+            },
+        ttl = Ttl
+    };
+json_record_to_erlang(#{~"name" := Name, ~"type" := ~"DSYNC", ~"ttl" := Ttl, ~"data" := Data}) ->
+    #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_DSYNC,
+        data =
+            #dns_rrdata_dsync{
+                rrtype = maps:get(~"rrtype", Data),
+                scheme = maps:get(~"scheme", Data),
+                port = maps:get(~"port", Data),
+                target = maps:get(~"target", Data)
+            },
+        ttl = Ttl
+    };
+json_record_to_erlang(#{
+    ~"name" := Name,
+    ~"type" := Type = ~"ZONEMD",
+    ~"ttl" := Ttl,
+    ~"data" := Data
+}) ->
+    try binary:decode_hex(maps:get(~"hash", Data)) of
+        Hash ->
+            #dns_rr{
+                name = Name,
+                type = ?DNS_TYPE_ZONEMD,
+                data =
+                    #dns_rrdata_zonemd{
+                        serial = maps:get(~"serial", Data),
+                        scheme = maps:get(~"scheme", Data),
+                        algorithm = maps:get(~"algorithm", Data),
+                        hash = Hash
+                    },
+                ttl = Ttl
+            }
+    catch
+        Class:Reason ->
+            ?LOG_ERROR(
+                #{
+                    what => error_parsing_record,
+                    name => Name,
+                    type => Type,
+                    data => Data,
+                    class => Class,
+                    reason => Reason
+                },
+                ?LOG_METADATA
+            ),
+            not_implemented
+    end;
 json_record_to_erlang(#{}) ->
     not_implemented.
 
