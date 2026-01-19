@@ -159,7 +159,7 @@ init(noargs) ->
 -spec handle_call(dynamic(), gen_server:from(), state()) ->
     {reply, dynamic(), state()}.
 handle_call({register_codecs, Modules}, _From, State) ->
-    {NewEncoders, NewDecoders} = prepare_codecs(Modules),
+    {NewEncoders, NewDecoders} = prepare_codecs(#{codecs => Modules}),
     Encoders = State#state.encoders ++ NewEncoders,
     Decoders = State#state.decoders ++ NewDecoders,
     persistent_term:put(?MODULE, {Encoders, Decoders}),

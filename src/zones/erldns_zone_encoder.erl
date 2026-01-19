@@ -4,6 +4,7 @@
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
 -include_lib("erldns/include/erldns.hrl").
+-define(LOG_METADATA, #{domain => [erldns, zones, encoder]}).
 
 -export([encode/3]).
 
@@ -97,11 +98,12 @@ encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_RRSIG, ttl = Ttl, dat
     encode_record(Name, Type, Ttl, Data);
 encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_TLSA, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_SVCB, ttl = Ttl, data = Data}) ->
+    encode_record(Name, Type, Ttl, Data);
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_HTTPS, ttl = Ttl, data = Data}) ->
+    encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
-    ?LOG_WARNING(
-        #{what => unable_to_encode_record, record => Record},
-        #{domain => [erldns, zones]}
-    ),
+    ?LOG_WARNING(#{what => unable_to_encode_record, record => Record}, ?LOG_METADATA),
     not_implemented.
 
 encode_record(Name, Type, Ttl, Data) ->
@@ -237,12 +239,79 @@ encode_data(#dns_rrdata_tlsa{
     escape_chars(
         io_lib:format("~w ~w ~w ~s", [Usage, Selector, MatchingType, Certificate])
     );
+encode_data(#dns_rrdata_svcb{
+    svc_priority = Priority,
+    target_name = TargetName,
+    svc_params = SvcParams
+}) ->
+    ParamsStr = encode_svcb_params(SvcParams),
+    case ParamsStr of
+        [] ->
+            erlang:iolist_to_binary(io_lib:format("~w ~s.", [Priority, TargetName]));
+        _ ->
+            erlang:iolist_to_binary(
+                io_lib:format("~w ~s.~s", [Priority, TargetName, ParamsStr])
+            )
+    end;
+encode_data(#dns_rrdata_https{
+    svc_priority = Priority,
+    target_name = TargetName,
+    svc_params = SvcParams
+}) ->
+    ParamsStr = encode_svcb_params(SvcParams),
+    case ParamsStr of
+        [] ->
+            erlang:iolist_to_binary(io_lib:format("~w ~s.", [Priority, TargetName]));
+        _ ->
+            erlang:iolist_to_binary(
+                io_lib:format("~w ~s.~s", [Priority, TargetName, ParamsStr])
+            )
+    end;
 encode_data(Data) ->
-    ?LOG_INFO(
-        #{what => unable_to_encode_rrdata, data => Data},
-        #{domain => [erldns, zones]}
-    ),
+    ?LOG_INFO(#{what => unable_to_encode_rrdata, data => Data}, ?LOG_METADATA),
     not_implemented.
+
+%% Helper function to encode SVCB service parameters
+-spec encode_svcb_params(dns:svcb_svc_params()) -> iolist().
+encode_svcb_params(SvcParams) when is_map(SvcParams) ->
+    SortedParams = lists:sort(maps:to_list(SvcParams)),
+    encode_svcb_params(SortedParams, []).
+
+-spec encode_svcb_params([{dns:uint16(), term()}], [iolist()]) -> iolist().
+encode_svcb_params([], Acc) ->
+    lists:reverse(Acc);
+encode_svcb_params([{Key, Value} | Rest], Acc) ->
+    ParamStr =
+        case {Key, Value} of
+            {?DNS_SVCB_PARAM_MANDATORY, Keys} when is_list(Keys) ->
+                KeyNames = [dns_names:svcb_param_name(K) || K <- Keys],
+                io_lib:format(" mandatory=~s", [
+                    string:join([binary_to_list(K) || K <- KeyNames], ",")
+                ]);
+            {?DNS_SVCB_PARAM_ALPN, Protocols} when is_list(Protocols) ->
+                ProtocolStrs = [binary_to_list(P) || P <- Protocols],
+                io_lib:format(" alpn=~s", [string:join(ProtocolStrs, ",")]);
+            {?DNS_SVCB_PARAM_NO_DEFAULT_ALPN, none} ->
+                " no-default-alpn";
+            {?DNS_SVCB_PARAM_PORT, Port} when is_integer(Port) ->
+                io_lib:format(" port=~w", [Port]);
+            {?DNS_SVCB_PARAM_ECH, ECH} when is_binary(ECH) ->
+                ECHBase64 = base64:encode(ECH),
+                io_lib:format(" ech=~s", [ECHBase64]);
+            {?DNS_SVCB_PARAM_IPV4HINT, IPs} when is_list(IPs) ->
+                IPStrs = [inet_parse:ntoa(IP) || IP <- IPs],
+                io_lib:format(" ipv4hint=~s", [string:join(IPStrs, ",")]);
+            {?DNS_SVCB_PARAM_IPV6HINT, IPs} when is_list(IPs) ->
+                IPStrs = [inet_parse:ntoa(IP) || IP <- IPs],
+                io_lib:format(" ipv6hint=~s", [string:join(IPStrs, ",")]);
+            {Key, Value} when is_binary(Value) ->
+                %% Unknown parameter with binary value
+                ValueBase64 = base64:encode(Value),
+                io_lib:format(" key~w=~s", [Key, ValueBase64]);
+            _ ->
+                ""
+        end,
+    encode_svcb_params(Rest, [ParamStr | Acc]).
 
 escape_chars(IoList) ->
     binary:encode_hex(erlang:iolist_to_binary(IoList)).

@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Added
+
+- Codec support for SVCB and HTTPS record types
+
 ### Removed
 
 - `rfc_compliant_ent` configuration option. RFC 4592 compliant empty non-terminal (ENT) handling is now always enabled.
+
+### Updated
+
+- Many more tests run in parallel and much faster
 
 ## v10.0.0-rc1
 
