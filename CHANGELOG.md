@@ -7,18 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+- Codec support for the many types introduced in `dns_erlang` v4.9.0
+
+## v10.0.0-rc2
+
 ### Added
 
-- Codec support for SVCB and HTTPS record types
-- Codec support for the many types introduced in `dns_erlang` v4.9.0
+- Codec support for SVCB and HTTPS record types ([#313](https://github.com/dnsimple/erldns/pull/313))
 
 ### Removed
 
-- `rfc_compliant_ent` configuration option. RFC 4592 compliant empty non-terminal (ENT) handling is now always enabled.
+- `rfc_compliant_ent` configuration option. RFC 4592 compliant empty non-terminal (ENT) handling is now always enabled ([#308](https://github.com/dnsimple/erldns/pull/308))
 
-### Updated
+### Fixed
 
-- Many more tests run in parallel and much faster
+- Fix false error raised in TCP listener initialization when gen_server exits normally ([#311](https://github.com/dnsimple/erldns/pull/311))
 
 ## v10.0.0-rc1
 
