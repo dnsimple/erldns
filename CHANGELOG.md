@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+- Codec support for the many types introduced in `dns_erlang` v4.9.0
+
 ## v10.0.0-rc2
 
 ### Added

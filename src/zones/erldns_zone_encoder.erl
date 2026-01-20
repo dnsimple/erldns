@@ -102,6 +102,24 @@ encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_SVCB, ttl = Ttl, data
     encode_record(Name, Type, Ttl, Data);
 encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_HTTPS, ttl = Ttl, data = Data}) ->
     encode_record(Name, Type, Ttl, Data);
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_OPENPGPKEY, ttl = Ttl, data = Data}) ->
+    encode_record(Name, Type, Ttl, Data);
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_SMIMEA, ttl = Ttl, data = Data}) ->
+    encode_record(Name, Type, Ttl, Data);
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_URI, ttl = Ttl, data = Data}) ->
+    encode_record(Name, Type, Ttl, Data);
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_WALLET, ttl = Ttl, data = Data}) ->
+    encode_record(Name, Type, Ttl, Data);
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_EUI48, ttl = Ttl, data = Data}) ->
+    encode_record(Name, Type, Ttl, Data);
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_EUI64, ttl = Ttl, data = Data}) ->
+    encode_record(Name, Type, Ttl, Data);
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_CSYNC, ttl = Ttl, data = Data}) ->
+    encode_record(Name, Type, Ttl, Data);
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_DSYNC, ttl = Ttl, data = Data}) ->
+    encode_record(Name, Type, Ttl, Data);
+encode_record(#dns_rr{name = Name, type = Type = ?DNS_TYPE_ZONEMD, ttl = Ttl, data = Data}) ->
+    encode_record(Name, Type, Ttl, Data);
 encode_record(Record) ->
     ?LOG_WARNING(#{what => unable_to_encode_record, record => Record}, ?LOG_METADATA),
     not_implemented.
@@ -267,6 +285,55 @@ encode_data(#dns_rrdata_https{
                 io_lib:format("~w ~s.~s", [Priority, TargetName, ParamsStr])
             )
     end;
+encode_data(#dns_rrdata_openpgpkey{data = Data}) ->
+    base64:encode(Data);
+encode_data(#dns_rrdata_smimea{
+    usage = Usage,
+    selector = Selector,
+    matching_type = MatchingType,
+    certificate = Certificate
+}) ->
+    escape_chars(
+        io_lib:format("~w ~w ~w ~s", [Usage, Selector, MatchingType, Certificate])
+    );
+encode_data(#dns_rrdata_uri{priority = Priority, weight = Weight, target = Target}) ->
+    erlang:iolist_to_binary(io_lib:format("~w ~w ~s", [Priority, Weight, Target]));
+encode_data(#dns_rrdata_wallet{data = Data}) ->
+    base64:encode(Data);
+encode_data(#dns_rrdata_eui48{address = Address}) ->
+    binary:encode_hex(Address);
+encode_data(#dns_rrdata_eui64{address = Address}) ->
+    binary:encode_hex(Address);
+encode_data(#dns_rrdata_csync{
+    soa_serial = Serial,
+    flags = Flags,
+    types = Types
+}) ->
+    TypesStr =
+        case Types of
+            [] -> "";
+            _ -> " " ++ string:join([integer_to_list(T) || T <- Types], " ")
+        end,
+    erlang:iolist_to_binary(io_lib:format("~w ~w~s", [Serial, Flags, TypesStr]));
+encode_data(#dns_rrdata_dsync{
+    rrtype = Rrtype,
+    scheme = Scheme,
+    port = Port,
+    target = Target
+}) ->
+    erlang:iolist_to_binary(
+        io_lib:format("~w ~w ~w ~s.", [Rrtype, Scheme, Port, Target])
+    );
+encode_data(#dns_rrdata_zonemd{
+    serial = Serial,
+    scheme = Scheme,
+    algorithm = Algorithm,
+    hash = Hash
+}) ->
+    HashHex = binary:encode_hex(Hash),
+    erlang:iolist_to_binary(
+        io_lib:format("~w ~w ~w ~s", [Serial, Scheme, Algorithm, HashHex])
+    );
 encode_data(Data) ->
     ?LOG_INFO(#{what => unable_to_encode_rrdata, data => Data}, ?LOG_METADATA),
     not_implemented.
