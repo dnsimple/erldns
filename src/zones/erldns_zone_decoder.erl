@@ -160,7 +160,7 @@ json_record_to_erlang(#{~"name" := Name, ~"type" := ~"NS", ~"ttl" := Ttl, ~"data
         ttl = Ttl
     };
 json_record_to_erlang(#{~"name" := Name, ~"type" := ~"A", ~"ttl" := Ttl, ~"data" := Data}) ->
-    case inet_parse:address(binary_to_list(maps:get(~"ip", Data))) of
+    case inet:parse_address(binary_to_list(maps:get(~"ip", Data))) of
         {ok, Address} ->
             #dns_rr{
                 name = Name,
@@ -182,7 +182,7 @@ json_record_to_erlang(#{~"name" := Name, ~"type" := ~"A", ~"ttl" := Ttl, ~"data"
             not_implemented
     end;
 json_record_to_erlang(#{~"name" := Name, ~"type" := ~"AAAA", ~"ttl" := Ttl, ~"data" := Data}) ->
-    case inet_parse:address(binary_to_list(maps:get(~"ip", Data))) of
+    case inet:parse_address(binary_to_list(maps:get(~"ip", Data))) of
         {ok, Address} ->
             #dns_rr{
                 name = Name,
@@ -817,7 +817,7 @@ parse_svcb_params([{Key, Value} | Rest], Acc) ->
 parse_ipv4(IP) when is_binary(IP) ->
     parse_ipv4(binary_to_list(IP));
 parse_ipv4(IP) when is_list(IP) ->
-    case inet_parse:address(IP) of
+    case inet:parse_address(IP) of
         {ok, {A, B, C, D}} -> {A, B, C, D};
         _ -> throw({invalid_ipv4, IP})
     end.
@@ -826,7 +826,7 @@ parse_ipv4(IP) when is_list(IP) ->
 parse_ipv6(IP) when is_binary(IP) ->
     parse_ipv6(binary_to_list(IP));
 parse_ipv6(IP) when is_list(IP) ->
-    case inet_parse:address(IP) of
+    case inet:parse_address(IP) of
         {ok, {A, B, C, D, E, F, G, H}} -> {A, B, C, D, E, F, G, H};
         _ -> throw({invalid_ipv6, IP})
     end.

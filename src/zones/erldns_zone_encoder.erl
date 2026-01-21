@@ -159,9 +159,9 @@ encode_data(#dns_rrdata_soa{
 encode_data(#dns_rrdata_ns{dname = Dname}) ->
     erlang:iolist_to_binary(io_lib:format("~s.", [Dname]));
 encode_data(#dns_rrdata_a{ip = Address}) ->
-    list_to_binary(inet_parse:ntoa(Address));
+    list_to_binary(inet:ntoa(Address));
 encode_data(#dns_rrdata_aaaa{ip = Address}) ->
-    list_to_binary(inet_parse:ntoa(Address));
+    list_to_binary(inet:ntoa(Address));
 encode_data(#dns_rrdata_caa{flags = Flags, tag = Tag, value = Value}) ->
     erlang:iolist_to_binary(io_lib:format("~w ~s \"~s\"", [Flags, Tag, Value]));
 encode_data(#dns_rrdata_cname{dname = Dname}) ->
@@ -366,10 +366,10 @@ encode_svcb_params([{Key, Value} | Rest], Acc) ->
                 ECHBase64 = base64:encode(ECH),
                 io_lib:format(" ech=~s", [ECHBase64]);
             {?DNS_SVCB_PARAM_IPV4HINT, IPs} when is_list(IPs) ->
-                IPStrs = [inet_parse:ntoa(IP) || IP <- IPs],
+                IPStrs = [inet:ntoa(IP) || IP <- IPs],
                 io_lib:format(" ipv4hint=~s", [string:join(IPStrs, ",")]);
             {?DNS_SVCB_PARAM_IPV6HINT, IPs} when is_list(IPs) ->
-                IPStrs = [inet_parse:ntoa(IP) || IP <- IPs],
+                IPStrs = [inet:ntoa(IP) || IP <- IPs],
                 io_lib:format(" ipv6hint=~s", [string:join(IPStrs, ",")]);
             {Key, Value} when is_binary(Value) ->
                 %% Unknown parameter with binary value
