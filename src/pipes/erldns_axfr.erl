@@ -45,7 +45,7 @@ is_enabled(Host, Metadata) ->
     lists:any(
         fun(MetadataRow) ->
             [_Id, _DomainId, Kind, Content] = MetadataRow,
-            {ok, AllowedAddress} = inet_parse:address(binary_to_list(Content)),
+            {ok, AllowedAddress} = inet:parse_address(binary_to_list(Content)),
             AllowedAddress =:= Host andalso Kind =:= <<"axfr">>
         end,
         Metadata
