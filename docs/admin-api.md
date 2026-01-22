@@ -292,11 +292,22 @@ GET /zones/example.com/records/www.example.com?type=A
 
 ## Authentication
 
-The Admin API supports HTTP Basic Authentication. When enabled, all endpoints require valid credentials.
+The Admin API supports HTTP Basic Authentication. When enabled, all endpoints require valid credentials. Authentication is disabled by default.
+
+### How Authentication Works
+
+Authentication is implemented as a Cowboy middleware (`erldns_admin_auth_middleware`). When credentials are configured, the middleware is automatically injected into the request processing pipeline before any handlers are invoked. This ensures that all endpoints are protected without requiring changes to individual handlers.
+
+The middleware:
+
+1. Intercepts every incoming request
+2. Parses the `Authorization` header for Basic Auth credentials
+3. Returns `401 Unauthorized` if credentials are missing or invalid
+4. Allows the request to proceed if credentials are valid
 
 ### Enabling Authentication
 
-Configure credentials in your `sys.config` or `erldns.config`:
+To enable authentication, configure the `credentials` option in your `sys.config` or `erldns.config`:
 
 ```erlang
 {erldns, [
@@ -306,7 +317,21 @@ Configure credentials in your `sys.config` or `erldns.config`:
 ]}
 ```
 
-Both username and password must be binary strings.
+Both username and password must be binary strings (using `<<"...">>` syntax).
+
+### Disabling Authentication
+
+Authentication is disabled by default. To explicitly disable it (or to disable it after it was enabled), set `credentials` to `false`:
+
+```erlang
+{erldns, [
+    {admin, [
+        {credentials, false}
+    ]}
+]}
+```
+
+When authentication is disabled, the auth middleware is not added to the request pipeline, and all endpoints are publicly accessible.
 
 ### Making Authenticated Requests
 
@@ -316,11 +341,13 @@ Include the `Authorization` header with Base64-encoded credentials:
 curl -u admin:secret http://localhost:8083/zones/example.com
 ```
 
-Or manually:
+Or manually construct the header:
 
 ```bash
 curl -H "Authorization: Basic YWRtaW46c2VjcmV0" http://localhost:8083/zones/example.com
 ```
+
+The Base64-encoded value is `username:password` encoded. For example, `admin:secret` encodes to `YWRtaW46c2VjcmV0`.
 
 ### Unauthorized Response
 
@@ -329,6 +356,26 @@ When authentication fails or credentials are missing:
 ```http
 HTTP/1.1 401 Unauthorized
 WWW-Authenticate: basic realm="erldns admin"
+```
+
+### Security Considerations
+
+- **Use TLS in production**: HTTP Basic Authentication transmits credentials encoded (not encrypted). Always enable TLS when using authentication in production to protect credentials in transit.
+- **Strong credentials**: Use long, random passwords. Consider using a password generator for production deployments.
+
+Example with both TLS and authentication:
+
+```erlang
+{erldns, [
+    {admin, [
+        {port, 8483},
+        {tls, {true, [
+            {certfile, "/path/to/cert.pem"},
+            {keyfile, "/path/to/key.pem"}
+        ]}},
+        {credentials, {<<"admin">>, <<"strong-random-password">>}}
+    ]}
+]}
 ```
 
 
