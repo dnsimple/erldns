@@ -26,7 +26,7 @@ The Admin API is built on [Cowboy](https://github.com/ninenines/cowboy), a high-
 
 Returns metadata about all zones currently loaded in the cache.
 
-```
+```http
 GET /
 ```
 
@@ -66,13 +66,13 @@ GET /
 
 Resets all DNS listener queues. This can be useful for clearing backlogged requests.
 
-```
+```http
 DELETE /
 ```
 
 #### Response
 
-```
+```http
 HTTP/1.1 204 No Content
 ```
 
@@ -81,7 +81,7 @@ HTTP/1.1 204 No Content
 
 Returns detailed information about a specific zone, including all its DNS records.
 
-```
+```http
 GET /zones/:zonename
 ```
 
@@ -164,7 +164,7 @@ When `?metaonly=true`:
 
 If the zone is not found:
 
-```
+```http
 HTTP/1.1 404 Not Found
 ```
 
@@ -173,7 +173,7 @@ HTTP/1.1 404 Not Found
 
 Removes a zone from the cache.
 
-```
+```http
 DELETE /zones/:zonename
 ```
 
@@ -185,7 +185,7 @@ DELETE /zones/:zonename
 
 #### Response
 
-```
+```http
 HTTP/1.1 204 No Content
 ```
 
@@ -193,7 +193,7 @@ HTTP/1.1 204 No Content
 
 If the zone is not found:
 
-```
+```http
 HTTP/1.1 400 Bad Request
 Content-Type: application/json
 
@@ -205,7 +205,7 @@ Content-Type: application/json
 
 Returns all DNS records in a zone.
 
-```
+```http
 GET /zones/:zonename/records
 ```
 
@@ -245,7 +245,7 @@ GET /zones/:zonename/records
 
 Returns DNS records matching a specific name within a zone.
 
-```
+```http
 GET /zones/:zonename/records/:record_name
 ```
 
@@ -266,13 +266,13 @@ GET /zones/:zonename/records/:record_name
 
 Get all records for `www.example.com`:
 
-```
+```http
 GET /zones/example.com/records/www.example.com
 ```
 
 Get only A records for `www.example.com`:
 
-```
+```http
 GET /zones/example.com/records/www.example.com?type=A
 ```
 
@@ -326,7 +326,7 @@ curl -H "Authorization: Basic YWRtaW46c2VjcmV0" http://localhost:8083/zones/exam
 
 When authentication fails or credentials are missing:
 
-```
+```http
 HTTP/1.1 401 Unauthorized
 WWW-Authenticate: basic realm="erldns admin"
 ```

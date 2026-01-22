@@ -51,13 +51,13 @@ To get started, copy it into your own `erldns.config` and modify as needed.
 
 To build:
 
-```sh
+```shell
 make
 ```
 
 To start fresh:
 
-```sh
+```shell
 make fresh
 make
 ```
@@ -66,19 +66,19 @@ make
 
 ### Launch directly
 
-```sh
+```shell
 overmind start
 ```
 
 ### To get an interactive Erlang REPL
 
-```sh
+```shell
 rebar3 shell
 ```
 
 ### Build a distribution with and run the release
 
-```sh
+```shell
 rebar3 release
 _build/default/rel/erldns/bin/erldns foreground
 ```
@@ -89,7 +89,7 @@ _build/default/rel/erldns/bin/erldns foreground
 
 Here are some queries to try:
 
-```sh
+```shell
 dig -p 8053 @127.0.0.1 example.com a
 dig -p 8053 @127.0.0.1 example.com cname
 dig -p 8053 @127.0.0.1 example.com ns
@@ -105,7 +105,7 @@ dig -p 8053 @127.0.0.1 -x 127.0.0.1 ptr
 
 The Admin API provides a RESTful HTTP interface for managing zones at runtime. By default, it listens on port `8083`.
 
-```sh
+```shell
 # List all zones
 curl http://localhost:8083/
 
@@ -130,7 +130,7 @@ AXFR zone transfers are not currently implemented. The current implementation (`
 
 To run automated tests:
 
-```sh
+```shell
 make test
 ```
 
