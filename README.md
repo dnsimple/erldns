@@ -20,8 +20,7 @@ The system responsible for processing incoming DNS queries, including resolution
 - `m:erldns_listeners`
 The system responsible for listening for incoming DNS queries. The system is designed to be able to listen on multiple ports and interfaces and supports both UDP and TCP, Unix network stack optimisations, and high parallelism.
 
-There is also an administrative API for querying the current zone cache and for basic control.
-You can read more about it at `m:erldns_admin`.
+There is also an [Admin API](docs/admin-api.md) for querying the current zone cache and for basic control.
 
 ## Instrumentation
 
@@ -52,13 +51,13 @@ To get started, copy it into your own `erldns.config` and modify as needed.
 
 To build:
 
-```sh
+```shell
 make
 ```
 
 To start fresh:
 
-```sh
+```shell
 make fresh
 make
 ```
@@ -67,28 +66,30 @@ make
 
 ### Launch directly
 
-```sh
+```shell
 overmind start
 ```
 
 ### To get an interactive Erlang REPL
 
-```sh
+```shell
 rebar3 shell
 ```
 
 ### Build a distribution with and run the release
 
-```sh
+```shell
 rebar3 release
 _build/default/rel/erldns/bin/erldns foreground
 ```
 
-## Querying
+## Usage
+
+### DNS Queries
 
 Here are some queries to try:
 
-```sh
+```shell
 dig -p 8053 @127.0.0.1 example.com a
 dig -p 8053 @127.0.0.1 example.com cname
 dig -p 8053 @127.0.0.1 example.com ns
@@ -100,19 +101,36 @@ dig -p 8053 @127.0.0.1 example.com naptr
 dig -p 8053 @127.0.0.1 -x 127.0.0.1 ptr
 ```
 
+### Admin API
+
+The Admin API provides a RESTful HTTP interface for managing zones at runtime. By default, it listens on port `8083`.
+
+```shell
+# List all zones
+curl http://localhost:8083/
+
+# Get zone details
+curl http://localhost:8083/zones/example.com
+
+# Get specific records
+curl "http://localhost:8083/zones/example.com/records/example.com?type=A"
+```
+
+For complete documentation including authentication, TLS configuration, and extensibility options, see the [Admin API documentation](docs/admin-api.md).
+
 ## Performance
 
-If you want to perform some benchmarks, see [`benchmarking`](./BENCHMARKING.md).
+If you want to perform some benchmarks, see the [benchmarking guide](./BENCHMARKING.md).
 
-### AXFR Support
+## AXFR Support
 
-AXFR zone transfers are not currently implemented. The current "implementation" (`m:erldns_axfr`) is just a stub.
+AXFR zone transfers are not currently implemented. The current implementation (`m:erldns_axfr`) is a stub.
 
 ## Tests
 
 To run automated tests:
 
-```sh
+```shell
 make test
 ```
 
