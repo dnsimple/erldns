@@ -265,10 +265,10 @@ encode_data(#dns_rrdata_svcb{
     ParamsStr = encode_svcb_params(SvcParams),
     case ParamsStr of
         [] ->
-            erlang:iolist_to_binary(io_lib:format("~w ~s.", [Priority, TargetName]));
+            erlang:iolist_to_binary(io_lib:format("~w ~s", [Priority, TargetName]));
         _ ->
             erlang:iolist_to_binary(
-                io_lib:format("~w ~s.~s", [Priority, TargetName, ParamsStr])
+                io_lib:format("~w ~s~s", [Priority, TargetName, ParamsStr])
             )
     end;
 encode_data(#dns_rrdata_https{
