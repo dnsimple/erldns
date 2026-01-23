@@ -788,7 +788,7 @@ parse_svcb_params([{Key, Value} | Rest], Acc) ->
     NewAcc =
         case ParamKey of
             undefined ->
-                %% Unknown parameter key, skip it
+                %% invalid parameter key, skip it. Note that dns_erlang parses keyNNNN here already
                 Acc;
             ?DNS_SVCB_PARAM_MANDATORY when is_list(Value) ->
                 KeyNums = [dns_names:name_svcb_param(K) || K <- Value],
@@ -807,9 +807,8 @@ parse_svcb_params([{Key, Value} | Rest], Acc) ->
             ?DNS_SVCB_PARAM_IPV6HINT when is_list(Value) ->
                 IPs = [parse_ipv6(IP) || IP <- Value],
                 Acc#{ParamKey => IPs};
-            _ ->
-                %% Unknown value format, skip it
-                Acc
+            NNNN when is_integer(NNNN) ->
+                Acc#{NNNN => Value}
         end,
     parse_svcb_params(Rest, NewAcc).
 
