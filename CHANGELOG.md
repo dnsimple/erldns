@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
-- Codec support for the many types introduced in `dns_erlang` v4.9.0
+## v10.0.0-rc3
+
+### Added
+
+- Codec support for many new record types introduced in `dns_erlang` v4.9.0 ([#312](https://github.com/dnsimple/erldns/pull/312)):
+  - OPENPGPKEY (Type 61) — RFC 7929
+  - SMIMEA (Type 53) — RFC 8162
+  - URI (Type 256) — RFC 7553
+  - WALLET (Type 262) — IANA Registration
+  - EUI48 (Type 108) and EUI64 (Type 109) — RFC 7043
+  - CSYNC (Type 62) — RFC 7477
+  - DSYNC (Type 66) — RFC 9859
+
+### Fixed
+
+- Fix wrong dot logic around SVCB and HTTPS records in the codec ([#319](https://github.com/dnsimple/erldns/pull/319))
+
+### Documentation
+
+- Add initial documentation regarding the Admin API ([#316](https://github.com/dnsimple/erldns/pull/316))
 
 ## v10.0.0-rc2
 
