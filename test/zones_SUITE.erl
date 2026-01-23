@@ -1430,21 +1430,44 @@ encode_decode_svcb(_) ->
         data =
             #dns_rrdata_svcb{
                 svc_priority = 0,
-                target_name = ~"target.example.com",
+                target_name = <<"target.", Name/binary>>,
+                svc_params = #{}
+            },
+        ttl = 3600
+    },
+    RecordWithParams = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_SVCB,
+        data =
+            #dns_rrdata_svcb{
+                svc_priority = 1,
+                target_name = <<"target.", Name/binary>>,
                 svc_params = #{?DNS_SVCB_PARAM_PORT => 8080}
             },
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    Zone = erldns_zone_codec:build_zone(Name, ~"ver", [Record, RecordWithParams], []),
     erldns_zone_cache:put_zone(Zone),
     Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
-    ?assertMatch([_], Encoded),
-    [EncodedRecord] = Encoded,
-    ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
+    ?assertMatch([_, _], Encoded),
+    [EncodedRecord, EncodedRecordWithParams] = lists:sort(Encoded),
+    ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 3600}, EncodedRecord),
+    ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 3600}, EncodedRecordWithParams).
 
 encode_decode_https(_) ->
     Name = unique_name(?FUNCTION_NAME),
     Record = #dns_rr{
+        name = Name,
+        type = ?DNS_TYPE_HTTPS,
+        data =
+            #dns_rrdata_https{
+                svc_priority = 0,
+                target_name = ~".",
+                svc_params = #{}
+            },
+        ttl = 3600
+    },
+    RecordWithParams = #dns_rr{
         name = Name,
         type = ?DNS_TYPE_HTTPS,
         data =
@@ -1455,12 +1478,13 @@ encode_decode_https(_) ->
             },
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    Zone = erldns_zone_codec:build_zone(Name, ~"ver", [Record, RecordWithParams], []),
     erldns_zone_cache:put_zone(Zone),
     Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
-    ?assertMatch([_], Encoded),
-    [EncodedRecord] = Encoded,
-    ?assertMatch(#{~"type" := ~"HTTPS", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
+    ?assertMatch([_, _], Encoded),
+    [EncodedRecord, EncodedRecordWithParams] = lists:sort(Encoded),
+    ?assertMatch(#{~"type" := ~"HTTPS", ~"name" := _, ~"ttl" := 3600}, EncodedRecord),
+    ?assertMatch(#{~"type" := ~"HTTPS", ~"name" := _, ~"ttl" := 3600}, EncodedRecordWithParams).
 
 encode_decode_openpgpkey(_) ->
     PidStr = pid_to_list(self()),
@@ -2321,7 +2345,7 @@ setup_test(_Config, codec) ->
 unique_name(TestCase) ->
     Name = atom_to_binary(TestCase),
     UniqueId = integer_to_binary(erlang:unique_integer([positive, monotonic])),
-    dns:dname_to_lower(erlang:iolist_to_binary([Name, ~".", UniqueId, ~".com"])).
+    dns:dname_to_lower(erlang:iolist_to_binary([Name, ~".", UniqueId, ~".com."])).
 
 ksk_private_key() ->
     <<
