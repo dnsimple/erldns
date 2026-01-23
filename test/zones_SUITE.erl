@@ -1469,7 +1469,7 @@ encode_decode_svcb(_) ->
                 target_name = <<"target.", Name/binary>>,
                 svc_params = #{}
             },
-        ttl = 3600
+        ttl = 120
     },
     RecordWithParams = #dns_rr{
         name = Name,
@@ -1478,7 +1478,10 @@ encode_decode_svcb(_) ->
             #dns_rrdata_svcb{
                 svc_priority = 1,
                 target_name = <<"target.", Name/binary>>,
-                svc_params = #{?DNS_SVCB_PARAM_PORT => 8080}
+                svc_params = #{
+                    ?DNS_SVCB_PARAM_PORT => 8080,
+                    3232 => ~"custom\"text"
+                }
             },
         ttl = 3600
     },
@@ -1487,8 +1490,10 @@ encode_decode_svcb(_) ->
     Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
     ?assertMatch([_, _], Encoded),
     [EncodedRecord, EncodedRecordWithParams] = lists:sort(Encoded),
-    ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 3600}, EncodedRecord),
-    ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 3600}, EncodedRecordWithParams).
+    ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 120}, EncodedRecord),
+    ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 3600}, EncodedRecordWithParams),
+    Content = maps:get(~"content", EncodedRecordWithParams),
+    ?assertNotMatch(nomatch, string:find(Content, ~"custom\"text"), Content).
 
 encode_decode_https(_) ->
     Name = unique_name(?FUNCTION_NAME),

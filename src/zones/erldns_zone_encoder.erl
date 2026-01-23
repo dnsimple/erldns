@@ -373,12 +373,34 @@ encode_svcb_params([{Key, Value} | Rest], Acc) ->
                 io_lib:format(" ipv6hint=~s", [string:join(IPStrs, ",")]);
             {Key, Value} when is_binary(Value) ->
                 %% Unknown parameter with binary value
-                ValueBase64 = base64:encode(Value),
+                ValueBase64 = encode_quoted_string(Value),
                 io_lib:format(" key~w=~s", [Key, ValueBase64]);
             _ ->
                 ""
         end,
     encode_svcb_params(Rest, [ParamStr | Acc]).
+
+-spec encode_quoted_string(binary()) -> binary().
+encode_quoted_string(Bin) ->
+    %% Escape backslashes and quotes, then wrap in quotes
+    Escaped = do_escape_string(Bin, <<$">>),
+    <<Escaped/binary, $">>.
+
+%% Escape string for zone file format
+-spec do_escape_string(binary(), binary()) -> binary().
+do_escape_string(<<>>, Acc) ->
+    Acc;
+do_escape_string(<<$\\, Rest/binary>>, Acc) ->
+    do_escape_string(Rest, <<Acc/binary, "\\\\">>);
+do_escape_string(<<$", Rest/binary>>, Acc) ->
+    do_escape_string(Rest, <<Acc/binary, "\"">>);
+do_escape_string(<<C, Rest/binary>>, Acc) when C >= 32, C =< 126 ->
+    do_escape_string(Rest, <<Acc/binary, C>>);
+do_escape_string(<<C, Rest/binary>>, Acc) ->
+    %% Non-printable, use escape format that matches decoder expectations
+    %% Note: Using binary format (not octal) to match existing decoder behavior
+    Escape = list_to_binary(io_lib:format("\\~3..0B", [C])),
+    do_escape_string(Rest, <<Acc/binary, Escape/binary>>).
 
 escape_chars(IoList) ->
     binary:encode_hex(erlang:iolist_to_binary(IoList)).
