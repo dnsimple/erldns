@@ -74,12 +74,12 @@ groups() ->
             json_record_svcb_no_mandatory,
             json_record_svcb_unknown_param,
             json_record_svcb_ech_param,
-            json_record_svcb_invalid_value_format,
             json_record_svcb_ipv4hint_binary,
             json_record_svcb_ipv6hint_binary,
             json_record_svcb_no_default_alpn_atom,
             json_record_svcb_ipv4hint_invalid,
             json_record_svcb_ipv6hint_invalid,
+            json_record_svcb_keynnnn_format,
             json_record_null_data,
             json_record_unsupported_type,
             json_record_context_filtered,
@@ -814,41 +814,6 @@ json_record_svcb_ech_param(_) ->
         })
     ).
 
-json_record_svcb_invalid_value_format(_) ->
-    Name = ~"example.com",
-    %% Test that invalid value formats for known parameters are skipped
-    ?assertEqual(
-        #dns_rr{
-            name = Name,
-            type = ?DNS_TYPE_SVCB,
-            data =
-                #dns_rrdata_svcb{
-                    svc_priority = 1,
-                    target_name = ~"target.example.com",
-                    svc_params = #{
-                        ?DNS_SVCB_PARAM_PORT => 8080
-                    }
-                },
-            ttl = 3600
-        },
-        erldns_zone_decoder:json_record_to_erlang(#{
-            ~"name" => Name,
-            ~"type" => ~"SVCB",
-            ~"ttl" => 3600,
-            ~"data" => #{
-                ~"svc_priority" => 1,
-                ~"target_name" => ~"target.example.com",
-                ~"svc_params" => #{
-                    ~"port" => 8080,
-                    %% Invalid: should be list
-                    ~"alpn" => <<"not_a_list">>,
-                    %% Invalid: should be list
-                    ~"ipv4hint" => <<"not_a_list">>
-                }
-            }
-        })
-    ).
-
 json_record_svcb_ipv4hint_binary(_) ->
     Name = ~"example.com",
     %% Test IPv4 hint with binary IP addresses (should convert to list)
@@ -977,6 +942,77 @@ json_record_svcb_ipv6hint_invalid(_) ->
                 ~"target_name" => ~"target.example.com",
                 ~"svc_params" => #{
                     ~"ipv6hint" => [~"invalid::ipv6::address"]
+                }
+            }
+        })
+    ).
+
+json_record_svcb_keynnnn_format(_) ->
+    Name = ~"example.com",
+    %% Test that keyNNNN format is supported (dns_erlang supports this)
+    %% Test with various keyNNNN formats: key997, key0998, key999
+    Key997Value = <<"quoted">>,
+    Key998Value = <<"foo">>,
+    Key999Value = <<"bar">>,
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_SVCB,
+            data =
+                #dns_rrdata_svcb{
+                    svc_priority = 6,
+                    target_name = ~".",
+                    svc_params = #{
+                        997 => Key997Value,
+                        998 => Key998Value,
+                        999 => Key999Value
+                    }
+                },
+            ttl = 120
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 120,
+            ~"data" => #{
+                ~"svc_priority" => 6,
+                ~"target_name" => ~".",
+                ~"svc_params" => #{
+                    ~"key997" => Key997Value,
+                    ~"key0998" => Key998Value,
+                    ~"key999" => Key999Value
+                }
+            }
+        })
+    ),
+    %% Test that keyNNNN format works in mandatory parameter list
+    ?assertEqual(
+        #dns_rr{
+            name = Name,
+            type = ?DNS_TYPE_SVCB,
+            data =
+                #dns_rrdata_svcb{
+                    svc_priority = 1,
+                    target_name = ~"target.example.com",
+                    svc_params = #{
+                        ?DNS_SVCB_PARAM_MANDATORY => [997, 998],
+                        997 => Key997Value,
+                        998 => Key998Value
+                    }
+                },
+            ttl = 3600
+        },
+        erldns_zone_decoder:json_record_to_erlang(#{
+            ~"name" => Name,
+            ~"type" => ~"SVCB",
+            ~"ttl" => 3600,
+            ~"data" => #{
+                ~"svc_priority" => 1,
+                ~"target_name" => ~"target.example.com",
+                ~"svc_params" => #{
+                    ~"mandatory" => [~"key997", ~"key0998"],
+                    ~"key997" => Key997Value,
+                    ~"key0998" => Key998Value
                 }
             }
         })
@@ -1433,7 +1469,7 @@ encode_decode_svcb(_) ->
                 target_name = <<"target.", Name/binary>>,
                 svc_params = #{}
             },
-        ttl = 3600
+        ttl = 120
     },
     RecordWithParams = #dns_rr{
         name = Name,
@@ -1442,7 +1478,10 @@ encode_decode_svcb(_) ->
             #dns_rrdata_svcb{
                 svc_priority = 1,
                 target_name = <<"target.", Name/binary>>,
-                svc_params = #{?DNS_SVCB_PARAM_PORT => 8080}
+                svc_params = #{
+                    ?DNS_SVCB_PARAM_PORT => 8080,
+                    3232 => ~"custom\"text"
+                }
             },
         ttl = 3600
     },
@@ -1451,8 +1490,12 @@ encode_decode_svcb(_) ->
     Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
     ?assertMatch([_, _], Encoded),
     [EncodedRecord, EncodedRecordWithParams] = lists:sort(Encoded),
-    ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 3600}, EncodedRecord),
-    ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 3600}, EncodedRecordWithParams).
+    ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 120}, EncodedRecord),
+    ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 3600}, EncodedRecordWithParams),
+    Content = maps:get(~"content", EncodedRecordWithParams),
+    ?assertNotMatch(
+        nomatch, string:find(Content, ~"port=\"8080\" key3232=\"custom\"text"), Content
+    ).
 
 encode_decode_https(_) ->
     Name = unique_name(?FUNCTION_NAME),
