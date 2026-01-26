@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.0.0-rc4
+
+### Fixed
+
+- Remove API blocking use of keyNNNN in SVCB records
+- Fix keyNNNN content encoding
+- Always quote values in svcb params
+
 ## v10.0.0-rc3
 
 ### Added
