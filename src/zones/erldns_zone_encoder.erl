@@ -352,25 +352,25 @@ encode_svcb_params([{Key, Value} | Rest], Acc) ->
         case {Key, Value} of
             {?DNS_SVCB_PARAM_MANDATORY, Keys} when is_list(Keys) ->
                 KeyNames = [dns_names:svcb_param_name(K) || K <- Keys],
-                io_lib:format(" mandatory=~s", [
+                io_lib:format(" mandatory=\"~s\"", [
                     string:join([binary_to_list(K) || K <- KeyNames], ",")
                 ]);
             {?DNS_SVCB_PARAM_ALPN, Protocols} when is_list(Protocols) ->
                 ProtocolStrs = [binary_to_list(P) || P <- Protocols],
-                io_lib:format(" alpn=~s", [string:join(ProtocolStrs, ",")]);
+                io_lib:format(" alpn=\"~s\"", [string:join(ProtocolStrs, ",")]);
             {?DNS_SVCB_PARAM_NO_DEFAULT_ALPN, none} ->
                 " no-default-alpn";
             {?DNS_SVCB_PARAM_PORT, Port} when is_integer(Port) ->
-                io_lib:format(" port=~w", [Port]);
+                io_lib:format(" port=\"~w\"", [Port]);
             {?DNS_SVCB_PARAM_ECH, ECH} when is_binary(ECH) ->
                 ECHBase64 = base64:encode(ECH),
-                io_lib:format(" ech=~s", [ECHBase64]);
+                io_lib:format(" ech=\"~s\"", [ECHBase64]);
             {?DNS_SVCB_PARAM_IPV4HINT, IPs} when is_list(IPs) ->
                 IPStrs = [inet:ntoa(IP) || IP <- IPs],
-                io_lib:format(" ipv4hint=~s", [string:join(IPStrs, ",")]);
+                io_lib:format(" ipv4hint=\"~s\"", [string:join(IPStrs, ",")]);
             {?DNS_SVCB_PARAM_IPV6HINT, IPs} when is_list(IPs) ->
                 IPStrs = [inet:ntoa(IP) || IP <- IPs],
-                io_lib:format(" ipv6hint=~s", [string:join(IPStrs, ",")]);
+                io_lib:format(" ipv6hint=\"~s\"", [string:join(IPStrs, ",")]);
             {Key, Value} when is_binary(Value) ->
                 %% Unknown parameter with binary value
                 ValueBase64 = encode_quoted_string(Value),
