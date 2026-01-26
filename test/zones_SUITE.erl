@@ -1494,7 +1494,7 @@ encode_decode_svcb(_) ->
     ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 3600}, EncodedRecordWithParams),
     Content = maps:get(~"content", EncodedRecordWithParams),
     ?assertNotMatch(
-        nomatch, string:find(Content, ~"port=\"8080\" key3232=\"custom\"text"), Content
+        nomatch, string:find(Content, ~"port=\"8080\" key3232=\"custom\\\"text"), Content
     ).
 
 encode_decode_https(_) ->
