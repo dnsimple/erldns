@@ -26,9 +26,8 @@ Encode the DNS message into its binary representation.
 """.
 -spec encode_message(dns:message()) -> dns:message_bin().
 encode_message(Message) ->
-    try dns:encode_message(Message) of
-        M ->
-            M
+    try
+        dns:encode_message(Message)
     catch
         Class:Reason:Stacktrace ->
             ?LOG_ERROR(
@@ -50,14 +49,13 @@ Encode the DNS message into its binary representation.
 Use the Opts argument to pass in encoding options.
 """.
 -spec encode_message(dns:message(), dns:encode_message_opts()) ->
-    {false, dns:message_bin()}
-    | {true, dns:message_bin(), dns:message()}
-    | {false, dns:message_bin(), dns:tsig_mac()}
-    | {true, dns:message_bin(), dns:tsig_mac(), dns:message()}.
+    dns:message_bin()
+    | {dns:message_bin(), dns:tsig_mac()}
+    | {truncated, dns:message_bin(), dns:message()}
+    | {truncated, dns:message_bin(), dns:tsig_mac(), dns:message()}.
 encode_message(Message, Opts) ->
-    try dns:encode_message(Message, Opts) of
-        M ->
-            M
+    try
+        dns:encode_message(Message, Opts)
     catch
         Class:Reason:Stacktrace ->
             ?LOG_ERROR(
@@ -71,7 +69,7 @@ encode_message(Message, Opts) ->
                 },
                 #{domain => [erldns, listeners]}
             ),
-            {false, encode_message(build_error_response(Message))}
+            encode_message(build_error_response(Message))
     end.
 
 % Private functions

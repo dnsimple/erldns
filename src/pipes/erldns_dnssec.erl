@@ -86,7 +86,7 @@ key_rrset_signer(ZoneName, RRs) ->
         PrivateKey = Keyset#keyset.key_signing_key,
         Inception = Keyset#keyset.inception,
         Expiration = Keyset#keyset.valid_until,
-        dnssec:sign_rr(RRs, dns:dname_to_lower(ZoneName), Keytag, Alg, PrivateKey, #{
+        dnssec:sign_rr(RRs, dns_domain:to_lower(ZoneName), Keytag, Alg, PrivateKey, #{
             inception => Inception, expiration => Expiration
         })
     end.
@@ -105,7 +105,7 @@ zone_rrset_signer(ZoneName, RRs) ->
         PrivateKey = Keyset#keyset.zone_signing_key,
         Inception = Keyset#keyset.inception,
         Expiration = Keyset#keyset.valid_until,
-        dnssec:sign_rr(RRs, dns:dname_to_lower(ZoneName), Keytag, Alg, PrivateKey, #{
+        dnssec:sign_rr(RRs, dns_domain:to_lower(ZoneName), Keytag, Alg, PrivateKey, #{
             inception => Inception, expiration => Expiration
         })
     end.
@@ -165,8 +165,8 @@ handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, QName, QTyp
     ApexRecords = erldns_zone_cache:get_records_by_name(Zone#zone.name),
     ApexRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), ApexRecords),
     SoaRRSigRecords = maybe_get_soa_rrsig_records(ApexRRSigRecords, MsgAuths),
-    NameToNormalise = dns:labels_to_dname([?NEXT_DNAME_PART | dns:dname_to_labels(QName)]),
-    NextDname = dns:dname_to_lower(NameToNormalise),
+    NameToNormalise = dns_domain:join([?NEXT_DNAME_PART | dns_domain:split(QName)]),
+    NextDname = dns_domain:to_lower(NameToNormalise),
     RecordTypesForQname = record_types_for_name(Zone, QName),
     NsecRrTypes = erldns_handler:call_map_nsec_rr_types(QType, RecordTypesForQname),
     NsecRecords =
@@ -243,7 +243,7 @@ find_unsigned_records(Records) ->
 
 %% compact-denial-of-existence-07
 record_types_for_name(Zone, Name) ->
-    Labels = dns:dname_to_lower_labels(Name),
+    Labels = dns_domain:split(dns_domain:to_lower(Name)),
     case best_match_at_node(Zone, Labels) of
         ent ->
             lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]);

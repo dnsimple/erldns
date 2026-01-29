@@ -255,12 +255,12 @@ resolve_exact_match(Message, Zone, QLabels, QType, CnameChain, MatchedRecords) -
 resolve_exact_type_match(Message, Zone, QLabels, ?DNS_TYPE_NS, CnameChain, MatchedRecords, []) ->
     % There was an exact type match for an NS query, however there is no SOA record for the zone.
     ?LOG_INFO(
-        #{what => exact_match_for_ns_with_no_soa, qname => dns:labels_to_dname(QLabels)},
+        #{what => exact_match_for_ns_with_no_soa, qname => dns_domain:join(QLabels)},
         #{domain => [erldns, pipeline]}
     ),
     Answer = lists:last(MatchedRecords),
     Name = Answer#dns_rr.name,
-    Labels = dns:dname_to_labels(Name),
+    Labels = dns_domain:split(Name),
     % It isn't clear what the QTYPE should be on a delegated restart. I assume an A record.
     restart_delegated_query(
         Message,
@@ -353,7 +353,7 @@ resolve_exact_type_match_delegated(
             };
         false ->
             % NS name is different than the name in the matched records
-            Labels = dns:dname_to_labels(Name),
+            Labels = dns_domain:split(Name),
             case check_if_parent(Labels, Answer#dns_rr.name) of
                 true ->
                     % NS record name is a parent of the answer name
@@ -445,7 +445,7 @@ resolve_exact_match_with_cname(
             % No CNAME loop, restart the query with the CNAME content.
             CnameRecord = lists:last(CnameRecords),
             Name = CnameRecord#dns_rr.data#dns_rrdata_cname.dname,
-            Labels = dns:dname_to_labels(Name),
+            Labels = dns_domain:split(Name),
             restart_query(
                 Message#dns_message{
                     aa = true, answers = Message#dns_message.answers ++ CnameRecords
@@ -622,7 +622,7 @@ resolve_best_match_with_wildcard_cname(
             UpdatedMessage = Message#dns_message{
                 aa = true, answers = Message#dns_message.answers ++ CnameRecords
             },
-            Labels = dns:dname_to_labels(Name),
+            Labels = dns_domain:split(Name),
             restart_query(
                 UpdatedMessage,
                 Zone,
@@ -741,7 +741,7 @@ optionally_add_root_hints(Message) ->
 check_if_parent(MaybeParent, MaybeChild) when is_list(MaybeParent), is_list(MaybeChild) ->
     lists:suffix(MaybeParent, MaybeChild);
 check_if_parent(MaybeParent, MaybeChild) when is_binary(MaybeChild) ->
-    check_if_parent(MaybeParent, dns:dname_to_labels(MaybeChild)).
+    check_if_parent(MaybeParent, dns_domain:split(MaybeChild)).
 
 %% See if additional processing is necessary.
 additional_processing(Message, Zone) ->
@@ -785,10 +785,10 @@ zone_authority_name(#zone{authority = [Record | _]}) ->
 
 % Find NS records that represent a zone cut.
 detect_zonecut(Zone, QName) when is_binary(QName) ->
-    detect_zonecut(Zone, dns:dname_to_labels(QName));
+    detect_zonecut(Zone, dns_domain:split(QName));
 detect_zonecut(Zone, QLabels) when is_list(QLabels) ->
     AuthName = zone_authority_name(Zone),
-    AuthLabels = dns:dname_to_labels(AuthName),
+    AuthLabels = dns_domain:split(AuthName),
     do_detect_zonecut(Zone, AuthLabels, QLabels).
 
 do_detect_zonecut(_, _, []) ->
@@ -796,7 +796,7 @@ do_detect_zonecut(_, _, []) ->
 do_detect_zonecut(_, _, [_]) ->
     [];
 do_detect_zonecut(Zone, AuthLabels, [_ | ParentLabels] = Labels) ->
-    case dns:compare_labels(AuthLabels, Labels) of
+    case dns_domain:are_equal_labels(AuthLabels, Labels) of
         true ->
             [];
         false ->

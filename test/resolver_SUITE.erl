@@ -18,8 +18,8 @@ all() ->
 %% Tests
 resolve_authoritative_host_not_found(_) ->
     erldns_zone_cache:start_link(),
-    ZoneName = dns:dname_to_lower(~"resolve_auth_no_host.com"),
-    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneName = dns_domain:to_lower(~"resolve_auth_no_host.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
     Z = #zone{
         labels = ZoneLabels,
         name = ZoneName,
@@ -36,8 +36,8 @@ resolve_authoritative_zone_cut(_) ->
     erldns_handler:start_link(),
     Qname = ~"delegated.resolve_auth_zone_cut.com",
     NSRecord = [#dns_rr{name = Qname, type = ?DNS_TYPE_NS}],
-    ZoneName = dns:dname_to_lower(~"resolve_auth_zone_cut.com"),
-    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneName = dns_domain:to_lower(~"resolve_auth_zone_cut.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
     Z = #zone{
         labels = ZoneLabels,
         name = ZoneName,
@@ -46,7 +46,7 @@ resolve_authoritative_zone_cut(_) ->
     },
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = Qtype = ?DNS_TYPE_A}]},
     erldns_zone_cache:put_zone(Z),
-    A = erldns_resolver:resolve_authoritative(Msg, Z, Qname, dns:dname_to_labels(Qname), Qtype, []),
+    A = erldns_resolver:resolve_authoritative(Msg, Z, Qname, dns_domain:split(Qname), Qtype, []),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
     ?assertEqual(NSRecord, A#dns_message.authority),
@@ -68,8 +68,8 @@ resolve_authoritative_zone_cut_with_cnames(_) ->
     NSRecord = [
         #dns_rr{name = ~"delegated-ns.resolve_auth_zone_cut_cnames.com", type = ?DNS_TYPE_NS}
     ],
-    ZoneName = dns:dname_to_lower(~"resolve_auth_zone_cut_cnames.com"),
-    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneName = dns_domain:to_lower(~"resolve_auth_zone_cut_cnames.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
     Z = #zone{
         labels = ZoneLabels,
         name = ZoneName,
@@ -78,7 +78,7 @@ resolve_authoritative_zone_cut_with_cnames(_) ->
     },
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = Qtype = ?DNS_TYPE_A}]},
     erldns_zone_cache:put_zone(Z),
-    A = erldns_resolver:resolve_authoritative(Msg, Z, Qname, dns:dname_to_labels(Qname), Qtype, []),
+    A = erldns_resolver:resolve_authoritative(Msg, Z, Qname, dns_domain:split(Qname), Qtype, []),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
     ?assertEqual(NSRecord, A#dns_message.authority),

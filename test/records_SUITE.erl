@@ -103,11 +103,11 @@ match_delegation(_) ->
 match_wildcard_label(_) ->
     ?assert(
         lists:any(
-            erldns_records:match_wildcard_label(), dns:dname_to_labels(<<"*.example.com">>)
+            erldns_records:match_wildcard_label(), dns_domain:split(<<"*.example.com">>)
         )
     ),
     ?assertNot(
         lists:any(
-            erldns_records:match_wildcard_label(), dns:dname_to_labels(<<"www.example.com">>)
+            erldns_records:match_wildcard_label(), dns_domain:split(<<"www.example.com">>)
         )
     ).

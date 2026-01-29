@@ -1925,10 +1925,10 @@ get_zone_records(_) ->
     ?assertMatch(L when 9 =:= length(L), erldns_zone_cache:get_zone_records(Zone)).
 
 get_records_by_name(_) ->
-    NxName = dns:dname_to_lower(~"nxname.a1.example.net"),
-    NxName2 = dns:dname_to_lower(~"nxname.a1.example.com"),
-    Name = dns:dname_to_lower(~"a1.example.com"),
-    Labels = dns:dname_to_lower_labels(~"a1.example.com"),
+    NxName = dns_domain:to_lower(~"nxname.a1.example.net"),
+    NxName2 = dns_domain:to_lower(~"nxname.a1.example.com"),
+    Name = dns_domain:to_lower(~"a1.example.com"),
+    Labels = dns_domain:split(dns_domain:to_lower(~"a1.example.com")),
     Zone = erldns_zone_cache:lookup_zone(~"example.com"),
     ?assertMatch([], erldns_zone_cache:get_records_by_name(NxName)),
     ?assertMatch([#dns_rr{}], erldns_zone_cache:get_records_by_name(Labels)),
@@ -1940,9 +1940,9 @@ get_records_by_name(_) ->
 
 get_records_by_name_and_type(_) ->
     Type = ?DNS_TYPE_A,
-    NxName = dns:dname_to_lower(~"nxname.a1.example.net"),
-    Name = dns:dname_to_lower(~"a1.example.com"),
-    Labels = dns:dname_to_lower_labels(~"a1.example.com"),
+    NxName = dns_domain:to_lower(~"nxname.a1.example.net"),
+    Name = dns_domain:to_lower(~"a1.example.com"),
+    Labels = dns_domain:split(dns_domain:to_lower(~"a1.example.com")),
     Zone = erldns_zone_cache:lookup_zone(~"example.com"),
     ?assertMatch([], erldns_zone_cache:get_records_by_name_and_type(NxName, Type)),
     ?assertMatch([#dns_rr{}], erldns_zone_cache:get_records_by_name_and_type(Labels, Type)),
@@ -1951,17 +1951,17 @@ get_records_by_name_and_type(_) ->
     ?assertMatch([#dns_rr{}], erldns_zone_cache:get_records_by_name_and_type(Zone, Labels, Type)).
 
 get_records_by_name_ent(_) ->
-    Ent = dns:dname_to_lower(~"a2.a1.example.com"),
-    Labels = dns:dname_to_lower_labels(Ent),
+    Ent = dns_domain:to_lower(~"a2.a1.example.com"),
+    Labels = dns_domain:split(dns_domain:to_lower(Ent)),
     Zone = erldns_zone_cache:lookup_zone(~"example.com"),
     ?assertMatch([#dns_rr{}, #dns_rr{}], erldns_zone_cache:get_records_by_name_ent(Zone, Ent)),
     ?assertMatch([#dns_rr{}, #dns_rr{}], erldns_zone_cache:get_records_by_name_ent(Zone, Labels)).
 
 get_records_by_name_wildcard(_) ->
-    Record = dns:dname_to_lower(~"a3.a2.a1.example.com"),
-    Ent = dns:dname_to_lower(~"a2.a1.example.com"),
-    Wild = dns:dname_to_lower(~"a.a-wild.example.com"),
-    Labels = dns:dname_to_lower_labels(Wild),
+    Record = dns_domain:to_lower(~"a3.a2.a1.example.com"),
+    Ent = dns_domain:to_lower(~"a2.a1.example.com"),
+    Wild = dns_domain:to_lower(~"a.a-wild.example.com"),
+    Labels = dns_domain:split(dns_domain:to_lower(Wild)),
     Zone = erldns_zone_cache:lookup_zone(~"example.com"),
     ?assertMatch([], erldns_zone_cache:get_records_by_name_wildcard(Zone, Ent)),
     ?assertMatch([], erldns_zone_cache:get_records_by_name_wildcard(Zone, Record)),
@@ -1969,10 +1969,10 @@ get_records_by_name_wildcard(_) ->
     ?assertMatch([#dns_rr{}], erldns_zone_cache:get_records_by_name_wildcard(Zone, Labels)).
 
 get_records_by_name_wildcard_strict(_) ->
-    Record = dns:dname_to_lower(~"a3.a2.a1.example.com"),
-    Ent = dns:dname_to_lower(~"a2.a1.example.com"),
-    Wild = dns:dname_to_lower(~"a.a-wild.example.com"),
-    Labels = dns:dname_to_lower_labels(Wild),
+    Record = dns_domain:to_lower(~"a3.a2.a1.example.com"),
+    Ent = dns_domain:to_lower(~"a2.a1.example.com"),
+    Wild = dns_domain:to_lower(~"a.a-wild.example.com"),
+    Labels = dns_domain:split(dns_domain:to_lower(Wild)),
     Zone = erldns_zone_cache:lookup_zone(~"example.com"),
     ?assertMatch([#dns_rr{}], erldns_zone_cache:get_records_by_name_wildcard_strict(Zone, Ent)),
     ?assertMatch([#dns_rr{}], erldns_zone_cache:get_records_by_name_wildcard_strict(Zone, Record)),
@@ -1980,35 +1980,35 @@ get_records_by_name_wildcard_strict(_) ->
     ?assertMatch([#dns_rr{}], erldns_zone_cache:get_records_by_name_wildcard_strict(Zone, Labels)).
 
 get_authoritative_zone(_) ->
-    NxName = dns:dname_to_lower(~"example.net"),
-    Labels = dns:dname_to_lower_labels(~"a.a-wild.example.com"),
-    Name = dns:dname_to_lower(~"n4.n3.n2.n1.example.com"),
+    NxName = dns_domain:to_lower(~"example.net"),
+    Labels = dns_domain:split(dns_domain:to_lower(~"a.a-wild.example.com")),
+    Name = dns_domain:to_lower(~"n4.n3.n2.n1.example.com"),
     ?assertMatch(zone_not_found, erldns_zone_cache:get_authoritative_zone(NxName)),
     ?assertMatch(#zone{}, erldns_zone_cache:get_authoritative_zone(Labels)),
     ?assertMatch(#zone{}, erldns_zone_cache:get_authoritative_zone(Name)).
 
 get_delegations(_) ->
-    NxName = dns:dname_to_lower(~"none.example.net"),
-    Labels = dns:dname_to_lower_labels(~"delegation.example.com"),
-    Name = dns:dname_to_lower(~"delegation.example.com"),
+    NxName = dns_domain:to_lower(~"none.example.net"),
+    Labels = dns_domain:split(dns_domain:to_lower(~"delegation.example.com")),
+    Name = dns_domain:to_lower(~"delegation.example.com"),
     ?assertMatch([], erldns_zone_cache:get_delegations(NxName)),
     ?assertMatch([#dns_rr{}], erldns_zone_cache:get_delegations(Labels)),
     ?assertMatch([#dns_rr{}], erldns_zone_cache:get_delegations(Name)).
 
 is_in_any_zone(_) ->
-    NxName = dns:dname_to_lower(~"nxname.a1.example.net"),
-    Name = dns:dname_to_lower(~"a1.example.com"),
-    Labels = dns:dname_to_lower_labels(Name),
+    NxName = dns_domain:to_lower(~"nxname.a1.example.net"),
+    Name = dns_domain:to_lower(~"a1.example.com"),
+    Labels = dns_domain:split(dns_domain:to_lower(Name)),
     ?assertMatch(false, erldns_zone_cache:is_in_any_zone(NxName)),
     ?assertMatch(true, erldns_zone_cache:is_in_any_zone(Name)),
     ?assertMatch(true, erldns_zone_cache:is_in_any_zone(Labels)).
 
 is_name_in_zone(_) ->
-    NxName = dns:dname_to_lower(~"a2.a1.example.net"),
-    Ent = dns:dname_to_lower(~"a2.a1.example.com"),
-    Name = dns:dname_to_lower(~"a3.a2.a1.example.com"),
-    Wild = dns:dname_to_lower(~"a.a-wild.example.com"),
-    Labels = dns:dname_to_lower_labels(Name),
+    NxName = dns_domain:to_lower(~"a2.a1.example.net"),
+    Ent = dns_domain:to_lower(~"a2.a1.example.com"),
+    Name = dns_domain:to_lower(~"a3.a2.a1.example.com"),
+    Wild = dns_domain:to_lower(~"a.a-wild.example.com"),
+    Labels = dns_domain:split(dns_domain:to_lower(Name)),
     Zone = erldns_zone_cache:lookup_zone(~"example.com"),
     ?assertMatch(false, erldns_zone_cache:is_name_in_zone(Zone, NxName)),
     ?assertMatch(false, erldns_zone_cache:is_name_in_zone(Zone, Ent)),
@@ -2017,11 +2017,11 @@ is_name_in_zone(_) ->
     ?assertMatch(true, erldns_zone_cache:is_name_in_zone(Zone, Labels)).
 
 is_record_name_in_zone(_) ->
-    NxName = dns:dname_to_lower(~"a2.a1.example.net"),
-    Ent = dns:dname_to_lower(~"a2.a1.example.com"),
-    Name = dns:dname_to_lower(~"a1.example.com"),
-    Wild = dns:dname_to_lower(~"a.a-wild.example.com"),
-    Labels = dns:dname_to_lower_labels(Name),
+    NxName = dns_domain:to_lower(~"a2.a1.example.net"),
+    Ent = dns_domain:to_lower(~"a2.a1.example.com"),
+    Name = dns_domain:to_lower(~"a1.example.com"),
+    Wild = dns_domain:to_lower(~"a.a-wild.example.com"),
+    Labels = dns_domain:split(dns_domain:to_lower(Name)),
     Zone = erldns_zone_cache:lookup_zone(~"example.com"),
     ?assertMatch(false, erldns_zone_cache:is_record_name_in_zone(Zone, NxName)),
     ?assertMatch(false, erldns_zone_cache:is_record_name_in_zone(Zone, Ent)),
@@ -2030,10 +2030,10 @@ is_record_name_in_zone(_) ->
     ?assertMatch(true, erldns_zone_cache:is_record_name_in_zone(Zone, Labels)).
 
 is_record_name_in_zone_strict(_) ->
-    NxName = dns:dname_to_lower(~"a2.a1.example.net"),
-    Ent = dns:dname_to_lower(~"a2.a1.example.com"),
-    Name = dns:dname_to_lower(~"a1.example.com"),
-    Labels = dns:dname_to_lower_labels(Name),
+    NxName = dns_domain:to_lower(~"a2.a1.example.net"),
+    Ent = dns_domain:to_lower(~"a2.a1.example.com"),
+    Name = dns_domain:to_lower(~"a1.example.com"),
+    Labels = dns_domain:split(dns_domain:to_lower(Name)),
     Zone = erldns_zone_cache:lookup_zone(~"example.com"),
     ?assertMatch(false, erldns_zone_cache:is_record_name_in_zone_strict(Zone, NxName)),
     ?assertMatch(true, erldns_zone_cache:is_record_name_in_zone_strict(Zone, Ent)),
@@ -2041,7 +2041,7 @@ is_record_name_in_zone_strict(_) ->
     ?assertMatch(true, erldns_zone_cache:is_record_name_in_zone_strict(Zone, Labels)).
 
 put_zone(_) ->
-    ZoneName = dns:dname_to_lower(~"a1.put_zone.com"),
+    ZoneName = dns_domain:to_lower(~"a1.put_zone.com"),
     RR = #dns_rr{
         data = #dns_rrdata_a{ip = {5, 5, 5, 5}},
         name = ~"a1.put_zone.com",
@@ -2072,11 +2072,11 @@ put_zone(_) ->
     ?assertMatch(not_authoritative, erldns_zone_cache:get_authoritative_zone(~"a3.put_zone.com")).
 
 put_zone_rrset(_) ->
-    ZoneNameNet = dns:dname_to_lower(~"example.net"),
+    ZoneNameNet = dns_domain:to_lower(~"example.net"),
     ZoneNet = erldns_zone_codec:build_zone(ZoneNameNet, ~"irrelevantDigest", [], []),
     ?assertMatch(zone_not_found, erldns_zone_cache:put_zone_rrset(ZoneNet, ~"a.example.net", 5, 1)),
-    ZoneName = dns:dname_to_lower(~"example.com"),
-    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneName = dns_domain:to_lower(~"example.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
     ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     Record = #dns_rr{
         data = #dns_rrdata_cname{dname = ~"google.com"},
@@ -2103,7 +2103,7 @@ put_zone_rrset(_) ->
     ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count).
 
 put_zone_rrset_fetch_soa_match(_) ->
-    ZoneName = dns:dname_to_lower(~"put_zone_rrset_fetch_soa_match.com"),
+    ZoneName = dns_domain:to_lower(~"put_zone_rrset_fetch_soa_match.com"),
     SoaData = #dns_rrdata_soa{
         mname = ~"ns1.put_zone_rrset_fetch_soa_match.com",
         rname = ~"admin.put_zone_rrset_fetch_soa_match.com",
@@ -2140,8 +2140,8 @@ put_zone_rrset_fetch_soa_match(_) ->
     ?assertMatch(NewSoaRecordsInCache, ZoneModified#zone.authority, Comment).
 
 put_zone_rrset_records_count_with_existing_rrset(_) ->
-    ZoneName = dns:dname_to_lower(~"example.com"),
-    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneName = dns_domain:to_lower(~"example.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
     ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, ~"irrelevantDigest",
@@ -2163,8 +2163,8 @@ put_zone_rrset_records_count_with_existing_rrset(_) ->
     ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count).
 
 put_zone_rrset_records_count_with_new_rrset(_) ->
-    ZoneName = dns:dname_to_lower(~"example.com"),
-    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneName = dns_domain:to_lower(~"example.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
     ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, ~"irrelevantDigest",
@@ -2186,8 +2186,8 @@ put_zone_rrset_records_count_with_new_rrset(_) ->
     ?assertEqual(ZoneBase#zone.record_count + 1, ZoneModified#zone.record_count).
 
 put_zone_rrset_records_count_matches_cache(_) ->
-    ZoneName = dns:dname_to_lower(~"example.com"),
-    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneName = dns_domain:to_lower(~"example.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, ~"irrelevantDigest",
             [
@@ -2210,8 +2210,8 @@ put_zone_rrset_records_count_matches_cache(_) ->
     ).
 
 put_zone_rrset_records_count_with_dnssec_zone_and_new_rrset(_) ->
-    ZoneName = dns:dname_to_lower(~"example-dnssec.com"),
-    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneName = dns_domain:to_lower(~"example-dnssec.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
     Zone = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     erldns_zone_cache:put_zone_rrset(
         {ZoneName, ~"irrelevantDigest",
@@ -2236,7 +2236,7 @@ put_zone_rrset_after_soa_delete(_) ->
     % This testcase simulates a situation when the zone needs to be updated even without the SOA
     % record present. This may happen for example during an Inbound AXFR.
     % Create a zone without SOA to simulate a deletion of SOA record
-    ZoneName = dns:dname_to_lower(~"put_zone_rrset_after_soa_delete.com"),
+    ZoneName = dns_domain:to_lower(~"put_zone_rrset_after_soa_delete.com"),
     TxtData = #dns_rrdata_txt{
         txt = "put_zone_rrset_after_soa_delete zone without SOA"
     },
@@ -2281,13 +2281,13 @@ put_zone_rrset_after_soa_delete(_) ->
     ?assertMatch(NewTXTRecordsInCache, [NewTXT]).
 
 delete_zone_rrset_records_count_width_existing_rrset(_) ->
-    ZoneName = dns:dname_to_lower(~"example.com"),
-    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneName = dns_domain:to_lower(~"example.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
     ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     erldns_zone_cache:delete_zone_rrset(
         ZoneName,
         ~"irrelevantDigest",
-        dns:dname_to_lower(~"cname.example.com"),
+        dns_domain:to_lower(~"cname.example.com"),
         ?DNS_TYPE_CNAME,
         1
     ),
@@ -2296,13 +2296,13 @@ delete_zone_rrset_records_count_width_existing_rrset(_) ->
     ?assertEqual(ZoneBase#zone.record_count - 1, ZoneModified#zone.record_count).
 
 delete_zone_rrset_records_count_width_dnssec_zone_and_existing_rrset(_) ->
-    ZoneName = dns:dname_to_lower(~"example-dnssec.com"),
-    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneName = dns_domain:to_lower(~"example-dnssec.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
     ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     erldns_zone_cache:delete_zone_rrset(
         ZoneName,
         ~"irrelevantDigest",
-        dns:dname_to_lower(~"cname2.example-dnssec.com"),
+        dns_domain:to_lower(~"cname2.example-dnssec.com"),
         ?DNS_TYPE_CNAME,
         2
     ),
@@ -2311,12 +2311,12 @@ delete_zone_rrset_records_count_width_dnssec_zone_and_existing_rrset(_) ->
     ?assertEqual(ZoneBase#zone.record_count - 2, ZoneModified#zone.record_count).
 
 delete_zone_rrset_records_count_matches_cache(_) ->
-    ZoneName = dns:dname_to_lower(~"example-dnssec.com"),
-    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneName = dns_domain:to_lower(~"example-dnssec.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
     erldns_zone_cache:delete_zone_rrset(
         ZoneName,
         ~"irrelevantDigest",
-        dns:dname_to_lower(~"cname2.example-dnssec.com"),
+        dns_domain:to_lower(~"cname2.example-dnssec.com"),
         ?DNS_TYPE_CNAME,
         2
     ),
@@ -2327,13 +2327,13 @@ delete_zone_rrset_records_count_matches_cache(_) ->
     ).
 
 delete_zone_rrset_records_count_underflow(_) ->
-    ZoneName = dns:dname_to_lower(~"example-dnssec.com"),
-    ZoneLabels = dns:dname_to_labels(ZoneName),
+    ZoneName = dns_domain:to_lower(~"example-dnssec.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
     ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
     erldns_zone_cache:delete_zone_rrset(
         ZoneName,
         ~"irrelevantDigest",
-        dns:dname_to_lower(~"cname2.example-dnssec.com"),
+        dns_domain:to_lower(~"cname2.example-dnssec.com"),
         ?DNS_TYPE_CNAME,
         1
     ),
@@ -2342,11 +2342,11 @@ delete_zone_rrset_records_count_underflow(_) ->
     ?assertEqual(ZoneBase#zone.record_count, ZoneModified#zone.record_count).
 
 delete_zone_rrset_records_zone_not_found(_) ->
-    ZoneName = dns:dname_to_lower(~"example-dnssec.net"),
+    ZoneName = dns_domain:to_lower(~"example-dnssec.net"),
     Ret = erldns_zone_cache:delete_zone_rrset(
         ZoneName,
         ~"irrelevantDigest",
-        dns:dname_to_lower(~"cname2.example-dnssec.com"),
+        dns_domain:to_lower(~"cname2.example-dnssec.com"),
         ?DNS_TYPE_CNAME,
         1
     ),
@@ -2388,7 +2388,7 @@ setup_test(_Config, codec) ->
 unique_name(TestCase) ->
     Name = atom_to_binary(TestCase),
     UniqueId = integer_to_binary(erlang:unique_integer([positive, monotonic])),
-    dns:dname_to_lower(erlang:iolist_to_binary([Name, ~".", UniqueId, ~".com."])).
+    dns_domain:to_lower(erlang:iolist_to_binary([Name, ~".", UniqueId, ~".com."])).
 
 ksk_private_key() ->
     <<
