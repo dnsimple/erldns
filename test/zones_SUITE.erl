@@ -605,7 +605,7 @@ json_record_https_to_erlang(_) ->
                 ~"target_name" => ~".",
                 ~"svc_params" => #{
                     ~"alpn" => [~"h2", ~"h3"],
-                    ~"no-default-alpn" => <<"none">>
+                    ~"no-default-alpn" => null
                 }
             },
             ~"context" => null

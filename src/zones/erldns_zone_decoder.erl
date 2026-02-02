@@ -795,7 +795,7 @@ parse_svcb_params([{Key, Value} | Rest], Acc) ->
                 Acc#{ParamKey => KeyNums};
             ?DNS_SVCB_PARAM_ALPN when is_list(Value) ->
                 Acc#{ParamKey => Value};
-            ?DNS_SVCB_PARAM_NO_DEFAULT_ALPN when Value =:= <<"none">> orelse Value =:= none ->
+            ?DNS_SVCB_PARAM_NO_DEFAULT_ALPN when Value =:= null ->
                 Acc#{ParamKey => none};
             ?DNS_SVCB_PARAM_PORT when is_integer(Value) ->
                 Acc#{ParamKey => Value};
