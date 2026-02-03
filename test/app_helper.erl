@@ -18,7 +18,7 @@ start_erldns(Config, Env, Attempt) ->
     Ref = make_ref(),
     {Pid, MonitorRef} = spawn_monitor(fun() ->
         StartTime = erlang:monotonic_time(microsecond),
-        Res = ?CT_PEER(["-pa" | code:get_path()]),
+        Res = ?CT_PEER(["+S 2 -pa" | code:get_path()]),
         Elapsed = erlang:monotonic_time(microsecond) - StartTime,
         ct:pal("Peer node created in ~p ms", [Elapsed / 1000]),
         Self ! {Ref, Res},
