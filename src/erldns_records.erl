@@ -35,7 +35,7 @@
 -doc "If given Name is a wildcard name then the original qname needs to be returned in its place.".
 -spec optionally_convert_wildcard(dns:dname(), dns:dname()) -> dns:dname().
 optionally_convert_wildcard(Name, Qname) ->
-    case dns:dname_to_labels(Name) of
+    case dns_domain:split(Name) of
         [~"*" | _] ->
             Qname;
         [_ | _] ->
@@ -49,8 +49,8 @@ Replaces the leading label with an asterisk for wildcard lookup.
 """.
 -spec wildcard_qname(dns:dname()) -> dns:dname().
 wildcard_qname(Qname) ->
-    [_ | Rest] = dns:dname_to_labels(Qname),
-    dns:labels_to_dname([~"*" | Rest]).
+    [_ | Rest] = dns_domain:split(Qname),
+    dns_domain:join([~"*" | Rest]).
 
 -doc "Return the TTL value or 3600 if it is undefined.".
 -spec default_ttl(integer() | undefined) -> integer().
@@ -111,11 +111,11 @@ match_types(Types) ->
 
 -spec match_wildcard() -> fun((dns:rr()) -> boolean()).
 match_wildcard() ->
-    fun(#dns_rr{name = RRName}) -> lists:member(~"*", dns:dname_to_labels(RRName)) end.
+    fun(#dns_rr{name = RRName}) -> lists:member(~"*", dns_domain:split(RRName)) end.
 
 -spec match_not_wildcard() -> fun((dns:rr()) -> boolean()).
 match_not_wildcard() ->
-    fun(#dns_rr{name = RRName}) -> not lists:member(~"*", dns:dname_to_labels(RRName)) end.
+    fun(#dns_rr{name = RRName}) -> not lists:member(~"*", dns_domain:split(RRName)) end.
 
 -spec match_wildcard_label() -> fun((binary()) -> boolean()).
 match_wildcard_label() ->

@@ -20,10 +20,10 @@ where `count` is the number of questions removed.
 call(#dns_message{qc = 0} = Msg, _) ->
     {stop, Msg#dns_message{qr = true}};
 call(#dns_message{qc = 1, questions = [#dns_query{name = Name, type = Type}]} = Msg, Opts) ->
-    Labels = dns:dname_to_lower_labels(Name),
+    Labels = dns_domain:split(dns_domain:to_lower(Name)),
     {Msg, Opts#{query_labels := Labels, query_type := Type}};
 call(#dns_message{questions = [Q1 | Rest]} = Msg, #{host := Host} = Opts) ->
-    Labels = dns:dname_to_lower_labels(Q1#dns_query.name),
+    Labels = dns_domain:split(dns_domain:to_lower(Q1#dns_query.name)),
     Measurements = #{count => length(Rest)},
     Metadata = #{host => Host, questions => [Q1 | Rest]},
     telemetry:execute([erldns, pipeline, questions], Measurements, Metadata),

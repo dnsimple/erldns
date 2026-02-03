@@ -115,7 +115,7 @@ call_handlers(Message, QLabels, QType, Records) ->
 call_handlers_fun(Message, QLabels, ?DNS_TYPE_ANY, Records) ->
     fun
         ({Handler, _, _, _, _, ?MINIMUM_HANDLER_VERSION}) ->
-            Handler(dns:labels_to_dname(QLabels), ?DNS_TYPE_ANY, Records, Message);
+            Handler(dns_domain:join(QLabels), ?DNS_TYPE_ANY, Records, Message);
         ({Handler, _, _, _, _, ?DEFAULT_HANDLER_VERSION}) ->
             Handler(Message, QLabels, ?DNS_TYPE_ANY, Records)
     end;
@@ -123,7 +123,7 @@ call_handlers_fun(Message, QLabels, QType, Records) ->
     fun
         ({Handler, _, _, _, Types, ?MINIMUM_HANDLER_VERSION}) ->
             case lists:member(QType, Types) of
-                true -> Handler(dns:labels_to_dname(QLabels), QType, Records, Message);
+                true -> Handler(dns_domain:join(QLabels), QType, Records, Message);
                 false -> []
             end;
         ({Handler, _, _, _, Types, ?DEFAULT_HANDLER_VERSION}) ->

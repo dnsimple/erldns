@@ -130,10 +130,10 @@ handle_pipeline_response(Socket, IpAddr, Port, TS0, #dns_message{} = Response) -
     Result = erldns_encoder:encode_message(Response, #{}),
     EncodedResponse =
         case Result of
-            {false, Enc} -> Enc;
-            {false, Enc, _TsigMac} -> Enc;
-            {true, Enc, #dns_message{} = _Message} -> Enc;
-            {true, Enc, _TsigMac, #dns_message{} = _Message} -> Enc
+            {truncated, Enc, _TsigMac, #dns_message{} = _Message} -> Enc;
+            {truncated, Enc, #dns_message{} = _Message} -> Enc;
+            {Enc, _TsigMac} -> Enc;
+            Enc -> Enc
         end,
     gen_udp:send(Socket, IpAddr, Port, EncodedResponse),
     measure_time(Response, EncodedResponse, TS0).

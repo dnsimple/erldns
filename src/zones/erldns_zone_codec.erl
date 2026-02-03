@@ -86,8 +86,8 @@ encode(_) ->
 
 -spec build_zone(dns:dname(), binary(), [dns:rr()], [erldns:keyset()]) -> erldns:zone().
 build_zone(Name, Version, Records, Keys) ->
-    NormalizedName = dns:dname_to_lower(Name),
-    Labels = dns:dname_to_labels(NormalizedName),
+    NormalizedName = dns_domain:to_lower(Name),
+    Labels = dns_domain:split(NormalizedName),
     Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
     #zone{
         labels = Labels,

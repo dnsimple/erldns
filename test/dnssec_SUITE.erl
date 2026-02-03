@@ -47,8 +47,8 @@ end_per_testcase(_, _Config) ->
     ok.
 
 verify_ksk_signed(_) ->
-    Name = dns:dname_to_lower(~"example-dnssec0.com"),
-    Labels = dns:dname_to_labels(Name),
+    Name = dns_domain:to_lower(~"example-dnssec0.com"),
+    Labels = dns_domain:split(Name),
     QType = ?DNS_TYPE_A,
     Q = #dns_query{name = Name, type = QType},
     A = #dns_rr{name = Name, type = QType, data = #dns_rrdata_a{ip = {1, 2, 3, 4}}},
@@ -77,8 +77,8 @@ verify_ksk_signed(_) ->
     ).
 
 verify_ksk_signed_alg13(_) ->
-    Name = dns:dname_to_lower(~"example-dnssec-13.com"),
-    Labels = dns:dname_to_labels(Name),
+    Name = dns_domain:to_lower(~"example-dnssec-13.com"),
+    Labels = dns_domain:split(Name),
     QType = ?DNS_TYPE_A,
     Q = #dns_query{name = Name, type = QType},
     A = #dns_rr{name = Name, type = QType, data = #dns_rrdata_a{ip = {1, 2, 3, 4}}},
@@ -107,8 +107,8 @@ verify_ksk_signed_alg13(_) ->
     ).
 
 verify_ksk_signed_alg14(_) ->
-    Name = dns:dname_to_lower(~"example-dnssec-14.com"),
-    Labels = dns:dname_to_labels(Name),
+    Name = dns_domain:to_lower(~"example-dnssec-14.com"),
+    Labels = dns_domain:split(Name),
     QType = ?DNS_TYPE_A,
     Q = #dns_query{name = Name, type = QType},
     A = #dns_rr{name = Name, type = QType, data = #dns_rrdata_a{ip = {1, 2, 3, 4}}},
@@ -137,8 +137,8 @@ verify_ksk_signed_alg14(_) ->
     ).
 
 verify_zsk_signed(_) ->
-    Name = dns:dname_to_lower(~"example-dnssec0.com"),
-    Labels = dns:dname_to_labels(Name),
+    Name = dns_domain:to_lower(~"example-dnssec0.com"),
+    Labels = dns_domain:split(Name),
     QType = ?DNS_TYPE_CDNSKEY,
     CDSRecord = #dns_rr{
         name = ~"example.com",
@@ -179,8 +179,8 @@ verify_zsk_signed(_) ->
     ).
 
 verify_zsk_signed_alg13(_) ->
-    Name = dns:dname_to_lower(~"example-dnssec-13.com"),
-    Labels = dns:dname_to_labels(Name),
+    Name = dns_domain:to_lower(~"example-dnssec-13.com"),
+    Labels = dns_domain:split(Name),
     QType = ?DNS_TYPE_CDNSKEY,
     CDSRecord = #dns_rr{
         name = ~"example.com",
@@ -220,8 +220,8 @@ verify_zsk_signed_alg13(_) ->
     ).
 
 verify_zsk_signed_alg14(_) ->
-    Name = dns:dname_to_lower(~"example-dnssec-14.com"),
-    Labels = dns:dname_to_labels(Name),
+    Name = dns_domain:to_lower(~"example-dnssec-14.com"),
+    Labels = dns_domain:split(Name),
     QType = ?DNS_TYPE_CDNSKEY,
     CDSRecord = #dns_rr{
         name = ~"example.com",
@@ -261,8 +261,8 @@ verify_zsk_signed_alg14(_) ->
     ).
 
 verify_ksk_signed_alg15(_) ->
-    Name = dns:dname_to_lower(~"example-dnssec-15.com"),
-    Labels = dns:dname_to_labels(Name),
+    Name = dns_domain:to_lower(~"example-dnssec-15.com"),
+    Labels = dns_domain:split(Name),
     QType = ?DNS_TYPE_A,
     Q = #dns_query{name = Name, type = QType},
     A = #dns_rr{name = Name, type = QType, data = #dns_rrdata_a{ip = {1, 2, 3, 4}}},
@@ -291,8 +291,8 @@ verify_ksk_signed_alg15(_) ->
     ).
 
 verify_ksk_signed_alg16(_) ->
-    Name = dns:dname_to_lower(~"example-dnssec-16.com"),
-    Labels = dns:dname_to_labels(Name),
+    Name = dns_domain:to_lower(~"example-dnssec-16.com"),
+    Labels = dns_domain:split(Name),
     QType = ?DNS_TYPE_A,
     Q = #dns_query{name = Name, type = QType},
     A = #dns_rr{name = Name, type = QType, data = #dns_rrdata_a{ip = {1, 2, 3, 4}}},
@@ -321,8 +321,8 @@ verify_ksk_signed_alg16(_) ->
     ).
 
 verify_zsk_signed_alg15(_) ->
-    Name = dns:dname_to_lower(~"example-dnssec-15.com"),
-    Labels = dns:dname_to_labels(Name),
+    Name = dns_domain:to_lower(~"example-dnssec-15.com"),
+    Labels = dns_domain:split(Name),
     QType = ?DNS_TYPE_CDNSKEY,
     CDSRecord = #dns_rr{
         name = ~"example.com",
@@ -362,8 +362,8 @@ verify_zsk_signed_alg15(_) ->
     ).
 
 verify_zsk_signed_alg16(_) ->
-    Name = dns:dname_to_lower(~"example-dnssec-16.com"),
-    Labels = dns:dname_to_labels(Name),
+    Name = dns_domain:to_lower(~"example-dnssec-16.com"),
+    Labels = dns_domain:split(Name),
     QType = ?DNS_TYPE_CDNSKEY,
     CDSRecord = #dns_rr{
         name = ~"example.com",

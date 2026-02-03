@@ -7,18 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
-## v10.0.0-rc4
-
-### Fixed
-
-- Remove API blocking use of keyNNNN in SVCB records
-- Fix keyNNNN content encoding
-- Always quote values in svcb params
-
-## v10.0.0-rc3
+## v10
 
 ### Added
 
+- Better overload management ([#301](https://github.com/dnsimple/erldns/pull/301) [#302](https://github.com/dnsimple/erldns/pull/302) [#306](https://github.com/dnsimple/erldns/pull/306))
+- RFC7766 pipelining support for TCP/TLS with concurrent request processing ([#300](https://github.com/dnsimple/erldns/pull/300))
+- DNS over TLS (DoT) support per RFC 7858 ([#300](https://github.com/dnsimple/erldns/pull/300))
+- Configurable request timeout monitoring for TCP workers with SERVFAIL responses ([#300](https://github.com/dnsimple/erldns/pull/300))
+- Codec support for SVCB and HTTPS record types ([#313](https://github.com/dnsimple/erldns/pull/313))
 - Codec support for many new record types introduced in `dns_erlang` v4.9.0 ([#312](https://github.com/dnsimple/erldns/pull/312)):
   - OPENPGPKEY (Type 61) — RFC 7929
   - SMIMEA (Type 53) — RFC 8162
@@ -27,52 +24,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - EUI48 (Type 108) and EUI64 (Type 109) — RFC 7043
   - CSYNC (Type 62) — RFC 7477
   - DSYNC (Type 66) — RFC 9859
-
-### Fixed
-
-- Fix wrong dot logic around SVCB and HTTPS records in the codec ([#319](https://github.com/dnsimple/erldns/pull/319))
-
-### Documentation
-
 - Add initial documentation regarding the Admin API ([#316](https://github.com/dnsimple/erldns/pull/316))
-
-## v10.0.0-rc2
-
-### Added
-
-- Codec support for SVCB and HTTPS record types ([#313](https://github.com/dnsimple/erldns/pull/313))
-
-### Removed
-
-- `rfc_compliant_ent` configuration option. RFC 4592 compliant empty non-terminal (ENT) handling is now always enabled ([#308](https://github.com/dnsimple/erldns/pull/308))
-
-### Fixed
-
-- Fix false error raised in TCP listener initialization when gen_server exits normally ([#311](https://github.com/dnsimple/erldns/pull/311))
-
-## v10.0.0-rc1
-
-### Added
-
-- RFC7766 pipelining support for TCP/TLS with concurrent request processing ([#300](https://github.com/dnsimple/erldns/pull/300))
-- DNS over TLS (DoT) support per RFC 7858 ([#300](https://github.com/dnsimple/erldns/pull/300))
-- Configurable request timeout monitoring for TCP workers with SERVFAIL responses ([#300](https://github.com/dnsimple/erldns/pull/300))
 
 ### Changed
 
 - Move TCP and UDP ingress timeout configuration to per-listener `opts` map ([#300](https://github.com/dnsimple/erldns/pull/300))
 - Rename transport type `both` to `standard` for clarity ([#300](https://github.com/dnsimple/erldns/pull/300))
-
-### Removed
-
-- Global `ingress_tcp_request_timeout` and `ingress_udp_request_timeout` application environment variables ([#300](https://github.com/dnsimple/erldns/pull/300))
-
-### Updated
-
-- Upgrade dns_erlang dependency ([#305](https://github.com/dnsimple/erldns/pull/305))
+- Upgrade dns_erlang dependency
   - Includes small performance optimisations
   - Adds support for many new record types
   - Adds `dns:decode_query/1` for early stop of bad input
+
+### Removed
+
+- `rfc_compliant_ent` configuration option. RFC 4592 compliant empty non-terminal (ENT) handling is now always enabled ([#308](https://github.com/dnsimple/erldns/pull/308))
+- Global `ingress_tcp_request_timeout` and `ingress_udp_request_timeout` application environment variables are now configured per listener ([#300](https://github.com/dnsimple/erldns/pull/300))
 
 ## v9.1.0
 
