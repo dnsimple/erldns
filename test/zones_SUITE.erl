@@ -649,7 +649,7 @@ json_record_svcb_mandatory_valid(_) ->
 json_record_svcb_mandatory_self_reference(_) ->
     Name = ~"example.com",
     ?assertException(
-        throw,
+        error,
         {svcb_mandatory_validation_error, {mandatory_self_reference, ?DNS_SVCB_PARAM_MANDATORY}},
         erldns_zone_decoder:json_record_to_erlang(#{
             ~"name" => Name,
@@ -668,7 +668,7 @@ json_record_svcb_mandatory_self_reference(_) ->
 json_record_svcb_mandatory_missing_keys(_) ->
     Name = ~"example.com",
     ?assertException(
-        throw,
+        error,
         {svcb_mandatory_validation_error, {missing_mandatory_keys, [?DNS_SVCB_PARAM_PORT]}},
         erldns_zone_decoder:json_record_to_erlang(#{
             ~"name" => Name,
@@ -909,10 +909,10 @@ json_record_svcb_no_default_alpn_atom(_) ->
 
 json_record_svcb_ipv4hint_invalid(_) ->
     Name = ~"example.com",
-    %% Test that invalid IPv4 addresses throw an error
+    %% Test that invalid IPv4 addresses error an error
     ?assertException(
-        throw,
-        {invalid_ipv4, _},
+        error,
+        {invalid_ipv4_in_json, _, _},
         erldns_zone_decoder:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
@@ -929,10 +929,10 @@ json_record_svcb_ipv4hint_invalid(_) ->
 
 json_record_svcb_ipv6hint_invalid(_) ->
     Name = ~"example.com",
-    %% Test that invalid IPv6 addresses throw an error
+    %% Test that invalid IPv6 addresses error an error
     ?assertException(
-        throw,
-        {invalid_ipv6, _},
+        error,
+        {invalid_ipv6_in_json, _, _},
         erldns_zone_decoder:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
@@ -1494,7 +1494,7 @@ encode_decode_svcb(_) ->
     ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 3600}, EncodedRecordWithParams),
     Content = maps:get(~"content", EncodedRecordWithParams),
     ?assertNotMatch(
-        nomatch, string:find(Content, ~"port=\"8080\" key3232=\"custom\"text"), Content
+        nomatch, string:find(Content, ~"port=\"8080\" key3232=\"custom\\\"text"), Content
     ).
 
 encode_decode_https(_) ->
