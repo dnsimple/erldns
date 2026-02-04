@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
-## v10
+## v10.1.0
+
+### Added
+
+- Redesigned RFC compliant codecs for the Admin API ([#325](https://github.com/dnsimple/erldns/pull/325))
+
+### Fixed
+
+- Fixed spurious trailing dots in the admin API ([#325](https://github.com/dnsimple/erldns/pull/325))
+- Fixed badly formatted TXT records in the admin API ([#325](https://github.com/dnsimple/erldns/pull/325))
+
+## v10.0.0
 
 ### Added
 

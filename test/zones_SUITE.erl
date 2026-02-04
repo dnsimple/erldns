@@ -909,7 +909,7 @@ json_record_svcb_no_default_alpn_atom(_) ->
 
 json_record_svcb_ipv4hint_invalid(_) ->
     Name = ~"example.com",
-    %% Test that invalid IPv4 addresses error an error
+    %% Test that invalid IPv4 addresses raises an error
     ?assertException(
         error,
         {invalid_ipv4_in_json, _, _},
@@ -929,7 +929,7 @@ json_record_svcb_ipv4hint_invalid(_) ->
 
 json_record_svcb_ipv6hint_invalid(_) ->
     Name = ~"example.com",
-    %% Test that invalid IPv6 addresses error an error
+    %% Test that invalid IPv6 addresses raises an error
     ?assertException(
         error,
         {invalid_ipv6_in_json, _, _},
