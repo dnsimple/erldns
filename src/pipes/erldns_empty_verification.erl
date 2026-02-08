@@ -2,9 +2,24 @@
 -moduledoc """
 Raise an event if the given message is empty or refused.
 
+## Telemetry events
+
 May emit the following telemetry events:
-- `[erldns, pipeline, refused]`, with measurements `#{count => 1}`
-- `[erldns, pipeline, empty]`, with measurements `#{count => 1}`
+
+### `[erldns, pipeline, refused]`
+
+Emitted when the empty verification pipe sees a resolved response with rcode REFUSED.
+
+- **Measurements:** `#{count => 1}`
+- **Metadata:** `#{}`
+
+### `[erldns, pipeline, empty]`
+
+Emitted when the empty verification pipe sees a resolved response with zero answer,
+authority, and additional records.
+
+- **Measurements:** `#{count => 1}`
+- **Metadata:** `#{}`
 """.
 
 -include_lib("kernel/include/logger.hrl").

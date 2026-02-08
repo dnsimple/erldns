@@ -4,8 +4,15 @@ Resolve a DNS query.
 
 Assumes that the DNS message contains exactly one query.
 
-Emits the following telemetry events:
-- `[erldns, pipeline, resolver, error]` with `#{rc := dns:rcode/0}` metadata.
+## Telemetry events
+
+### `[erldns, pipeline, resolver, error]`
+
+Emitted when the resolver pipe catches an error: either a thrown `{error, rcode, RCODE}`
+or an exception (mapped to SERVFAIL).
+
+- **Measurements:** `#{count => 1}`
+- **Metadata:** `#{rc => dns:rcode()}`
 """.
 
 -include_lib("dns_erlang/include/dns.hrl").

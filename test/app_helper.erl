@@ -18,7 +18,7 @@ start_erldns(Config, Env, Attempt) ->
     Ref = make_ref(),
     {Pid, MonitorRef} = spawn_monitor(fun() ->
         StartTime = erlang:monotonic_time(microsecond),
-        Res = ?CT_PEER(["-pa" | code:get_path()]),
+        Res = ?CT_PEER(["+S 2 -pa" | code:get_path()]),
         Elapsed = erlang:monotonic_time(microsecond) - StartTime,
         ct:pal("Peer node created in ~p ms", [Elapsed / 1000]),
         Self ! {Ref, Res},
@@ -54,12 +54,53 @@ do_start_erldns(Config, Env) ->
     Node = proplists:get_value(node, Config),
     ok = erpc:call(Node, application, set_env, [Env]),
     PrivDir = proplists:get_value(priv_dir, Config),
-    File = filename:join([PrivDir, "dnstest.log"]),
+    UniqueInt = erlang:unique_integer([positive, monotonic]),
+    File = filename:join([PrivDir, integer_to_list(UniqueInt) ++ "dnstest.log"]),
     ct:pal("Log file ~n~s~n", [File]),
     ok = erpc:call(Node, logger, update_primary_config, [#{level => info}]),
     ok = erpc:call(Node, logger, add_handler, [dnstest, logger_std_h, #{config => #{file => File}}]),
     {ok, _} = erpc:call(Node, application, ensure_all_started, [erldns]),
     Config.
+
+get_configured_port(Config, Name, udp) ->
+    Node = app_helper:get_node(Config),
+    erpc:call(Node, fun() ->
+        try
+            Children = supervisor:which_children(erldns_listeners),
+            case lists:keyfind({Name, udp}, 1, Children) of
+                {_, Sup, _, _} ->
+                    ChildSpecs = supervisor:which_children(Sup),
+                    case ChildSpecs of
+                        [{erldns_proto_udp_acceptor_sup, AccSup, _, _} | _] ->
+                            AccChildren = supervisor:which_children(AccSup),
+                            case AccChildren of
+                                [{_, AcceptorPid, _, _} | _] ->
+                                    State = sys:get_state(AcceptorPid),
+                                    Socket = element(3, State),
+                                    {ok, {_, Port}} = inet:sockname(Socket),
+                                    Port;
+                                _ ->
+                                    error(no_udp_acceptor)
+                            end;
+                        _ ->
+                            error(no_udp_acceptor_sup)
+                    end;
+                _ ->
+                    error(no_udp_listener)
+            end
+        catch
+            _:Reason ->
+                error({failed_to_get_udp_port, Reason})
+        end
+    end);
+get_configured_port(Config, Name, tcp) ->
+    Node = app_helper:get_node(Config),
+    erpc:call(Node, ranch, get_port, [{erldns_listeners, {Name, tcp}}]);
+get_configured_port(Config, Name, tls) ->
+    Node = app_helper:get_node(Config),
+    erpc:call(Node, ranch, get_port, [{erldns_listeners, {Name, tls}}]);
+get_configured_port(_Config, _, standard) ->
+    0.
 
 get_node(Config) ->
     proplists:get_value(node, Config).

@@ -19,9 +19,13 @@ for reflection/amplification attacks.
 
 ## Telemetry events
 
-- `[erldns, pipeline, throttle]` spans with `host` in the metadata
-    as triggered by `m:segmented_cache`.
-- `[erldns, pipeline, throttle]` with `host` in the metadata.
+### `[erldns, pipeline, throttle]`
+
+Emitted when the query throttle pipe stops the request (e.g. UDP client over limit);
+response is truncated.
+
+- **Measurements:** `#{count => non_neg_integer()}` — request count that triggered throttle
+- **Metadata:** `#{transport => udp, host => host()}`
 """.
 
 -include_lib("dns_erlang/include/dns.hrl").

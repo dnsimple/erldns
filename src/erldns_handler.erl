@@ -52,13 +52,17 @@ handle(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> [dns:rr()].
     call_filters/1,
     call_handlers/4,
     call_map_nsec_rr_types/1,
-    call_map_nsec_rr_types/2
+    call_map_nsec_rr_types/2,
+    %% Standalone NSEC type mapper registration (for pipeline modules)
+    register_nsec_type_mapper/2,
+    unregister_nsec_type_mapper/1
 ]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, terminate/2]).
 
 -record(handlers_state, {
-    handlers = [] :: [versioned_handler()]
+    handlers = [] :: [versioned_handler()],
+    mappers = [] :: [nsec_type_mapper()]
 }).
 -opaque state() :: #handlers_state{}.
 -type versioned_handler() :: {
@@ -70,7 +74,9 @@ handle(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> [dns:rr()].
     integer()
 }.
 -type handler() :: {module(), [dns:type()]}.
--export_type([state/0, versioned_handler/0, handler/0]).
+-type handler_config() :: {module(), [dns:type()], integer()}.
+-type nsec_type_mapper() :: {[dns:type()], fun((dns:type(), dns:type()) -> [dns:type()])}.
+-export_type([state/0, versioned_handler/0, handler/0, handler_config/0, nsec_type_mapper/0]).
 
 -doc "Filter the given record set, returning replacement records.".
 -callback filter([dns:rr()]) -> [dns:rr()].
@@ -92,7 +98,8 @@ register_handler(RecordTypes, Module, Version) ->
 -doc "Get all registered handlers along with the DNS types they handle and associated versions".
 -spec get_versioned_handlers() -> [versioned_handler()].
 get_versioned_handlers() ->
-    persistent_term:get(?MODULE, []).
+    {Handlers, _Mappers} = persistent_term:get(?MODULE, {[], []}),
+    Handlers.
 
 -doc "Filter records through registered handlers.".
 -spec call_filters([dns:rr()]) -> [dns:rr()].
@@ -111,7 +118,7 @@ call_handlers(Message, QLabels, QType, Records) ->
     lists:flatmap(call_handlers_fun(Message, QLabels, QType, Records), Handlers).
 
 -spec call_handlers_fun(dns:message(), dns:labels(), dns:type(), [dns:rr()]) ->
-    fun((...) -> [dns:rr()]).
+    fun((versioned_handler()) -> [dns:rr()]).
 call_handlers_fun(Message, QLabels, ?DNS_TYPE_ANY, Records) ->
     fun
         ({Handler, _, _, _, _, ?MINIMUM_HANDLER_VERSION}) ->
@@ -135,46 +142,80 @@ call_handlers_fun(Message, QLabels, QType, Records) ->
 
 -spec call_map_nsec_rr_types([dns:type()]) -> [dns:type()].
 call_map_nsec_rr_types(Types) ->
-    case get_versioned_handlers() of
-        [] ->
-            %% No handlers, return the types as is
-            Types;
-        Handlers ->
-            %% Map the types using the handlers
-            MappedTypes = lists:flatmap(
-                fun(Type) ->
-                    case lists:keyfind([Type], 5, Handlers) of
-                        false -> [Type];
-                        {_, _, _, M, _, _} -> M:nsec_rr_type_mapper(Type)
-                    end
-                end,
-                Types
-            ),
-            lists:usort(MappedTypes)
-    end.
+    Handlers = get_versioned_handlers(),
+    Mappers = get_nsec_type_mappers(),
+    MappedTypes = lists:flatmap(
+        fun(Type) ->
+            map_single_type_arity1(Type, Handlers, Mappers)
+        end,
+        Types
+    ),
+    lists:usort(MappedTypes).
 
 -spec call_map_nsec_rr_types(dns:type(), [dns:type()]) -> [dns:type()].
 call_map_nsec_rr_types(QType, Types) ->
     Handlers = get_versioned_handlers(),
-    MappedTypes = map_nsec_rr_types(QType, Types, Handlers),
+    Mappers = get_nsec_type_mappers(),
+    MappedTypes = map_nsec_rr_types(QType, Types, Handlers, Mappers),
     lists:usort(MappedTypes).
 
--spec map_nsec_rr_types(dns:type(), [dns:type()], [versioned_handler()]) ->
+%% Map a single type using arity-1 mapper (for call_map_nsec_rr_types/1)
+-spec map_single_type_arity1(dns:type(), [versioned_handler()], [nsec_type_mapper()]) ->
     [dns:type()].
-map_nsec_rr_types(_QType, Types, []) ->
+map_single_type_arity1(Type, Handlers, Mappers) ->
+    %% First check versioned handlers
+    case lists:keyfind([Type], 5, Handlers) of
+        {_, _, _, M, _, _} ->
+            M:nsec_rr_type_mapper(Type);
+        false ->
+            %% Check standalone mappers
+            case find_standalone_mapper(Type, Mappers) of
+                {ok, MapperFun} ->
+                    MapperFun(Type, Type);
+                not_found ->
+                    [Type]
+            end
+    end.
+
+-spec map_nsec_rr_types(dns:type(), [dns:type()], [versioned_handler()], [nsec_type_mapper()]) ->
+    [dns:type()].
+map_nsec_rr_types(_QType, Types, [], []) ->
     Types;
-map_nsec_rr_types(QType, Types, Handlers) ->
+map_nsec_rr_types(QType, Types, Handlers, Mappers) ->
     lists:flatmap(
         fun(Type) ->
-            case lists:keyfind([Type], 5, Handlers) of
-                false ->
-                    [Type];
-                {_, _, Mapper, _, _, _} ->
-                    Mapper(Type, QType)
-            end
+            map_single_type(Type, QType, Handlers, Mappers)
         end,
         Types
     ).
+
+%% Map a single type using arity-2 mapper (for call_map_nsec_rr_types/2)
+-spec map_single_type(dns:type(), dns:type(), [versioned_handler()], [nsec_type_mapper()]) ->
+    [dns:type()].
+map_single_type(Type, QType, Handlers, Mappers) ->
+    %% First check versioned handlers
+    case lists:keyfind([Type], 5, Handlers) of
+        {_, _, Mapper, _, _, _} ->
+            Mapper(Type, QType);
+        false ->
+            %% Check standalone mappers
+            case find_standalone_mapper(Type, Mappers) of
+                {ok, MapperFun} ->
+                    MapperFun(Type, QType);
+                not_found ->
+                    [Type]
+            end
+    end.
+
+-spec find_standalone_mapper(dns:type(), [nsec_type_mapper()]) ->
+    {ok, fun((dns:type(), dns:type()) -> [dns:type()])} | not_found.
+find_standalone_mapper(_Type, []) ->
+    not_found;
+find_standalone_mapper(Type, [{RecordTypes, MapperFun} | Rest]) ->
+    case lists:member(Type, RecordTypes) of
+        true -> {ok, MapperFun};
+        false -> find_standalone_mapper(Type, Rest)
+    end.
 
 -doc "Start the handler registry process".
 -spec start_link() -> gen_server:start_ret().
@@ -187,19 +228,35 @@ start_link() ->
 init(noargs) ->
     process_flag(trap_exit, true),
     Handlers = prepare_handlers(),
-    persistent_term:put(?MODULE, Handlers),
-    {ok, #handlers_state{}}.
+    persistent_term:put(?MODULE, {Handlers, []}),
+    {ok, #handlers_state{handlers = Handlers, mappers = []}}.
 
 -doc false.
 -spec handle_call
     ({register_handler, {module(), [dns:type()], integer()}}, gen_server:from(), state()) ->
         {reply, ok, state()};
+    (
+        {register_nsec_type_mapper, [dns:type()], fun((dns:type(), dns:type()) -> [dns:type()])},
+        gen_server:from(),
+        state()
+    ) ->
+        {reply, ok, state()};
+    ({unregister_nsec_type_mapper, [dns:type()]}, gen_server:from(), state()) ->
+        {reply, ok, state()};
     (dynamic(), gen_server:from(), state()) ->
         {reply, not_implemented, state()}.
 handle_call({register_handler, Handler}, _, State) ->
     NewHandlers = prepare_handlers([Handler], State#handlers_state.handlers),
-    persistent_term:put(?MODULE, NewHandlers),
+    persistent_term:put(?MODULE, {NewHandlers, State#handlers_state.mappers}),
     {reply, ok, State#handlers_state{handlers = NewHandlers}};
+handle_call({register_nsec_type_mapper, RecordTypes, MapperFun}, _, State) ->
+    NewMappers = [{RecordTypes, MapperFun} | State#handlers_state.mappers],
+    persistent_term:put(?MODULE, {State#handlers_state.handlers, NewMappers}),
+    {reply, ok, State#handlers_state{mappers = NewMappers}};
+handle_call({unregister_nsec_type_mapper, RecordTypes}, _, State) ->
+    NewMappers = lists:keydelete(RecordTypes, 1, State#handlers_state.mappers),
+    persistent_term:put(?MODULE, {State#handlers_state.handlers, NewMappers}),
+    {reply, ok, State#handlers_state{mappers = NewMappers}};
 handle_call(_, _, State) ->
     {reply, not_implemented, State}.
 
@@ -212,6 +269,34 @@ handle_cast(_, State) ->
 -spec terminate(term(), state()) -> term().
 terminate(_, _) ->
     persistent_term:erase(?MODULE).
+
+-spec get_nsec_type_mappers() -> [nsec_type_mapper()].
+get_nsec_type_mappers() ->
+    {_Handlers, Mappers} = persistent_term:get(?MODULE, {[], []}),
+    Mappers.
+
+%% NSEC Type Mapper Registry
+%% Allows pipeline modules to register type mappers without implementing full handler interface.
+
+-doc """
+Register a standalone NSEC type mapper for specific record types.
+
+This allows pipeline modules to provide NSEC type mapping without implementing
+the full handler interface (handle/4, filter/1).
+
+Example:
+```erlang
+erldns_handler:register_nsec_type_mapper([30003], fun my_module:nsec_rr_type_mapper/2)
+```
+""".
+-spec register_nsec_type_mapper([dns:type()], fun((dns:type(), dns:type()) -> [dns:type()])) -> ok.
+register_nsec_type_mapper(RecordTypes, MapperFun) when is_function(MapperFun, 2) ->
+    gen_server:call(?MODULE, {register_nsec_type_mapper, RecordTypes, MapperFun}, ?TIMEOUT).
+
+-doc "Unregister NSEC type mappers for specific record types.".
+-spec unregister_nsec_type_mapper([dns:type()]) -> ok.
+unregister_nsec_type_mapper(RecordTypes) ->
+    gen_server:call(?MODULE, {unregister_nsec_type_mapper, RecordTypes}, ?TIMEOUT).
 
 -spec prepare_handlers() -> [versioned_handler()].
 prepare_handlers() ->

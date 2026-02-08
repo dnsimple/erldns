@@ -197,7 +197,8 @@ Example TLS listener:
 Statistics about each listener.
 """.
 -type stats() :: #{
-    {name(), tls | tcp | udp} => #{queue_length := non_neg_integer()}
+    {name(), tls | tcp | udp} => #{queue_length := non_neg_integer()},
+    async => #{queue_length := non_neg_integer()}
 }.
 -export_type([name/0, transport/0, parallel_factor/0, config/0, stats/0]).
 
@@ -239,10 +240,11 @@ reset_queues() ->
 -doc "Get statistics about all listeners.".
 -spec get_stats() -> stats().
 get_stats() ->
+    Acc1 = erldns_async_pool:get_stats(),
     Children = supervisor:which_children(?MODULE),
-    lists:foldl(fun get_stats/2, #{}, Children).
+    lists:foldl(fun get_stats/2, Acc1, Children).
 
-get_stats({erldns_sch_mon, _, _, _}, #{} = Stats) ->
+get_stats({erldns_sch_mon, _, _, _}, Stats) ->
     Stats;
 get_stats({{ranch_embedded_sup, {?MODULE, {_, tcp}}}, _, _, _} = Child, Stats) ->
     erldns_proto_tcp_config:get_stats(Child, Stats);

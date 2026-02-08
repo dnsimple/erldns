@@ -987,8 +987,8 @@ reset_queues(Config) ->
     Config1 = app_helper:start_erldns(Config, AppConfig),
     Node = app_helper:get_node(Config1),
     ct:sleep(100),
-    UdpPort = get_configured_port(Config1, ?FUNCTION_NAME, udp),
-    TcpPort = get_configured_port(Config1, ?FUNCTION_NAME, tcp),
+    UdpPort = app_helper:get_configured_port(Config1, ?FUNCTION_NAME, udp),
+    TcpPort = app_helper:get_configured_port(Config1, ?FUNCTION_NAME, tcp),
     Udps = [
         spawn_link(fun() -> bombard_udp_fun(UdpPort) end)
      || _ <- lists:seq(1, erlang:system_info(schedulers))
@@ -1231,52 +1231,12 @@ prepare_test(Config, Name, Transport, TelemetryEvent, Pipeline, CustomOpts) ->
     % For standard transport, return both ports; otherwise return single port
     case Transport of
         standard ->
-            UdpPort = get_configured_port(Config1, Name, udp),
-            TcpPort = get_configured_port(Config1, Name, tcp),
+            UdpPort = app_helper:get_configured_port(Config1, Name, udp),
+            TcpPort = app_helper:get_configured_port(Config1, Name, tcp),
             ct:pal("Configured ports for ~p:standard - UDP:~p TCP:~p~n", [Name, UdpPort, TcpPort]),
             #{udp_port => UdpPort, tcp_port => TcpPort};
         _ ->
-            Port = get_configured_port(Config1, Name, Transport),
+            Port = app_helper:get_configured_port(Config1, Name, Transport),
             ct:pal("Configured port for ~p:~p is ~p~n", [Name, Transport, Port]),
             #{port => Port}
     end.
-
-get_configured_port(Config, Name, udp) ->
-    Node = app_helper:get_node(Config),
-    erpc:call(Node, fun() ->
-        try
-            Children = supervisor:which_children(erldns_listeners),
-            case lists:keyfind({Name, udp}, 1, Children) of
-                {_, Sup, _, _} ->
-                    ChildSpecs = supervisor:which_children(Sup),
-                    case ChildSpecs of
-                        [{erldns_proto_udp_acceptor_sup, AccSup, _, _} | _] ->
-                            AccChildren = supervisor:which_children(AccSup),
-                            case AccChildren of
-                                [{_, AcceptorPid, _, _} | _] ->
-                                    State = sys:get_state(AcceptorPid),
-                                    Socket = element(3, State),
-                                    {ok, {_, Port}} = inet:sockname(Socket),
-                                    Port;
-                                _ ->
-                                    error(no_udp_acceptor)
-                            end;
-                        _ ->
-                            error(no_udp_acceptor_sup)
-                    end;
-                _ ->
-                    error(no_udp_listener)
-            end
-        catch
-            _:Reason ->
-                error({failed_to_get_udp_port, Reason})
-        end
-    end);
-get_configured_port(Config, Name, tcp) ->
-    Node = app_helper:get_node(Config),
-    erpc:call(Node, ranch, get_port, [{erldns_listeners, {Name, tcp}}]);
-get_configured_port(Config, Name, tls) ->
-    Node = app_helper:get_node(Config),
-    erpc:call(Node, ranch, get_port, [{erldns_listeners, {Name, tls}}]);
-get_configured_port(_Config, _, standard) ->
-    0.
