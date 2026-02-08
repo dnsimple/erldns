@@ -6,7 +6,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 %% API
--export([cast/1, pool_status/0]).
+-export([cast/1, get_stats/0]).
 %% worker pool details
 -export([child_spec/0, overrun_handler/1]).
 %% gen_server callbacks
@@ -65,22 +65,15 @@ overrun_handler(Args) ->
 -spec cast(erldns_pipeline:continuation()) -> ok.
 cast(Continuation) ->
     Work = {async_work, self(), Continuation},
+    telemetry:execute([erldns, pipeline, suspend], #{count => 1}, #{cont => Continuation}),
     wpool:cast(?POOL_NAME, Work, random_worker).
 
 %% Get pool status for monitoring..
--spec pool_status() -> #{atom() => dynamic()}.
-pool_status() ->
-    try
-        Stats = wpool:stats(?POOL_NAME),
-        #{
-            pool_size => proplists:get_value(size, Stats, 0),
-            pending_tasks => proplists:get_value(pending_tasks, Stats, 0),
-            workers => proplists:get_value(workers, Stats, [])
-        }
-    catch
-        exit:no_workers ->
-            #{error => no_workers}
-    end.
+-spec get_stats() -> erldns_listeners:stats().
+get_stats() ->
+    Stats = wpool:stats(?POOL_NAME),
+    {_, TotalPool} = lists:keyfind(total_message_queue_len, 1, Stats),
+    #{async => #{queue_length => TotalPool}}.
 
 -doc false.
 -spec init({non_neg_integer(), non_neg_integer()}) -> {ok, erldns_codel:codel()}.
