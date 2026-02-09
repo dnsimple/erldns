@@ -77,7 +77,7 @@ process_udp_work(Codel, Socket, IpAddr, Port, IngressTs, Bin, Budget) ->
     Continuation :: erldns_pipeline:continuation(),
     Budget :: false | non_neg_integer().
 process_async_continuation(Codel, Continuation, Budget) ->
-    #{socket := Socket, host := IpAddr, port := Port, monotonic_time := IngressTs} =
+    #{inet_socket := Socket, host := IpAddr, port := Port, monotonic_time := IngressTs} =
         erldns_pipeline:get_continuation_opts(Continuation),
     Now = erlang:monotonic_time(),
     {message_queue_len, QueueLen} = process_info(self(), message_queue_len),
@@ -152,7 +152,8 @@ handle_decoded(Socket, IpAddr, Port, TS0, #dns_message{} = Msg) ->
     InitOpts = #{
         monotonic_time => TS0,
         transport => udp,
-        socket => Socket,
+        socket => {Socket, Port},
+        inet_socket => Socket,
         host => IpAddr,
         port => Port
     },

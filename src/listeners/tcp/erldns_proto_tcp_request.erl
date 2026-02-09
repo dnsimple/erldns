@@ -52,6 +52,7 @@ handle_decoded(#dns_message{} = Msg, TS0, Socket, SocketType, IpAddr, Port) ->
     InitOpts = #{
         monotonic_time => TS0,
         transport => tcp,
+        inet_socket => Socket,
         socket => Socket,
         host => IpAddr,
         port => Port

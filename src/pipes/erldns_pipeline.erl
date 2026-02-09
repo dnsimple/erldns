@@ -189,7 +189,13 @@ call(Msg, _Opts) ->
 -doc "Opaque continuation for suspended pipeline execution.".
 -opaque continuation() :: #continuation{}.
 
--doc "Options that can be passed and accumulated to the pipeline.".
+-doc """
+Options that can be passed and accumulated to the pipeline.
+
+> ### Warning {: .warning}
+>
+> `socket` is deprecated in favour of `inet_socket`.
+""".
 -type opts() :: #{
     query_name := dns:dname(),
     query_labels := dns:labels(),
@@ -199,7 +205,8 @@ call(Msg, _Opts) ->
     transport := transport(),
     port := inet:port_number(),
     host := host(),
-    socket := gen_tcp:socket() | gen_udp:socket(),
+    socket := gen_tcp:socket() | {gen_udp:socket(), inet:port_number()},
+    inet_socket := gen_tcp:socket() | gen_udp:socket(),
     atom() => dynamic()
 }.
 
@@ -700,5 +707,6 @@ def_opts() ->
         transport => udp,
         port => undefined,
         host => undefined,
+        inet_socket => undefined,
         socket => undefined
     }.
