@@ -1,13 +1,3 @@
-*.beam
-*.dump
-log/
-db/
-Mnesia.nonode@nohost/
-*.DCD
-*.DCL
-*.DAT
-*.LOG
-
 # local setup
 .tool-versions
 erldns.config
@@ -18,3 +8,7 @@ priv/zones/local/*.json
 _build/
 _checkouts/
 doc/
+
+# BEAM files
+*.beam
+*.dump
