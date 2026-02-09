@@ -67,21 +67,23 @@ handle_decoded({Error, Msg, _}, TS0, _, _, _, _) ->
     request_error_event(Metadata).
 
 -spec handle_pipeline_response(PipeResult, TS, Socket, SocketType) -> ok when
-    PipeResult :: erldns_pipeline:result(),
+    PipeResult :: erldns_pipeline:result() | erldns_pipeline:continuation(),
     TS :: erldns_proto_tcp:ts(),
     Socket :: erldns_proto_tcp:socket(),
     SocketType :: erldns_proto_tcp:socket_type().
 handle_pipeline_response(halt, _, _, _) ->
     ok;
-handle_pipeline_response({suspend, Continuation}, TS0, Socket, SocketType) ->
-    %% For TCP, execute synchronously (per-request process, blocking is fine)
-    FinalResponse = erldns_pipeline:resume_pipeline(Continuation),
-    handle_pipeline_response(FinalResponse, TS0, Socket, SocketType);
 handle_pipeline_response(#dns_message{} = Response, TS0, Socket, SocketType) ->
     EncodedResponse = erldns_encoder:encode_message(Response),
     Payload = [<<(byte_size(EncodedResponse)):16>>, EncodedResponse],
     ok = send_data(Socket, SocketType, Payload),
-    measure_time(Response, TS0, EncodedResponse).
+    measure_time(Response, TS0, EncodedResponse);
+handle_pipeline_response({suspend, Continuation}, TS0, Socket, SocketType) ->
+    Executed = erldns_pipeline:execute_work(Continuation),
+    handle_pipeline_response(Executed, TS0, Socket, SocketType);
+handle_pipeline_response(Continuation, TS0, Socket, SocketType) ->
+    FinalResponse = erldns_pipeline:resume_pipeline(Continuation),
+    handle_pipeline_response(FinalResponse, TS0, Socket, SocketType).
 
 -spec send_data(erldns_proto_tcp:socket(), erldns_proto_tcp:socket_type(), iodata()) ->
     ok | {error, term()}.
