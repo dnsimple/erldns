@@ -55,7 +55,7 @@ handle(dns:dname(), dns:type(), [dns:rr()], dns:message()) -> [dns:rr()].
     call_map_nsec_rr_types/2,
     %% Standalone NSEC type mapper registration (for pipeline modules)
     register_nsec_type_mapper/2,
-    unregister_nsec_type_mapper/1
+    unregister_nsec_type_mapper/2
 ]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, terminate/2]).
@@ -241,7 +241,11 @@ init(noargs) ->
         state()
     ) ->
         {reply, ok, state()};
-    ({unregister_nsec_type_mapper, [dns:type()]}, gen_server:from(), state()) ->
+    (
+        {unregister_nsec_type_mapper, [dns:type()], fun((dns:type(), dns:type()) -> [dns:type()])},
+        gen_server:from(),
+        state()
+    ) ->
         {reply, ok, state()};
     (dynamic(), gen_server:from(), state()) ->
         {reply, not_implemented, state()}.
@@ -253,8 +257,8 @@ handle_call({register_nsec_type_mapper, RecordTypes, MapperFun}, _, State) ->
     NewMappers = [{RecordTypes, MapperFun} | State#handlers_state.mappers],
     persistent_term:put(?MODULE, {State#handlers_state.handlers, NewMappers}),
     {reply, ok, State#handlers_state{mappers = NewMappers}};
-handle_call({unregister_nsec_type_mapper, RecordTypes}, _, State) ->
-    NewMappers = [M || M = {RT, _} <- State#handlers_state.mappers, RT =/= RecordTypes],
+handle_call({unregister_nsec_type_mapper, RecordTypes, MapperFun}, _, State) ->
+    NewMappers = lists:delete({RecordTypes, MapperFun}, State#handlers_state.mappers),
     persistent_term:put(?MODULE, {State#handlers_state.handlers, NewMappers}),
     {reply, ok, State#handlers_state{mappers = NewMappers}};
 handle_call(_, _, State) ->
@@ -294,9 +298,10 @@ register_nsec_type_mapper(RecordTypes, MapperFun) when is_function(MapperFun, 2)
     gen_server:call(?MODULE, {register_nsec_type_mapper, RecordTypes, MapperFun}, ?TIMEOUT).
 
 -doc "Unregister NSEC type mappers for specific record types.".
--spec unregister_nsec_type_mapper([dns:type()]) -> ok.
-unregister_nsec_type_mapper(RecordTypes) ->
-    gen_server:call(?MODULE, {unregister_nsec_type_mapper, RecordTypes}, ?TIMEOUT).
+-spec unregister_nsec_type_mapper([dns:type()], fun((dns:type(), dns:type()) -> [dns:type()])) ->
+    ok.
+unregister_nsec_type_mapper(RecordTypes, MapperFun) ->
+    gen_server:call(?MODULE, {unregister_nsec_type_mapper, RecordTypes, MapperFun}, ?TIMEOUT).
 
 -spec prepare_handlers() -> [versioned_handler()].
 prepare_handlers() ->
