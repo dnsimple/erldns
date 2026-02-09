@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.1.1
+
+### Fixed
+
+- Upgraded dns_erlang, which fixes a series of bugs regarding SVCB params ([#329](https://github.com/dnsimple/erldns/pull/329))
+
 ## v10.1.0
 
 ### Added

@@ -901,7 +901,7 @@ json_record_svcb_no_default_alpn_atom(_) ->
                 ~"svc_priority" => 1,
                 ~"target_name" => ~"target.example.com",
                 ~"svc_params" => #{
-                    ~"no-default-alpn" => none
+                    ~"no-default-alpn" => null
                 }
             }
         })
