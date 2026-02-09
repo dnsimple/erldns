@@ -254,7 +254,7 @@ handle_call({register_nsec_type_mapper, RecordTypes, MapperFun}, _, State) ->
     persistent_term:put(?MODULE, {State#handlers_state.handlers, NewMappers}),
     {reply, ok, State#handlers_state{mappers = NewMappers}};
 handle_call({unregister_nsec_type_mapper, RecordTypes}, _, State) ->
-    NewMappers = lists:keydelete(RecordTypes, 1, State#handlers_state.mappers),
+    NewMappers = [M || M = {RT, _} <- State#handlers_state.mappers, RT =/= RecordTypes],
     persistent_term:put(?MODULE, {State#handlers_state.handlers, NewMappers}),
     {reply, ok, State#handlers_state{mappers = NewMappers}};
 handle_call(_, _, State) ->
