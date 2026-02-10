@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.2.1
+
+### Fixed
+
+- Updated changelog
+
+## v10.2.0
+
+### Added
+
+- Pipeline suspension for non-blocking async operations: pipes can return `{suspend, Msg, Opts, AsyncFun}` to run blocking work in a bounded worker pool so listener workers are not blocked ([#327](https://github.com/dnsimple/erldns/pull/327))
+
 ## v10.1.1
 
 ### Fixed
