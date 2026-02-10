@@ -30,7 +30,7 @@ start_link(RequestBinary, TS0, Socket, SocketType, IpAddr, Port) ->
     erldns_proto_tcp:socket_type(),
     inet:ip_address(),
     inet:port_number()
-) -> no_return().
+) -> term().
 request(RequestBinary, TS0, Socket, SocketType, IpAddr, Port) ->
     proc_lib:set_label({?MODULE, Port}),
     Measurements = #{monotonic_time => TS0, request_size => byte_size(RequestBinary)},
@@ -40,7 +40,7 @@ request(RequestBinary, TS0, Socket, SocketType, IpAddr, Port) ->
     handle_decoded(Decoded, TS0, Socket, SocketType, IpAddr, Port).
 
 -spec handle_decoded(
-    dns:message(),
+    {dns:decode_error(), dns:message() | undefined, binary()} | dns:message(),
     erldns_proto_tcp:ts(),
     erldns_proto_tcp:socket(),
     erldns_proto_tcp:socket_type(),
@@ -52,13 +52,14 @@ handle_decoded(#dns_message{} = Msg, TS0, Socket, SocketType, IpAddr, Port) ->
     InitOpts = #{
         monotonic_time => TS0,
         transport => tcp,
+        inet_socket => Socket,
         socket => Socket,
         host => IpAddr,
         port => Port
     },
     Response = erldns_pipeline:call(Msg, InitOpts),
     handle_pipeline_response(Response, TS0, Socket, SocketType);
-handle_decoded({notimp, Msg, _}, TS0, Socket, SocketType, _, _) ->
+handle_decoded({notimp, #dns_message{} = Msg, _}, TS0, Socket, SocketType, _, _) ->
     Metadata = #{transport => tcp, reason => notimp, message => Msg, monotonic_time => TS0},
     request_error_event(Metadata),
     handle_pipeline_response(Msg, TS0, Socket, SocketType);
@@ -66,20 +67,24 @@ handle_decoded({Error, Msg, _}, TS0, _, _, _, _) ->
     Metadata = #{transport => tcp, reason => Error, message => Msg, monotonic_time => TS0},
     request_error_event(Metadata).
 
--spec handle_pipeline_response(
-    halt | dns:message(),
-    erldns_proto_tcp:ts(),
-    erldns_proto_tcp:socket(),
-    erldns_proto_tcp:socket_type()
-) ->
-    ok.
+-spec handle_pipeline_response(PipeResult, TS, Socket, SocketType) -> ok when
+    PipeResult :: erldns_pipeline:result() | erldns_pipeline:continuation(),
+    TS :: erldns_proto_tcp:ts(),
+    Socket :: erldns_proto_tcp:socket(),
+    SocketType :: erldns_proto_tcp:socket_type().
 handle_pipeline_response(halt, _, _, _) ->
     ok;
 handle_pipeline_response(#dns_message{} = Response, TS0, Socket, SocketType) ->
     EncodedResponse = erldns_encoder:encode_message(Response),
     Payload = [<<(byte_size(EncodedResponse)):16>>, EncodedResponse],
     ok = send_data(Socket, SocketType, Payload),
-    measure_time(Response, TS0, EncodedResponse).
+    measure_time(Response, TS0, EncodedResponse);
+handle_pipeline_response({suspend, Continuation}, TS0, Socket, SocketType) ->
+    Executed = erldns_pipeline:execute_work(Continuation),
+    handle_pipeline_response(Executed, TS0, Socket, SocketType);
+handle_pipeline_response(Continuation, TS0, Socket, SocketType) ->
+    FinalResponse = erldns_pipeline:resume_pipeline(Continuation),
+    handle_pipeline_response(FinalResponse, TS0, Socket, SocketType).
 
 -spec send_data(erldns_proto_tcp:socket(), erldns_proto_tcp:socket_type(), iodata()) ->
     ok | {error, term()}.

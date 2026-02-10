@@ -1,8 +1,6 @@
 -module(erldns_pipeline).
 -moduledoc """
-The pipeline specification.
-
-It declares a pipeline of sequential transformations to apply to the
+It declares a pipeline of sequential transformations to apply to an
 incoming query until a response is constructed.
 
 This module is responsible for handling the pipeline of pipes that will be
@@ -33,11 +31,11 @@ There are two kind of pipes: function pipes and module pipes.
 ### Function pipes
 
 A function pipe is by definition any function that receives a `t:dns:message/0`
-and a set of options and returns a `t:dns:message/0`. Function pipes must have
-the following type signature:
+and a set of `t:opts/0` options and returns a `t:dns:message/0`. Function pipes
+must have the following type signature:
 
 ```erlang
--type pipe() :: fun((dns:message(), opts()) -> return()
+-type pipefun() :: fun((dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return())
 ```
 
 ### Module pipes
@@ -45,12 +43,53 @@ the following type signature:
 The preferred mechanism, a module pipe is an extension of the function pipe.
 
 It is a module that exports:
-* a `c:prepare/1` function which takes a set of options and initializes it, or disables the pipe.
-* a `c:call/2` function with the signature defined as in the function pipe.
+
+- a `c:deps/0` function which enumerates pipes required to run before or after the current pipe.
+- a `c:prepare/1` function which takes a set of options and initializes it, or disables the pipe.
+- a `c:call/2` function with the signature defined as in the function pipe.
 
 The API expected by a module pipe is defined as a behaviour by this module.
 
+## Suspending Pipes
+
+A pipe can suspend execution to perform blocking work asynchronously. This is
+useful for operations like external DNS resolution that would block the worker.
+
+To suspend, return `{suspend, Msg1, Opts1, AsyncFun}` from your pipe:
+
+```erlang
+-spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
+call(Msg, Opts) ->
+    case needs_external_resolution(Msg) of
+        false ->
+            Msg;
+        true ->
+            AsyncFun = fun(M, _O, _Ctx) ->
+                %% This runs in the async pool, blocking is OK here
+                resolve_external(M)
+            end,
+            {suspend, Msg, Opts, AsyncFun}
+    end.
+```
+
+The asynchronous function behaves like a regular pipe function, and it can even return more
+asynchronous work. Once work is not asynchronous anymore, the remaining of the pipeline will
+be scheduled back in the regular worker.
+
+## Async pool
+
+When a pipe suspends, the blocking work is run in a bounded worker pool so that
+listener workers are not blocked.
+
+Pool behaviour:
+
+- Uses a worker pool (wpool) with CoDel for queue management.
+- Default parallelism: 4x. Configurable via `pipeline` options below.
+- Pool size and pending task counts are available for monitoring via the pool implementation.
+
 ## Configuration
+
+### Packet pipeline (list of pipes)
 
 ```erlang
 {erldns, [
@@ -70,26 +109,41 @@ The API expected by a module pipe is defined as a behaviour by this module.
 ]}
 ```
 
+### Pipeline async pool (size and CoDel)
+
+```erlang
+{erldns, [
+    {pipeline, #{
+        async_pool => #{
+          parallelism => 32,       % Worker count (default: 4 * schedulers)
+          codel_interval => 500,   % CoDel interval in ms (default: 500)
+          codel_target => 50       % CoDel target delay in ms (default: 50)
+        }
+      }
+    }
+]}
+```
+
 ## Telemetry events
 
-Emits the following telemetry events:
-
 ### `[erldns, pipeline, error]`
-- Measurements:
-```erlang
-count := non_neg_integer()
-```
-- Metadata:
-If it is an exception, the metadata will contain:
-```erlang
-kind => exit | error | throw
-reason => term()
-stacktrace => [term()]
-```
-otherwise, it will contain:
-```erlang
-reason => term()
-```
+
+Emitted when pipeline execution hits an error: invalid pipe return,
+exception in a pipe, exception in async work, or suspend loop detection.
+
+- **Measurements:** `#{count => 1}`
+- **Metadata (exception in sync or async pipe):**
+
+  ```erlang
+  kind => exit | error | throw
+  reason => term()
+  stacktrace => [term()]
+  ```
+
+- **Metadata (invalid return from pipe):** `#{reason => term()}`
+- **Metadata (too many nested suspends):** `#{reason => pipeline_suspend_loop}`
+- **Metadata (exception in async pool worker):**
+    `#{what => async_work_failed, class => ..., reason => ..., stacktrace => ...}`
 
 ## Examples
 
@@ -110,7 +164,7 @@ prepare(Opts) ->
     end.
 
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
-call(#dns_message{questions = [#dns_query{name = <<"example.com">>} | _]} = Msg, _Opts) ->
+call(#dns_message{questions = [#dns_query{name = ~"example.com"} | _]} = Msg, _Opts) ->
     Msg#dns_message{tc = true}.
 call(Msg, _Opts) ->
     Msg.
@@ -126,8 +180,24 @@ call(Msg, _Opts) ->
 -doc "The underlying request transport protocol. All requests come either through UDP or TCP.".
 -type transport() :: tcp | udp.
 
--doc "Options that can be passed and accumulated to the pipeline.".
+-record(continuation, {
+    message :: dns:message(),
+    opts :: opts(),
+    pipeline :: pipeline()
+}).
+
+-doc "Opaque continuation for suspended pipeline execution.".
+-opaque continuation() :: #continuation{}.
+
+-doc """
+Options that can be passed and accumulated to the pipeline.
+
+> ### Warning {: .warning}
+>
+> `socket` is deprecated in favour of `inet_socket`.
+""".
 -type opts() :: #{
+    query_name := dns:dname(),
     query_labels := dns:labels(),
     query_type := dns:type(),
     monotonic_time := integer(),
@@ -136,6 +206,7 @@ call(Msg, _Opts) ->
     port := inet:port_number(),
     host := host(),
     socket := gen_tcp:socket() | {gen_udp:socket(), inet:port_number()},
+    inet_socket := gen_tcp:socket() | gen_udp:socket(),
     atom() => dynamic()
 }.
 
@@ -143,9 +214,29 @@ call(Msg, _Opts) ->
 The return type of a pipe.
 
 It can return `halt`, a new `t:dns:message/0`, with or without new `t:opts/0`,
-or put a `stop` to the pipeline execution.
+put a `stop` to the pipeline execution, or `suspend` for async operations.
+
+The `{suspend, Msg, Opts, AsyncFun}` return allows a pipe to pause execution and
+perform blocking work asynchronously. This is used for operations like
+external DNS resolution that would otherwise block the worker pool.
 """.
--type return() :: halt | dns:message() | {dns:message(), opts()} | {stop, dns:message()}.
+-type return() ::
+    halt
+    | dns:message()
+    | {dns:message(), opts()}
+    | {stop, dns:message()}
+    | {suspend, dns:message(), opts(), pipefun()}.
+
+-doc """
+The result of a pipeline.
+
+It can return `halt`, a new `t:dns:message/0`, or `suspend` for async operations.
+
+The `{suspend, Msg, Opts, AsyncFun}` return allows a pipe to pause execution and
+perform blocking work asynchronously. This is used for operations like
+external DNS resolution that would otherwise block the worker pool.
+""".
+-type result() :: halt | dns:message() | {suspend, continuation()}.
 
 -doc """
 The dependencies of a pipe module.
@@ -163,9 +254,27 @@ See [Module pipes](#module-module-pipes) and [Function pipes](#module-function-p
 """.
 -type pipe() :: module() | fun((dns:message(), opts()) -> return()).
 
--type pipeline() :: [fun((dns:message(), opts()) -> return())].
+-doc """
+A ready function in the pipeline.
 
--export_type([transport/0, host/0, pipe/0, opts/0, deps/0, return/0]).
+It is either the function from `t:pipe/0` or the function `fun Module:call/2`.
+""".
+-type pipefun() :: fun((dns:message(), opts()) -> return()).
+
+-type pipeline() :: [pipefun()].
+
+-export_type([
+    transport/0,
+    host/0,
+    pipe/0,
+    pipefun/0,
+    pipeline/0,
+    opts/0,
+    deps/0,
+    return/0,
+    result/0,
+    continuation/0
+]).
 
 -doc """
 Initialise the pipe handler, triggering side-effects and preparing any necessary metadata.
@@ -196,8 +305,7 @@ This callback can return
     and in the case of TCP it would be required to first steal the socket using
     `gen_tcp:controlling_process/2` so that the connection is not closed.
 """.
--callback call(dns:message(), opts()) ->
-    halt | dns:message() | {dns:message(), opts()} | {stop, dns:message()}.
+-callback call(dns:message(), opts()) -> return().
 -doc """
 Declare dependencies on other pipes.
 
@@ -224,6 +332,9 @@ deps() ->
 -export([call/2, call_custom/3, store_pipeline/2, delete_pipeline/1]).
 -export([is_pipe_configured/1, is_pipe_configured/2]).
 -export([start_link/0, init/1, store_pipeline/0]).
+%% Continuation API for suspending pipes
+-export([execute_work/1, resume_pipeline/1]).
+-export([get_continuation_opts/1, get_continuation_message/1]).
 
 -ifdef(TEST).
 -export([def_opts/0]).
@@ -250,8 +361,8 @@ deps() ->
 -doc """
 Call the main application packet pipeline with the pipes configured in the system configuration.
 """.
--spec call(dns:message(), #{atom() => dynamic()}) -> halt | dns:message().
-call(Msg, Opts) ->
+-spec call(dns:message(), #{atom() => dynamic()}) -> result().
+call(#dns_message{} = Msg, Opts) ->
     ?LOG_DEBUG(
         #{what => main_pipeline_triggered, dns_message => Msg, opts => Opts},
         ?LOG_METADATA
@@ -262,10 +373,10 @@ call(Msg, Opts) ->
 -doc """
 Call a custom pipeline by name.
 
-The pipeline should have been verifiend and stored previously with `store_pipeline/2`.
+The pipeline should have been verified and stored previously with `store_pipeline/2`.
 """.
--spec call_custom(dns:message(), #{atom() => dynamic()}, dynamic()) -> halt | dns:message().
-call_custom(Msg, Opts, PipelineName) ->
+-spec call_custom(dns:message(), #{atom() => dynamic()}, dynamic()) -> result().
+call_custom(#dns_message{} = Msg, Opts, PipelineName) ->
     ?LOG_DEBUG(
         #{
             what => custom_pipeline_triggered,
@@ -284,7 +395,12 @@ Verify and store a custom pipeline.
 Can be used to prepare a custom pipeline that can be triggered using `call_custom/3`.
 
 Validates that pipe dependencies (declared via `c:deps/0`) are satisfied by the given order.
-Raises an error if a pipe's dependencies don't appear earlier in the pipeline.
+Note that custom pipelines are not garbage collected, that is, it is the responsibility of
+the registrant to ensure it is cleaned up when is not needed using `delete_pipeline/1`.
+
+> #### Note {: .info }
+>
+> The underlying storage is a `persistent_term` so all warnings apply.
 """.
 -spec store_pipeline(term(), [pipe()]) -> ok.
 store_pipeline(PipelineName, Pipes) ->
@@ -312,24 +428,23 @@ Check if a pipe is configured in a specific pipeline. Returns `false` if the pip
 is_pipe_configured(Module, PipelineName) when is_atom(Module) ->
     is_pipe_configured(fun Module:call/2, PipelineName);
 is_pipe_configured(Fun, PipelineName) when is_function(Fun, 2) ->
-    case persistent_term:get(PipelineName, undefined) of
-        undefined ->
-            false;
-        {Pipeline, _Opts} ->
-            lists:member(Fun, Pipeline)
-    end.
+    {Pipeline, _Opts} = persistent_term:get(PipelineName, {[], #{}}),
+    lists:member(Fun, Pipeline).
 
--spec do_call(dns:message(), pipeline(), opts()) -> halt | dns:message().
+-doc false.
+-spec do_call(dns:message(), pipeline(), opts()) -> result().
 do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
     try Pipe(Msg, Opts) of
         halt ->
             halt;
+        {stop, #dns_message{} = Msg1} ->
+            Msg1;
+        {suspend, #dns_message{} = Msg1, #{} = Opts1, AsyncFun} when is_function(AsyncFun, 2) ->
+            {suspend, #continuation{message = Msg1, opts = Opts1, pipeline = [AsyncFun | Pipes]}};
         #dns_message{} = Msg1 ->
             do_call(Msg1, Pipes, Opts);
         {#dns_message{} = Msg1, Opts1} ->
             do_call(Msg1, Pipes, Opts1);
-        {stop, #dns_message{} = Msg1} ->
-            Msg1;
         Other ->
             telemetry:execute([erldns, pipeline, error], #{count => 1}, #{reason => Other}),
             ?LOG_ERROR(
@@ -365,6 +480,83 @@ do_call(Msg, [], _) ->
     Msg.
 
 -doc false.
+-spec execute_work(continuation()) -> halt | continuation().
+execute_work(#continuation{message = Msg, opts = Opts, pipeline = Pipeline}) when
+    is_record(Msg, dns_message), is_list(Pipeline), is_map(Opts)
+->
+    execute_work(Msg, Opts, Pipeline, 3).
+
+execute_work(_, _, _, 0) ->
+    telemetry:execute([erldns, pipeline, error], #{count => 1}, #{reason => pipeline_suspend_loop}),
+    halt;
+execute_work(Msg0, Opts0, [AsyncFun0 | Pipes], Retries) ->
+    try AsyncFun0(Msg0, Opts0) of
+        halt ->
+            halt;
+        {stop, #dns_message{} = Msg1} ->
+            #continuation{message = Msg1, opts = Opts0, pipeline = []};
+        {suspend, #dns_message{} = Msg1, #{} = Opts1, AsyncFun1} when is_function(AsyncFun1, 2) ->
+            execute_work(Msg1, Opts1, [AsyncFun1 | Pipes], Retries - 1);
+        #dns_message{} = Msg1 ->
+            #continuation{message = Msg1, opts = Opts0, pipeline = Pipes};
+        {#dns_message{} = Msg1, Opts1} ->
+            #continuation{message = Msg1, opts = Opts1, pipeline = Pipes};
+        Other ->
+            telemetry:execute([erldns, pipeline, error], #{count => 1}, #{reason => Other}),
+            ?LOG_ERROR(
+                #{
+                    what => async_pipe_failed_with_invalid_return,
+                    pipe => AsyncFun0,
+                    dns_message => Msg0,
+                    opts => Opts0,
+                    unexpected_return => Other
+                },
+                ?LOG_METADATA
+            ),
+            #continuation{message = Msg0, opts = Opts0, pipeline = Pipes}
+    catch
+        Class:Error:Stacktrace ->
+            ExceptionMetadata = #{kind => Class, reason => Error, stacktrace => Stacktrace},
+            telemetry:execute([erldns, pipeline, error], #{count => 1}, ExceptionMetadata),
+            ?LOG_ERROR(
+                #{
+                    what => async_pipe_failed_with_exception,
+                    pipe => AsyncFun0,
+                    dns_message => Msg0,
+                    opts => Opts0,
+                    class => Class,
+                    error => Error,
+                    stacktrace => Stacktrace
+                },
+                ?LOG_METADATA
+            ),
+            #continuation{message = Msg0, opts = Opts0, pipeline = Pipes}
+    end.
+
+%% Execute work and resume pipeline in one call.
+%%
+%% can be used by TCP to just run it all, or by UDP when it receives the payload from
+%% `execute_work/1` which has already removed the blocking AsyncFun from the pipeline
+-doc false.
+-spec resume_pipeline(continuation()) -> result().
+resume_pipeline(#continuation{message = Msg, opts = Opts, pipeline = Pipeline}) when
+    is_record(Msg, dns_message), is_list(Pipeline), is_map(Opts)
+->
+    do_call(Msg, Pipeline, Opts).
+
+%% Get the opts from a continuation. Used by async pool for CoDel timestamp..
+-doc false.
+-spec get_continuation_opts(continuation()) -> opts().
+get_continuation_opts(#continuation{opts = Opts}) ->
+    Opts.
+
+%% Get the message from a continuation..
+-doc false.
+-spec get_continuation_message(continuation()) -> dns:message().
+get_continuation_message(#continuation{message = Msg}) ->
+    Msg.
+
+-doc false.
 -spec start_link() -> gen_server:start_ret().
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, noargs).
@@ -379,7 +571,8 @@ init(noargs) ->
             worker(erldns_packet_cache),
             worker(erldns_query_throttle),
             worker(erldns_handler),
-            worker(erldns_pipeline_worker)
+            worker(erldns_pipeline_worker),
+            erldns_async_pool:child_spec()
         ],
     {ok, {SupFlags, Children}}.
 
@@ -506,6 +699,7 @@ ensure_satisfied(Module, ModulesDefinedBefore, Hint, List) ->
 
 def_opts() ->
     #{
+        query_name => ~"",
         query_labels => [],
         query_type => ?DNS_TYPE_A,
         monotonic_time => 0,
@@ -513,5 +707,6 @@ def_opts() ->
         transport => udp,
         port => undefined,
         host => undefined,
+        inet_socket => undefined,
         socket => undefined
     }.

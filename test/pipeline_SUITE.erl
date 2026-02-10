@@ -13,7 +13,9 @@ all() ->
         {group, general},
         {group, pipe_calls},
         {group, dependencies},
-        {group, is_pipe_configured}
+        {group, is_pipe_configured},
+        {group, pipeline_suspension},
+        {group, suspension_integration}
     ].
 
 -spec groups() -> [ct_suite:ct_group_def()].
@@ -57,6 +59,27 @@ groups() ->
             is_pipe_configured_not_in_main_pipeline,
             is_pipe_configured_in_custom_pipeline,
             is_pipe_configured_nonexistent_pipeline
+        ]},
+        {pipeline_suspension, [parallel], [
+            pipe_returns_suspend,
+            pipe_suspend_resumes_remaining_pipeline,
+            continuation_execute_work,
+            continuation_resume,
+            continuation_execute_and_resume
+        ]},
+        {suspension_integration, [parallel], [
+            udp_basic_pipeline_works,
+            udp_suspend_async_pool_integration,
+            udp_suspend_with_remaining_pipeline,
+            tcp_basic_pipeline_works,
+            tcp_suspend_sync_integration,
+            tcp_suspend_with_remaining_pipeline,
+            suspend_halt_from_async_fun,
+            suspend_chain_limited,
+            suspend_async_returns_msg_with_opts,
+            suspend_async_returns_stop,
+            suspend_async_returns_invalid,
+            suspend_async_raises_exception
         ]}
     ].
 
@@ -64,6 +87,22 @@ groups() ->
 init_per_suite(Config) ->
     application:ensure_all_started([telemetry]),
     ok = telemetry:attach(?MODULE, ?PIPE_ERROR_EVENT, fun ?MODULE:telemetry_handler/4, []),
+    Config.
+
+-spec init_per_group(atom(), ct_suite:ct_config()) -> ct_suite:ct_config().
+init_per_group(suspension_integration, Config) ->
+    [{integration, true} | Config];
+init_per_group(_, Config) ->
+    Config.
+
+-spec end_per_group(atom(), ct_suite:ct_config()) -> term().
+end_per_group(suspension_integration, Config) ->
+    case proplists:get_value(peer_started, Config, false) of
+        true -> app_helper:stop(Config);
+        false -> ok
+    end,
+    Config;
+end_per_group(_, Config) ->
     Config.
 
 -spec end_per_suite(ct_suite:ct_config()) -> term().
@@ -424,3 +463,342 @@ is_pipe_configured_in_custom_pipeline(_) ->
 is_pipe_configured_nonexistent_pipeline(_) ->
     % Check that querying a nonexistent pipeline returns false
     ?assertNot(erldns_pipeline:is_pipe_configured(any_any_pipe, very_nonexistent_pipeline)).
+
+%% ===================================================================
+%% Pipeline Suspension Tests
+%% ===================================================================
+
+%% Verify pipeline returns {suspend, Continuation} when pipe suspends.
+pipe_returns_suspend(_) ->
+    Msg = example_msg(),
+    AsyncFun = fun(M, _) -> M#dns_message{aa = true} end,
+    SuspendFun = fun(M, Opts) -> {suspend, M, Opts, AsyncFun} end,
+    erldns_pipeline:store_pipeline(?FUNCTION_NAME, [SuspendFun]),
+    Result = erldns_pipeline:call_custom(Msg, def_opts(), ?FUNCTION_NAME),
+    ?assertMatch({suspend, _}, Result).
+
+%% Verify suspension captures remaining pipeline and resuming executes them.
+pipe_suspend_resumes_remaining_pipeline(_) ->
+    Msg = example_msg(),
+    AsyncFun = fun(M, _) -> M#dns_message{aa = true} end,
+    SecondPipe = fun(M, _) -> M#dns_message{tc = true} end,
+    SuspendFun = fun(M, Opts) -> {suspend, M, Opts, AsyncFun} end,
+    erldns_pipeline:store_pipeline(?FUNCTION_NAME, [SuspendFun, SecondPipe]),
+    {suspend, Cont} = erldns_pipeline:call_custom(Msg, def_opts(), ?FUNCTION_NAME),
+    Result = erldns_pipeline:resume_pipeline(Cont),
+    ?assertMatch(#dns_message{}, Result),
+    ?assertEqual(true, Result#dns_message.aa),
+    ?assertEqual(true, Result#dns_message.tc).
+
+%% Verify execute_work runs the work function and returns updated continuation.
+continuation_execute_work(_) ->
+    Msg = example_msg(),
+    Context = #{multiplier => 2},
+    AsyncFun = fun(M, _) ->
+        #{multiplier := N} = Context,
+        M#dns_message{anc = N * 5}
+    end,
+    SuspendFun = fun(M, Opts) -> {suspend, M, Opts, AsyncFun} end,
+    SecondPipe = fun(M, _) -> M#dns_message{tc = true} end,
+    erldns_pipeline:store_pipeline(?FUNCTION_NAME, [SuspendFun, SecondPipe]),
+    {suspend, Cont} = erldns_pipeline:call_custom(Msg, def_opts(), ?FUNCTION_NAME),
+    ResultCont = erldns_pipeline:execute_work(Cont),
+    ?assertNotEqual(halt, ResultCont),
+    ResultMsg = erldns_pipeline:get_continuation_message(ResultCont),
+    ?assertEqual(false, ResultMsg#dns_message.tc),
+    ?assertEqual(10, ResultMsg#dns_message.anc).
+
+%% Verify resume_pipeline continues executing remaining pipeline stages.
+continuation_resume(_) ->
+    Msg = example_msg(),
+    AsyncFun = fun(M, _) -> M#dns_message{aa = true} end,
+    SuspendPipe = fun(M, Opts) -> {suspend, M, Opts, AsyncFun} end,
+    FinalPipe = fun(M, _) -> M#dns_message{tc = true} end,
+    erldns_pipeline:store_pipeline(?FUNCTION_NAME, [SuspendPipe, FinalPipe]),
+    {suspend, Cont} = erldns_pipeline:call_custom(Msg, def_opts(), ?FUNCTION_NAME),
+    % Execute work, then resume remaining pipeline
+    Cont1 = erldns_pipeline:execute_work(Cont),
+    Result = erldns_pipeline:resume_pipeline(Cont1),
+    ?assertEqual(true, Result#dns_message.aa),
+    ?assertEqual(true, Result#dns_message.tc).
+
+%% Verify resume_pipeline combines work execution and pipeline resumption.
+continuation_execute_and_resume(_) ->
+    Msg = example_msg(),
+    AsyncFun = fun(M, _) -> M#dns_message{aa = true} end,
+    SuspendPipe = fun(M, Opts) ->
+        {suspend, M, Opts, AsyncFun}
+    end,
+    FinalPipe = fun(M, _) -> M#dns_message{tc = true} end,
+    erldns_pipeline:store_pipeline(?FUNCTION_NAME, [SuspendPipe, FinalPipe]),
+    {suspend, Cont} = erldns_pipeline:call_custom(Msg, def_opts(), ?FUNCTION_NAME),
+    Result = erldns_pipeline:resume_pipeline(Cont),
+    ?assertEqual(true, Result#dns_message.aa),
+    ?assertEqual(true, Result#dns_message.tc).
+
+%% ===================================================================
+%% Suspension Integration Tests
+%% ===================================================================
+%% These tests use a peer node with actual UDP/TCP listeners to verify
+%% the complete suspension flow through async pool and transport layers.
+
+%% Verify basic UDP pipeline works (sanity check before testing suspension).
+udp_basic_pipeline_works(Config) ->
+    #{port := Port} = start_integration_peer(
+        Config, ?FUNCTION_NAME, udp, [fun marking_pipe/2]
+    ),
+    Packet = example_packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
+    {ok, {_, _, ResponseBin}} = gen_udp:recv(Socket, 0, 5000),
+    Response = dns:decode_message(ResponseBin),
+    %% marking_pipe sets tc=true
+    ?assertEqual(true, Response#dns_message.tc),
+    gen_udp:close(Socket).
+
+%% Verify UDP suspension works end-to-end: pipe suspends, async pool executes
+%% work, UDP worker receives {async_done, Continuation} and sends response.
+udp_suspend_async_pool_integration(Config) ->
+    #{port := Port} = start_integration_peer(
+        Config, ?FUNCTION_NAME, udp, [fun suspending_pipe/2]
+    ),
+    Packet = example_packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
+    {ok, {_, _, ResponseBin}} = gen_udp:recv(Socket, 0, 5000),
+    Response = dns:decode_message(ResponseBin),
+    %% AsyncFun sets aa=true
+    ?assertEqual(true, Response#dns_message.aa),
+    gen_udp:close(Socket).
+
+%% Verify UDP suspension with remaining pipeline stages after async work.
+udp_suspend_with_remaining_pipeline(Config) ->
+    #{port := Port} = start_integration_peer(
+        Config, ?FUNCTION_NAME, udp, [fun suspending_pipe/2, fun marking_pipe/2]
+    ),
+    Packet = example_packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
+    {ok, {_, _, ResponseBin}} = gen_udp:recv(Socket, 0, 5000),
+    Response = dns:decode_message(ResponseBin),
+    %% AsyncFun sets aa=true, then marking_pipe sets tc=true
+    ?assertEqual(true, Response#dns_message.aa),
+    ?assertEqual(true, Response#dns_message.tc),
+    gen_udp:close(Socket).
+
+%% Verify basic TCP pipeline works (sanity check before testing suspension).
+tcp_basic_pipeline_works(Config) ->
+    #{port := Port} = start_integration_peer(
+        Config, ?FUNCTION_NAME, tcp, [fun marking_pipe/2]
+    ),
+    Packet = example_packet(),
+    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, Port, [binary, {active, false}]),
+    ok = gen_tcp:send(Socket, [<<(byte_size(Packet)):16>>, Packet]),
+    {ok, <<Len:16, ResponseBin:Len/binary>>} = gen_tcp:recv(Socket, 0, 5000),
+    Response = dns:decode_message(ResponseBin),
+    %% marking_pipe sets tc=true
+    ?assertEqual(true, Response#dns_message.tc),
+    gen_tcp:close(Socket).
+
+%% Verify TCP suspension works end-to-end: pipe suspends, TCP calls
+%% resume_pipeline synchronously, response is sent.
+tcp_suspend_sync_integration(Config) ->
+    #{port := Port} = start_integration_peer(
+        Config, ?FUNCTION_NAME, tcp, [fun suspending_pipe/2]
+    ),
+    Packet = example_packet(),
+    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, Port, [binary, {active, false}]),
+    ok = gen_tcp:send(Socket, [<<(byte_size(Packet)):16>>, Packet]),
+    {ok, <<Len:16, ResponseBin:Len/binary>>} = gen_tcp:recv(Socket, 0, 5000),
+    Response = dns:decode_message(ResponseBin),
+    %% AsyncFun sets aa=true
+    ?assertEqual(true, Response#dns_message.aa),
+    gen_tcp:close(Socket).
+
+%% Verify TCP suspension with remaining pipeline stages after async work.
+tcp_suspend_with_remaining_pipeline(Config) ->
+    #{port := Port} = start_integration_peer(
+        Config, ?FUNCTION_NAME, tcp, [fun suspending_pipe/2, fun marking_pipe/2]
+    ),
+    Packet = example_packet(),
+    {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, Port, [binary, {active, false}]),
+    ok = gen_tcp:send(Socket, [<<(byte_size(Packet)):16>>, Packet]),
+    {ok, <<Len:16, ResponseBin:Len/binary>>} = gen_tcp:recv(Socket, 0, 5000),
+    Response = dns:decode_message(ResponseBin),
+    %% AsyncFun sets aa=true, then marking_pipe sets tc=true
+    ?assertEqual(true, Response#dns_message.aa),
+    ?assertEqual(true, Response#dns_message.tc),
+    gen_tcp:close(Socket).
+
+%% Verify halt returned from async function stops processing without response.
+suspend_halt_from_async_fun(Config) ->
+    #{port := Port} = start_integration_peer(
+        Config, ?FUNCTION_NAME, udp, [fun halting_suspend_pipe/2, fun marking_pipe/2]
+    ),
+    Packet = example_packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
+    %% Should not receive a response since async fun returns halt
+    {error, timeout} = gen_udp:recv(Socket, 0, 500),
+    gen_udp:close(Socket).
+
+%% Verify chain of suspends is limited to prevent infinite loops.
+suspend_chain_limited(Config) ->
+    #{port := Port} = start_integration_peer(
+        Config, ?FUNCTION_NAME, udp, [fun chain_suspend_pipe/2]
+    ),
+    Packet = example_packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
+    %% Chain suspends 4 times, but limit is 3, so it should halt (no response)
+    {error, timeout} = gen_udp:recv(Socket, 0, 500),
+    gen_udp:close(Socket).
+
+%% Verify async fun can return {Message, Opts} to update both.
+suspend_async_returns_msg_with_opts(Config) ->
+    #{port := Port} = start_integration_peer(
+        Config, ?FUNCTION_NAME, udp, [fun suspend_with_opts_pipe/2, fun opts_checking_pipe/2]
+    ),
+    Packet = example_packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
+    {ok, {_, _, ResponseBin}} = gen_udp:recv(Socket, 0, 5000),
+    Response = dns:decode_message(ResponseBin),
+    %% AsyncFun sets aa=true, opts_checking_pipe sees custom_opt and sets tc=true
+    ?assertEqual(true, Response#dns_message.aa),
+    ?assertEqual(true, Response#dns_message.tc),
+    gen_udp:close(Socket).
+
+%% Verify async fun returning {stop, Message} skips remaining pipeline.
+suspend_async_returns_stop(Config) ->
+    #{port := Port} = start_integration_peer(
+        Config, ?FUNCTION_NAME, udp, [fun suspend_stop_pipe/2, fun marking_pipe/2]
+    ),
+    Packet = example_packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
+    {ok, {_, _, ResponseBin}} = gen_udp:recv(Socket, 0, 5000),
+    Response = dns:decode_message(ResponseBin),
+    %% AsyncFun sets aa=true and returns stop, marking_pipe should NOT run
+    ?assertEqual(true, Response#dns_message.aa),
+    ?assertEqual(false, Response#dns_message.tc),
+    gen_udp:close(Socket).
+
+%% Verify async fun returning invalid value logs error and continues.
+suspend_async_returns_invalid(Config) ->
+    #{port := Port} = start_integration_peer(
+        Config, ?FUNCTION_NAME, udp, [fun suspend_invalid_pipe/2, fun marking_pipe/2]
+    ),
+    Packet = example_packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
+    {ok, {_, _, ResponseBin}} = gen_udp:recv(Socket, 0, 5000),
+    Response = dns:decode_message(ResponseBin),
+    %% AsyncFun returns invalid, original message used, marking_pipe still runs
+    ?assertEqual(false, Response#dns_message.aa),
+    ?assertEqual(true, Response#dns_message.tc),
+    gen_udp:close(Socket).
+
+%% Verify async fun raising exception logs error and continues.
+suspend_async_raises_exception(Config) ->
+    #{port := Port} = start_integration_peer(
+        Config, ?FUNCTION_NAME, udp, [fun suspend_exception_pipe/2, fun marking_pipe/2]
+    ),
+    Packet = example_packet(),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Packet),
+    {ok, {_, _, ResponseBin}} = gen_udp:recv(Socket, 0, 5000),
+    Response = dns:decode_message(ResponseBin),
+    %% AsyncFun raises, original message used, marking_pipe still runs
+    ?assertEqual(false, Response#dns_message.aa),
+    ?assertEqual(true, Response#dns_message.tc),
+    gen_udp:close(Socket).
+
+%% ===================================================================
+%% Integration Test Helpers
+%% ===================================================================
+
+start_integration_peer(Config, Name, Transport, Pipeline) ->
+    ListenerOpts = #{ingress_request_timeout => 5000},
+    AppConfig = [
+        {erldns, [
+            {listeners, [
+                #{
+                    name => Name,
+                    transport => Transport,
+                    port => 0,
+                    opts => ListenerOpts
+                }
+            ]},
+            {packet_pipeline, Pipeline}
+        ]}
+    ],
+    Config1 = app_helper:start_erldns(Config, AppConfig),
+    Node = app_helper:get_node(Config1),
+    ct:sleep(100),
+    Port = app_helper:get_configured_port(Config1, Name, Transport),
+    ct:pal("Integration test ~p:~p on port ~p", [Name, Transport, Port]),
+    #{port => Port, node => Node, config => Config1}.
+
+%% A pipe that suspends with an async function that sets aa=true
+suspending_pipe(Msg, Opts) ->
+    AsyncFun = fun(M, _) -> M#dns_message{aa = true} end,
+    {suspend, Msg, Opts, AsyncFun}.
+
+%% A pipe that sets tc=true (used after suspension to verify remaining pipeline)
+marking_pipe(Msg, _Opts) ->
+    Msg#dns_message{tc = true}.
+
+%% A pipe that suspends but the async function returns halt
+halting_suspend_pipe(Msg, Opts) ->
+    AsyncFun = fun(_, _) -> halt end,
+    {suspend, Msg, Opts, AsyncFun}.
+
+%% A pipe that creates a chain of suspends (for testing loop limit)
+%% The limit is 3, so this creates 4 nested suspends to exceed it.
+chain_suspend_pipe(Msg, Opts) ->
+    %% Level 4: innermost
+    Level4 = fun(M, _) -> M#dns_message{aa = true} end,
+    %% Level 3
+    Level3 = fun(M, O) -> {suspend, M, O, Level4} end,
+    %% Level 2
+    Level2 = fun(M, O) -> {suspend, M, O, Level3} end,
+    %% Level 1
+    Level1 = fun(M, O) -> {suspend, M, O, Level2} end,
+    %% Level 0: initial suspend
+    {suspend, Msg, Opts, Level1}.
+
+%% A pipe that suspends with async fun returning {Message, Opts}
+suspend_with_opts_pipe(Msg, Opts) ->
+    AsyncFun = fun(M, O) ->
+        {M#dns_message{aa = true}, O#{custom_opt => true}}
+    end,
+    {suspend, Msg, Opts, AsyncFun}.
+
+%% A pipe that checks for custom_opt and sets tc=true if present
+opts_checking_pipe(Msg, Opts) ->
+    case maps:get(custom_opt, Opts, false) of
+        true -> Msg#dns_message{tc = true};
+        false -> Msg
+    end.
+
+%% A pipe that suspends with async fun returning {stop, Message}
+suspend_stop_pipe(Msg, Opts) ->
+    AsyncFun = fun(M, _) -> {stop, M#dns_message{aa = true}} end,
+    {suspend, Msg, Opts, AsyncFun}.
+
+%% A pipe that suspends with async fun returning invalid value
+suspend_invalid_pipe(Msg, Opts) ->
+    AsyncFun = fun(_, _) -> {invalid, return, value} end,
+    {suspend, Msg, Opts, AsyncFun}.
+
+%% A pipe that suspends with async fun that raises an exception
+suspend_exception_pipe(Msg, Opts) ->
+    AsyncFun = fun(_, _) -> error(intentional_test_error) end,
+    {suspend, Msg, Opts, AsyncFun}.
+
+%% Create an example DNS query packet (matches listeners_SUITE:packet())
+example_packet() ->
+    Q = #dns_query{name = ~"example.com", type = ?DNS_TYPE_A},
+    Msg = #dns_message{qc = 1, questions = [Q]},
+    dns:encode_message(Msg).
