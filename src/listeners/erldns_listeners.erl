@@ -115,7 +115,7 @@ Configuration map for a listener.
 It can contain the following keys:
 - `Name` is any desired name in the form of an atom,
 - `IP` is `any`, in which case it will listen on all interfaces,
-    or a valid ip address in tuple or string format. Default is `any`.
+    or a valid ip address in tuple, binary, or string format. Default is `any`.
 - `Port` is a valid port number. Default is `53`.
 - `Transport` is the transport protocol: `udp`, `tcp`, `tls`, or `standard`
     (creates both UDP and TCP). Default is `standard`.
@@ -187,7 +187,7 @@ Example TLS listener:
 -type config() :: #{
     name := name(),
     transport => transport(),
-    ip => inet:ip_address() | string() | any,
+    ip => inet:ip_address() | binary() | string() | any,
     port => inet:port_number(),
     parallel_factor => parallel_factor(),
     opts => #{atom() => term()}
@@ -295,16 +295,22 @@ get_ip(Config) ->
             [inet, {ip, IP}];
         IP when is_tuple(IP), tuple_size(IP) =:= 8 ->
             [inet6, {ip, IP}];
+        IP when is_binary(IP) ->
+            parse_ip(Config, binary_to_list(IP));
         IP when is_list(IP) ->
-            case inet:parse_address(IP) of
-                {ok, IpAddr} when is_tuple(IpAddr), tuple_size(IpAddr) =:= 4 ->
-                    [inet, {ip, IpAddr}];
-                {ok, IpAddr} when is_tuple(IpAddr), tuple_size(IpAddr) =:= 8 ->
-                    [inet6, {ip, IpAddr}];
-                {error, _} ->
-                    error({invalid_listener, ip, Config})
-            end;
+            parse_ip(Config, IP);
         _ ->
+            error({invalid_listener, ip, Config})
+    end.
+
+-spec parse_ip(config(), string()) -> list().
+parse_ip(Config, IP) ->
+    case inet:parse_address(IP) of
+        {ok, IpAddr} when is_tuple(IpAddr), tuple_size(IpAddr) =:= 4 ->
+            [inet, {ip, IpAddr}];
+        {ok, IpAddr} when is_tuple(IpAddr), tuple_size(IpAddr) =:= 8 ->
+            [inet6, {ip, IpAddr}];
+        {error, _} ->
             error({invalid_listener, ip, Config})
     end.
 

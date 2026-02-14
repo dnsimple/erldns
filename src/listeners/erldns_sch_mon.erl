@@ -168,7 +168,7 @@ utilization(AtomicsRef, S0, S1, LastEma) ->
     NewEMA.
 
 -spec safe_div(number(), number()) -> float().
-safe_div(_, Zero) when 0 == Zero ->
+safe_div(_, Zero) when 0 =:= Zero ->
     +0.0;
 safe_div(A, B) ->
     A / B.

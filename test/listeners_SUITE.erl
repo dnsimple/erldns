@@ -38,7 +38,6 @@ groups() ->
             tls_opts_configuration,
             udp_opts_configuration,
             standard_transport_creates_both,
-            ip_must_be_inet_parseable,
             codel
         ]},
         {udp, [parallel], [
@@ -511,6 +510,9 @@ ip_must_be_inet_parseable(_) ->
     ?assertMatch({ok, _}, erldns_listeners:start_link()),
     gen_server:stop(erldns_listeners),
     application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, ip => "0.0.0.0", port => 0}]),
+    ?assertMatch({ok, _}, erldns_listeners:start_link()),
+    gen_server:stop(erldns_listeners),
+    application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, ip => ~"0.0.0.0", port => 0}]),
     ?assertMatch({ok, _}, erldns_listeners:start_link()).
 
 udp_halted(Config) ->

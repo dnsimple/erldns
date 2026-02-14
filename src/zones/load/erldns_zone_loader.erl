@@ -23,7 +23,7 @@ load_zones() ->
     load_zones(#{}).
 
 -doc "Load zones from a given configuration, see `t:erldns_zones:config/0` for details.".
--spec load_zones(erldns_zones:config() | file:name()) -> non_neg_integer().
+-spec load_zones(erldns_zones:config() | file:name_all()) -> non_neg_integer().
 load_zones(ConfigOrPath) ->
     Config = get_config(ConfigOrPath),
     case erldns_zone_loader_getter:load_zones(Config) of
@@ -39,14 +39,18 @@ get_config() ->
     Config = application:get_env(erldns, zones, #{}),
     get_config(Config).
 
--spec get_config(map() | file:name()) -> erldns_zones:config().
+-spec get_config(map() | file:name_all()) -> erldns_zones:config().
+get_config(Path) when is_binary(Path) ->
+    get_config(#{path => unicode:characters_to_list(Path)});
 get_config(Path) when is_list(Path) ->
     get_config(#{path => Path});
 get_config(Config) when is_map(Config) ->
     Format = maps:get(format, Config, json),
     Timeout = maps:get(timeout, Config, timer:minutes(30)),
-    Path = maps:get(path, Config, undefined),
-    KeysPath = maps:get(keys_path, Config, undefined),
+    Path0 = maps:get(path, Config, undefined),
+    Path = ensure_path(Path0),
+    KeysPath0 = maps:get(keys_path, Config, undefined),
+    KeysPath = ensure_path(KeysPath0),
     Strict = maps:get(strict, Config, undefined =/= Path),
     assert_valid_format(Format),
     assert_valid_timeout(Timeout),
@@ -94,6 +98,13 @@ assert_valid_keys_path(KeysPath) when is_list(KeysPath) ->
     end;
 assert_valid_keys_path(_) ->
     erlang:error({badconfig, invalid_keys_path}).
+
+ensure_path(undefined) ->
+    undefined;
+ensure_path(Path) when is_list(Path) ->
+    Path;
+ensure_path(Path) when is_binary(Path) ->
+    unicode:characters_to_list(Path).
 
 -spec assert_valid_path(file:name() | undefined, boolean()) -> ok | no_return().
 assert_valid_path(_, Strict) when not is_boolean(Strict) ->
