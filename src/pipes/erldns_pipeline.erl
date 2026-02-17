@@ -213,12 +213,22 @@ Options that can be passed and accumulated to the pipeline.
 -doc """
 The return type of a pipe.
 
-It can return `halt`, a new `t:dns:message/0`, with or without new `t:opts/0`,
-put a `stop` to the pipeline execution, or `suspend` for async operations.
-
-The `{suspend, Msg, Opts, AsyncFun}` return allows a pipe to pause execution and
-perform blocking work asynchronously. This is used for operations like
-external DNS resolution that would otherwise block the worker pool.
+Valid returns are:
+- a possibly new `t:dns:message/0`;
+- a `{Msg, Opts}` tuple containing a new `t:dns:message/0` and a new set of `t:opts/0`;
+- a `{stop, Msg}` tuple containing a possibly new `t:dns:message/0` to stop the pipeline execution
+    altogether and return the given message.
+- a `halt` atom, in which case the pipeline will be halted and no further pipes will be executed.
+    The socket workers won't respond nor trigger any events, and it's fully the responsibility of
+    a handler to deal with all the edge cases. This could be useful for either dropping the request
+    entirely, or for stealing the request from a given worker to answer separately.
+    Note that the pipe options will contain the UDP or TCP socket to answer to, so in the case
+    of UDP the client can be answered using `gen_udp:send/4` with the socket, host and port;
+    and in the case of TCP it would be required to first steal the socket using
+    `gen_tcp:controlling_process/2` so that the connection is not closed.
+- a `{suspend, Msg, Opts, AsyncFun}` to allow a pipe to pause execution and perform blocking
+    work asynchronously. This is used for operations like external DNS resolution that would
+    otherwise block the worker pool.
 """.
 -type return() ::
     halt
@@ -230,11 +240,7 @@ external DNS resolution that would otherwise block the worker pool.
 -doc """
 The result of a pipeline.
 
-It can return `halt`, a new `t:dns:message/0`, or `suspend` for async operations.
-
-The `{suspend, Msg, Opts, AsyncFun}` return allows a pipe to pause execution and
-perform blocking work asynchronously. This is used for operations like
-external DNS resolution that would otherwise block the worker pool.
+It can return `halt`, a new `t:dns:message/0`, or `suspend` for async operations. See `t:return/0`.
 """.
 -type result() :: halt | dns:message() | {suspend, continuation()}.
 
@@ -261,6 +267,7 @@ It is either the function from `t:pipe/0` or the function `fun Module:call/2`.
 """.
 -type pipefun() :: fun((dns:message(), opts()) -> return()).
 
+-doc "A list of ready `t:pipefun/0`.".
 -type pipeline() :: [pipefun()].
 
 -export_type([
@@ -281,8 +288,8 @@ Initialise the pipe handler, triggering side-effects and preparing any necessary
 
 This will be called during the pipeline initialisation phase, which should happen at application
 startup provided you added the pipeline to your application's supervision tree. This will be called
-only once during application startup and therefore it is an opportunity to do any necessary
-preparations that can reduce the amount of work at runtime and therefore improve performance.
+only once at boot and therefore it is an opportunity to do any necessary preparations that can
+reduce the amount of work at runtime and therefore improve performance.
 
 This callback can return `disabled`, and then the `c:call/2` callback won't be added to the
 pipeline.
@@ -290,22 +297,10 @@ pipeline.
 -callback prepare(opts()) -> disabled | opts().
 
 -doc """
-Trigger the pipeline at run-time.
-
-This callback can return
-- a possibly new `t:dns:message/0`;
-- a tuple containing a new `t:dns:message/0` and a new set of `t:opts/0`;
-- a `{stop, t:dns:message/0}` tuple to stop the pipeline execution altogether.
-- a `halt` atom, in which case the pipeline will be halted and no further pipes will be executed.
-    The socket workers won't respond nor trigger any events, and it's fully the responsibility of
-    a handler to deal with all the edge cases. This could be useful for either dropping the request
-    entirely, or for stealing the request from a given worker to answer separately.
-    Note that the pipe options will contain the UDP or TCP socket to answer to, so in the case
-    of UDP the client can be answered using `gen_udp:send/4` with the socket, host and port;
-    and in the case of TCP it would be required to first steal the socket using
-    `gen_tcp:controlling_process/2` so that the connection is not closed.
+Trigger the pipeline at run-time. See `t:return/0` for details.
 """.
 -callback call(dns:message(), opts()) -> return().
+
 -doc """
 Declare dependencies on other pipes.
 
