@@ -231,7 +231,7 @@ resolve_exact_match(Message, Zone, QLabels, QType, CnameChain, MatchedRecords) -
             % There are no exact type matches and no referrals,
             % return NOERROR with the authority set
             Message#dns_message{aa = true, authority = Zone#zone.authority};
-        {[], _} when QType == ?DNS_TYPE_DS ->
+        {[], _} when QType =:= ?DNS_TYPE_DS ->
             % There were no exact type matches, but since the query type
             % was DS we still return NOERROR with the authority set
             Message#dns_message{aa = true, authority = Zone#zone.authority};
@@ -762,9 +762,7 @@ additional_processing(Message, _Zone, []) ->
     Message;
 %% There are records with names that require additional processing.
 additional_processing(Message, Zone, Names) ->
-    RRs = lists:flatmap(
-        fun(Name) -> erldns_zone_cache:get_records_by_name(Name) end, Names
-    ),
+    RRs = lists:flatmap(fun erldns_zone_cache:get_records_by_name/1, Names),
     Records = lists:filter(erldns_records:match_types([?DNS_TYPE_A, ?DNS_TYPE_AAAA]), RRs),
     additional_processing(Message, Zone, Names, Records).
 

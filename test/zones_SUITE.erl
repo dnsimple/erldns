@@ -32,6 +32,7 @@ groups() ->
             load_dnssec_zone,
             wildcard_loose,
             load_zonefile,
+            load_zonefile_binary,
             load_zonefile_format_auto,
             load_zonefile_rfc3597,
             load_zonefile_with_custom_decoder,
@@ -1764,6 +1765,12 @@ wildcard_loose(Config) ->
 load_zonefile(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "example.zone"),
+    LoadConfig = #{path => Path, format => zonefile},
+    ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig)).
+
+load_zonefile_binary(Config) ->
+    DataDir = proplists:get_value(data_dir, Config),
+    Path = filename:join(DataDir, ~"example.zone"),
     LoadConfig = #{path => Path, format => zonefile},
     ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig)).
 

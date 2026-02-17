@@ -62,8 +62,8 @@ Zone configuration.
 See `m:erldns_zone_loader` for more details.
 """.
 -type config() :: #{
-    path => undefined | file:name(),
-    keys_path => undefined | file:name(),
+    path => undefined | file:name_all(),
+    keys_path => undefined | file:name_all(),
     strict => boolean(),
     format => format(),
     timeout => timeout(),
