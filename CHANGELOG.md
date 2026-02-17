@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.3.0
+
+### Added
+
+- Allow to use binary strings to specify listener IP
+- Allow to use binary strings to specify zones path
+
 ## v10.2.1
 
 ### Fixed
