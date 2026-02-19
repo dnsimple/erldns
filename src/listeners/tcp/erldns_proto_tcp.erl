@@ -117,22 +117,18 @@ handle_info({timeout, TimerRef, ingress}, #state{timer_ref = TimerRef} = State) 
     Metadata = #{transport => tcp, timeout_type => ingress, buffer => State#state.buffer},
     telemetry:execute([erldns, request, dropped], #{count => Count}, Metadata),
     {stop, normal, State};
-handle_info({timeout, TimerRef, {request_timeout, WorkerPid}}, State) ->
+handle_info({timeout, TimerRef, {request_timeout, WorkerPid}}, #state{} = State) ->
     handle_worker_timeout(WorkerPid, TimerRef, State);
-handle_info({timeout, _, _}, State) ->
+handle_info({timeout, _, _}, #state{} = State) ->
     % Timer was cancelled/replaced, ignore
     {noreply, State};
-handle_info({'EXIT', Pid, normal}, #state{active_workers = ActiveWorkers} = State) ->
-    {RequestInfo, NewActiveWorkers} = maps:take(Pid, ActiveWorkers),
-    cancel_timer(RequestInfo#request.timeout_timer),
-    State1 = State#state{active_workers = NewActiveWorkers},
-    handle_process_buffer(State1);
-handle_info({'EXIT', Pid, Reason}, #state{active_workers = ActiveWorkers} = State) ->
+handle_info({'EXIT', Pid, normal}, #state{} = State) ->
+    handle_worker_down(Pid, State);
+handle_info({'EXIT', Pid, killed}, #state{} = State) ->
+    handle_worker_down(Pid, State);
+handle_info({'EXIT', Pid, Reason}, #state{} = State) ->
     ?LOG_WARNING(#{what => tcp_worker_crashed, pid => Pid, reason => Reason}, ?LOG_METADATA),
-    {RequestInfo, NewActiveWorkers} = maps:take(Pid, ActiveWorkers),
-    cancel_timer(RequestInfo#request.timeout_timer),
-    State1 = State#state{active_workers = NewActiveWorkers},
-    handle_process_buffer(State1);
+    handle_worker_down(Pid, State);
 handle_info({SocketType, Socket, Bin}, #state{socket = Socket, socket_type = SocketType} = State) ->
     % Placeholder for future Active Queue Management implementations
     NewBuffer = <<(State#state.buffer)/binary, Bin/binary>>,
@@ -149,6 +145,13 @@ handle_info(Info, State) ->
 -spec terminate(term(), state()) -> ok.
 terminate(_Reason, State) ->
     shutdown(State).
+
+-spec handle_worker_down(pid(), state()) -> {noreply, state()}.
+handle_worker_down(Pid, #state{active_workers = ActiveWorkers} = State) ->
+    {RequestInfo, NewActiveWorkers} = maps:take(Pid, ActiveWorkers),
+    cancel_timer(RequestInfo#request.timeout_timer),
+    State1 = State#state{active_workers = NewActiveWorkers},
+    handle_process_buffer(State1).
 
 -define(CONCURRENT_QUERIES_EMPTY(S),
     0 =:= map_size(S#state.active_workers)
