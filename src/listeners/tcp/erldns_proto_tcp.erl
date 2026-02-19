@@ -113,6 +113,7 @@ handle_info({timeout, TimerRef, idle}, #state{timer_ref = TimerRef} = State) ->
     ?LOG_DEBUG(#{what => connection_idle_timeout, transport => tcp}, ?LOG_METADATA),
     {stop, normal, State};
 handle_info({timeout, TimerRef, ingress}, #state{timer_ref = TimerRef} = State) ->
+    ?LOG_INFO(#{what => connection_ingress_timeout, transport => tcp}, ?LOG_METADATA),
     Count = 1 + maps:size(State#state.active_workers),
     Metadata = #{transport => tcp, timeout_type => ingress, buffer => State#state.buffer},
     telemetry:execute([erldns, request, dropped], #{count => Count}, Metadata),
