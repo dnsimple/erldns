@@ -751,10 +751,8 @@ check_if_parent(MaybeParent, MaybeChild) when is_binary(MaybeChild) ->
     check_if_parent(MaybeParent, dns_domain:split(MaybeChild)).
 
 %% See if additional processing is necessary.
-additional_processing(Message, Zone) ->
-    RequiresAdditionalProcessing = requires_additional_processing(
-        Message#dns_message.answers ++ Message#dns_message.authority, []
-    ),
+additional_processing(#dns_message{answers = Answers, authority = Authority} = Message, Zone) ->
+    RequiresAdditionalProcessing = requires_additional_processing(Answers, Authority, []),
     additional_processing(Message, Zone, RequiresAdditionalProcessing).
 
 %% No records require additional processing.
@@ -774,15 +772,19 @@ additional_processing(Message, _Zone, _Names, Records) ->
     Message#dns_message{additional = Message#dns_message.additional ++ Records}.
 
 %% Given a list of answers find the names that require additional processing.
--spec requires_additional_processing([dns:rr()], [dns:dname()]) -> [dns:dname()].
-requires_additional_processing([#dns_rr{data = #dns_rrdata_ns{dname = Dname}} | Rest], Acc) ->
-    requires_additional_processing(Rest, [Dname | Acc]);
-requires_additional_processing([#dns_rr{data = #dns_rrdata_mx{exchange = Exchange}} | Rest], Acc) ->
-    requires_additional_processing(Rest, [Exchange | Acc]);
-requires_additional_processing([_ | Rest], Acc) ->
-    requires_additional_processing(Rest, Acc);
-requires_additional_processing([], Acc) ->
-    lists:reverse(Acc).
+-spec requires_additional_processing([dns:rr()], [dns:rr()], [dns:dname()]) -> [dns:dname()].
+requires_additional_processing([], [], Acc) ->
+    Acc;
+requires_additional_processing([#dns_rr{data = #dns_rrdata_ns{dname = Dname}} | Rest], More, Acc) ->
+    requires_additional_processing(Rest, More, [Dname | Acc]);
+requires_additional_processing(
+    [#dns_rr{data = #dns_rrdata_mx{exchange = Exchange}} | Rest], More, Acc
+) ->
+    requires_additional_processing(Rest, More, [Exchange | Acc]);
+requires_additional_processing([_ | Rest], More, Acc) ->
+    requires_additional_processing(Rest, More, Acc);
+requires_additional_processing([], More, Acc) ->
+    requires_additional_processing(More, [], Acc).
 
 % Extract the name from the first record in the list.
 zone_authority_name(#zone{authority = [Record | _]}) ->
