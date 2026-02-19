@@ -5,6 +5,7 @@
 -include_lib("dns_erlang/include/dns.hrl").
 
 -define(MIN_HEAP_SIZE, 650).
+-define(LOG_METADATA, #{domain => [erldns, listeners]}).
 
 -export([start_link/6]).
 -export([request/6]).
@@ -99,10 +100,7 @@ request_error_event(Metadata) ->
 
 -spec measure_time(dns:message(), erldns_proto_tcp:ts(), binary()) -> ok.
 measure_time(Response, TS0, EncodedResponse) ->
-    ?LOG_DEBUG(
-        #{what => tcp_request_finished, dns_message => Response},
-        #{domain => [erldns, listeners]}
-    ),
+    ?LOG_DEBUG(#{what => tcp_request_finished, dns_message => Response}, ?LOG_METADATA),
     TS1 = erlang:monotonic_time(),
     Measurements = #{
         monotonic_time => TS1,
