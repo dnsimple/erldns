@@ -66,7 +66,15 @@ process_udp_work(Codel, Socket, IpAddr, Port, IngressTs, Bin, Budget) ->
             handle_udp_work(Socket, IpAddr, Port, IngressTs, Bin),
             drop_loop(Codel1, Budget);
         {drop, Codel1} ->
-            ?LOG_WARNING(#{what => request_dropped, transport => udp}, ?LOG_METADATA),
+            ?LOG_WARNING(
+                #{
+                    what => request_dropped,
+                    ingress_ts => IngressTs,
+                    current_ts => Now,
+                    transport => udp
+                },
+                ?LOG_METADATA
+            ),
             telemetry:execute([erldns, request, dropped], #{count => 1}, #{transport => udp}),
             drop_loop(Codel1, budget(Budget))
     end.
@@ -86,7 +94,15 @@ process_async_continuation(Codel, Continuation, Budget) ->
             handle_async_reply(Socket, IpAddr, Port, IngressTs, Continuation),
             drop_loop(Codel1, Budget);
         {drop, Codel1} ->
-            ?LOG_WARNING(#{what => request_dropped, transport => udp}, ?LOG_METADATA),
+            ?LOG_WARNING(
+                #{
+                    what => request_dropped,
+                    ingress_ts => IngressTs,
+                    current_ts => Now,
+                    transport => udp
+                },
+                ?LOG_METADATA
+            ),
             telemetry:execute([erldns, request, dropped], #{count => 1}, #{transport => udp}),
             drop_loop(Codel1, budget(Budget))
     end.
