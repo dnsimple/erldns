@@ -134,7 +134,7 @@ handle_info({SocketType, Socket, Bin}, #state{socket = Socket, socket_type = Soc
     NewBuffer = <<(State#state.buffer)/binary, Bin/binary>>,
     handle_process_buffer(State#state{buffer = NewBuffer});
 handle_info({Error, Socket, Reason}, #state{socket = Socket} = State) when ?SOCKET_ERROR(State) ->
-    ?LOG_INFO(#{what => socket_error, reason => Reason}, ?LOG_METADATA),
+    ?LOG_NOTICE(#{what => socket_error, reason => Reason}, ?LOG_METADATA),
     {stop, normal, State};
 handle_info({Closed, Socket}, #state{socket = Socket} = State) when ?SOCKET_CLOSED(State) ->
     {stop, normal, State};
