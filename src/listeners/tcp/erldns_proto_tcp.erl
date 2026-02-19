@@ -2,8 +2,9 @@
 -moduledoc false.
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("dns_erlang/include/dns.hrl").
 
--define(LOG_METADATA, #{domain => [erldns, pipeline]}).
+-define(LOG_METADATA, #{domain => [erldns, listeners]}).
 
 -define(SOCKET_ERROR(State),
     ((Error =:= tcp_error andalso State#state.socket_type =:= tcp) orelse
@@ -252,20 +253,29 @@ handle_worker_timeout(WorkerPid, TimerRef, #state{active_workers = ActiveWorkers
             % Worker is still alive and timer matches, kill it and send SERVFAIL
             % We don't remove it from the active_workers because the kill will send an EXIT signal
             exit(WorkerPid, kill),
-            Metadata = #{transport => tcp, pid => WorkerPid, timeout_type => worker},
-            telemetry:execute([erldns, request, timeout], #{count => 1}, Metadata),
-            % Send SERVFAIL response
-            send_servfail_response(State, RequestBin),
+            send_servfail_response(State, RequestBin, WorkerPid),
             handle_process_buffer(State);
         _ ->
             % Worker already finished, timer was stale, worker was restarted, or timer was cancelled
             {noreply, State}
     end.
 
--spec send_servfail_response(state(), dns:message_bin()) -> term().
-send_servfail_response(#state{socket = Socket, socket_type = SocketType}, RequestBin) ->
+-spec send_servfail_response(state(), dns:message_bin(), pid()) -> term().
+send_servfail_response(#state{socket = Socket, socket_type = SocketType}, RequestBin, WorkerPid) ->
     try
         Decoded = dns:decode_query(RequestBin),
+        % Try to log the qname of the query that
+        #dns_message{questions = [#dns_query{name = QName, type = QType} | _]} = Decoded,
+        Metadata = #{
+            what => request_timeout,
+            transport => tcp,
+            timeout_type => worker,
+            worker_pid => WorkerPid,
+            qname => QName,
+            qtype => QType
+        },
+        telemetry:execute([erldns, request, timeout], #{count => 1}, Metadata),
+        ?LOG_WARNING(Metadata, ?LOG_METADATA),
         ServfailMsg = erldns_encoder:build_error_response(Decoded),
         EncodedResponse = dns:encode_message(ServfailMsg),
         Payload = [<<(byte_size(EncodedResponse)):16>>, EncodedResponse],
@@ -279,6 +289,8 @@ send_servfail_response(#state{socket = Socket, socket_type = SocketType}, Reques
                 reason => Reason,
                 stacktrace => Stacktrace
             },
+            TimeoutMetadata = #{transport => tcp, pid => WorkerPid, timeout_type => worker},
+            telemetry:execute([erldns, request, timeout], #{count => 1}, TimeoutMetadata),
             telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata)
     end.
 
