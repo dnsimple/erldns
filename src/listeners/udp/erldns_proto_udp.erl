@@ -66,7 +66,7 @@ process_udp_work(Codel, Socket, IpAddr, Port, IngressTs, Bin, Budget) ->
             handle_udp_work(Socket, IpAddr, Port, IngressTs, Bin),
             drop_loop(Codel1, Budget);
         {drop, Codel1} ->
-            ?LOG_WARNING(
+            ?LOG_NOTICE(
                 #{
                     what => request_dropped,
                     ingress_ts => IngressTs,
@@ -94,7 +94,7 @@ process_async_continuation(Codel, Continuation, Budget) ->
             handle_async_reply(Socket, IpAddr, Port, IngressTs, Continuation),
             drop_loop(Codel1, Budget);
         {drop, Codel1} ->
-            ?LOG_WARNING(
+            ?LOG_NOTICE(
                 #{
                     what => request_dropped,
                     ingress_ts => IngressTs,
