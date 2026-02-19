@@ -242,7 +242,7 @@ ensure_ingress_timer(#state{} = State) ->
 cancel_timer(undefined) ->
     undefined;
 cancel_timer(TimerRef) ->
-    erlang:cancel_timer(TimerRef).
+    _ = erlang:cancel_timer(TimerRef, [{async, true}, {info, false}]).
 
 -spec handle_worker_timeout(pid(), reference(), state()) -> {noreply, state()}.
 handle_worker_timeout(WorkerPid, TimerRef, #state{active_workers = ActiveWorkers} = State) ->
