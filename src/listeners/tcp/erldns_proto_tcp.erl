@@ -110,7 +110,7 @@ handle_cast(_Msg, State) ->
 
 -spec handle_info(dynamic(), state()) -> {noreply, state()} | {stop, normal | term(), state()}.
 handle_info({timeout, TimerRef, idle}, #state{timer_ref = TimerRef} = State) ->
-    ?LOG_INFO(#{what => connection_idle_timeout, transport => tcp}, ?LOG_METADATA),
+    ?LOG_DEBUG(#{what => connection_idle_timeout, transport => tcp}, ?LOG_METADATA),
     {stop, normal, State};
 handle_info({timeout, TimerRef, ingress}, #state{timer_ref = TimerRef} = State) ->
     Count = 1 + maps:size(State#state.active_workers),
