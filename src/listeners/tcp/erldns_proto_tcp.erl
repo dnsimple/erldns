@@ -129,7 +129,7 @@ handle_info({'EXIT', Pid, normal}, #state{} = State) ->
 handle_info({'EXIT', Pid, killed}, #state{} = State) ->
     handle_worker_down(Pid, State);
 handle_info({'EXIT', Pid, Reason}, #state{} = State) ->
-    ?LOG_WARNING(#{what => tcp_worker_crashed, pid => Pid, reason => Reason}, ?LOG_METADATA),
+    ?LOG_WARNING(#{what => tcp_worker_crashed, worker_pid => Pid, reason => Reason}, ?LOG_METADATA),
     handle_worker_down(Pid, State);
 handle_info({SocketType, Socket, Bin}, #state{socket = Socket, socket_type = SocketType} = State) ->
     % Placeholder for future Active Queue Management implementations
