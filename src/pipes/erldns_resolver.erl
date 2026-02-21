@@ -138,9 +138,7 @@ maybe_add_zonecut_records(Zone, QLabels, Result, Message, _QType, _) ->
         [] ->
             Result;
         ZonecutRecords ->
-            CnameAnswers = lists:filter(
-                erldns_records:match_type(?DNS_TYPE_CNAME), Result#dns_message.answers
-            ),
+            CnameAnswers = lists:filter(fun erldns_records:is_cname/1, Result#dns_message.answers),
             FilteredCnameAnswers =
                 lists:filter(
                     fun(RR) ->
@@ -183,7 +181,7 @@ resolve_ent(Message, Zone, QLabels) ->
 
 %% Determine if there is a CNAME anywhere in the records with the given QName.
 exact_match_resolution(Message, Zone, QLabels, QType, CnameChain, MatchedRecords) ->
-    case lists:filter(erldns_records:match_type(?DNS_TYPE_CNAME), MatchedRecords) of
+    case lists:filter(fun erldns_records:is_cname/1, MatchedRecords) of
         [] ->
             % No CNAME records found in the record set for the QName
             resolve_exact_match(Message, Zone, QLabels, QType, CnameChain, MatchedRecords);
@@ -224,8 +222,8 @@ resolve_exact_match(Message, Zone, QLabels, QType, CnameChain, MatchedRecords) -
                 % Records match qtype, use them
                 TypeMatches
         end,
-    AuthorityRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), MatchedRecords),
-    ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), MatchedRecords),
+    AuthorityRecords = lists:filter(fun erldns_records:is_soa/1, MatchedRecords),
+    ReferralRecords = lists:filter(fun erldns_records:is_ns/1, MatchedRecords),
     case {ExactTypeMatches, ReferralRecords} of
         {[], []} ->
             % There are no exact type matches and no referrals,
@@ -480,7 +478,7 @@ best_match_resolution(Message, Zone, QLabels, QName, QType, CnameChain, BestMatc
     % There was no exact match for the QName,
     % so we use the best matches that were returned by the
     % get_records_by_name_wildcard_strict() function.
-    ReferralRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_NS), BestMatchRecords),
+    ReferralRecords = lists:filter(fun erldns_records:is_ns/1, BestMatchRecords),
     case ReferralRecords of
         [] ->
             % There were no NS records in the best matches.
@@ -516,7 +514,7 @@ resolve_best_match(Message, Zone, QLabels, QName, QType, CnameChain, BestMatchRe
         true ->
             % It's a wildcard match
             CnameRecords = lists:filter(
-                erldns_records:match_type(?DNS_TYPE_CNAME),
+                fun erldns_records:is_cname/1,
                 lists:map(erldns_records:replace_name(QName), BestMatchRecords)
             ),
             resolve_best_match_with_wildcard(
@@ -655,7 +653,7 @@ resolve_best_match_with_wildcard_cname(
 resolve_best_match_referral(
     Message, Zone, QLabels, QType, CnameChain, BestMatchRecords, ReferralRecords
 ) ->
-    Authority = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), BestMatchRecords),
+    Authority = lists:filter(fun erldns_records:is_soa/1, BestMatchRecords),
     case {QType, Authority, CnameChain} of
         {_, [], []} ->
             % We are authoritative for the name since there was an SOA record

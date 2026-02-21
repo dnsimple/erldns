@@ -204,7 +204,7 @@ handle(Msg, Zone, _, _, true, true) ->
 % but only if SOA is in the Authority Section to begin with
 -spec maybe_get_soa_rrsig_records([dns:rr()], [dns:rr()]) -> [dns:rr()].
 maybe_get_soa_rrsig_records(ApexRRSigRecords, MsgAuths) ->
-    case lists:any(erldns_records:match_type(?DNS_TYPE_SOA), MsgAuths) of
+    case lists:any(fun erldns_records:is_soa/1, MsgAuths) of
         true -> lists:filter(erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords);
         false -> []
     end.
