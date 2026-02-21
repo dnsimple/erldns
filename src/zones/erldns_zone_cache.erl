@@ -119,7 +119,11 @@ get_records_by_name(Labels) when is_list(Labels) ->
     end.
 
 -doc #{group => ~"API: Lookups"}.
--doc "Return the record set for the given dname in the given zone.".
+-doc """
+Return the record set for the given dname in the given zone.
+
+Returns only exact records at that node; no wildcard expansion and no subtree.
+""".
 -spec get_records_by_name(erldns:zone(), dns:dname() | dns:labels()) -> [dns:rr()].
 get_records_by_name(Zone, Name) when is_binary(Name) ->
     Labels = dns_domain:split(Name),
@@ -159,7 +163,9 @@ get_records_by_name_and_type(#zone{labels = ZL, reversed_labels = RZL}, Labels, 
     pattern_zone_dname_type(ZL, RecordLabels, Type).
 
 -doc #{group => ~"API: Lookups"}.
--doc "Return the full record set for the tree below the given dname".
+-doc """
+Return the entire subtree at the given dname: all records at that node and at any descendant.
+""".
 -spec get_records_by_name_ent(erldns:zone(), dns:dname() | dns:labels()) -> [dns:rr()].
 get_records_by_name_ent(Zone, Name) when is_binary(Name) ->
     Labels = dns_domain:split(Name),
@@ -172,10 +178,11 @@ get_records_by_name_ent(#zone{labels = ZL, reversed_labels = RZL}, Labels) when
 
 -doc #{group => ~"API: Lookups"}.
 -doc """
-Return the record set for the given dname in the given zone, including parent wildcard matches.
+Return records for the given dname or at any parent that has a wildcard.
 
-Note that this helper is not RFC compliant with ENT handling - they will get expanded if covered by
-wildcards. Whether a node is an ENT has to be checked beforehand by `is_record_name_in_zone/2`.
+Walks from the name upward; at each level looks only for a wildcard (`*.parent`).
+Stops at the first wildcard found and returns those records. Does not consider
+exact records at ancestors, and does not block on ENT (empty non-terminals).
 """.
 -spec get_records_by_name_wildcard(erldns:zone(), dns:dname() | dns:labels()) -> [dns:rr()].
 get_records_by_name_wildcard(Zone, Name) when is_binary(Name) ->
@@ -189,8 +196,12 @@ get_records_by_name_wildcard(#zone{labels = ZL, reversed_labels = RZL}, Labels) 
 
 -doc #{group => ~"API: Lookups"}.
 -doc """
-Return the record set for the given dname in the given zone,
-including parent exact and wildcard matches.
+Return records for the given dname or at any parent that has a wildcard or exact records.
+
+Walks from the name upward; at each level looks for a wildcard first, then for
+exact records at that parent. Stops at the first level that has either and
+returns those records. Does not block on ENT (empty non-terminals); only
+prefers exact over wildcard when both exist at the same level.
 """.
 -spec get_records_by_name_wildcard_strict(erldns:zone(), dns:dname() | dns:labels()) -> [dns:rr()].
 get_records_by_name_wildcard_strict(Zone, Name) when is_binary(Name) ->
