@@ -17,6 +17,7 @@
     %% We're assuming zones were stored with names already normalised,
     %% hence removing the need to re-normalize them on every fetch
     labels :: dns:labels(),
+    reversed_labels :: dns:labels(),
     name :: dns:dname(),
     version :: erldns_zones:version(),
     authority = [] :: dns:authority(),

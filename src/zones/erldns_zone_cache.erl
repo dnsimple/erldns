@@ -124,8 +124,10 @@ get_records_by_name(Labels) when is_list(Labels) ->
 get_records_by_name(Zone, Name) when is_binary(Name) ->
     Labels = dns_domain:split(Name),
     get_records_by_name(Zone, Labels);
-get_records_by_name(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
-    RecordLabels = reduce_record_labels(ZL, Labels),
+get_records_by_name(#zone{labels = ZL, reversed_labels = RZL}, Labels) when
+    is_list(ZL), is_list(RZL), is_list(Labels)
+->
+    RecordLabels = reduce_record_labels_pre_reversed(RZL, Labels),
     pattern_zone_dname(ZL, RecordLabels).
 
 -doc #{group => ~"API: Lookups"}.
@@ -150,8 +152,10 @@ get_records_by_name_and_type(Labels, Type) when is_list(Labels) ->
 get_records_by_name_and_type(Zone, Name, Type) when is_binary(Name) ->
     Labels = dns_domain:split(Name),
     get_records_by_name_and_type(Zone, Labels, Type);
-get_records_by_name_and_type(#zone{labels = ZL}, Labels, Type) when is_list(ZL), is_list(Labels) ->
-    RecordLabels = reduce_record_labels(ZL, Labels),
+get_records_by_name_and_type(#zone{labels = ZL, reversed_labels = RZL}, Labels, Type) when
+    is_list(ZL), is_list(RZL), is_list(Labels)
+->
+    RecordLabels = reduce_record_labels_pre_reversed(RZL, Labels),
     pattern_zone_dname_type(ZL, RecordLabels, Type).
 
 -doc #{group => ~"API: Lookups"}.
@@ -160,8 +164,10 @@ get_records_by_name_and_type(#zone{labels = ZL}, Labels, Type) when is_list(ZL),
 get_records_by_name_ent(Zone, Name) when is_binary(Name) ->
     Labels = dns_domain:split(Name),
     get_records_by_name_ent(Zone, Labels);
-get_records_by_name_ent(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
-    RecordLabels = reduce_record_labels(ZL, Labels),
+get_records_by_name_ent(#zone{labels = ZL, reversed_labels = RZL}, Labels) when
+    is_list(ZL), is_list(RZL), is_list(Labels)
+->
+    RecordLabels = reduce_record_labels_pre_reversed(RZL, Labels),
     record_name_in_zone_with_descendants(ZL, RecordLabels).
 
 -doc #{group => ~"API: Lookups"}.
@@ -175,8 +181,10 @@ wildcards. Whether a node is an ENT has to be checked beforehand by `is_record_n
 get_records_by_name_wildcard(Zone, Name) when is_binary(Name) ->
     Labels = dns_domain:split(Name),
     get_records_by_name_wildcard(Zone, Labels);
-get_records_by_name_wildcard(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
-    RecordLabels = reduce_record_labels(ZL, Labels),
+get_records_by_name_wildcard(#zone{labels = ZL, reversed_labels = RZL}, Labels) when
+    is_list(ZL), is_list(RZL), is_list(Labels)
+->
+    RecordLabels = reduce_record_labels_pre_reversed(RZL, Labels),
     record_name_in_zone_with_wildcard(ZL, RecordLabels).
 
 -doc #{group => ~"API: Lookups"}.
@@ -188,8 +196,10 @@ including parent exact and wildcard matches.
 get_records_by_name_wildcard_strict(Zone, Name) when is_binary(Name) ->
     Labels = dns_domain:split(Name),
     get_records_by_name_wildcard_strict(Zone, Labels);
-get_records_by_name_wildcard_strict(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
-    RecordLabels = reduce_record_labels(ZL, Labels),
+get_records_by_name_wildcard_strict(#zone{labels = ZL, reversed_labels = RZL}, Labels) when
+    is_list(ZL), is_list(RZL), is_list(Labels)
+->
+    RecordLabels = reduce_record_labels_pre_reversed(RZL, Labels),
     record_name_in_zone_with_wildcard_strict(ZL, RecordLabels).
 
 -doc #{group => ~"API: Lookups"}.
@@ -257,8 +267,10 @@ Check if the exact record name is in the zone, without recursing nor traversing 
 is_name_in_zone(Zone, Name) when is_binary(Name) ->
     Labels = dns_domain:split(Name),
     is_name_in_zone(Zone, Labels);
-is_name_in_zone(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
-    case reduce_record_labels(ZL, Labels) of
+is_name_in_zone(#zone{labels = ZL, reversed_labels = RZL}, Labels) when
+    is_list(ZL), is_list(RZL), is_list(Labels)
+->
+    case reduce_record_labels_pre_reversed(RZL, Labels) of
         false ->
             false;
         RecordLabels ->
@@ -359,7 +371,11 @@ erldns_zone_cache:put_zone({
 put_zone(#zone{name = Name} = Zone) ->
     NormalizedName = dns_domain:to_lower(Name),
     ZoneLabels = dns_domain:split(NormalizedName),
-    SignedZone = sign_zone(Zone#zone{name = NormalizedName, labels = ZoneLabels}),
+    SignedZone = sign_zone(Zone#zone{
+        name = NormalizedName,
+        labels = ZoneLabels,
+        reversed_labels = lists:reverse(ZoneLabels)
+    }),
     NamedRecords = build_named_index(SignedZone#zone.records),
     ZoneRecords = prepare_zone_records(ZoneLabels, NamedRecords),
     true = insert_zone(SignedZone#zone{records = []}),
@@ -604,6 +620,11 @@ do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Record) ->
 %% hence we can cut the zone labels from the record labels
 reduce_record_labels(ZoneLabels, RecordLabels) when is_list(ZoneLabels), is_list(RecordLabels) ->
     match_labels(lists:reverse(ZoneLabels), lists:reverse(RecordLabels)).
+
+reduce_record_labels_pre_reversed(ReversedZoneLabels, RecordLabels) when
+    is_list(ReversedZoneLabels), is_list(RecordLabels)
+->
+    match_labels(ReversedZoneLabels, lists:reverse(RecordLabels)).
 
 match_labels([], Rest) ->
     Rest;
