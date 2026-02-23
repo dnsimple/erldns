@@ -2,8 +2,9 @@
 -moduledoc false.
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("dns_erlang/include/dns.hrl").
 
--define(LOG_METADATA, #{domain => [erldns, pipeline]}).
+-define(LOG_METADATA, #{domain => [erldns, listeners]}).
 
 -define(SOCKET_ERROR(State),
     ((Error =:= tcp_error andalso State#state.socket_type =:= tcp) orelse
@@ -92,6 +93,7 @@ init({Ref, Transport, Opts, StartTime}) ->
                     reason => Reason,
                     stacktrace => Stacktrace
                 },
+                ?LOG_ERROR(ExceptionMetadata, ?LOG_METADATA),
                 telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata),
                 {stop, {init_failed, Class, Reason}}
         end,
@@ -110,35 +112,32 @@ handle_cast(_Msg, State) ->
 
 -spec handle_info(dynamic(), state()) -> {noreply, state()} | {stop, normal | term(), state()}.
 handle_info({timeout, TimerRef, idle}, #state{timer_ref = TimerRef} = State) ->
-    ?LOG_INFO(#{what => connection_idle_timeout, transport => tcp}, ?LOG_METADATA),
+    ?LOG_DEBUG(#{what => connection_idle_timeout, transport => tcp}, ?LOG_METADATA),
     {stop, normal, State};
 handle_info({timeout, TimerRef, ingress}, #state{timer_ref = TimerRef} = State) ->
+    ?LOG_INFO(#{what => connection_ingress_timeout, transport => tcp}, ?LOG_METADATA),
     Count = 1 + maps:size(State#state.active_workers),
     Metadata = #{transport => tcp, timeout_type => ingress, buffer => State#state.buffer},
     telemetry:execute([erldns, request, dropped], #{count => Count}, Metadata),
     {stop, normal, State};
-handle_info({timeout, TimerRef, {request_timeout, WorkerPid}}, State) ->
+handle_info({timeout, TimerRef, {request_timeout, WorkerPid}}, #state{} = State) ->
     handle_worker_timeout(WorkerPid, TimerRef, State);
-handle_info({timeout, _, _}, State) ->
+handle_info({timeout, _, _}, #state{} = State) ->
     % Timer was cancelled/replaced, ignore
     {noreply, State};
-handle_info({'EXIT', Pid, normal}, #state{active_workers = ActiveWorkers} = State) ->
-    {RequestInfo, NewActiveWorkers} = maps:take(Pid, ActiveWorkers),
-    cancel_timer(RequestInfo#request.timeout_timer),
-    State1 = State#state{active_workers = NewActiveWorkers},
-    handle_process_buffer(State1);
-handle_info({'EXIT', Pid, Reason}, #state{active_workers = ActiveWorkers} = State) ->
-    ?LOG_WARNING(#{what => tcp_worker_crashed, pid => Pid, reason => Reason}, ?LOG_METADATA),
-    {RequestInfo, NewActiveWorkers} = maps:take(Pid, ActiveWorkers),
-    cancel_timer(RequestInfo#request.timeout_timer),
-    State1 = State#state{active_workers = NewActiveWorkers},
-    handle_process_buffer(State1);
+handle_info({'EXIT', Pid, normal}, #state{} = State) ->
+    handle_worker_down(Pid, State);
+handle_info({'EXIT', Pid, killed}, #state{} = State) ->
+    handle_worker_down(Pid, State);
+handle_info({'EXIT', Pid, Reason}, #state{} = State) ->
+    ?LOG_WARNING(#{what => tcp_worker_crashed, worker_pid => Pid, reason => Reason}, ?LOG_METADATA),
+    handle_worker_down(Pid, State);
 handle_info({SocketType, Socket, Bin}, #state{socket = Socket, socket_type = SocketType} = State) ->
     % Placeholder for future Active Queue Management implementations
     NewBuffer = <<(State#state.buffer)/binary, Bin/binary>>,
     handle_process_buffer(State#state{buffer = NewBuffer});
 handle_info({Error, Socket, Reason}, #state{socket = Socket} = State) when ?SOCKET_ERROR(State) ->
-    ?LOG_INFO(#{what => socket_error, reason => Reason}, ?LOG_METADATA),
+    ?LOG_NOTICE(#{what => socket_error, reason => Reason}, ?LOG_METADATA),
     {stop, normal, State};
 handle_info({Closed, Socket}, #state{socket = Socket} = State) when ?SOCKET_CLOSED(State) ->
     {stop, normal, State};
@@ -149,6 +148,13 @@ handle_info(Info, State) ->
 -spec terminate(term(), state()) -> ok.
 terminate(_Reason, State) ->
     shutdown(State).
+
+-spec handle_worker_down(pid(), state()) -> {noreply, state()}.
+handle_worker_down(Pid, #state{active_workers = ActiveWorkers} = State) ->
+    {RequestInfo, NewActiveWorkers} = maps:take(Pid, ActiveWorkers),
+    cancel_timer(RequestInfo#request.timeout_timer),
+    State1 = State#state{active_workers = NewActiveWorkers},
+    handle_process_buffer(State1).
 
 -define(CONCURRENT_QUERIES_EMPTY(S),
     0 =:= map_size(S#state.active_workers)
@@ -239,7 +245,7 @@ ensure_ingress_timer(#state{} = State) ->
 cancel_timer(undefined) ->
     undefined;
 cancel_timer(TimerRef) ->
-    erlang:cancel_timer(TimerRef).
+    _ = erlang:cancel_timer(TimerRef, [{async, true}, {info, false}]).
 
 -spec handle_worker_timeout(pid(), reference(), state()) -> {noreply, state()}.
 handle_worker_timeout(WorkerPid, TimerRef, #state{active_workers = ActiveWorkers} = State) ->
@@ -248,20 +254,29 @@ handle_worker_timeout(WorkerPid, TimerRef, #state{active_workers = ActiveWorkers
             % Worker is still alive and timer matches, kill it and send SERVFAIL
             % We don't remove it from the active_workers because the kill will send an EXIT signal
             exit(WorkerPid, kill),
-            Metadata = #{transport => tcp, pid => WorkerPid, timeout_type => worker},
-            telemetry:execute([erldns, request, timeout], #{count => 1}, Metadata),
-            % Send SERVFAIL response
-            send_servfail_response(State, RequestBin),
+            send_servfail_response(State, RequestBin, WorkerPid),
             handle_process_buffer(State);
         _ ->
             % Worker already finished, timer was stale, worker was restarted, or timer was cancelled
             {noreply, State}
     end.
 
--spec send_servfail_response(state(), dns:message_bin()) -> term().
-send_servfail_response(#state{socket = Socket, socket_type = SocketType}, RequestBin) ->
+-spec send_servfail_response(state(), dns:message_bin(), pid()) -> term().
+send_servfail_response(#state{socket = Socket, socket_type = SocketType}, RequestBin, WorkerPid) ->
     try
         Decoded = dns:decode_query(RequestBin),
+        % Try to log the qname of the query that
+        #dns_message{questions = [#dns_query{name = QName, type = QType} | _]} = Decoded,
+        Metadata = #{
+            what => request_timeout,
+            transport => tcp,
+            timeout_type => worker,
+            worker_pid => WorkerPid,
+            qname => QName,
+            qtype => QType
+        },
+        telemetry:execute([erldns, request, timeout], #{count => 1}, Metadata),
+        ?LOG_WARNING(Metadata, ?LOG_METADATA),
         ServfailMsg = erldns_encoder:build_error_response(Decoded),
         EncodedResponse = dns:encode_message(ServfailMsg),
         Payload = [<<(byte_size(EncodedResponse)):16>>, EncodedResponse],
@@ -275,6 +290,9 @@ send_servfail_response(#state{socket = Socket, socket_type = SocketType}, Reques
                 reason => Reason,
                 stacktrace => Stacktrace
             },
+            TimeoutMetadata = #{transport => tcp, pid => WorkerPid, timeout_type => worker},
+            telemetry:execute([erldns, request, timeout], #{count => 1}, TimeoutMetadata),
+            ?LOG_ERROR(ExceptionMetadata, ?LOG_METADATA),
             telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata)
     end.
 

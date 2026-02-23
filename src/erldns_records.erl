@@ -15,6 +15,9 @@
 ]).
 % Matcher functions
 -export([
+    is_soa/1,
+    is_cname/1,
+    is_ns/1,
     match_name/1,
     match_type/1,
     match_name_and_type/2,
@@ -92,6 +95,18 @@ rewrite_soa_ttl(Message, [R | Rest], NewAuthority) ->
     rewrite_soa_ttl(Message, Rest, [minimum_soa_ttl(R, R#dns_rr.data) | NewAuthority]).
 
 %% Various matching functions.
+
+-spec is_soa(dns:rr()) -> boolean().
+is_soa(#dns_rr{type = RRType}) ->
+    ?DNS_TYPE_SOA =:= RRType.
+
+-spec is_cname(dns:rr()) -> boolean().
+is_cname(#dns_rr{type = RRType}) ->
+    ?DNS_TYPE_CNAME =:= RRType.
+
+-spec is_ns(dns:rr()) -> boolean().
+is_ns(#dns_rr{type = RRType}) ->
+    ?DNS_TYPE_NS =:= RRType.
 
 -spec match_name(dns:dname()) -> fun((dns:rr()) -> boolean()).
 match_name(Name) ->

@@ -5,6 +5,7 @@
 -include_lib("dns_erlang/include/dns.hrl").
 
 -define(MIN_HEAP_SIZE, 650).
+-define(LOG_METADATA, #{domain => [erldns, listeners]}).
 
 -export([start_link/6]).
 -export([request/6]).
@@ -60,11 +61,15 @@ handle_decoded(#dns_message{} = Msg, TS0, Socket, SocketType, IpAddr, Port) ->
     Response = erldns_pipeline:call(Msg, InitOpts),
     handle_pipeline_response(Response, TS0, Socket, SocketType);
 handle_decoded({notimp, #dns_message{} = Msg, _}, TS0, Socket, SocketType, _, _) ->
-    Metadata = #{transport => tcp, reason => notimp, message => Msg, monotonic_time => TS0},
+    Metadata = #{
+        what => tcp_error, transport => tcp, reason => notimp, message => Msg, monotonic_time => TS0
+    },
     request_error_event(Metadata),
     handle_pipeline_response(Msg, TS0, Socket, SocketType);
 handle_decoded({Error, Msg, _}, TS0, _, _, _, _) ->
-    Metadata = #{transport => tcp, reason => Error, message => Msg, monotonic_time => TS0},
+    Metadata = #{
+        what => tcp_error, transport => tcp, reason => Error, message => Msg, monotonic_time => TS0
+    },
     request_error_event(Metadata).
 
 -spec handle_pipeline_response(PipeResult, TS, Socket, SocketType) -> ok when
@@ -95,14 +100,12 @@ send_data(Socket, ssl, Data) ->
 
 -spec request_error_event(map()) -> ok.
 request_error_event(Metadata) ->
+    ?LOG_ERROR(Metadata, ?LOG_METADATA),
     telemetry:execute([erldns, request, error], #{count => 1}, Metadata).
 
 -spec measure_time(dns:message(), erldns_proto_tcp:ts(), binary()) -> ok.
 measure_time(Response, TS0, EncodedResponse) ->
-    ?LOG_DEBUG(
-        #{what => tcp_request_finished, dns_message => Response},
-        #{domain => [erldns, listeners]}
-    ),
+    ?LOG_DEBUG(#{what => tcp_request_finished, dns_message => Response}, ?LOG_METADATA),
     TS1 = erlang:monotonic_time(),
     Measurements = #{
         monotonic_time => TS1,

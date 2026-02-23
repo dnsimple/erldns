@@ -88,7 +88,7 @@ encode(_) ->
 build_zone(Name, Version, Records, Keys) ->
     NormalizedName = dns_domain:to_lower(Name),
     Labels = dns_domain:split(NormalizedName),
-    Authorities = lists:filter(erldns_records:match_type(?DNS_TYPE_SOA), Records),
+    Authorities = lists:filter(fun erldns_records:is_soa/1, Records),
     #zone{
         labels = Labels,
         name = NormalizedName,
