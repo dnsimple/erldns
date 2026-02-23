@@ -57,7 +57,7 @@ verify_ksk_signed(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -87,7 +87,7 @@ verify_ksk_signed_alg13(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -117,7 +117,7 @@ verify_ksk_signed_alg14(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -159,7 +159,7 @@ verify_zsk_signed(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -200,7 +200,7 @@ verify_zsk_signed_alg13(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -241,7 +241,7 @@ verify_zsk_signed_alg14(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -271,7 +271,7 @@ verify_ksk_signed_alg15(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -301,7 +301,7 @@ verify_ksk_signed_alg16(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -342,7 +342,7 @@ verify_zsk_signed_alg15(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -383,7 +383,7 @@ verify_zsk_signed_alg16(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Name, QType),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
     ?assertMatch(
         #dns_message{
             answers =
