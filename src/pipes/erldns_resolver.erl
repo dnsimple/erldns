@@ -27,6 +27,8 @@ or an exception (mapped to SERVFAIL).
 
 -export([prepare/1, call/2, deps/0]).
 
+-define(LOG_METADATA, #{domain => [erldns, pipeline, resolver]}).
+
 -doc "`c:erldns_pipeline:deps/0` callback.".
 -spec deps() -> erldns_pipeline:deps().
 deps() ->
@@ -77,7 +79,7 @@ resolve(Msg, Zone, QLabels, QName, QType) ->
                     reason => Reason,
                     stacktrace => Stacktrace
                 },
-                #{domain => [erldns, pipeline]}
+                ?LOG_METADATA
             ),
             telemetry:execute([erldns, pipeline, resolver, error], #{count => 1}, #{
                 rc => ?DNS_RCODE_SERVFAIL
@@ -106,50 +108,49 @@ resolve_question(Msg, Zone, QLabels, QName, QType) ->
     QName :: dns:dname(),
     QType :: dns:type(),
     CnameChain :: [dns:rr()].
-resolve_authoritative(Message, Zone, QLabels, QName, QType, CnameChain) ->
-    IsRecordNameInZone = erldns_zone_cache:is_record_name_in_zone(Zone, QLabels),
-    Result =
-        case {IsRecordNameInZone, CnameChain} of
-            {false, []} ->
-                resolve_ent(Message, Zone, QLabels);
-            _ ->
-                case erldns_zone_cache:get_records_by_name(Zone, QLabels) of
-                    [] ->
-                        % No exact match of name and type, move to best match resolution
-                        BestMatchRecords = erldns_zone_cache:get_records_by_name_wildcard_strict(
-                            Zone, QLabels
-                        ),
-                        best_match_resolution(
-                            Message, Zone, QLabels, QName, QType, CnameChain, BestMatchRecords
-                        );
-                    Records ->
-                        % Exact match of name and type
-                        exact_match_resolution(
-                            Message, Zone, QLabels, QType, CnameChain, Records
-                        )
-                end
+resolve_authoritative(Msg, Zone, QLabels, QName, QType, CnameChain) ->
+    Resolved = erldns_zone_cache:get_records_by_name_resolved(Zone, QLabels),
+    ResultMsg =
+        case Resolved of
+            nxdomain when [] =:= CnameChain ->
+                Msg#dns_message{
+                    aa = true, rc = ?DNS_RCODE_NXDOMAIN, authority = Zone#zone.authority
+                };
+            nxdomain ->
+                % CNAME chain target doesn't exist, but the CNAME was valid: NOERROR + SOA
+                Msg#dns_message{
+                    aa = true, rc = ?DNS_RCODE_NOERROR, authority = Zone#zone.authority
+                };
+            ent ->
+                Msg#dns_message{
+                    aa = true, rc = ?DNS_RCODE_NOERROR, authority = Zone#zone.authority
+                };
+            {exact, Records} ->
+                exact_match_resolution(Msg, Zone, QLabels, QType, CnameChain, Records);
+            {wildcard, Records} ->
+                best_match_resolution(Msg, Zone, QLabels, QName, QType, CnameChain, Records)
         end,
-    maybe_add_zonecut_records(Zone, QLabels, Result, Message, QType, IsRecordNameInZone).
+    IsRecordNameInZone = is_tuple(Resolved),
+    maybe_add_zonecut_records(Msg, Zone, QLabels, ResultMsg, QType, IsRecordNameInZone).
 
-maybe_add_zonecut_records(_, _, Result, _, ?DNS_TYPE_DS, true) ->
-    Result;
-maybe_add_zonecut_records(Zone, QLabels, Result, Message, _QType, _) ->
+maybe_add_zonecut_records(_, _, _, ResultMsg, ?DNS_TYPE_DS, true) ->
+    ResultMsg;
+maybe_add_zonecut_records(Msg, Zone, QLabels, ResultMsg, _QType, _) ->
     case detect_zonecut(Zone, QLabels) of
         [] ->
-            Result;
+            ResultMsg;
         ZonecutRecords ->
-            CnameAnswers = lists:filter(fun erldns_records:is_cname/1, Result#dns_message.answers),
+            CnameAnswers = lists:filter(
+                fun erldns_records:is_cname/1, ResultMsg#dns_message.answers
+            ),
             FilteredCnameAnswers =
                 lists:filter(
                     fun(RR) ->
-                        case detect_zonecut(Zone, RR#dns_rr.data#dns_rrdata_cname.dname) of
-                            [] -> false;
-                            _ -> true
-                        end
+                        [] =/= detect_zonecut(Zone, RR#dns_rr.data#dns_rrdata_cname.dname)
                     end,
                     CnameAnswers
                 ),
-            Message#dns_message{
+            Msg#dns_message{
                 aa = false,
                 rc = ?DNS_RCODE_NOERROR,
                 authority = ZonecutRecords,
@@ -261,7 +262,7 @@ resolve_exact_type_match(Message, Zone, QLabels, ?DNS_TYPE_NS, CnameChain, Match
     % There was an exact type match for an NS query, however there is no SOA record for the zone.
     ?LOG_INFO(
         #{what => exact_match_for_ns_with_no_soa, qname => dns_domain:join(QLabels)},
-        #{domain => [erldns, pipeline]}
+        ?LOG_METADATA
     ),
     Answer = lists:last(MatchedRecords),
     Name = Answer#dns_rr.name,
@@ -425,7 +426,7 @@ resolve_exact_match_referral(Message, _, _MatchedRecords, _ReferralRecords, Auth
 -spec resolve_exact_match_with_cname(
     Message :: dns:message(),
     Zone :: erldns:zone(),
-    QType :: ?DNS_TYPE_CNAME,
+    QType :: dns:type(),
     CnameChain :: [dns:rr()],
     MatchedRecords :: [dns:rr()],
     CnameRecords :: [dns:rr()]
@@ -438,9 +439,15 @@ resolve_exact_match_with_cname(
     % so append the CNAME records to the answers section.
     Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
 resolve_exact_match_with_cname(
+    Message, _Zone, ?DNS_TYPE_ANY, _CnameChain, _MatchedRecords, CnameRecords
+) ->
+    % For ANY queries, return the CNAME record without following the chain.
+    % ANY means "return all records at this name" and the CNAME is the record here.
+    Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
+resolve_exact_match_with_cname(
     Message, Zone, QType, CnameChain, _MatchedRecords, CnameRecords
 ) ->
-    % There is a CNAME record, however the QType is not CNAME,
+    % There is a CNAME record, however the QType is not CNAME or ANY,
     % check for a CNAME loop before continuing.
     case lists:member(lists:last(CnameRecords), CnameChain) of
         true ->
