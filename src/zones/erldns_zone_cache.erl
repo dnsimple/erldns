@@ -46,6 +46,8 @@ once and use multiple times.
     get_records_by_name_ent/2,
     get_records_by_name_wildcard/2,
     get_records_by_name_wildcard_strict/2,
+    get_records_by_name_resolved/2,
+    get_records_by_name_and_type_resolved/3,
     get_authoritative_zone/1,
     get_authoritative_zone/2,
     get_delegations/1,
@@ -53,8 +55,37 @@ once and use multiple times.
     is_in_any_zone/1,
     is_name_in_zone/2,
     is_record_name_in_zone/2,
-    is_record_name_in_zone_strict/2
+    is_record_name_in_zone_strict/2,
+    zone_name_existence/2
 ]).
+
+-doc """
+Classification of a name in a zone.
+
+It can be:
+- exact (records at node)
+- wildcard (matched by a parent wildcard)
+- ent (empty non-terminal)
+- or nxdomain (not in zone)
+""".
+-type existence_type() :: ent | nxdomain | exact | wildcard.
+
+-doc """
+One-shot resolution result.
+
+It can be:
+- `ent`
+- `nxdomain`
+- `{exact, [dns:rr()]}` — records at the query name (list may be empty for typed lookup)
+- `{wildcard, [dns:rr()]}` — records from a parent wildcard (list may be empty for typed lookup)
+""".
+-type resolved_records() ::
+    ent
+    | nxdomain
+    | {exact, [dns:rr()]}
+    | {wildcard, [dns:rr()]}.
+
+-export_type([existence_type/0, resolved_records/0]).
 
 %% Other
 -export([
@@ -214,6 +245,48 @@ get_records_by_name_wildcard_strict(#zone{labels = ZL, reversed_labels = RZL}, L
     record_name_in_zone_with_wildcard_strict(ZL, RecordLabels).
 
 -doc #{group => ~"API: Lookups"}.
+-doc """
+Return matching records or a status when there are none.
+
+One-shot resolution: returns either
+- the atom `nxdomain` (name does not exist in the zone),
+- the atom `ent` (empty non-terminal: no records at this node but it has descendants),
+- `{exact, Records}` (records at the query name; list is non-empty for untyped lookup),
+- `{wildcard, Records}` (records from a parent wildcard; list is non-empty for untyped lookup).
+""".
+-spec get_records_by_name_resolved(erldns:zone(), dns:dname() | dns:labels()) ->
+    resolved_records().
+get_records_by_name_resolved(Zone, Name) ->
+    get_records_by_name_and_type_resolved_1(Zone, Name, '_').
+
+-doc #{group => ~"API: Lookups"}.
+-doc """
+Return matching records of the given type, or a status when there are none.
+
+Same as `get_records_by_name_resolved/2` but only returns records of the given `dns:type()`.
+""".
+-spec get_records_by_name_and_type_resolved(
+    erldns:zone(), dns:dname() | dns:labels(), dns:type()
+) ->
+    resolved_records().
+get_records_by_name_and_type_resolved(Zone, Name, Type) ->
+    get_records_by_name_and_type_resolved_1(Zone, Name, Type).
+
+get_records_by_name_and_type_resolved_1(Zone, Name, Type) when is_binary(Name) ->
+    get_records_by_name_and_type_resolved_1(Zone, dns_domain:split(Name), Type);
+get_records_by_name_and_type_resolved_1(
+    #zone{labels = ZL, reversed_labels = RZL}, Labels, Type
+) when
+    is_list(ZL), is_list(RZL), is_list(Labels)
+->
+    case reduce_record_labels_pre_reversed(RZL, Labels) of
+        false ->
+            nxdomain;
+        RecordLabels ->
+            get_records_resolved_1(ZL, RecordLabels, Type)
+    end.
+
+-doc #{group => ~"API: Lookups"}.
 -doc "Find an authoritative zone for a given qname.".
 -spec get_authoritative_zone(dns:dname() | dns:labels()) ->
     erldns:zone() | zone_not_found | not_authoritative.
@@ -285,7 +358,7 @@ is_name_in_zone(#zone{labels = ZL, reversed_labels = RZL}, Labels) when
         false ->
             false;
         RecordLabels ->
-            0 =/= pattern_zone_dname_count(ZL, RecordLabels)
+            pattern_zone_dname_exists(ZL, RecordLabels)
     end.
 
 -doc #{group => ~"API: Boolean Operations"}.
@@ -294,13 +367,9 @@ is_name_in_zone(#zone{labels = ZL, reversed_labels = RZL}, Labels) when
 is_record_name_in_zone(Zone, Name) when is_binary(Name) ->
     Labels = dns_domain:split(Name),
     is_record_name_in_zone(Zone, Labels);
-is_record_name_in_zone(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
-    case reduce_record_labels(ZL, Labels) of
-        false ->
-            false;
-        RecordLabels ->
-            is_record_name_in_zone_helper(ZL, RecordLabels)
-    end.
+is_record_name_in_zone(Zone, Labels) when is_list(Labels) ->
+    Existence = zone_name_existence(Zone, Labels),
+    (exact =:= Existence) orelse (wildcard =:= Existence).
 
 -doc #{group => ~"API: Boolean Operations"}.
 -doc """
@@ -313,13 +382,29 @@ or if any descendant has existing records (and the queried name is an ENT).
 is_record_name_in_zone_strict(Zone, Name) when is_binary(Name) ->
     Labels = dns_domain:split(Name),
     is_record_name_in_zone_strict(Zone, Labels);
-is_record_name_in_zone_strict(#zone{labels = ZL}, Labels) when is_list(ZL), is_list(Labels) ->
-    case reduce_record_labels(ZL, Labels) of
+is_record_name_in_zone_strict(Zone, Labels) when is_list(Labels) ->
+    Existence = zone_name_existence(Zone, Labels),
+    (exact =:= Existence) orelse (wildcard =:= Existence) orelse (ent =:= Existence).
+
+-doc #{group => ~"API: Boolean Operations"}.
+-doc """
+Single-pass classification of how a name exists in the zone.
+
+This can return: exact match, wildcard match, empty non-terminal (ENT), or nxdomain (no match).
+Note that according to RFC4592, wildcards match only non-existing names;
+this means that an ENT blocks a wildcard.
+""".
+-spec zone_name_existence(erldns:zone(), dns:dname() | dns:labels()) -> existence_type().
+zone_name_existence(Zone, Name) when is_binary(Name) ->
+    zone_name_existence(Zone, dns_domain:split(Name));
+zone_name_existence(#zone{labels = ZL, reversed_labels = RZL}, Labels) when
+    is_list(ZL), is_list(RZL), is_list(Labels)
+->
+    case reduce_record_labels_pre_reversed(RZL, Labels) of
         false ->
-            false;
+            nxdomain;
         RecordLabels ->
-            is_record_name_in_zone_helper(ZL, RecordLabels) orelse
-                is_record_name_in_zone_with_descendants(ZL, RecordLabels)
+            zone_name_existence_1(ZL, RecordLabels)
     end.
 
 -doc #{group => ~"API: Utilities"}.
@@ -627,6 +712,106 @@ put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Records) ->
 do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Record) ->
     ets:insert(erldns_zone_records_typed, {{ZoneLabels, ReducedLabels, Type}, Record}).
 
+-compile({inline, [make_improper_list/1]}).
+make_improper_list(List) ->
+    % eqwalizer:ignore this needs to be an improper list for tree traversal
+    List ++ '_'.
+
+%% Classify how a name exists in the zone.
+%% ZoneLabels: zone-order (e.g. ["example", "com"])
+%% RecordLabels: zone-order path within zone (e.g. ["a", "b", "c"] for c.b.a.example.com)
+zone_name_existence_1(ZoneLabels, RecordLabels) ->
+    case pattern_zone_dname_exists(ZoneLabels, RecordLabels) of
+        true ->
+            exact;
+        false ->
+            case pattern_zone_dname_exists(ZoneLabels, make_improper_list(RecordLabels)) of
+                true ->
+                    ent;
+                false ->
+                    check_wildcard_existence(ZoneLabels, lists:reverse(RecordLabels))
+            end
+    end.
+
+%% Climb parent path looking for a wildcard match.
+%% PathReversed is in query order (outermost label first) so dropping the head gives the parent.
+%% At each step: if the current path is an ENT, the wildcard is blocked (RFC 4592 §2.2.2, §3.3.1),
+%% so we skip to the next parent. Otherwise check for a wildcard at the parent level.
+%% We use lists:reverse/2 to build zone-order paths for ETS without a separate traversal.
+check_wildcard_existence(_ZoneLabels, []) ->
+    nxdomain;
+check_wildcard_existence(ZoneLabels, [_ | ParentReversed] = PathReversed) ->
+    ZoneOrderPath = lists:reverse(PathReversed),
+    case pattern_zone_dname_exists(ZoneLabels, make_improper_list(ZoneOrderPath)) of
+        true ->
+            %% Current path is an ENT — wildcard blocked at this level, climb further
+            check_wildcard_existence(ZoneLabels, ParentReversed);
+        false ->
+            case pattern_zone_dname_exists(ZoneLabels, lists:reverse(ParentReversed, [~"*"])) of
+                true ->
+                    wildcard;
+                false ->
+                    check_wildcard_existence(ZoneLabels, ParentReversed)
+            end
+    end.
+
+%% Single-pass resolved: exact -> fetch at node; ent -> ent; else wildcard climb with single fetch.
+%% When Type =:= '_', fetch all types at path (no filter). When Type =/= '_', use typed fetch;
+%% if typed fetch returns [] we need one exists check to distinguish
+%% "node missing" from "node, no RR of type".
+get_records_resolved_1(ZoneLabels, RecordLabels, Type) ->
+    case fetch_records(ZoneLabels, RecordLabels, Type) of
+        [_ | _] = Records ->
+            {exact, Records};
+        [] when Type =/= '_' ->
+            %% Typed query returned nothing — check if the node itself exists (NOERROR, no data)
+            case pattern_zone_dname_exists(ZoneLabels, RecordLabels) of
+                true -> {exact, []};
+                false -> exact_missing_ent_or_wildcard(ZoneLabels, RecordLabels, Type)
+            end;
+        [] ->
+            %% Untyped query returned nothing — node doesn't exist for this name
+            exact_missing_ent_or_wildcard(ZoneLabels, RecordLabels, Type)
+    end.
+
+exact_missing_ent_or_wildcard(ZoneLabels, RecordLabels, Type) ->
+    HasDescendantsPath = make_improper_list(RecordLabels),
+    case pattern_zone_dname_exists(ZoneLabels, HasDescendantsPath) of
+        true ->
+            ent;
+        false ->
+            get_records_resolved_wildcard_1(ZoneLabels, RecordLabels, Type)
+    end.
+
+%% Climb parent path looking for wildcard records.
+%% At each level: if current path is an ENT, skip (RFC 4592).
+%% Otherwise check for wildcard at parent.
+%% For typed lookups: if the wildcard node exists but has no records of Type, return [] (NOERROR).
+get_records_resolved_wildcard_1(_ZoneLabels, [], _Type) ->
+    nxdomain;
+get_records_resolved_wildcard_1(ZoneLabels, RecordLabels, Type) ->
+    Parent = lists:droplast(RecordLabels),
+    case pattern_zone_dname_exists(ZoneLabels, make_improper_list(RecordLabels)) of
+        true ->
+            %% Current path is an ENT — wildcard blocked, climb further
+            get_records_resolved_wildcard_1(ZoneLabels, Parent, Type);
+        false ->
+            WildcardPath = Parent ++ [~"*"],
+            WildcardRrs = fetch_records(ZoneLabels, WildcardPath, Type),
+            case WildcardRrs of
+                [_ | _] ->
+                    {wildcard, WildcardRrs};
+                [] ->
+                    case pattern_zone_dname_exists(ZoneLabels, WildcardPath) of
+                        true ->
+                            %% Wildcard node exists but no records of requested type
+                            {wildcard, []};
+                        false ->
+                            get_records_resolved_wildcard_1(ZoneLabels, Parent, Type)
+                    end
+            end
+    end.
+
 %% record paths shall not cross the zone boundary,
 %% hence we can cut the zone labels from the record labels
 reduce_record_labels(ZoneLabels, RecordLabels) when is_list(ZoneLabels), is_list(RecordLabels) ->
@@ -646,9 +831,9 @@ match_labels([_ | _], [_ | _]) ->
 
 %% expects name to be already normalized
 is_name_in_any_zone_helper(ZoneLabels, []) ->
-    0 =/= pattern_zone_dname_count(ZoneLabels, []);
+    pattern_zone_dname_exists(ZoneLabels, []);
 is_name_in_any_zone_helper(ZoneLabels, [_ | ParentLabels] = RecordLabels) ->
-    0 =/= pattern_zone_dname_count(ZoneLabels, RecordLabels) orelse
+    pattern_zone_dname_exists(ZoneLabels, RecordLabels) orelse
         is_name_in_any_zone_helper(ZoneLabels, ParentLabels).
 
 find_authoritative_zone_in_cache([]) ->
@@ -752,8 +937,7 @@ filter_rrsig_records_with_type_covered(Labels, TypeCovered) ->
     end.
 
 record_name_in_zone_with_descendants(ZoneLabels, QLabels) ->
-    % eqwalizer:ignore this needs to be an improper list for tree traversal
-    HasDescendantsPath = QLabels ++ '_',
+    HasDescendantsPath = make_improper_list(QLabels),
     pattern_zone_dname(ZoneLabels, HasDescendantsPath).
 
 %% Checks if there is a wildcard record matching all the way to the last label.
@@ -789,36 +973,6 @@ record_name_in_zone_with_wildcard_strict(ZoneLabels, [_ | _] = RecordLabels) ->
             RRsWild
     end.
 
-is_record_name_in_zone_helper(ZoneLabels, RecordLabels) ->
-    is_record_name_in_zone_traverse_wildcard(ZoneLabels, RecordLabels, RecordLabels).
-
-is_record_name_in_zone_with_wildcard(_, []) ->
-    false;
-is_record_name_in_zone_with_wildcard(ZoneLabels, QLabels) ->
-    Parent = lists:droplast(QLabels),
-    WildcardPath = Parent ++ [~"*"],
-    is_record_name_in_zone_traverse_wildcard(ZoneLabels, WildcardPath, Parent).
-
-is_record_name_in_zone_traverse_wildcard(ZoneLabels, Path, ParentPath) ->
-    case pattern_zone_dname_count(ZoneLabels, Path) of
-        0 ->
-            is_record_name_in_zone_do_traverse_wildcard(ZoneLabels, ParentPath);
-        _ ->
-            true
-    end.
-
-% Since there are no records at path, if is_record_name_in_zone_with_descendants at
-% ParentPath, ParentPath is an ENT, and we don't synthesise the wildcard.
-% See RFC 4592: §2.2.2, and §3.3.1 for details.
-is_record_name_in_zone_do_traverse_wildcard(ZoneLabels, ParentPath) ->
-    not is_record_name_in_zone_with_descendants(ZoneLabels, ParentPath) andalso
-        is_record_name_in_zone_with_wildcard(ZoneLabels, ParentPath).
-
-is_record_name_in_zone_with_descendants(ZoneLabels, QLabels) ->
-    % eqwalizer:ignore this needs to be an improper list for tree traversal
-    HasDescendantsPath = QLabels ++ '_',
-    0 =/= pattern_zone_dname_count(ZoneLabels, HasDescendantsPath).
-
 pattern_zone(ZoneLabels) ->
     Pattern = {{{ZoneLabels, '_', '_'}, '$1'}, [], ['$1']},
     lists:append(ets:select(erldns_zone_records_typed, [Pattern])).
@@ -831,9 +985,19 @@ pattern_zone_dname_type(ZoneLabels, Labels, Type) ->
     Pattern = {{{ZoneLabels, Labels, Type}, '$1'}, [], ['$1']},
     lists:append(ets:select(erldns_zone_records_typed, [Pattern])).
 
-pattern_zone_dname_count(ZoneLabels, Labels) ->
-    Pattern = {{{ZoneLabels, Labels, '_'}, '$1'}, [], [true]},
-    ets:select_count(erldns_zone_records_typed, [Pattern]).
+pattern_zone_dname_exists(ZoneLabels, Labels) ->
+    Pattern = {{{ZoneLabels, Labels, '_'}, '_'}, [], [true]},
+    case ets:select(erldns_zone_records_typed, [Pattern], 1) of
+        {[true], _Continuation} ->
+            true;
+        '$end_of_table' ->
+            false
+    end.
+
+fetch_records(ZoneLabels, Labels, '_') ->
+    pattern_zone_dname(ZoneLabels, Labels);
+fetch_records(ZoneLabels, Labels, Type) ->
+    pattern_zone_dname_type(ZoneLabels, Labels, Type).
 
 pattern_zone_dname_type_delete(ZoneLabels, Labels, Type) ->
     Pattern = {{{ZoneLabels, Labels, Type}, '_'}, [], [true]},
