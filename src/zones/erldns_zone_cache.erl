@@ -51,6 +51,7 @@ once and use multiple times.
     get_authoritative_zone/1,
     get_authoritative_zone/2,
     get_delegations/1,
+    get_delegations/2,
     get_rrset_sync_counter/3,
     is_in_any_zone/1,
     is_name_in_zone/2,
@@ -314,10 +315,22 @@ This function will always return a list, even if it is empty.
 -spec get_delegations(dns:dname() | dns:labels()) -> [dns:rr()].
 get_delegations(Name) when is_binary(Name) ->
     Labels = dns_domain:split(Name),
-    get_delegations(Name, Labels);
+    do_get_delegations(Name, Labels);
 get_delegations(Labels) when is_list(Labels) ->
     Name = dns_domain:join(Labels),
-    get_delegations(Name, Labels).
+    do_get_delegations(Name, Labels).
+
+-doc #{group => ~"API: Lookups"}.
+-doc """
+Get the list of NS and glue records for the given name.
+
+Expects name and labels to refer to the same domain.
+
+This function will always return a list, even if it is empty.
+""".
+-spec get_delegations(dns:dname(), dns:labels()) -> [dns:rr()].
+get_delegations(Name, Labels) when is_binary(Name), is_list(Labels) ->
+    do_get_delegations(Name, Labels).
 
 -doc #{group => ~"API: Lookups"}.
 -doc "Return current sync counter".
@@ -856,7 +869,7 @@ find_authoritative_zone_in_cache_ds([_ | Tail] = Labels) ->
             find_authoritative_zone_in_cache(Labels)
     end.
 
-get_delegations(Name, Labels) ->
+do_get_delegations(Name, Labels) ->
     case find_zone_labels_in_cache(Labels) of
         zone_not_found ->
             [];
