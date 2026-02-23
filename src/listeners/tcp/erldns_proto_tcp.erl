@@ -93,6 +93,7 @@ init({Ref, Transport, Opts, StartTime}) ->
                     reason => Reason,
                     stacktrace => Stacktrace
                 },
+                ?LOG_ERROR(ExceptionMetadata, ?LOG_METADATA),
                 telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata),
                 {stop, {init_failed, Class, Reason}}
         end,
@@ -291,6 +292,7 @@ send_servfail_response(#state{socket = Socket, socket_type = SocketType}, Reques
             },
             TimeoutMetadata = #{transport => tcp, pid => WorkerPid, timeout_type => worker},
             telemetry:execute([erldns, request, timeout], #{count => 1}, TimeoutMetadata),
+            ?LOG_ERROR(ExceptionMetadata, ?LOG_METADATA),
             telemetry:execute([erldns, request, error], #{count => 1}, ExceptionMetadata)
     end.
 
