@@ -126,6 +126,7 @@ groups() ->
             get_records_by_name_and_type_resolved,
             wildcard_deep_path_parent_record_labels,
             ent_blocks_wildcard_deep_path,
+            exact_parent_blocks_wildcard_rfc4592,
             put_zone,
             put_zone_rrset,
             put_zone_rrset_fetch_soa_match,
@@ -2145,6 +2146,65 @@ ent_blocks_wildcard_deep_path(_) ->
     ?assertMatch(ent, erldns_zone_cache:get_records_by_name_resolved(ZoneLookup, Ent)),
     ?assertMatch([], erldns_zone_cache:get_records_by_name(ZoneLookup, Ent)),
     ?assertMatch([_], erldns_zone_cache:get_records_by_name_ent(ZoneLookup, Ent)),
+    _ = erldns_zone_cache:delete_zone(ZoneName).
+
+%% RFC 4592: An exact existing parent node (not only ENT) must block wildcard synthesis.
+%% If bar.foo.example exists (has its own RRs) and *.foo.example exists, a query for
+%% baz.bar.foo.example must yield NXDOMAIN — closest encloser is bar.foo.example,
+%% source of synthesis would be *.bar.foo.example (absent), so no wildcard from *.foo.
+exact_parent_blocks_wildcard_rfc4592(_) ->
+    ZoneName = dns_domain:to_lower(~"exact-parent-blocks-wildcard.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
+    SOA = #dns_rr{
+        name = ZoneName,
+        type = ?DNS_TYPE_SOA,
+        ttl = 3600,
+        data = #dns_rrdata_soa{
+            mname = <<"ns1.", ZoneName/binary>>,
+            rname = <<"admin.", ZoneName/binary>>,
+            serial = 1,
+            refresh = 3600,
+            retry = 600,
+            expire = 86400,
+            minimum = 3600
+        }
+    },
+    BarFoo = #dns_rr{
+        name = <<"bar.foo.", ZoneName/binary>>,
+        type = ?DNS_TYPE_A,
+        ttl = 1,
+        data = #dns_rrdata_a{ip = {1, 1, 1, 1}}
+    },
+    WildcardFoo = #dns_rr{
+        name = <<"*.foo.", ZoneName/binary>>,
+        type = ?DNS_TYPE_A,
+        ttl = 2,
+        data = #dns_rrdata_a{ip = {2, 2, 2, 2}}
+    },
+    Zone = erldns_zone_codec:build_zone(ZoneName, <<>>, [SOA, BarFoo, WildcardFoo], []),
+    ok = erldns_zone_cache:put_zone(Zone),
+    #zone{} = ZoneLookup = erldns_zone_cache:lookup_zone(ZoneName),
+    Exact = dns_domain:join([~"bar", ~"foo" | ZoneLabels]),
+    ?assertEqual(exact, erldns_zone_cache:zone_name_existence(ZoneLookup, Exact)),
+    ?assertMatch(
+        {exact, [#dns_rr{ttl = 1}]},
+        erldns_zone_cache:get_records_by_name_resolved(ZoneLookup, Exact)
+    ),
+    Wildcard = dns_domain:join([~"bob", ~"foo" | ZoneLabels]),
+    ?assertEqual(wildcard, erldns_zone_cache:zone_name_existence(ZoneLookup, Wildcard)),
+    ?assertMatch(
+        {wildcard, [#dns_rr{ttl = 2}]},
+        erldns_zone_cache:get_records_by_name_resolved(ZoneLookup, Wildcard)
+    ),
+    %% bar.foo exists as exact node (no descendants). baz.bar.foo does not exist.
+    %% Closest encloser for baz.bar.foo is bar.foo; source of synthesis would be *.bar.foo (absent).
+    %% Must not use *.foo — must be NXDOMAIN per RFC 4592 §3.3.1.
+    NxDomain = dns_domain:join([~"baz", ~"bar", ~"foo" | ZoneLabels]),
+    ?assertEqual(nxdomain, erldns_zone_cache:zone_name_existence(ZoneLookup, NxDomain)),
+    ?assertMatch(nxdomain, erldns_zone_cache:get_records_by_name_resolved(ZoneLookup, NxDomain)),
+    Ent = dns_domain:join([~"foo" | ZoneLabels]),
+    ?assertEqual(ent, erldns_zone_cache:zone_name_existence(ZoneLookup, Ent)),
+    ?assertMatch(ent, erldns_zone_cache:get_records_by_name_resolved(ZoneLookup, Ent)),
     _ = erldns_zone_cache:delete_zone(ZoneName).
 
 get_authoritative_zone(_) ->
