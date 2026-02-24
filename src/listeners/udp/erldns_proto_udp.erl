@@ -70,7 +70,7 @@ process_udp_work(Codel, Socket, IpAddr, Port, IngressTs, Bin, Budget) ->
                 what => request_dropped,
                 ingress_ts => IngressTs,
                 current_ts => Now,
-                sojourn_time_us => erlang:convert_time_unit(IngressTs - Now, native, microsecond),
+                sojourn_time_us => erlang:convert_time_unit(Now - IngressTs, native, microsecond),
                 transport => udp
             },
             telemetry:execute([erldns, request, dropped], #{count => 1}, Metadata),
@@ -97,7 +97,7 @@ process_async_continuation(Codel, Continuation, Budget) ->
                 what => request_dropped,
                 ingress_ts => IngressTs,
                 current_ts => Now,
-                sojourn_time_us => erlang:convert_time_unit(IngressTs - Now, native, microsecond),
+                sojourn_time_us => erlang:convert_time_unit(Now - IngressTs, native, microsecond),
                 transport => udp
             },
             telemetry:execute([erldns, request, dropped], #{count => 1}, Metadata),
