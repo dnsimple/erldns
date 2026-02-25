@@ -21,7 +21,7 @@ see [`ZONES`](priv/zones/ZONES.md) for more details.
 -export([rrsig_for_zone_rrset/2]).
 
 -ifdef(TEST).
--export([handle/6, requires_key_signing_key/1, choose_signer_for_rrset/2]).
+-export([handle/6, requires_key_signing_key/1, choose_signer_for_rrset/2, find_unique_lookups/1]).
 -endif.
 
 -define(NEXT_DNAME_PART, <<"\000">>).
@@ -213,12 +213,7 @@ maybe_get_soa_rrsig_records(ApexRRSigRecords, MsgAuths) ->
 % Find all RRSIG records that cover the records in the provided record list.
 -spec find_rrsigs(erldns:zone(), [dns:rr()]) -> [dns:rr()].
 find_rrsigs(Zone, MessageRecords) ->
-    UniqueLookups = lists:usort(
-        fun(#dns_rr{name = N1, type = T1}, #dns_rr{name = N2, type = T2}) ->
-            N1 =< N2 andalso T1 =< T2
-        end,
-        MessageRecords
-    ),
+    UniqueLookups = find_unique_lookups(MessageRecords),
     lists:flatmap(
         fun(#dns_rr{name = Name, type = Type}) ->
             NamedRRSigs = erldns_zone_cache:get_records_by_name_and_type(
@@ -227,6 +222,15 @@ find_rrsigs(Zone, MessageRecords) ->
             lists:filter(erldns_records:match_type_covered(Type), NamedRRSigs)
         end,
         UniqueLookups
+    ).
+
+-spec find_unique_lookups([dns:rr()]) -> [dns:rr()].
+find_unique_lookups(MessageRecords) ->
+    lists:usort(
+        fun(#dns_rr{name = N1, type = T1}, #dns_rr{name = N2, type = T2}) ->
+            (N1 < N2) orelse (N1 =:= N2 andalso T1 =< T2)
+        end,
+        MessageRecords
     ).
 
 -spec sign_unsigned(dns:message(), erldns:zone()) -> dns:message().

@@ -20,7 +20,8 @@ all() ->
         verify_zsk_signed_alg15,
         verify_zsk_signed_alg16,
         test_signer_selection_logic,
-        test_requires_key_signing_key_function
+        test_requires_key_signing_key_function,
+        find_rrsigs_deduplicates_by_name_and_type
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -505,3 +506,26 @@ test_signer_selection_logic(_Config) ->
     % These are internal tests - we can't easily verify which signer is returned
     % without exposing more internals, but the function should work without error
     ok.
+
+%% Regression: find_rrsigs must deduplicate by (name, type) so that duplicate
+%% records in the message do not produce duplicate RRSIGs. The implementation
+%% uses lists:usort/2 with a comparison that must be a total order (e.g.
+%% (N1 < N2) orelse (N1 =:= N2 andalso T1 =< T2)); using N1 =< N2 andalso T1 =< T2
+%% is not a total order and fails to deduplicate when (A,B) and (B,A) are both false
+%% (e.g. name A < name B but type A > type B).
+find_rrsigs_deduplicates_by_name_and_type(_Config) ->
+    Name = dns_domain:to_lower(~"example.com"),
+    A = #dns_rr{name = Name, type = ?DNS_TYPE_AAAA, data = <<>>},
+    B = #dns_rr{name = <<"www.", Name/binary>>, type = ?DNS_TYPE_A, data = <<>>},
+    R1 = erldns_dnssec:find_unique_lookups([A, B]),
+    R2 = erldns_dnssec:find_unique_lookups([A, B, A]),
+    ?assertEqual(
+        length(R1),
+        length(R2),
+        "find_unique_lookups must deduplicate by (name, type); [A,B,A] must yield same RRSIG count as [A,B]"
+    ),
+    ?assertEqual(
+        lists:sort(R1),
+        lists:sort(R2),
+        "find_unique_lookups must deduplicate by (name, type); duplicate records must not duplicate RRSIGs"
+    ).
