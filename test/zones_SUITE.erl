@@ -262,7 +262,8 @@ json_to_erlang(_) ->
     ?assertMatch(#zone{}, R).
 
 json_to_erlang_txt_spf_records(_) ->
-    I = ~"""
+    I =
+        ~"""
     {
       "name": "example.com",
       "records": [
