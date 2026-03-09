@@ -22,6 +22,7 @@ resolve_authoritative_host_not_found(_) ->
     ZoneLabels = dns_domain:split(ZoneName),
     Z = #zone{
         labels = ZoneLabels,
+        reversed_labels = lists:reverse(ZoneLabels),
         name = ZoneName,
         authority = Authority = [#dns_rr{name = ~"resolve_auth_no_host.com", type = ?DNS_TYPE_SOA}]
     },
@@ -40,6 +41,7 @@ resolve_authoritative_zone_cut(_) ->
     ZoneLabels = dns_domain:split(ZoneName),
     Z = #zone{
         labels = ZoneLabels,
+        reversed_labels = lists:reverse(ZoneLabels),
         name = ZoneName,
         authority = [#dns_rr{name = ~"resolve_auth_zone_cut.com", type = ?DNS_TYPE_SOA}],
         records = NSRecord
@@ -72,6 +74,7 @@ resolve_authoritative_zone_cut_with_cnames(_) ->
     ZoneLabels = dns_domain:split(ZoneName),
     Z = #zone{
         labels = ZoneLabels,
+        reversed_labels = lists:reverse(ZoneLabels),
         name = ZoneName,
         authority = [#dns_rr{name = ~"resolve_auth_zone_cut_cnames.com", type = ?DNS_TYPE_SOA}],
         records = NSRecord ++ CnameRecords

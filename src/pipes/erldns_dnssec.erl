@@ -21,15 +21,16 @@ see [`ZONES`](priv/zones/ZONES.md) for more details.
 -export([rrsig_for_zone_rrset/2]).
 
 -ifdef(TEST).
--export([handle/4, requires_key_signing_key/1, choose_signer_for_rrset/2]).
+-export([handle/6, requires_key_signing_key/1, choose_signer_for_rrset/2, find_unique_lookups/1]).
 -endif.
 
 -define(NEXT_DNAME_PART, <<"\000">>).
+-define(LOG_METADATA, #{domain => [erldns, pipeline, dnssec]}).
 
 -doc "`c:erldns_pipeline:deps/0` callback.".
 -spec deps() -> erldns_pipeline:deps().
 deps() ->
-    #{prerequisites => [erldns_resolver]}.
+    #{prerequisites => [erldns_questions, erldns_resolver]}.
 
 -doc "`c:erldns_pipeline:prepare/1` callback.".
 -spec prepare(erldns_pipeline:opts()) -> erldns_pipeline:opts().
@@ -39,13 +40,21 @@ prepare(Opts) ->
 -doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
 call(
-    #dns_message{questions = [#dns_query{name = QName, type = QType}]} = Msg,
-    #{resolved := true, auth_zone := #zone{} = Zone} = Opts
+    #dns_message{} = Msg,
+    #{
+        resolved := true,
+        query_name := QName,
+        query_type := QType,
+        query_labels := QLabels,
+        auth_zone := #zone{} = Zone
+    } = Opts
 ) ->
     RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Msg)),
-    {handle(Msg, Zone, QName, QType), Opts#{dnssec => RequestDnssec}};
-call(Msg, _) ->
-    Msg.
+    Opts1 = Opts#{dnssec => RequestDnssec},
+    {handle(Msg, Zone, QLabels, QName, QType, RequestDnssec), Opts1};
+call(Msg, Opts) ->
+    RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Msg)),
+    {Msg, Opts#{dnssec => RequestDnssec}}.
 
 -doc "Get signed records from a zone".
 -spec get_signed_records(erldns:zone()) -> #{atom() => [dns:rr()]}.
@@ -125,15 +134,6 @@ choose_signer_for_rrset(ZoneName, RRs) ->
     end.
 
 -doc """
-Apply DNSSEC records to the given message if the zone is signed and DNSSEC is requested.
-""".
--spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type()) -> dns:message().
-handle(Message, Zone, QName, QType) ->
-    HasKeySets = [] =/= Zone#zone.keysets,
-    RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Message)),
-    handle(Message, Zone, QName, QType, HasKeySets, RequestDnssec).
-
--doc """
 Check if any record in the set requires key-signing-key for RRSIG.
 
 CDS and CDNSKEY records should be signed with key-signing-key.
@@ -148,51 +148,52 @@ requires_key_signing_key(RRs) ->
     ).
 
 %%% Internal functions
--spec handle(dns:message(), erldns:zone(), dns:dname(), dns:type(), boolean(), boolean()) ->
-    dns:message().
+-spec handle(Msg, Zone, QLabels, QName, QType, RequestDnssec) -> Return when
+    Msg :: dns:message(),
+    Zone :: erldns:zone(),
+    QLabels :: dns:labels(),
+    QName :: dns:dname(),
+    QType :: dns:type(),
+    RequestDnssec :: boolean(),
+    Return :: dns:message().
+%% DNSSEC not requested, leave
 handle(Msg, _, _, _, _, false) ->
     Msg;
-handle(Msg, _, _, ?DNS_TYPE_NXNAME, _, true) ->
-    %% compact-denial-of-existence §3.5: Responses to explicit queries for NXNAME
+%% compact-denial-of-existence §3.5: Responses to explicit queries for NXNAME
+handle(Msg, _, _, _, ?DNS_TYPE_NXNAME, _) ->
     Msg#dns_message{rc = ?DNS_RCODE_FORMERR, authority = []};
-handle(Msg, _, _, _, false, true) ->
-    % DNSSEC requested, zone unsigned, nothing to do
+%% DNSSEC requested, zone unsigned, nothing to do
+handle(Msg, #zone{keysets = []}, _, _, _, _) ->
     Msg;
-handle(#dns_message{answers = [], authority = MsgAuths} = Msg, Zone, QName, QType, true, true) ->
-    % No answers found, return NSEC.
-    Authority = lists:last(Zone#zone.authority),
+%% DNSSEC requested, zone signed, no answers found, return NSEC.
+handle(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QType, _) ->
+    #dns_message{authority = MsgAuths} = Msg,
+    #zone{labels = ZLabels, authority = [Authority | _]} = Zone,
     Ttl = minimum_soa_ttl(Authority),
-    ApexRecords = erldns_zone_cache:get_records_by_name(Zone#zone.name),
-    ApexRRSigRecords = lists:filter(erldns_records:match_type(?DNS_TYPE_RRSIG), ApexRecords),
-    SoaRRSigRecords = maybe_get_soa_rrsig_records(ApexRRSigRecords, MsgAuths),
-    NameToNormalise = dns_domain:join([?NEXT_DNAME_PART | dns_domain:split(QName)]),
-    NextDname = dns_domain:to_lower(NameToNormalise),
-    RecordTypesForQname = record_types_for_name(Zone, QName),
+    ApexRRSigRRs = erldns_zone_cache:get_records_by_name_and_type(Zone, ZLabels, ?DNS_TYPE_RRSIG),
+    SoaRRSigRecords = maybe_get_soa_rrsig_records(ApexRRSigRRs, MsgAuths),
+    RecordTypesForQname = record_types_for_name(Zone, QLabels),
     NsecRrTypes = erldns_handler:call_map_nsec_rr_types(QType, RecordTypesForQname),
-    NsecRecords =
-        [
-            #dns_rr{
-                name = QName,
-                type = ?DNS_TYPE_NSEC,
-                ttl = Ttl,
-                data = #dns_rrdata_nsec{
-                    next_dname = NextDname,
-                    types = NsecRrTypes
-                }
+    NextDname = <<?NEXT_DNAME_PART/binary, ".", QName/binary>>,
+    NsecRecord =
+        #dns_rr{
+            name = QName,
+            type = ?DNS_TYPE_NSEC,
+            ttl = Ttl,
+            data = #dns_rrdata_nsec{
+                next_dname = NextDname,
+                types = NsecRrTypes
             }
-        ],
-    NsecRRSigRecords = rrsig_for_zone_rrset(Zone, NsecRecords),
-    Auth = lists:append([MsgAuths, NsecRecords, SoaRRSigRecords, NsecRRSigRecords]),
-    Msg1 = Msg#dns_message{
-        ad = true,
-        rc = ?DNS_RCODE_NOERROR,
-        authority = Auth
-    },
+        },
+    NsecRRSigRecords = rrsig_for_zone_rrset(Zone, [NsecRecord]),
+    Auth = lists:append([MsgAuths, [NsecRecord], SoaRRSigRecords, NsecRRSigRecords]),
+    Msg1 = Msg#dns_message{ad = true, rc = ?DNS_RCODE_NOERROR, authority = Auth},
     sign_unsigned(Msg1, Zone);
-handle(Msg, Zone, _, _, true, true) ->
-    ?LOG_DEBUG(#{what => dnssec_requested, name => Zone#zone.name}, #{domain => [erldns]}),
-    AnswerSignatures = find_rrsigs(Msg#dns_message.answers),
-    AuthoritySignatures = find_rrsigs(Msg#dns_message.authority),
+%% DNSSEC requested, zone signed, answers ready and need signing
+handle(Msg, Zone, _, _, _, _) ->
+    ?LOG_DEBUG(#{what => dnssec_requested, name => Zone#zone.name}, ?LOG_METADATA),
+    AnswerSignatures = find_rrsigs(Zone, Msg#dns_message.answers),
+    AuthoritySignatures = find_rrsigs(Zone, Msg#dns_message.authority),
     Msg1 = Msg#dns_message{
         ad = true,
         answers = Msg#dns_message.answers ++ AnswerSignatures,
@@ -205,22 +206,31 @@ handle(Msg, Zone, _, _, true, true) ->
 -spec maybe_get_soa_rrsig_records([dns:rr()], [dns:rr()]) -> [dns:rr()].
 maybe_get_soa_rrsig_records(ApexRRSigRecords, MsgAuths) ->
     case lists:any(fun erldns_records:is_soa/1, MsgAuths) of
-        true -> lists:filter(erldns_records:match_type_covered(?DNS_TYPE_SOA), ApexRRSigRecords);
+        true -> lists:filter(fun erldns_records:is_soa_rrsig/1, ApexRRSigRecords);
         false -> []
     end.
 
 % Find all RRSIG records that cover the records in the provided record list.
--spec find_rrsigs([dns:rr()]) -> [dns:rr()].
-find_rrsigs(MessageRecords) ->
-    NamesAndTypes = lists:usort(
-        lists:map(fun(RR) -> {RR#dns_rr.name, RR#dns_rr.type} end, MessageRecords)
-    ),
+-spec find_rrsigs(erldns:zone(), [dns:rr()]) -> [dns:rr()].
+find_rrsigs(Zone, MessageRecords) ->
+    UniqueLookups = find_unique_lookups(MessageRecords),
     lists:flatmap(
-        fun({Name, Type}) ->
-            NamedRRSigs = erldns_zone_cache:get_records_by_name_and_type(Name, ?DNS_TYPE_RRSIG),
+        fun(#dns_rr{name = Name, type = Type}) ->
+            NamedRRSigs = erldns_zone_cache:get_records_by_name_and_type(
+                Zone, Name, ?DNS_TYPE_RRSIG
+            ),
             lists:filter(erldns_records:match_type_covered(Type), NamedRRSigs)
         end,
-        NamesAndTypes
+        UniqueLookups
+    ).
+
+-spec find_unique_lookups([dns:rr()]) -> [dns:rr()].
+find_unique_lookups(MessageRecords) ->
+    lists:usort(
+        fun(#dns_rr{name = N1, type = T1}, #dns_rr{name = N2, type = T2}) ->
+            (N1 < N2) orelse (N1 =:= N2 andalso T1 =< T2)
+        end,
+        MessageRecords
     ).
 
 -spec sign_unsigned(dns:message(), erldns:zone()) -> dns:message().
@@ -242,44 +252,25 @@ find_unsigned_records(Records) ->
     ).
 
 %% compact-denial-of-existence-07
-record_types_for_name(Zone, Name) ->
-    Labels = dns_domain:split(dns_domain:to_lower(Name)),
-    case best_match_at_node(Zone, Labels) of
+%%
+%% Find the best match records for the given QName in the given zone.
+%% This will look for both exact and wildcard matches AT the QNAME label count
+%% without attempting to walk down to the root.
+record_types_for_name(Zone, QLabels) ->
+    case erldns_zone_cache:get_records_by_name_resolved(Zone, QLabels) of
         ent ->
             lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]);
-        [] ->
+        nxdomain ->
             lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME]);
-        RecordsAtName ->
-            TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
-            lists:usort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC | TypesCovered])
+        {_, RecordsAtName} ->
+            types_covered_from_records(RecordsAtName)
     end.
 
-% Find the best match records for the given QName in the given zone.
-% This will look for both exact and wildcard matches AT the QNAME label count
-% without attempting to walk down to the root.
--spec best_match_at_node(erldns:zone(), dns:labels()) -> ent | [dns:rr()].
-best_match_at_node(Zone, Labels) ->
-    maybe
-        [] ?= erldns_zone_cache:get_records_by_name(Zone, Labels),
-        [] ?= get_wildcard_records_without_ent(Zone, Labels),
-        true ?= erldns_zone_cache:is_record_name_in_zone_strict(Zone, Labels),
-        ent
-    else
-        [_ | _] = RRs ->
-            RRs;
-        _ ->
-            []
-    end.
+types_covered_from_records(RecordsAtName) ->
+    TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
+    lists:usort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC | TypesCovered]).
 
-% Prevent wildcard expansion for ENTs per RFC 4592
-get_wildcard_records_without_ent(Zone, Labels) ->
-    case erldns_zone_cache:is_record_name_in_zone(Zone, Labels) of
-        true ->
-            erldns_zone_cache:get_records_by_name_wildcard(Zone, Labels);
-        false ->
-            []
-    end.
-
+-compile({inline, [minimum_soa_ttl/1]}).
 -spec minimum_soa_ttl(dns:rr()) -> dns:ttl().
 minimum_soa_ttl(#dns_rr{type = ?DNS_TYPE_SOA, ttl = Rec, data = #dns_rrdata_soa{minimum = Min}}) ->
     erlang:min(Min, Rec).

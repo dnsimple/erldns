@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.4.0
+
+### Added
+
+- Zone cache: pre-reversed labels (used on every lookup), `zone_name_existence` and one-shot resolved lookups ([#333](https://github.com/dnsimple/erldns/pull/333))
+- Helper boolean filters for common record types ([#332](https://github.com/dnsimple/erldns/pull/332))
+- Error logging on request timeout ([#332](https://github.com/dnsimple/erldns/pull/332))
+- Log ingress and current timestamps when dropping a packet ([#332](https://github.com/dnsimple/erldns/pull/332))
+- Richer context on query timeouts (what query actually timed out) ([#332](https://github.com/dnsimple/erldns/pull/332))
+
+### Fixed
+
+- Zone cache and resolver: reworked for performance and correctness; fewer redundant computations at runtime ([#333](https://github.com/dnsimple/erldns/pull/333))
+- Optimised `erldns_dnssec` and `erldns_resolver` pipes ([#333](https://github.com/dnsimple/erldns/pull/333))
+- Logging and observability: connection idle timeout at debug level; TCP socket errors and ingress timeouts at notice/info; skip logging TCP killed when we killed it ourselves; use `log_metadata` helper; clearer TCP worker log naming ([#332](https://github.com/dnsimple/erldns/pull/332))
+- Resolver: tiny list processing improvement; async cancel timers for timers ([#332](https://github.com/dnsimple/erldns/pull/332))
+
 ## v10.3.0
 
 ### Added

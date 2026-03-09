@@ -91,6 +91,7 @@ build_zone(Name, Version, Records, Keys) ->
     Authorities = lists:filter(fun erldns_records:is_soa/1, Records),
     #zone{
         labels = Labels,
+        reversed_labels = lists:reverse(Labels),
         name = NormalizedName,
         version = Version,
         record_count = length(Records),

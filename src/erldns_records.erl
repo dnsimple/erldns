@@ -16,6 +16,7 @@
 % Matcher functions
 -export([
     is_soa/1,
+    is_soa_rrsig/1,
     is_cname/1,
     is_ns/1,
     match_name/1,
@@ -99,6 +100,12 @@ rewrite_soa_ttl(Message, [R | Rest], NewAuthority) ->
 -spec is_soa(dns:rr()) -> boolean().
 is_soa(#dns_rr{type = RRType}) ->
     ?DNS_TYPE_SOA =:= RRType.
+
+-spec is_soa_rrsig(dns:rr()) -> boolean().
+is_soa_rrsig(#dns_rr{type = Type, data = Data}) ->
+    ?DNS_TYPE_RRSIG =:= Type andalso
+        is_record(Data, dns_rrdata_rrsig) andalso
+        ?DNS_TYPE_SOA =:= Data#dns_rrdata_rrsig.type_covered.
 
 -spec is_cname(dns:rr()) -> boolean().
 is_cname(#dns_rr{type = RRType}) ->
