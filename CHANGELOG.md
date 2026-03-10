@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.4.1
+
+### Fixed
+
+- Upgraded `dns_erlang` dependency with DNSSEC ECDSA fixes
+
 ## v10.4.0
 
 ### Added
