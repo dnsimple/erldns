@@ -139,7 +139,8 @@ groups() ->
             delete_zone_rrset_records_count_width_dnssec_zone_and_existing_rrset,
             delete_zone_rrset_records_count_matches_cache,
             delete_zone_rrset_records_count_underflow,
-            delete_zone_rrset_records_zone_not_found
+            delete_zone_rrset_records_zone_not_found,
+            rrset_sync_counter_dname_and_trailing_dot_same_key
         ]}
     ].
 
@@ -2580,6 +2581,58 @@ delete_zone_rrset_records_zone_not_found(_) ->
         1
     ),
     ?assertEqual(zone_not_found, Ret).
+
+%% Sync counter table uses normalized labels as keys so "example.com" and "example.com."
+%% refer to the same entry (no confusion between relative and FQDN form).
+rrset_sync_counter_dname_and_trailing_dot_same_key(_) ->
+    ZoneName = dns_domain:to_lower(~"example.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
+    RRFqdnNoDot = ~"sync-dot-test.example.com",
+    Counter = 100,
+    Record = #dns_rr{
+        data = #dns_rrdata_a{ip = {10, 10, 10, 10}},
+        name = RRFqdnNoDot,
+        ttl = 300,
+        type = ?DNS_TYPE_A
+    },
+    ok = erldns_zone_cache:put_zone_rrset(
+        {ZoneName, ~"digest", [Record], []},
+        RRFqdnNoDot,
+        ?DNS_TYPE_A,
+        Counter
+    ),
+    %% Same counter must be returned whether zone/RRFqdn are given with or without trailing dot
+    ?assertEqual(
+        Counter,
+        erldns_zone_cache:get_rrset_sync_counter(~"example.com", RRFqdnNoDot, ?DNS_TYPE_A),
+        "no dots"
+    ),
+    ?assertEqual(
+        Counter,
+        erldns_zone_cache:get_rrset_sync_counter(
+            ~"example.com.", ~"sync-dot-test.example.com.", ?DNS_TYPE_A
+        ),
+        "with trailing dots"
+    ),
+    ?assertEqual(
+        Counter,
+        erldns_zone_cache:get_rrset_sync_counter(~"example.com.", RRFqdnNoDot, ?DNS_TYPE_A),
+        "zone with dot, rrset without"
+    ),
+    ?assertEqual(
+        Counter,
+        erldns_zone_cache:get_rrset_sync_counter(
+            ~"example.com", ~"sync-dot-test.example.com.", ?DNS_TYPE_A
+        ),
+        "zone without dot, rrset with dot"
+    ),
+    ?assertEqual(
+        Counter,
+        erldns_zone_cache:get_rrset_sync_counter(
+            ZoneLabels, dns_domain:split(RRFqdnNoDot), ?DNS_TYPE_A
+        ),
+        "labels form"
+    ).
 
 init_supervision_tree(Config, Role) ->
     Self = self(),

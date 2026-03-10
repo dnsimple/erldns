@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.4.1
+
+### Fixed
+
+- Ensure records are normalised as FQDN when using the sync counter zone cache functionality
+
 ## v10.4.0
 
 ### Added
