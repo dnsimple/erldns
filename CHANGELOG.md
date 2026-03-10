@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optimised `erldns_dnssec` and `erldns_resolver` pipes ([#333](https://github.com/dnsimple/erldns/pull/333))
 - Logging and observability: connection idle timeout at debug level; TCP socket errors and ingress timeouts at notice/info; skip logging TCP killed when we killed it ourselves; use `log_metadata` helper; clearer TCP worker log naming ([#332](https://github.com/dnsimple/erldns/pull/332))
 - Resolver: tiny list processing improvement; async cancel timers for timers ([#332](https://github.com/dnsimple/erldns/pull/332))
+- Upgraded `dns_erlang` dependency with DNSSEC ECDSA fixes
 
 ## v10.3.0
 
