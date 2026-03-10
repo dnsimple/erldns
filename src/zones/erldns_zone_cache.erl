@@ -441,18 +441,11 @@ zone_names_and_versions() ->
     ).
 
 %% Update the RRSet sync counter for the given RR set name and type in the given zone.
--spec write_rrset_sync_counter(
-    dns:dname() | dns:labels(), dns:dname() | dns:labels(), dns:type(), integer()
-) -> ok.
-write_rrset_sync_counter(ZoneName, RRFqdn, Type, Counter) when is_binary(ZoneName) ->
-    write_rrset_sync_counter(dns_domain:split(ZoneName), RRFqdn, Type, Counter);
-write_rrset_sync_counter(ZoneName, RRFqdn, Type, Counter) when is_binary(RRFqdn) ->
-    write_rrset_sync_counter(ZoneName, dns_domain:split(RRFqdn), Type, Counter);
+-spec write_rrset_sync_counter(dns:labels(), dns:labels(), dns:type(), integer()) -> term().
 write_rrset_sync_counter(ZoneNameLabels, RRFqdnLabels, Type, Counter) when
     is_list(ZoneNameLabels), is_list(RRFqdnLabels)
 ->
-    true = ets:insert(erldns_sync_counters, {{ZoneNameLabels, RRFqdnLabels, Type}, Counter}),
-    ok.
+    ets:insert(erldns_sync_counters, {{ZoneNameLabels, RRFqdnLabels, Type}, Counter}).
 
 % Write API
 %% All write operations write records with normalized names, hence reads won't need to
