@@ -334,10 +334,18 @@ get_delegations(Name, Labels) when is_binary(Name), is_list(Labels) ->
 
 -doc #{group => ~"API: Lookups"}.
 -doc "Return current sync counter".
--spec get_rrset_sync_counter(dns:dname(), dns:dname(), dns:type()) -> integer().
-get_rrset_sync_counter(NormalizedZoneName, RRFqdn, Type) ->
-    NormalizedRRFqdn = dns_domain:to_lower(RRFqdn),
-    Key = {NormalizedZoneName, NormalizedRRFqdn, Type},
+-spec get_rrset_sync_counter(dns:dname() | dns:labels(), dns:dname() | dns:labels(), dns:type()) ->
+    integer().
+get_rrset_sync_counter(ZoneName, RRFqdn, Type) when is_binary(ZoneName) ->
+    NormalizedZoneNameLabels = dns_domain:split(dns_domain:to_lower(ZoneName)),
+    get_rrset_sync_counter(NormalizedZoneNameLabels, RRFqdn, Type);
+get_rrset_sync_counter(ZoneName, RRFqdn, Type) when is_binary(RRFqdn) ->
+    NormalizedRRFqdnLabels = dns_domain:split(dns_domain:to_lower(RRFqdn)),
+    get_rrset_sync_counter(ZoneName, NormalizedRRFqdnLabels, Type);
+get_rrset_sync_counter(ZoneNameLabels, RRFqdnLabels, Type) when
+    is_list(ZoneNameLabels), is_list(RRFqdnLabels)
+->
+    Key = {ZoneNameLabels, RRFqdnLabels, Type},
     % return default value of 0
     ets:lookup_element(erldns_sync_counters, Key, 2, 0).
 
@@ -433,10 +441,11 @@ zone_names_and_versions() ->
     ).
 
 %% Update the RRSet sync counter for the given RR set name and type in the given zone.
--spec write_rrset_sync_counter(dns:dname(), dns:dname(), dns:type(), integer()) -> ok.
-write_rrset_sync_counter(ZoneName, RRFqdn, Type, Counter) ->
-    true = ets:insert(erldns_sync_counters, {{ZoneName, RRFqdn, Type}, Counter}),
-    ok.
+-spec write_rrset_sync_counter(dns:labels(), dns:labels(), dns:type(), integer()) -> term().
+write_rrset_sync_counter(ZoneNameLabels, RRFqdnLabels, Type, Counter) when
+    is_list(ZoneNameLabels), is_list(RRFqdnLabels)
+->
+    ets:insert(erldns_sync_counters, {{ZoneNameLabels, RRFqdnLabels, Type}, Counter}).
 
 % Write API
 %% All write operations write records with normalized names, hence reads won't need to
@@ -551,7 +560,7 @@ put_zone_rrset({ZoneName, Digest, Records}, RRFqdn, Type, Counter) ->
                     (length(Records) - length(CurrentRRSetRecords)) +
                     (length(SignedRRSet) - length(RRSigRecsCovering)),
             update_zone_records_and_digest(ZoneLabels, UpdatedZoneRecordsCount, Digest),
-            write_rrset_sync_counter(NormalizedZoneName, NormalizedRRFqdn, Type, Counter),
+            write_rrset_sync_counter(ZQLabels, RecordLabels, Type, Counter),
             ?LOG_DEBUG(
                 #{what => rrset_update_completed, rrset => NormalizedRRFqdn, type => Type},
                 ?LOG_METADATA
@@ -579,17 +588,18 @@ delete_zone(ZoneLabels) when is_list(ZoneLabels) ->
 delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
     NormalizedZoneName = dns_domain:to_lower(ZoneName),
     ZQLabels = dns_domain:split(NormalizedZoneName),
+    NormalizedRRFqdn = dns_domain:to_lower(RRFqdn),
+    RRFqdnLabels = dns_domain:split(NormalizedRRFqdn),
     case find_zone_in_cache(ZQLabels) of
         #zone{labels = ZoneLabels} = Zone ->
-            CurrentCounter = get_rrset_sync_counter(ZoneName, RRFqdn, Type),
+            CurrentCounter = get_rrset_sync_counter(ZQLabels, RRFqdnLabels, Type),
             case Counter of
                 N when N =:= 0; CurrentCounter =< N ->
                     ?LOG_DEBUG(
-                        #{what => removing_rrset, rrset => RRFqdn, type => Type},
+                        #{what => removing_rrset, rrset => NormalizedRRFqdn, type => Type},
                         ?LOG_METADATA
                     ),
                     ZoneRecordsCount = Zone#zone.record_count,
-                    NormalizedRRFqdn = dns_domain:to_lower(RRFqdn),
                     RecordLabels = dns_domain:split(NormalizedRRFqdn),
                     CurrentRRSetRecords = get_records_by_name_and_type(Zone, RecordLabels, Type),
                     ReducedLabels = reduce_record_labels(ZoneLabels, RecordLabels),
@@ -626,7 +636,7 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                             update_zone_records_and_digest(
                                 ZoneLabels, UpdatedZoneRecordsCount, Digest
                             ),
-                            write_rrset_sync_counter(NormalizedZoneName, RRFqdn, Type, Counter);
+                            write_rrset_sync_counter(ZQLabels, RRFqdnLabels, Type, Counter);
                         _ ->
                             ok
                     end;
