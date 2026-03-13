@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.4.2
+
+### Fixed
+
+- `erldns_zone_cache:delete_zone_rrset/5` correctly returns `ok | zone_not_found`
+
 ## v10.4.1
 
 ### Fixed

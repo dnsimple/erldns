@@ -636,7 +636,8 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                             update_zone_records_and_digest(
                                 ZoneLabels, UpdatedZoneRecordsCount, Digest
                             ),
-                            write_rrset_sync_counter(ZQLabels, RRFqdnLabels, Type, Counter);
+                            write_rrset_sync_counter(ZQLabels, RRFqdnLabels, Type, Counter),
+                            ok;
                         _ ->
                             ok
                     end;
