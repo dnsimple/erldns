@@ -184,13 +184,13 @@ handle_process_buffer(#state{buffer = <<_, _/binary>>} = State) ->
 %% If the buffer is empty, it is because we've already triggered all pending requests:
 %% - We'll become idle only if there's no pending active workers
 %% - Or we'll set the socket active if the active workers is not full
-handle_process_buffer(#state{buffer = <<>>} = State) when ?CONCURRENT_QUERIES_EMPTY(State) ->
+handle_process_buffer(#state{buffer = ~""} = State) when ?CONCURRENT_QUERIES_EMPTY(State) ->
     set_socket_active(State#state.socket, State#state.socket_type),
     start_idle_timer(State);
-handle_process_buffer(#state{buffer = <<>>} = State) when ?CONCURRENT_QUERIES_NOT_FULL(State) ->
+handle_process_buffer(#state{buffer = ~""} = State) when ?CONCURRENT_QUERIES_NOT_FULL(State) ->
     set_socket_active(State#state.socket, State#state.socket_type),
     {noreply, State};
-handle_process_buffer(#state{buffer = <<>>} = State) when ?CONCURRENT_QUERIES_FULL(State) ->
+handle_process_buffer(#state{buffer = ~""} = State) when ?CONCURRENT_QUERIES_FULL(State) ->
     {noreply, State}.
 
 -spec spawn_tcp_worker_and_recurse(state(), dns:message_bin(), binary()) -> {noreply, state()}.
