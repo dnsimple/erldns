@@ -1,13 +1,19 @@
-# local setup
+# build
+_build/
+doc/
+
+# developer environment
 .tool-versions
+
+# local config
 erldns.config
+
+# local data
 priv/zones/local/*.json
 
-# rebar 3
+# rebar3
 .rebar3
-_build/
 _checkouts/
-doc/
 
 # BEAM files
 *.beam
