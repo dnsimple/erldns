@@ -130,12 +130,13 @@ resolve_authoritative(Msg, Zone, QLabels, QName, QType, CnameChain) ->
             {wildcard, Records} ->
                 best_match_resolution(Msg, Zone, QLabels, QName, QType, CnameChain, Records)
         end,
-    IsRecordNameInZone = is_tuple(Resolved),
-    maybe_add_zonecut_records(Msg, Zone, QLabels, ResultMsg, QType, IsRecordNameInZone).
+    maybe_add_zonecut_records(ResultMsg, Zone, QLabels, QType, Resolved).
 
-maybe_add_zonecut_records(_, _, _, ResultMsg, ?DNS_TYPE_DS, true) ->
+%% DS is always answered from the parent zone (RFC 4035); do not downgrade to a
+%% referral via zonecut processing (see PR #285).
+maybe_add_zonecut_records(ResultMsg, _, _, ?DNS_TYPE_DS, Resolved) when is_tuple(Resolved) ->
     ResultMsg;
-maybe_add_zonecut_records(Msg, Zone, QLabels, ResultMsg, _QType, _) ->
+maybe_add_zonecut_records(ResultMsg, Zone, QLabels, _, _) ->
     AuthName = zone_authority_name(Zone),
     AuthLabels = dns_domain:split(AuthName),
     case detect_zonecut(Zone, AuthLabels, QLabels) of
@@ -143,13 +144,13 @@ maybe_add_zonecut_records(Msg, Zone, QLabels, ResultMsg, _QType, _) ->
             ResultMsg;
         ZonecutRecords ->
             FilteredCnameAnswers = lists:filter(
-                fun(#dns_rr{data = Data} = RR) ->
-                    erldns_records:is_cname(RR) andalso
+                fun(#dns_rr{type = RRType, data = Data}) ->
+                    ?DNS_TYPE_CNAME =:= RRType andalso
                         [] =/= detect_zonecut(Zone, AuthLabels, Data#dns_rrdata_cname.dname)
                 end,
                 ResultMsg#dns_message.answers
             ),
-            Msg#dns_message{
+            ResultMsg#dns_message{
                 aa = false,
                 rc = ?DNS_RCODE_NOERROR,
                 authority = ZonecutRecords,

@@ -877,7 +877,12 @@ find_authoritative_zone_in_cache_ds([_ | Tail] = Labels) ->
         #zone{authority = [_ | _]} = Zone ->
             Zone;
         _ ->
-            find_authoritative_zone_in_cache(Labels)
+            case ets:lookup(erldns_zones_table, Labels) of
+                [#zone{authority = [_ | _]} = Zone] ->
+                    Zone;
+                _ ->
+                    not_authoritative
+            end
     end.
 
 do_get_delegations(Name, Labels) ->
