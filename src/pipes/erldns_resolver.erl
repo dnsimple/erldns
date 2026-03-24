@@ -258,20 +258,14 @@ resolve_exact_match(Message, Zone, QLabels, QType, CnameChain, MatchedRecords) -
     AuthorityRecords :: [dns:rr()]
 ) ->
     dns:message().
-resolve_exact_type_match(Message, Zone, QLabels, ?DNS_TYPE_NS, CnameChain, [Answer | _], []) ->
-    % There was an exact type match for an NS query, however there is no SOA record for the zone.
-    Name = Answer#dns_rr.name,
-    ?LOG_INFO(#{what => exact_match_for_ns_with_no_soa, qname => Name}, ?LOG_METADATA),
-    % It isn't clear what the QTYPE should be on a delegated restart. I assume an A record.
-    restart_delegated_query(
-        Message,
-        Zone,
-        QLabels,
-        Name,
-        ?DNS_TYPE_A,
-        CnameChain,
-        erldns_zone_cache:is_in_any_zone(QLabels)
-    );
+resolve_exact_type_match(Message, _Zone, _QLabels, ?DNS_TYPE_NS, _CnameChain, [Answer | _], []) ->
+    % NS records at this name but no SOA — this is a delegation point.
+    % Return the message as-is; maybe_add_zonecut_records in resolve_authoritative
+    % will detect the zone cut and produce the correct referral response.
+    ?LOG_INFO(
+        #{what => exact_match_for_ns_with_no_soa, qname => Answer#dns_rr.name}, ?LOG_METADATA
+    ),
+    Message;
 resolve_exact_type_match(
     Message, _Zone, _QLabels, ?DNS_TYPE_NS, _CnameChain, MatchedRecords, _AuthorityRecords
 ) ->
@@ -337,7 +331,7 @@ resolve_exact_type_match(
     dns:message().
 resolve_exact_type_match_delegated(
     Message,
-    Zone,
+    _Zone,
     QLabels,
     QType,
     CnameChain,
@@ -362,12 +356,10 @@ resolve_exact_type_match_delegated(
                     % NS record name is a parent of the answer name
                     restart_delegated_query(
                         Message,
-                        Zone,
                         NSLabels,
                         NSRecordName,
                         QType,
-                        CnameChain,
-                        erldns_zone_cache:is_in_any_zone(NSLabels)
+                        CnameChain
                     );
                 false ->
                     % NS record name is not a parent of the answer name
@@ -706,30 +698,17 @@ restart_query(Message, _Zone, _Labels, _Name, _QType, _CnameChain, false) ->
 
 -spec restart_delegated_query(
     Message :: dns:message(),
-    Zone :: erldns:zone(),
     Labels :: dns:labels(),
     QName :: dns:dname(),
     QType :: dns:type(),
-    CnameChain :: [dns:rr()],
-    InZone :: boolean()
+    CnameChain :: [dns:rr()]
 ) ->
     dns:message().
-% Delegated, but in the same zone.
-restart_delegated_query(Message, Zone, QLabels, QName, QType, CnameChain, true) ->
-    resolve_authoritative(Message, Zone, QLabels, QName, QType, CnameChain);
-% Delegated to a different zone.
-restart_delegated_query(Message, Zone, QLabels, QName, QType, CnameChain, false) ->
+restart_delegated_query(Message, QLabels, QName, QType, CnameChain) ->
     case erldns_zone_cache:get_authoritative_zone(QLabels) of
-        #zone{} = Zone ->
-            resolve_authoritative(
-                Message,
-                Zone,
-                QLabels,
-                QName,
-                QType,
-                CnameChain
-            );
-        zone_not_found ->
+        #zone{} = AuthZone ->
+            resolve_authoritative(Message, AuthZone, QLabels, QName, QType, CnameChain);
+        _NotFound ->
             Message
     end.
 
