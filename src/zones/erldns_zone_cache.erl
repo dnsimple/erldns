@@ -684,18 +684,17 @@ insert_zone(#zone{} = Zone) ->
 delete_zone_records(ZoneLabels) ->
     pattern_zone_delete(ZoneLabels).
 
-%% expects name to be already normalized
--spec prepare_zone_records(dns:labels(), #{dns:dname() => [dns:rr()]}) ->
+%% expects record owner names to be normalized (lowercase); keys are full owner label paths
+-spec prepare_zone_records(dns:labels(), #{dns:labels() => [dns:rr()]}) ->
     [{dns:labels(), dns:labels(), dns:type(), [dns:rr()]}].
-prepare_zone_records(ZoneLabels, RecordsByName) ->
+prepare_zone_records(ZoneLabels, RecordsByLabels) ->
     lists:flatmap(
-        fun({Fqdn, Records}) ->
-            RecordLabels = dns_domain:split(Fqdn),
+        fun({RecordLabels, Records}) ->
             TypedRecords = build_typed_index(Records),
             ListTypedRecords = maps:to_list(TypedRecords),
             prepare_zone_records_typed_entry(ZoneLabels, RecordLabels, ListTypedRecords)
         end,
-        maps:to_list(RecordsByName)
+        maps:to_list(RecordsByLabels)
     ).
 
 %% expects name to be already normalized
@@ -919,9 +918,13 @@ find_zone_in_cache([_ | Tail] = Labels) ->
             Zone
     end.
 
--spec build_named_index([dns:rr()]) -> #{dns:dname() => [dns:rr()]}.
+%% Group records by the owner name as labels: lowercase, then `dns_domain:split/1`.
+%% Names that differ only by case or trailing dot collapse to the same key, while
+%% the stored `#dns_rr.name` binaries are left as provided by the zone source.
+-spec build_named_index([dns:rr()]) -> #{dns:labels() => [dns:rr()]}.
 build_named_index(Records) ->
-    maps:groups_from_list(fun(R) -> dns_domain:to_lower(R#dns_rr.name) end, Records).
+    Classifier = fun(#dns_rr{name = Name}) -> dns_domain:split(dns_domain:to_lower(Name)) end,
+    maps:groups_from_list(Classifier, Records).
 
 -spec build_typed_index([dns:rr()]) -> #{dns:type() => [dns:rr()]}.
 build_typed_index(Records) ->

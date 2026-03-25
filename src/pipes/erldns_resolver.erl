@@ -290,7 +290,7 @@ resolve_exact_type_match(
             };
         [#dns_rr{name = NSRecordName} | _] = NSRecords ->
             SoaRecordName = zone_authority_name(Zone),
-            case SoaRecordName =:= NSRecordName of
+            case dns_domain:are_equal(SoaRecordName, NSRecordName) of
                 true ->
                     % The SOA record name matches the NS record name, we are at the apex,
                     % NOERROR and append the matched records to the answers
@@ -335,14 +335,19 @@ resolve_exact_type_match_delegated(
     QLabels,
     QType,
     CnameChain,
-    [Answer | _] = MatchedRecords,
+    [#dns_rr{name = AnswerName} | _] = MatchedRecords,
     _AuthorityRecords,
     [#dns_rr{name = NSRecordName} | _] = NSRecords
 ) ->
     % We are authoritative and there are NS records here.
-    case NSRecordName =:= Answer#dns_rr.name of
+    % Compare by labels so FQDNs that differ only by a trailing dot (or case)
+    % still match — otherwise we miss the "self delegation" case and loop via
+    % restart_delegated_query/5 (see resolver_SUITE).
+    NSLabels = dns_domain:split(NSRecordName),
+    AnswerNameLabels = dns_domain:split(AnswerName),
+    case dns_domain:are_equal_labels(NSLabels, AnswerNameLabels) of
         true ->
-            % NS name matches answer name, thus it's a recursion, so return the message
+            % NS owner name matches answer name, thus it's a recursion, so return the message
             Message#dns_message{
                 aa = false,
                 rc = ?DNS_RCODE_NOERROR,
@@ -350,17 +355,10 @@ resolve_exact_type_match_delegated(
             };
         false ->
             % NS name is different than the name in the matched records
-            NSLabels = dns_domain:split(NSRecordName),
             case check_if_parent(NSLabels, QLabels) of
                 true ->
                     % NS record name is a parent of the answer name
-                    restart_delegated_query(
-                        Message,
-                        NSLabels,
-                        NSRecordName,
-                        QType,
-                        CnameChain
-                    );
+                    restart_delegated_query(Message, NSLabels, NSRecordName, QType, CnameChain);
                 false ->
                     % NS record name is not a parent of the answer name
                     Message#dns_message{
@@ -515,9 +513,9 @@ resolve_best_match(Message, Zone, QLabels, QName, QType, CnameChain, BestMatchRe
             );
         false ->
             % It's not a wildcard
-            [Question | _] = Message#dns_message.questions,
+            #dns_message{questions = [#dns_query{name = QuestionName} | _]} = Message,
             % TODO this logic can be moved up higher in processing potentially.
-            case QName =:= Question#dns_query.name of
+            case dns_domain:are_equal(QName, QuestionName) of
                 true ->
                     % We are authoritative but there is no match on name and type,
                     % so respond with NXDOMAIN
