@@ -23,7 +23,7 @@ or an exception (mapped to SERVFAIL).
 -export([resolve_authoritative/7]).
 -endif.
 
--define(MAX_RESOLUTION_DEPTH, 20).
+-define(MAX_RESOLUTION_DEPTH, 32).
 
 -behaviour(erldns_pipeline).
 

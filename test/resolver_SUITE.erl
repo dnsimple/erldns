@@ -7,7 +7,7 @@
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("erldns/include/erldns.hrl").
 
--define(MAX_RESOLUTION_DEPTH, 20).
+-define(MAX_RESOLUTION_DEPTH, 32).
 
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
