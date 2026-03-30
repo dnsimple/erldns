@@ -39,7 +39,7 @@ jobs:
       matrix:
         os: ['ubuntu-24.04']
         otp: ['28', '27']
-        rebar3: ['3.25']
+        rebar3: ['3.27']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6

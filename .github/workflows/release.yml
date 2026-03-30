@@ -15,8 +15,8 @@ jobs:
         uses: actions/checkout@v6
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: '27'
-          rebar3-version: '3.25'
+          otp-version: '28'
+          rebar3-version: '3.27'
       - run: rebar3 compile
       - name: Publish to hex.pm
         env:
