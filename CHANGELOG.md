@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixes wrong zone reuse and a `case_clause` error when the delegated zone differed from the caller's zone [#341](https://github.com/dnsimple/erldns/pull/341)
 - When following delegation chains, `resolve_authoritative/7` keeps track of a recursion depth and stops after 32 steps with a SERVFAIL, preventing infinite loops [#342](https://github.com/dnsimple/erldns/pull/342)
+- Simplify restart query operations on CNAME delegations [#343](https://github.com/dnsimple/erldns/pull/343)
 
 ## v10.4.3
 
