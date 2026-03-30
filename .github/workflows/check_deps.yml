@@ -60,3 +60,4 @@ jobs:
           body-path: /tmp/pr-body.md
           labels: "dependencies,task"
           delete-branch: true
+          sign-commits: true
