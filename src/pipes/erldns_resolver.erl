@@ -472,18 +472,10 @@ resolve_exact_match_with_cname(
             % No CNAME loop, restart the query with the CNAME content.
             Name = CnameRecord#dns_rr.data#dns_rrdata_cname.dname,
             Labels = dns_domain:split(Name),
-            restart_query(
-                Message#dns_message{
-                    aa = true, answers = Message#dns_message.answers ++ CnameRecords
-                },
-                Zone,
-                Labels,
-                Name,
-                QType,
-                CnameChain ++ CnameRecords,
-                erldns_zone_cache:is_in_any_zone(Labels),
-                Depth
-            )
+            Msg1 = Message#dns_message{
+                aa = true, answers = Message#dns_message.answers ++ CnameRecords
+            },
+            restart_query(Msg1, Zone, Labels, Name, QType, CnameRecords ++ CnameChain, Depth)
     end.
 
 -spec best_match_resolution(
@@ -672,20 +664,11 @@ resolve_best_match_with_wildcard_cname(
         false ->
             % Follow the CNAME
             Name = CnameRecord#dns_rr.data#dns_rrdata_cname.dname,
-            UpdatedMessage = Message#dns_message{
+            Labels = dns_domain:split(Name),
+            Msg1 = Message#dns_message{
                 aa = true, answers = Message#dns_message.answers ++ CnameRecords
             },
-            Labels = dns_domain:split(Name),
-            restart_query(
-                UpdatedMessage,
-                Zone,
-                Labels,
-                Name,
-                QType,
-                CnameChain ++ CnameRecords,
-                erldns_zone_cache:is_in_any_zone(Labels),
-                Depth
-            )
+            restart_query(Msg1, Zone, Labels, Name, QType, CnameRecords ++ CnameChain, Depth)
     end.
 
 % There are referral records
@@ -724,8 +707,10 @@ resolve_best_match_referral(
             Message#dns_message{authority = Authority}
     end.
 
-% The CNAME is in a zone.
-% If it is the same zone, then continue the chain, otherwise return the message
+% Continue the CNAME chain only when the target is under the current zone apex (suffix) and the
+% name is considered in-zone by the zone cache (same rules as is_in_any_zone/1). We check
+% check_if_parent/2 first so we skip the zone-cache walk when the target is out of bailiwick for
+% this zone — the outcome is the same as is_in_any_zone=false in that case.
 -spec restart_query(
     Message :: dns:message(),
     Zone :: erldns:zone(),
@@ -733,20 +718,18 @@ resolve_best_match_referral(
     Name :: dns:dname(),
     QType :: dns:type(),
     CnameChain :: [dynamic()],
-    InZone :: boolean(),
     Depth :: non_neg_integer()
 ) ->
     dns:message().
-restart_query(Message, Zone, Labels, Name, QType, CnameChain, true, Depth) ->
-    case check_if_parent(Zone#zone.labels, Labels) of
-        true ->
-            resolve_authoritative(Message, Zone, Labels, Name, QType, CnameChain, Depth - 1);
-        false ->
+restart_query(Message, Zone, Labels, Name, QType, CnameChain, Depth) ->
+    maybe
+        true ?= check_if_parent(Zone#zone.labels, Labels),
+        true ?= erldns_zone_cache:is_in_any_zone(Labels),
+        resolve_authoritative(Message, Zone, Labels, Name, QType, CnameChain, Depth - 1)
+    else
+        _ ->
             Message
-    end;
-% The CNAME is not in a zone, do not restart the query, return the answer.
-restart_query(Message, _Zone, _Labels, _Name, _QType, _CnameChain, false, _Depth) ->
-    Message.
+    end.
 
 -spec restart_delegated_query(
     Message :: dns:message(),
