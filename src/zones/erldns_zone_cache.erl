@@ -23,7 +23,7 @@ once and use multiple times.
 %%
 %% This serves two purposes: smaller memory footprint, and when traversing the tree for a path in a
 %% zone, traversal will forcefully stop when it arrives at the parent zone, ensuring no resources
-%% are waste looking for a record above the zone boundary.
+%% are wasted looking for a record above the zone boundary.
 %%
 %% 3. `erldns_sync_counters`:
 %% Holds a counter of updates for each RR.
@@ -725,16 +725,16 @@ put_zone_records(RecordsByName) ->
 put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Records) ->
     TypedRecords = build_typed_index(Records),
     maps:foreach(
-        fun(Type, Record) ->
-            do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Record)
+        fun(Type, RRSet) ->
+            do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, RRSet)
         end,
         TypedRecords
     ).
 
 %% Expects record labels to be already reduced
 -spec do_put_zone_records_typed_entry(dns:labels(), dns:labels(), dns:type(), [dns:rr()]) -> true.
-do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Record) ->
-    ets:insert(erldns_zone_records_typed, {{ZoneLabels, ReducedLabels, Type}, Record}).
+do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, RRSet) ->
+    ets:insert(erldns_zone_records_typed, {{ZoneLabels, ReducedLabels, Type}, RRSet}).
 
 -compile({inline, [make_improper_list/1]}).
 make_improper_list(List) ->
