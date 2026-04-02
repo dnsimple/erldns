@@ -7,6 +7,35 @@ responsibility of the client to call this API with normalised names.
 This is to avoid normalising already normalised names, which can result into computational waste.
 As the client might need to call multiple points of this API, the client can ensure to normalise
 once and use multiple times.
+
+## Telemetry events
+
+### `[erldns, zone, put]`
+
+Emitted at the end of `put_zone/1`, after the zone and its records have been inserted.
+
+- Measurements:
+```erlang
+count := 1
+```
+- Metadata:
+```erlang
+zone_name := dns:dname()
+```
+
+### `[erldns, zone, delete]`
+
+Emitted at the end of `delete_zone/1`, after the zone, its records, and sync counters
+have been removed.
+
+- Measurements:
+```erlang
+count := 1
+```
+- Metadata:
+```erlang
+zone_name := dns:dname()
+```
 """.
 
 %% This module's gen_server holds three tables:
@@ -506,6 +535,7 @@ put_zone(#zone{name = Name} = Zone) ->
     delete_zone_sync_counters(ZoneLabels),
     maybe_notify_of_zone_replacement(NumDeleted, NormalizedName),
     put_zone_records(ZoneRecords),
+    telemetry:execute([erldns, zone, put], #{count => 1}, #{zone_name => NormalizedName}),
     ok;
 put_zone({Name, Sha, Records}) ->
     put_zone({Name, Sha, Records, []});
@@ -586,7 +616,9 @@ delete_zone(Name) when is_binary(Name) ->
 delete_zone(ZoneLabels) when is_list(ZoneLabels) ->
     ets:delete(erldns_zones_table, ZoneLabels),
     delete_zone_records(ZoneLabels),
-    delete_zone_sync_counters(ZoneLabels).
+    delete_zone_sync_counters(ZoneLabels),
+    ZoneName = dns_domain:join(ZoneLabels, fqdn),
+    telemetry:execute([erldns, zone, delete], #{count => 1}, #{zone_name => ZoneName}).
 
 -doc #{group => ~"API: Mutations"}.
 -doc "Remove zone RRSet".
