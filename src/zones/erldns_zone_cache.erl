@@ -26,7 +26,8 @@ once and use multiple times.
 %% are wasted looking for a record above the zone boundary.
 %%
 %% 3. `erldns_sync_counters`:
-%% Holds a counter of updates for each RR.
+%% Holds a counter of updates for each RR, keyed by
+%% `{<zone labels>, <reduced record labels>, dns:type()}` — same key shape as table 2.
 
 -behaviour(gen_server).
 
@@ -345,7 +346,8 @@ get_rrset_sync_counter(ZoneName, RRFqdn, Type) when is_binary(RRFqdn) ->
 get_rrset_sync_counter(ZoneNameLabels, RRFqdnLabels, Type) when
     is_list(ZoneNameLabels), is_list(RRFqdnLabels)
 ->
-    Key = {ZoneNameLabels, RRFqdnLabels, Type},
+    ReducedLabels = reduce_record_labels(ZoneNameLabels, RRFqdnLabels),
+    Key = {ZoneNameLabels, ReducedLabels, Type},
     % return default value of 0
     ets:lookup_element(erldns_sync_counters, Key, 2, 0).
 
@@ -441,11 +443,14 @@ zone_names_and_versions() ->
     ).
 
 %% Update the RRSet sync counter for the given RR set name and type in the given zone.
+%% The key uses reduced labels (relative to the zone) for consistency
+%% with erldns_zone_records_typed.
 -spec write_rrset_sync_counter(dns:labels(), dns:labels(), dns:type(), integer()) -> term().
 write_rrset_sync_counter(ZoneNameLabels, RRFqdnLabels, Type, Counter) when
     is_list(ZoneNameLabels), is_list(RRFqdnLabels)
 ->
-    ets:insert(erldns_sync_counters, {{ZoneNameLabels, RRFqdnLabels, Type}, Counter}).
+    ReducedLabels = reduce_record_labels(ZoneNameLabels, RRFqdnLabels),
+    ets:insert(erldns_sync_counters, {{ZoneNameLabels, ReducedLabels, Type}, Counter}).
 
 % Write API
 %% All write operations write records with normalized names, hence reads won't need to
@@ -498,6 +503,7 @@ put_zone(#zone{name = Name} = Zone) ->
     ZoneRecords = prepare_zone_records(ZoneLabels, NamedRecords),
     true = insert_zone(SignedZone#zone{records = []}),
     NumDeleted = delete_zone_records(ZoneLabels),
+    delete_zone_sync_counters(ZoneLabels),
     maybe_notify_of_zone_replacement(NumDeleted, NormalizedName),
     put_zone_records(ZoneRecords),
     ok;
@@ -579,7 +585,8 @@ delete_zone(Name) when is_binary(Name) ->
     delete_zone(Labels);
 delete_zone(ZoneLabels) when is_list(ZoneLabels) ->
     ets:delete(erldns_zones_table, ZoneLabels),
-    delete_zone_records(ZoneLabels).
+    delete_zone_records(ZoneLabels),
+    delete_zone_sync_counters(ZoneLabels).
 
 -doc #{group => ~"API: Mutations"}.
 -doc "Remove zone RRSet".
@@ -1035,6 +1042,10 @@ pattern_zone_dname_type_delete(ZoneLabels, Labels, Type) ->
 pattern_zone_delete(ZoneLabels) ->
     Pattern = {{{ZoneLabels, '_', '_'}, '_'}, [], [true]},
     ets:select_delete(erldns_zone_records_typed, [Pattern]).
+
+delete_zone_sync_counters(ZoneLabels) ->
+    Pattern = {{{ZoneLabels, '_', '_'}, '_'}, [], [true]},
+    ets:select_delete(erldns_sync_counters, [Pattern]).
 
 maybe_notify_of_zone_replacement(0, _) ->
     ok;

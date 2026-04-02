@@ -140,7 +140,9 @@ groups() ->
             delete_zone_rrset_records_count_matches_cache,
             delete_zone_rrset_records_count_underflow,
             delete_zone_rrset_records_zone_not_found,
-            rrset_sync_counter_dname_and_trailing_dot_same_key
+            rrset_sync_counter_dname_and_trailing_dot_same_key,
+            delete_zone_cleans_sync_counters,
+            put_zone_cleans_sync_counters
         ]}
     ].
 
@@ -2632,6 +2634,88 @@ rrset_sync_counter_dname_and_trailing_dot_same_key(_) ->
             ZoneLabels, dns_domain:split(RRFqdnNoDot), ?DNS_TYPE_A
         ),
         "labels form"
+    ).
+
+delete_zone_cleans_sync_counters(_) ->
+    ZoneName = unique_name(delete_zone_sync),
+    ZoneLabels = dns_domain:split(ZoneName),
+    RRFqdn = dns_domain:join([~"www", ZoneName]),
+    SOA = #dns_rr{
+        name = ZoneName,
+        type = ?DNS_TYPE_SOA,
+        data = #dns_rrdata_soa{
+            mname = dns_domain:join([~"ns1", ZoneName]),
+            rname = dns_domain:join([~"admin", ZoneName]),
+            serial = 1,
+            refresh = 1,
+            retry = 1,
+            expire = 1,
+            minimum = 1
+        },
+        ttl = 3600
+    },
+    Record = #dns_rr{
+        name = RRFqdn,
+        type = ?DNS_TYPE_A,
+        ttl = 300,
+        data = #dns_rrdata_a{ip = {1, 2, 3, 4}}
+    },
+    ok = erldns_zone_cache:put_zone({ZoneName, ~"v1", [SOA, Record]}),
+    %% Create a sync counter via put_zone_rrset
+    ok = erldns_zone_cache:put_zone_rrset({ZoneName, ~"v2", [Record]}, RRFqdn, ?DNS_TYPE_A, 42),
+    ?assertEqual(
+        42,
+        erldns_zone_cache:get_rrset_sync_counter(ZoneLabels, dns_domain:split(RRFqdn), ?DNS_TYPE_A),
+        "counter should exist before delete"
+    ),
+    %% Delete the zone
+    erldns_zone_cache:delete_zone(ZoneLabels),
+    %% Counter must be gone (default 0)
+    ?assertEqual(
+        0,
+        erldns_zone_cache:get_rrset_sync_counter(ZoneLabels, dns_domain:split(RRFqdn), ?DNS_TYPE_A),
+        "counter should be cleaned up after zone deletion"
+    ).
+
+put_zone_cleans_sync_counters(_) ->
+    ZoneName = unique_name(put_zone_sync),
+    ZoneLabels = dns_domain:split(ZoneName),
+    RRFqdn = dns_domain:join([~"www", ZoneName]),
+    SOA = #dns_rr{
+        name = ZoneName,
+        type = ?DNS_TYPE_SOA,
+        data = #dns_rrdata_soa{
+            mname = dns_domain:join([~"ns1", ZoneName]),
+            rname = dns_domain:join([~"admin", ZoneName]),
+            serial = 1,
+            refresh = 1,
+            retry = 1,
+            expire = 1,
+            minimum = 1
+        },
+        ttl = 3600
+    },
+    Record = #dns_rr{
+        name = RRFqdn,
+        type = ?DNS_TYPE_A,
+        ttl = 300,
+        data = #dns_rrdata_a{ip = {1, 2, 3, 4}}
+    },
+    ok = erldns_zone_cache:put_zone({ZoneName, ~"v1", [SOA, Record]}),
+    %% Create a sync counter via put_zone_rrset
+    ok = erldns_zone_cache:put_zone_rrset({ZoneName, ~"v2", [Record]}, RRFqdn, ?DNS_TYPE_A, 99),
+    ?assertEqual(
+        99,
+        erldns_zone_cache:get_rrset_sync_counter(ZoneLabels, dns_domain:split(RRFqdn), ?DNS_TYPE_A),
+        "counter should exist before zone replacement"
+    ),
+    %% Replace the zone via put_zone (full reload)
+    ok = erldns_zone_cache:put_zone({ZoneName, ~"v3", [SOA]}),
+    %% Counter must be gone (default 0) — old RRset no longer exists
+    ?assertEqual(
+        0,
+        erldns_zone_cache:get_rrset_sync_counter(ZoneLabels, dns_domain:split(RRFqdn), ?DNS_TYPE_A),
+        "counter should be cleaned up after zone replacement"
     ).
 
 init_supervision_tree(Config, Role) ->
