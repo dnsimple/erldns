@@ -10,3 +10,8 @@ updates:
       - dependencies
     cooldown:
       default-days: 3
+    groups:
+      actions-patch-minor:
+        update-types:
+          - patch
+          - minor
