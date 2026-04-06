@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.5.0
+
+### Added
+
+- Telemetry events to zone creation and deletion [#344](https://github.com/dnsimple/erldns/pull/344)
+
+### Fixed
+
+- Record counters are correctly garbage collected [#344](https://github.com/dnsimple/erldns/pull/344)
+
 ## v10.4.4
 
 ### Fixed
