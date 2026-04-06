@@ -21,6 +21,7 @@ count := 1
 - Metadata:
 ```erlang
 zone_name := dns:dname()
+zone_labels := dns:labels()
 ```
 
 ### `[erldns, zone, delete]`
@@ -35,6 +36,7 @@ count := 1
 - Metadata:
 ```erlang
 zone_name := dns:dname()
+zone_labels := dns:labels()
 ```
 """.
 
@@ -535,7 +537,8 @@ put_zone(#zone{name = Name} = Zone) ->
     delete_zone_sync_counters(ZoneLabels),
     maybe_notify_of_zone_replacement(NumDeleted, NormalizedName),
     put_zone_records(ZoneRecords),
-    telemetry:execute([erldns, zone, put], #{count => 1}, #{zone_name => NormalizedName}),
+    Metadata = #{zone_name => NormalizedName, zone_labels => ZoneLabels},
+    telemetry:execute([erldns, zone, put], #{count => 1}, Metadata),
     ok;
 put_zone({Name, Sha, Records}) ->
     put_zone({Name, Sha, Records, []});
@@ -618,7 +621,8 @@ delete_zone(ZoneLabels) when is_list(ZoneLabels) ->
     delete_zone_records(ZoneLabels),
     delete_zone_sync_counters(ZoneLabels),
     ZoneName = dns_domain:join(ZoneLabels, fqdn),
-    telemetry:execute([erldns, zone, delete], #{count => 1}, #{zone_name => ZoneName}).
+    Metadata = #{zone_name => ZoneName, zone_labels => ZoneLabels},
+    telemetry:execute([erldns, zone, delete], #{count => 1}, Metadata).
 
 -doc #{group => ~"API: Mutations"}.
 -doc "Remove zone RRSet".
