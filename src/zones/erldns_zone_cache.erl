@@ -7,6 +7,37 @@ responsibility of the client to call this API with normalised names.
 This is to avoid normalising already normalised names, which can result into computational waste.
 As the client might need to call multiple points of this API, the client can ensure to normalise
 once and use multiple times.
+
+## Telemetry events
+
+### `[erldns, zone, put]`
+
+Emitted at the end of `put_zone/1`, after the zone and its records have been inserted.
+
+- Measurements:
+```erlang
+count := 1
+```
+- Metadata:
+```erlang
+zone_name := dns:dname()
+zone_labels := dns:labels()
+```
+
+### `[erldns, zone, delete]`
+
+Emitted at the end of `delete_zone/1`, after the zone, its records, and sync counters
+have been removed.
+
+- Measurements:
+```erlang
+count := 1
+```
+- Metadata:
+```erlang
+zone_name := dns:dname()
+zone_labels := dns:labels()
+```
 """.
 
 %% This module's gen_server holds three tables:
@@ -23,10 +54,11 @@ once and use multiple times.
 %%
 %% This serves two purposes: smaller memory footprint, and when traversing the tree for a path in a
 %% zone, traversal will forcefully stop when it arrives at the parent zone, ensuring no resources
-%% are waste looking for a record above the zone boundary.
+%% are wasted looking for a record above the zone boundary.
 %%
 %% 3. `erldns_sync_counters`:
-%% Holds a counter of updates for each RR.
+%% Holds a counter of updates for each RR, keyed by
+%% `{<zone labels>, <reduced record labels>, dns:type()}` — same key shape as table 2.
 
 -behaviour(gen_server).
 
@@ -345,7 +377,8 @@ get_rrset_sync_counter(ZoneName, RRFqdn, Type) when is_binary(RRFqdn) ->
 get_rrset_sync_counter(ZoneNameLabels, RRFqdnLabels, Type) when
     is_list(ZoneNameLabels), is_list(RRFqdnLabels)
 ->
-    Key = {ZoneNameLabels, RRFqdnLabels, Type},
+    ReducedLabels = reduce_record_labels(ZoneNameLabels, RRFqdnLabels),
+    Key = {ZoneNameLabels, ReducedLabels, Type},
     % return default value of 0
     ets:lookup_element(erldns_sync_counters, Key, 2, 0).
 
@@ -441,11 +474,14 @@ zone_names_and_versions() ->
     ).
 
 %% Update the RRSet sync counter for the given RR set name and type in the given zone.
+%% The key uses reduced labels (relative to the zone) for consistency
+%% with erldns_zone_records_typed.
 -spec write_rrset_sync_counter(dns:labels(), dns:labels(), dns:type(), integer()) -> term().
 write_rrset_sync_counter(ZoneNameLabels, RRFqdnLabels, Type, Counter) when
     is_list(ZoneNameLabels), is_list(RRFqdnLabels)
 ->
-    ets:insert(erldns_sync_counters, {{ZoneNameLabels, RRFqdnLabels, Type}, Counter}).
+    ReducedLabels = reduce_record_labels(ZoneNameLabels, RRFqdnLabels),
+    ets:insert(erldns_sync_counters, {{ZoneNameLabels, ReducedLabels, Type}, Counter}).
 
 % Write API
 %% All write operations write records with normalized names, hence reads won't need to
@@ -498,8 +534,11 @@ put_zone(#zone{name = Name} = Zone) ->
     ZoneRecords = prepare_zone_records(ZoneLabels, NamedRecords),
     true = insert_zone(SignedZone#zone{records = []}),
     NumDeleted = delete_zone_records(ZoneLabels),
+    delete_zone_sync_counters(ZoneLabels),
     maybe_notify_of_zone_replacement(NumDeleted, NormalizedName),
     put_zone_records(ZoneRecords),
+    Metadata = #{zone_name => NormalizedName, zone_labels => ZoneLabels},
+    telemetry:execute([erldns, zone, put], #{count => 1}, Metadata),
     ok;
 put_zone({Name, Sha, Records}) ->
     put_zone({Name, Sha, Records, []});
@@ -579,7 +618,11 @@ delete_zone(Name) when is_binary(Name) ->
     delete_zone(Labels);
 delete_zone(ZoneLabels) when is_list(ZoneLabels) ->
     ets:delete(erldns_zones_table, ZoneLabels),
-    delete_zone_records(ZoneLabels).
+    delete_zone_records(ZoneLabels),
+    delete_zone_sync_counters(ZoneLabels),
+    ZoneName = dns_domain:join(ZoneLabels, fqdn),
+    Metadata = #{zone_name => ZoneName, zone_labels => ZoneLabels},
+    telemetry:execute([erldns, zone, delete], #{count => 1}, Metadata).
 
 -doc #{group => ~"API: Mutations"}.
 -doc "Remove zone RRSet".
@@ -725,16 +768,16 @@ put_zone_records(RecordsByName) ->
 put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Records) ->
     TypedRecords = build_typed_index(Records),
     maps:foreach(
-        fun(Type, Record) ->
-            do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Record)
+        fun(Type, RRSet) ->
+            do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, RRSet)
         end,
         TypedRecords
     ).
 
 %% Expects record labels to be already reduced
 -spec do_put_zone_records_typed_entry(dns:labels(), dns:labels(), dns:type(), [dns:rr()]) -> true.
-do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, Record) ->
-    ets:insert(erldns_zone_records_typed, {{ZoneLabels, ReducedLabels, Type}, Record}).
+do_put_zone_records_typed_entry(ZoneLabels, ReducedLabels, Type, RRSet) ->
+    ets:insert(erldns_zone_records_typed, {{ZoneLabels, ReducedLabels, Type}, RRSet}).
 
 -compile({inline, [make_improper_list/1]}).
 make_improper_list(List) ->
@@ -1035,6 +1078,10 @@ pattern_zone_dname_type_delete(ZoneLabels, Labels, Type) ->
 pattern_zone_delete(ZoneLabels) ->
     Pattern = {{{ZoneLabels, '_', '_'}, '_'}, [], [true]},
     ets:select_delete(erldns_zone_records_typed, [Pattern]).
+
+delete_zone_sync_counters(ZoneLabels) ->
+    Pattern = {{{ZoneLabels, '_', '_'}, '_'}, [], [true]},
+    ets:select_delete(erldns_sync_counters, [Pattern]).
 
 maybe_notify_of_zone_replacement(0, _) ->
     ok;
