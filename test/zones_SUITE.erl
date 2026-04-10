@@ -32,6 +32,8 @@ groups() ->
             load_dnssec_zone,
             wildcard_loose,
             load_zonefile,
+            worker_do_load_file_zonefile,
+            worker_do_load_file_json,
             load_zonefile_binary,
             load_zonefile_format_auto,
             load_zonefile_rfc3597,
@@ -1779,6 +1781,36 @@ load_zonefile(Config) ->
     LoadConfig = #{path => Path, format => zonefile},
     ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig)).
 
+%% Exercises `do_load_file/3` (extension dispatch + zonefile parsing) without the getter/supervisor.
+worker_do_load_file_zonefile(Config) ->
+    DataDir = proplists:get_value(data_dir, Config),
+    Path = filename:join(DataDir, "example.zone"),
+    [Zone] = erldns_zone_loader_worker:do_load_file(Path, DataDir, true),
+    ?assert(
+        lists:any(
+            fun
+                (#dns_rr{type = ?DNS_TYPE_SOA}) -> true;
+                (_) -> false
+            end,
+            Zone#zone.records
+        )
+    ),
+    ?assert(Zone#zone.record_count > 0).
+
+worker_do_load_file_json(Config) ->
+    DataDir = proplists:get_value(data_dir, Config),
+    Path = filename:join(DataDir, "standard.json"),
+    [Zone] = erldns_zone_loader_worker:do_load_file(Path, DataDir, true),
+    ?assert(
+        lists:any(
+            fun
+                (#dns_rr{type = ?DNS_TYPE_SOA}) -> true;
+                (_) -> false
+            end,
+            Zone#zone.records
+        )
+    ).
+
 load_zonefile_binary(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, ~"example.zone"),
@@ -1809,7 +1841,27 @@ load_zonefile_with_custom_decoder(Config) ->
     Result = erldns_zone_loader:load_zones(LoadConfig),
     ?assertMatch(1, Result),
     Records = erldns_zone_cache:get_zone_records(~"example-rfc3597.com"),
-    ?assert(lists:any(fun(#dns_rr{data = Data}) -> ~"example.net" =:= Data end, Records)).
+    %% RFC 3597 hex RDATA is stored as binary;
+    %% it is not passed through custom JSON codecs (those apply to JSON zone files).
+    ?assert(
+        lists:any(
+            fun
+                (#dns_rr{data = Data}) when is_binary(Data) ->
+                    case json:decode(Data) of
+                        #{
+                            ~"type" := ~"SAMPLE",
+                            ~"data" := #{~"dname" := ~"example.net"}
+                        } ->
+                            true;
+                        _ ->
+                            false
+                    end;
+                (_) ->
+                    false
+            end,
+            Records
+        )
+    ).
 
 load_zonefile_with_dnssec(Config) ->
     DataDir = proplists:get_value(data_dir, Config),

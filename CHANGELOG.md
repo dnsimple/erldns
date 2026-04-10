@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.5.1
+
+### Changed
+
+- Zone loading from zonefiles: records from `dns_zone:parse_file/1` now load successfully.
+
 ## v10.5.0
 
 ### Added
