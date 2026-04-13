@@ -5,6 +5,10 @@
 
 -export([load_file/4, start_link/4, init/4]).
 
+-ifdef(TEST).
+-export([do_load_file/3]).
+-endif.
+
 -spec load_file(erldns_zone_loader_getter:tag(), file:filename(), file:name(), boolean()) ->
     reference().
 load_file(Tag, File, KeysPath, Strict) ->
@@ -37,11 +41,11 @@ run(Tag, File, KeysPath, Strict, AliasMon) ->
         throw:Reason ->
             AliasMon ! {Tag, AliasMon, error, Reason};
         error:unexpected_end = Error ->
-            AliasMon ! {Tag, AliasMon, error, {json_error, Error}};
+            AliasMon ! {Tag, AliasMon, error, {json_error, #{error => Error, file => File}}};
         error:{invalid_byte, _} = Error ->
-            AliasMon ! {Tag, AliasMon, error, {json_error, Error}};
+            AliasMon ! {Tag, AliasMon, error, {json_error, #{error => Error, file => File}}};
         error:{unexpected_sequence, _} = Error ->
-            AliasMon ! {Tag, AliasMon, error, {json_error, Error}};
+            AliasMon ! {Tag, AliasMon, error, {json_error, #{error => Error, file => File}}};
         error:Reason:StackTrace ->
             AliasMon ! {Tag, AliasMon, error, {Reason, StackTrace}}
     end.
@@ -85,8 +89,7 @@ ensure_zones([], _) ->
 -spec load_zone_file(file:filename(), file:name(), boolean()) -> [erldns:zone()].
 load_zone_file(File, KeysPath, Strict) ->
     maybe
-        {ok, Records0} ?= dns_zone:parse_file(File),
-        Records = parse_zonefile_records(Records0, Strict),
+        {ok, Records} ?= dns_zone:parse_file(File),
         Soa = #dns_rr{name = ZoneName} ?= lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, Records),
         Sha = crypto:hash(sha256, term_to_binary(Soa)),
         Keys = load_private_keys(ZoneName, KeysPath),
@@ -119,27 +122,6 @@ load_private_keys(ZoneName, KeysDir) ->
             []
     end.
 
--spec parse_zonefile_records([dns:rr()], boolean()) -> [dns:rr()].
-parse_zonefile_records(Records, Strict) ->
-    lists:map(fun(Record) -> parse_zonefile_record(Record, Strict) end, Records).
-
-%% Parses a JSON map (from a key file) into an Erlang crypto key record.
--spec parse_zonefile_record(dns:rr(), boolean()) -> dns:rr().
-parse_zonefile_record(#dns_rr{data = Data} = Record, Strict) when is_binary(Data) ->
-    maybe
-        {ok, Json} ?= safe_json_decode_record(Data),
-        #dns_rr{} ?= erldns_zone_codec:decode_record(Json)
-    else
-        not_implemented ->
-            Strict andalso erlang:throw({custom_record_could_not_be_decoded, Record}),
-            Record;
-        {json_error, Reason} ->
-            Strict andalso erlang:throw(Reason),
-            Record
-    end;
-parse_zonefile_record(Record, _) ->
-    Record.
-
 -spec safe_json_decode_list(binary()) -> {ok, [json:decode_value()]} | {json_error, atom()}.
 safe_json_decode_list(Binary) ->
     case json:decode(Binary) of
@@ -147,13 +129,4 @@ safe_json_decode_list(Binary) ->
             {ok, List};
         _ ->
             {json_error, invalid_zone_file}
-    end.
-
--spec safe_json_decode_record(binary()) -> {ok, json:decode_value()} | {json_error, atom()}.
-safe_json_decode_record(Binary) ->
-    case json:decode(Binary) of
-        Map when is_map(Map) ->
-            {ok, Map};
-        _ ->
-            {json_error, invalid_record}
     end.
