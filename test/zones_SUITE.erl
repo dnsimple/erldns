@@ -1239,12 +1239,12 @@ json_record_uri_to_erlang(_) ->
 
 json_record_wallet_to_erlang(_) ->
     Name = ~"example.com",
-    WalletData = base64:encode(<<1, 2, 3, 4, 5>>),
+    WalletData = [~"BTC", ~"abcdefghijklmnopqrstuvwxyz"],
     ?assertEqual(
         #dns_rr{
             name = Name,
             type = ?DNS_TYPE_WALLET,
-            data = #dns_rrdata_wallet{data = <<1, 2, 3, 4, 5>>},
+            data = #dns_rrdata_wallet{data = WalletData},
             ttl = 3600
         },
         erldns_zone_decoder:json_record_to_erlang(#{
@@ -1252,17 +1252,6 @@ json_record_wallet_to_erlang(_) ->
             ~"type" => ~"WALLET",
             ~"ttl" => 3600,
             ~"data" => #{~"data" => WalletData},
-            ~"context" => null
-        })
-    ),
-    %% Negative case: invalid base64 data
-    ?assertEqual(
-        not_implemented,
-        erldns_zone_decoder:json_record_to_erlang(#{
-            ~"name" => Name,
-            ~"type" => ~"WALLET",
-            ~"ttl" => 3600,
-            ~"data" => #{~"data" => <<"invalid_base64!!!">>},
             ~"context" => null
         })
     ).
@@ -1614,7 +1603,7 @@ encode_decode_wallet(_) ->
     Record = #dns_rr{
         name = Name,
         type = ?DNS_TYPE_WALLET,
-        data = #dns_rrdata_wallet{data = <<1, 2, 3, 4, 5>>},
+        data = #dns_rrdata_wallet{data = [~"BTC", ~"abcdefghijklmnopqrstuvwxyz"]},
         ttl = 3600
     },
     Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
