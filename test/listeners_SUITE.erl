@@ -19,6 +19,7 @@ all() ->
         {group, tls},
         build_error_response_tuple_format,
         sched_mon_coverage,
+        udp_load_shedding,
         reset_queues,
         stats
     ].
@@ -47,7 +48,6 @@ groups() ->
             udp_reactivate,
             udp_coverage,
             udp_encoder_failure,
-            udp_load_shedding,
             udp_trailing_garbage_raises_error_returns_correct_answer,
             udp_notimp_raises_error_returns_notimp,
             udp_not_a_question_raises_error_returns_nothing
