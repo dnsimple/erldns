@@ -85,7 +85,6 @@ groups() ->
             json_record_svcb_keynnnn_format,
             json_record_null_data,
             json_record_unsupported_type,
-            json_record_context_filtered,
             encode_meta_to_json,
             encode_decode_svcb,
             encode_decode_https,
@@ -104,6 +103,7 @@ groups() ->
         {codec_sequential, [], [
             custom_decode,
             encode_meta_to_json_dnssec,
+            json_record_context_filtered,
             bad_custom_codecs_module_does_not_exist,
             bad_custom_codecs_module_does_not_export_callbacks
         ]},
