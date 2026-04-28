@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.5.2
+
+### Changed
+
+- Export `get_pipeline/0,1` from `erldns_pipeline`
+
 ## v10.5.1
 
 ### Changed

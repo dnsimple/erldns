@@ -693,7 +693,8 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
                             counter => Counter
                         },
                         ?LOG_METADATA
-                    )
+                    ),
+                    ok
             end;
         zone_not_found ->
             zone_not_found
