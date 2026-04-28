@@ -326,6 +326,7 @@ deps() ->
 
 -export([call/2, call_custom/3, store_pipeline/2, delete_pipeline/1]).
 -export([is_pipe_configured/1, is_pipe_configured/2]).
+-export([get_pipeline/0, get_pipeline/1]).
 -export([start_link/0, init/1, store_pipeline/0]).
 %% Continuation API for suspending pipes
 -export([execute_work/1, resume_pipeline/1]).
@@ -334,7 +335,7 @@ deps() ->
 -ifdef(TEST).
 -export([def_opts/0]).
 -else.
--compile({inline, [def_opts/0]}).
+-compile({inline, [def_opts/0, get_pipeline/0, get_pipeline/1]}).
 -endif.
 
 -define(DEFAULT_PACKET_PIPELINE, [
@@ -577,10 +578,12 @@ worker(Module) ->
 worker(Name, Module, Args) ->
     #{id => Name, start => {Module, start_link, Args}, type => worker}.
 
+-doc "Get main pipeline".
 -spec get_pipeline() -> {pipeline(), opts()}.
 get_pipeline() ->
     persistent_term:get(?MODULE).
 
+-doc "Get main pipeline".
 -spec get_pipeline(term()) -> {pipeline(), opts()}.
 get_pipeline(PipelineName) ->
     persistent_term:get(PipelineName).
