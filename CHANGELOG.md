@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.5.3
+
+### Changed
+
+- Improve transport logs
+- Improve pipeline dependency error message
+
 ## v10.5.2
 
 ### Changed

@@ -150,10 +150,8 @@ handle_udp_work(Socket, IpAddr, Port, TS, Bin) ->
         handle_decoded(Socket, IpAddr, Port, TS, Decoded)
     catch
         Class:Reason:Stacktrace ->
-            ExceptionMetadata = #{
-                transport => udp, kind => Class, reason => Reason, stacktrace => Stacktrace
-            },
-            request_error_event(ExceptionMetadata)
+            ExceptionMetadata = #{kind => Class, reason => Reason, stacktrace => Stacktrace},
+            raise_event(error, ExceptionMetadata)
     end.
 
 -spec handle_decoded(Socket, IpAddr, Port, TS0, Msg) -> ok when
@@ -175,21 +173,20 @@ handle_decoded(Socket, IpAddr, Port, TS0, #dns_message{} = Msg) ->
     handle_pipeline_response(Socket, IpAddr, Port, TS0, Response);
 handle_decoded(Socket, IpAddr, Port, TS0, {trailing_garbage, #dns_message{} = Msg, Trailing}) ->
     Metadata = #{
-        transport => udp,
         reason => trailing_garbage,
         trailing_garbage => Trailing,
         message => Msg,
         monotonic_time => TS0
     },
-    request_error_event(Metadata),
+    raise_event(info, Metadata),
     handle_decoded(Socket, IpAddr, Port, TS0, Msg);
 handle_decoded(Socket, IpAddr, Port, TS0, {notimp, #dns_message{} = Msg, _}) ->
-    Metadata = #{transport => udp, reason => notimp, message => Msg, monotonic_time => TS0},
-    request_error_event(Metadata),
+    Metadata = #{reason => notimp, message => Msg, monotonic_time => TS0},
+    raise_event(warning, Metadata),
     handle_pipeline_response(Socket, IpAddr, Port, TS0, Msg);
 handle_decoded(_, _, _, TS0, {Error, Msg, _}) ->
-    Metadata = #{transport => udp, reason => Error, message => Msg, monotonic_time => TS0},
-    request_error_event(Metadata).
+    Metadata = #{reason => Error, message => Msg, monotonic_time => TS0},
+    raise_event(error, Metadata).
 
 -spec handle_pipeline_response(Socket, IpAddr, Port, TS, PipeResult) -> ok when
     PipeResult :: erldns_pipeline:result(),
@@ -213,8 +210,15 @@ handle_pipeline_response(Socket, IpAddr, Port, TS0, #dns_message{} = Response) -
     gen_udp:send(Socket, IpAddr, Port, EncodedResponse),
     measure_time(Response, EncodedResponse, TS0).
 
-request_error_event(Metadata) ->
-    ?LOG_ERROR(Metadata, ?LOG_METADATA),
+-compile({inline, [raise_event/2]}).
+raise_event(info, Metadata) ->
+    ?LOG_INFO(Metadata#{what => transport_error, transport => udp}, ?LOG_METADATA),
+    telemetry:execute([erldns, request, error], #{count => 1}, Metadata);
+raise_event(warning, Metadata) ->
+    ?LOG_WARNING(Metadata#{what => transport_error, transport => udp}, ?LOG_METADATA),
+    telemetry:execute([erldns, request, error], #{count => 1}, Metadata);
+raise_event(error, Metadata) ->
+    ?LOG_ERROR(Metadata#{what => transport_error, transport => udp}, ?LOG_METADATA),
     telemetry:execute([erldns, request, error], #{count => 1}, Metadata).
 
 measure_time(Response, EncodedResponse, TS0) ->

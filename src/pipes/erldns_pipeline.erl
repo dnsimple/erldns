@@ -674,7 +674,7 @@ validate_deps_satisfied(Module, OriginalPipes, Deps) ->
     Prerequisites = maps:get(prerequisites, Deps, []),
     Dependents = maps:get(dependents, Deps, []),
     DepHint = ~"Prerequisite must appear earlier in pipeline",
-    PreHint = ~"Dependent must appear earlier in pipeline",
+    PreHint = ~"Dependent must appear later in pipeline",
     PreSafisfied = ensure_satisfied(Module, ModulesDefinedBefore, PreHint, Prerequisites),
     DepSafisfied = ensure_satisfied(Module, ModulesDefinedAfter, DepHint, Dependents),
     case {PreSafisfied, DepSafisfied} of
