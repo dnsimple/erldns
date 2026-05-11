@@ -64,8 +64,8 @@ handle_decoded({notimp, #dns_message{} = Msg, _}, TS0, Socket, SocketType, _, _)
     Metadata = #{reason => notimp, message => Msg, monotonic_time => TS0},
     raise_event(warning, Metadata),
     handle_pipeline_response(Msg, TS0, Socket, SocketType);
-handle_decoded({Error, Msg, _}, TS0, _, _, _, _) ->
-    Metadata = #{reason => Error, message => Msg, monotonic_time => TS0},
+handle_decoded({Error, Msg, Bin}, TS0, _, _, _, _) ->
+    Metadata = #{reason => Error, message => Msg, binary => Bin, monotonic_time => TS0},
     raise_event(error, Metadata).
 
 -spec handle_pipeline_response(PipeResult, TS, Socket, SocketType) -> ok when

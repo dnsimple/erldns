@@ -184,8 +184,8 @@ handle_decoded(Socket, IpAddr, Port, TS0, {notimp, #dns_message{} = Msg, _}) ->
     Metadata = #{reason => notimp, message => Msg, monotonic_time => TS0},
     raise_event(warning, Metadata),
     handle_pipeline_response(Socket, IpAddr, Port, TS0, Msg);
-handle_decoded(_, _, _, TS0, {Error, Msg, _}) ->
-    Metadata = #{reason => Error, message => Msg, monotonic_time => TS0},
+handle_decoded(_, _, _, TS0, {Error, Msg, Bin}) ->
+    Metadata = #{reason => Error, message => Msg, binary => Bin, monotonic_time => TS0},
     raise_event(error, Metadata).
 
 -spec handle_pipeline_response(Socket, IpAddr, Port, TS, PipeResult) -> ok when
