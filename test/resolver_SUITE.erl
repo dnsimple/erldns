@@ -16,6 +16,8 @@ all() ->
         resolve_authoritative_zone_cut,
         resolve_authoritative_zone_cut_with_cnames,
         resolve_authoritative_zone_cut_with_cname_chain_through_wildcard,
+        resolve_authoritative_zone_cut_with_plain_cname_chain,
+        resolve_authoritative_zone_cut_drops_occluded_cname,
         resolve_authoritative_self_delegation_trailing_dot_name_mismatch,
         resolve_authoritative_max_depth_returns_servfail
     ].
@@ -153,6 +155,108 @@ resolve_authoritative_zone_cut_with_cname_chain_through_wildcard(_) ->
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
     ?assertEqual([DelegationNS], A#dns_message.authority),
     ?assertEqual([Cname1, ExpandedWildcardCname], A#dns_message.answers),
+    erldns_zone_cache:delete_zone(ZoneName).
+
+%% Plain 2-hop CNAME chain (no wildcard) terminating at a delegated zonecut.
+%% Both CNAMEs are owned in the parent zone; only the last hop's target crosses
+%% the cut. This is the simplest reproducer of the owner-vs-target filter bug,
+%% isolated from the RFC 4592 wildcard mechanics covered by the chain-through-
+%% wildcard test above.
+resolve_authoritative_zone_cut_with_plain_cname_chain(_) ->
+    erldns_zone_cache:start_link(),
+    erldns_handler:start_link(),
+    ZoneName = dns_domain:to_lower(~"plain-chain-zone-cut.example"),
+    Qname = ~"a.plain-chain-zone-cut.example",
+    SoaData = #dns_rrdata_soa{
+        mname = ~"ns1.plain-chain-zone-cut.example",
+        rname = ~"admin.plain-chain-zone-cut.example",
+        serial = 1,
+        refresh = 3600,
+        retry = 600,
+        expire = 86400,
+        minimum = 300
+    },
+    SOA = #dns_rr{name = ZoneName, type = ?DNS_TYPE_SOA, ttl = 3600, data = SoaData},
+    Cname1 = #dns_rr{
+        name = Qname,
+        type = ?DNS_TYPE_CNAME,
+        ttl = 3600,
+        data = #dns_rrdata_cname{dname = ~"b.plain-chain-zone-cut.example"}
+    },
+    Cname2 = #dns_rr{
+        name = ~"b.plain-chain-zone-cut.example",
+        type = ?DNS_TYPE_CNAME,
+        ttl = 3600,
+        data = #dns_rrdata_cname{dname = ~"target.delegated.plain-chain-zone-cut.example"}
+    },
+    DelegationNS = #dns_rr{
+        name = ~"delegated.plain-chain-zone-cut.example",
+        type = ?DNS_TYPE_NS,
+        ttl = 3600,
+        data = #dns_rrdata_ns{dname = ~"ns-ext.example."}
+    },
+    Z = erldns_zone_codec:build_zone(
+        ZoneName, ~"digest", [SOA, Cname1, Cname2, DelegationNS], []
+    ),
+    ok = erldns_zone_cache:put_zone(Z),
+    Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
+    A = erldns_resolver:resolve_authoritative(
+        Msg, Z, Qname, dns_domain:split(Qname), ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+    ),
+    ?assertEqual(false, A#dns_message.aa),
+    ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
+    ?assertEqual([DelegationNS], A#dns_message.authority),
+    ?assertEqual([Cname1, Cname2], A#dns_message.answers),
+    erldns_zone_cache:delete_zone(ZoneName).
+
+%% Occluded data (RFC 5936 §3.5, RFC 2181 §6): records whose owner sits below a
+%% zone cut in the parent zone MUST NOT be served by the parent. If the
+%% maybe_add_zonecut_records filter ever regresses back to keying off the CNAME
+%% target instead of the owner, a CNAME owned below the cut whose target is
+%% also below the cut would leak into the answer section. This test pins the
+%% owner-based behavior so that regression would fail loudly.
+resolve_authoritative_zone_cut_drops_occluded_cname(_) ->
+    erldns_zone_cache:start_link(),
+    erldns_handler:start_link(),
+    ZoneName = dns_domain:to_lower(~"occluded-cname.example"),
+    Qname = ~"occluded.delegated.occluded-cname.example",
+    SoaData = #dns_rrdata_soa{
+        mname = ~"ns1.occluded-cname.example",
+        rname = ~"admin.occluded-cname.example",
+        serial = 1,
+        refresh = 3600,
+        retry = 600,
+        expire = 86400,
+        minimum = 300
+    },
+    SOA = #dns_rr{name = ZoneName, type = ?DNS_TYPE_SOA, ttl = 3600, data = SoaData},
+    %% CNAME whose owner AND target both sit below the delegated cut.
+    OccludedCname = #dns_rr{
+        name = Qname,
+        type = ?DNS_TYPE_CNAME,
+        ttl = 3600,
+        data = #dns_rrdata_cname{
+            dname = ~"sibling.delegated.occluded-cname.example"
+        }
+    },
+    DelegationNS = #dns_rr{
+        name = ~"delegated.occluded-cname.example",
+        type = ?DNS_TYPE_NS,
+        ttl = 3600,
+        data = #dns_rrdata_ns{dname = ~"ns-ext.example."}
+    },
+    Z = erldns_zone_codec:build_zone(
+        ZoneName, ~"digest", [SOA, OccludedCname, DelegationNS], []
+    ),
+    ok = erldns_zone_cache:put_zone(Z),
+    Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
+    A = erldns_resolver:resolve_authoritative(
+        Msg, Z, Qname, dns_domain:split(Qname), ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+    ),
+    ?assertEqual(false, A#dns_message.aa),
+    ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
+    ?assertEqual([DelegationNS], A#dns_message.authority),
+    ?assertEqual([], A#dns_message.answers),
     erldns_zone_cache:delete_zone(ZoneName).
 
 %% NS at the same name as the answer (self-delegation) must be detected even when
