@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.5.5
+
 ### Fixed
 
 - CNAME chains terminating at a zonecut no longer drop earlier hops from the answer section. `maybe_add_zonecut_records/5` previously filtered CNAMEs by target name, which removed any CNAME whose target stayed inside the parent zone — breaking multi-hop chains where only the last hop crossed the cut. The filter now keys off the CNAME owner name, preserving every parent-zone CNAME in the chain.
