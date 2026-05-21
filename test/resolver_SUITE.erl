@@ -15,6 +15,7 @@ all() ->
         resolve_authoritative_host_not_found,
         resolve_authoritative_zone_cut,
         resolve_authoritative_zone_cut_with_cnames,
+        resolve_authoritative_zone_cut_with_cname_chain_through_wildcard,
         resolve_authoritative_self_delegation_trailing_dot_name_mismatch,
         resolve_authoritative_max_depth_returns_servfail
     ].
@@ -96,6 +97,52 @@ resolve_authoritative_zone_cut_with_cnames(_) ->
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
     ?assertEqual(NSRecord, A#dns_message.authority),
     ?assertEqual(CnameRecords, A#dns_message.answers),
+    erldns_zone_cache:delete_zone(ZoneName).
+
+%% A chain of two CNAMEs in the parent zone where the second hop is matched by a
+%% wildcard and the chain terminates at a delegated subzone. Both CNAMEs must
+%% appear in the ANSWER section in chain order; previously the first hop was
+%% filtered out because maybe_add_zonecut_records keyed the filter off the CNAME
+%% target rather than the CNAME owner name.
+resolve_authoritative_zone_cut_with_cname_chain_through_wildcard(_) ->
+    erldns_zone_cache:start_link(),
+    erldns_handler:start_link(),
+    ZoneName = dns_domain:to_lower(~"chain-zone-cut.example"),
+    Qname = ~"ffog.chain-zone-cut.example",
+    SoaData = #dns_rrdata_soa{
+        mname = ~"ns1.chain-zone-cut.example",
+        rname = ~"admin.chain-zone-cut.example",
+        serial = 1, refresh = 3600, retry = 600, expire = 86400, minimum = 300
+    },
+    SOA = #dns_rr{name = ZoneName, type = ?DNS_TYPE_SOA, ttl = 3600, data = SoaData},
+    Cname1 = #dns_rr{
+        name = Qname, type = ?DNS_TYPE_CNAME, ttl = 3600,
+        data = #dns_rrdata_cname{dname = ~"ffog.client.chain-zone-cut.example"}
+    },
+    WildcardCname = #dns_rr{
+        name = ~"*.client.chain-zone-cut.example", type = ?DNS_TYPE_CNAME, ttl = 60,
+        data = #dns_rrdata_cname{dname = ~"swarm.dyn.chain-zone-cut.example"}
+    },
+    %% The wildcard CNAME is instantiated with the queried owner name per RFC 4592 §3.3.1.
+    ExpandedWildcardCname = WildcardCname#dns_rr{
+        name = ~"ffog.client.chain-zone-cut.example"
+    },
+    DelegationNS = #dns_rr{
+        name = ~"dyn.chain-zone-cut.example", type = ?DNS_TYPE_NS, ttl = 3600,
+        data = #dns_rrdata_ns{dname = ~"ns-ext.example."}
+    },
+    Z = erldns_zone_codec:build_zone(
+        ZoneName, ~"digest", [SOA, Cname1, WildcardCname, DelegationNS], []
+    ),
+    ok = erldns_zone_cache:put_zone(Z),
+    Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
+    A = erldns_resolver:resolve_authoritative(
+        Msg, Z, Qname, dns_domain:split(Qname), ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+    ),
+    ?assertEqual(false, A#dns_message.aa),
+    ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
+    ?assertEqual([DelegationNS], A#dns_message.authority),
+    ?assertEqual([Cname1, ExpandedWildcardCname], A#dns_message.answers),
     erldns_zone_cache:delete_zone(ZoneName).
 
 %% NS at the same name as the answer (self-delegation) must be detected even when
