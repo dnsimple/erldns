@@ -112,15 +112,23 @@ resolve_authoritative_zone_cut_with_cname_chain_through_wildcard(_) ->
     SoaData = #dns_rrdata_soa{
         mname = ~"ns1.chain-zone-cut.example",
         rname = ~"admin.chain-zone-cut.example",
-        serial = 1, refresh = 3600, retry = 600, expire = 86400, minimum = 300
+        serial = 1,
+        refresh = 3600,
+        retry = 600,
+        expire = 86400,
+        minimum = 300
     },
     SOA = #dns_rr{name = ZoneName, type = ?DNS_TYPE_SOA, ttl = 3600, data = SoaData},
     Cname1 = #dns_rr{
-        name = Qname, type = ?DNS_TYPE_CNAME, ttl = 3600,
+        name = Qname,
+        type = ?DNS_TYPE_CNAME,
+        ttl = 3600,
         data = #dns_rrdata_cname{dname = ~"ffog.client.chain-zone-cut.example"}
     },
     WildcardCname = #dns_rr{
-        name = ~"*.client.chain-zone-cut.example", type = ?DNS_TYPE_CNAME, ttl = 60,
+        name = ~"*.client.chain-zone-cut.example",
+        type = ?DNS_TYPE_CNAME,
+        ttl = 60,
         data = #dns_rrdata_cname{dname = ~"swarm.dyn.chain-zone-cut.example"}
     },
     %% The wildcard CNAME is instantiated with the queried owner name per RFC 4592 §3.3.1.
@@ -128,7 +136,9 @@ resolve_authoritative_zone_cut_with_cname_chain_through_wildcard(_) ->
         name = ~"ffog.client.chain-zone-cut.example"
     },
     DelegationNS = #dns_rr{
-        name = ~"dyn.chain-zone-cut.example", type = ?DNS_TYPE_NS, ttl = 3600,
+        name = ~"dyn.chain-zone-cut.example",
+        type = ?DNS_TYPE_NS,
+        ttl = 3600,
         data = #dns_rrdata_ns{dname = ~"ns-ext.example."}
     },
     Z = erldns_zone_codec:build_zone(
