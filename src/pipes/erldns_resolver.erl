@@ -158,10 +158,13 @@ maybe_add_zonecut_records(ResultMsg, Zone, QLabels, _, _) ->
         [] ->
             ResultMsg;
         ZonecutRecords ->
+            %% Keep every CNAME whose owner name sits in the parent zone (above the cut),
+            %% so multi-hop chains terminating at a zonecut are preserved intact. Filtering
+            %% by target instead drops earlier hops whose targets stay inside the parent zone.
             FilteredCnameAnswers = lists:filter(
-                fun(#dns_rr{type = RRType, data = Data}) ->
+                fun(#dns_rr{type = RRType, name = Name}) ->
                     ?DNS_TYPE_CNAME =:= RRType andalso
-                        [] =/= detect_zonecut(Zone, AuthLabels, Data#dns_rrdata_cname.dname)
+                        [] =:= detect_zonecut(Zone, AuthLabels, Name)
                 end,
                 ResultMsg#dns_message.answers
             ),
