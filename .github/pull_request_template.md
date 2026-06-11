@@ -33,6 +33,31 @@ Delete this comment when you fill in the section.
 - Listed change, or use the narrative style
 
 
+## :mag: QA
+
+<!--
+Describe the manual QA scenarios a reviewer should run to confirm the change
+behaves as intended. Group related steps under a named scenario.
+
+QA is NOT a checklist of tasks: it is a set of listed items and instructions
+that tell the reviewer what to do and what to expect. Write each step as a
+plain bullet (`- ...`), not a GitHub checkbox (`- [ ] ...`):
+
+    **Scenario: New user sign-up**
+
+    - Visit `/signup` and create an account.
+    - Confirm the welcome email is delivered.
+
+Write `N/A` if the change needs no manual QA (e.g., docs-only changes).
+
+Delete this comment when you fill in the section.
+-->
+
+**Scenario:**
+
+- 
+
+
 ## :clipboard: Deployment Pre/Post tasks
 
 <!--
