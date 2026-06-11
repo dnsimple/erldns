@@ -33,9 +33,9 @@ resolve_authoritative_host_not_found(_) ->
         name = ZoneName,
         authority = Authority = [#dns_rr{name = ~"resolve_auth_no_host.com", type = ?DNS_TYPE_SOA}]
     },
-    Msg = #dns_message{questions = [#dns_query{name = ZoneName, type = Qtype = ?DNS_TYPE_A}]},
+    Msg = #dns_message{questions = [#dns_query{name = ZoneName, type = ?DNS_TYPE_A}]},
     A = erldns_resolver:resolve_authoritative(
-        Msg, Z, ZoneName, ZoneLabels, Qtype, [], ?MAX_RESOLUTION_DEPTH
+        Msg, Z, ZoneName, ZoneLabels, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(true, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NXDOMAIN, A#dns_message.rc),
@@ -55,10 +55,10 @@ resolve_authoritative_zone_cut(_) ->
         authority = [#dns_rr{name = ~"resolve_auth_zone_cut.com", type = ?DNS_TYPE_SOA}],
         records = NSRecord
     },
-    Msg = #dns_message{questions = [#dns_query{name = Qname, type = Qtype = ?DNS_TYPE_A}]},
+    Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
     erldns_zone_cache:put_zone(Z),
     A = erldns_resolver:resolve_authoritative(
-        Msg, Z, Qname, dns_domain:split(Qname), Qtype, [], ?MAX_RESOLUTION_DEPTH
+        Msg, Z, Qname, dns_domain:split(Qname), ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
@@ -90,10 +90,10 @@ resolve_authoritative_zone_cut_with_cnames(_) ->
         authority = [#dns_rr{name = ~"resolve_auth_zone_cut_cnames.com", type = ?DNS_TYPE_SOA}],
         records = NSRecord ++ CnameRecords
     },
-    Msg = #dns_message{questions = [#dns_query{name = Qname, type = Qtype = ?DNS_TYPE_A}]},
+    Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
     erldns_zone_cache:put_zone(Z),
     A = erldns_resolver:resolve_authoritative(
-        Msg, Z, Qname, dns_domain:split(Qname), Qtype, [], ?MAX_RESOLUTION_DEPTH
+        Msg, Z, Qname, dns_domain:split(Qname), ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),

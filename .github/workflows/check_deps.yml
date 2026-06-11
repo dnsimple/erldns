@@ -22,7 +22,7 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: '28'
+          otp-version: '29'
           rebar3-version: '3.27'
 
       - uses: actions/cache@v5
