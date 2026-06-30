@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v10.6.0
+
+### Added
+
+- `autostart_listeners` application environment (default `true`) and `erldns:start_listeners/0`.
+
+## v10.5.6
+
+### Changed
+
+- Updated dependencies
+
 ## v10.5.5
 
 ### Fixed

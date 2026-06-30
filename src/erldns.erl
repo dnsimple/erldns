@@ -19,7 +19,7 @@ Convenience API to start erldns directly.
 
 -include("erldns.hrl").
 
--export([start/0]).
+-export([start/0, start_listeners/0]).
 
 -export_type([keyset/0, zone/0]).
 
@@ -29,3 +29,18 @@ Convenience API to start erldns directly.
 -spec start() -> term().
 start() ->
     application:ensure_all_started(erldns).
+
+-doc """
+Start the DNS listeners if they were not started at boot.
+
+When `erldns` is configured with the `autostart_listeners` application environment set to
+`false`, the listeners (and the sockets they bind) are not started during boot. An embedding
+application can then call this once its own resources are ready, so no query is served before
+they exist.
+
+Returns the supervisor child start result. Idempotent: returns `{error, {already_started, _}}`
+when the listeners are already running.
+""".
+-spec start_listeners() -> supervisor:startchild_ret().
+start_listeners() ->
+    erldns_sup:start_listeners().

@@ -21,7 +21,9 @@ all() ->
         sched_mon_coverage,
         udp_load_shedding,
         reset_queues,
-        stats
+        stats,
+        autostart_listeners_gates_init,
+        autostart_listeners_started_on_request
     ].
 
 -spec groups() -> [ct_suite:ct_group_def()].
@@ -118,6 +120,44 @@ name_must_be_atom(_) ->
     ),
     application:set_env(erldns, listeners, [#{name => good_name, port => 0}]),
     ?assertMatch({ok, _}, erldns_listeners:start_link()).
+
+autostart_listeners_gates_init(_) ->
+    % erldns_sup omits the listeners child at boot when autostart_listeners is false.
+    application:unset_env(erldns, autostart_listeners),
+    ?assert(sup_starts_listeners()),
+    application:set_env(erldns, autostart_listeners, false),
+    ?assertNot(sup_starts_listeners()),
+    application:set_env(erldns, autostart_listeners, true),
+    ?assert(sup_starts_listeners()),
+    application:unset_env(erldns, autostart_listeners).
+
+sup_starts_listeners() ->
+    {ok, {_SupFlags, Children}} = erldns_sup:init(noargs),
+    lists:any(fun(#{id := Id}) -> Id =:= erldns_listeners end, Children).
+
+autostart_listeners_started_on_request(Config) ->
+    % With autostart_listeners=false the listeners are not up at boot; start_listeners/0 opens
+    % them and is idempotent.
+    AppConfig = [
+        {erldns, [
+            {autostart_listeners, false},
+            {listeners, [
+                #{
+                    name => ?FUNCTION_NAME,
+                    transport => standard,
+                    port => 0,
+                    opts => #{ingress_request_timeout => ?INGRESS_TIMEOUT}
+                }
+            ]}
+        ]}
+    ],
+    Config1 = app_helper:start_erldns(Config, AppConfig),
+    Node = app_helper:get_node(Config1),
+    ?assertEqual(undefined, erpc:call(Node, erlang, whereis, [erldns_listeners])),
+    ?assertMatch({ok, _}, erpc:call(Node, erldns, start_listeners, [])),
+    ?assert(is_pid(erpc:call(Node, erlang, whereis, [erldns_listeners]))),
+    ?assertMatch({error, {already_started, _}}, erpc:call(Node, erldns, start_listeners, [])),
+    app_helper:stop(Config1).
 
 port_must_be_inet_port(_) ->
     application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, port => bad_port}]),
