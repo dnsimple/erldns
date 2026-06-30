@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Added
+
+- DNSSEC NSEC type-mapper extension API on `erldns_dnssec:add_nsec_type_mapper/3` lets a pipeline stage register, from its `prepare/1`, how a custom record type widens the NSEC type bitmap (e.g. ALIAS → A).
+
+### Removed
+
+- Removed the `erldns_handler` module and the `packet_handlers` extension mechanism. Migrate handlers to `erldns_pipeline` and NSEC mappers to `erldns_dnssec:add_nsec_type_mapper/3`.
+
 ## v10.6.0
 
 ### Added

@@ -226,21 +226,14 @@ exact_match_resolution(Message, Zone, QLabels, QType, CnameChain, MatchedRecords
 ) ->
     dns:message().
 resolve_exact_match(Message, Zone, QLabels, QType, CnameChain, MatchedRecords, Depth) ->
-    TypeMatches =
+    % Custom record types (URL/POOL) are synthesized by pipeline stages after the resolver, so the
+    % resolver only matches the qtype against the zone records and returns NODATA otherwise.
+    ExactTypeMatches =
         case QType of
             ?DNS_TYPE_ANY ->
-                erldns_handler:call_filters(MatchedRecords);
+                MatchedRecords;
             _ ->
                 lists:filter(erldns_records:match_type(QType), MatchedRecords)
-        end,
-    ExactTypeMatches =
-        case TypeMatches of
-            [] ->
-                % No records matched the qtype, call custom handler
-                erldns_handler:call_handlers(Message, QLabels, QType, MatchedRecords);
-            _ ->
-                % Records match qtype, use them
-                TypeMatches
         end,
     AuthorityRecords = lists:filter(fun erldns_records:is_soa/1, MatchedRecords),
     ReferralRecords = lists:filter(fun erldns_records:is_ns/1, MatchedRecords),
@@ -583,13 +576,13 @@ resolve_best_match(Message, Zone, QLabels, QName, QType, CnameChain, BestMatchRe
 ) ->
     dns:message().
 resolve_best_match_with_wildcard(
-    Message, Zone, QLabels, QName, QType, _CnameChain, MatchedRecords, [], _Depth
+    Message, Zone, _, QName, QType, _CnameChain, MatchedRecords, [], _Depth
 ) ->
     % Handle best match resolving with a wildcard name in the zone.
     TypeMatchedRecords =
         case QType of
             ?DNS_TYPE_ANY ->
-                erldns_handler:call_filters(MatchedRecords);
+                MatchedRecords;
             _ ->
                 lists:filter(erldns_records:match_type(QType), MatchedRecords)
         end,
@@ -597,19 +590,8 @@ resolve_best_match_with_wildcard(
     case lists:map(ReplacementNameFun, TypeMatchedRecords) of
         [] ->
             % There is no exact type matches for the original qtype,
-            % ask the custom handlers for their records.
-            HandlerRecords = erldns_handler:call_handlers(Message, QLabels, QType, MatchedRecords),
-            case lists:map(ReplacementNameFun, HandlerRecords) of
-                [] ->
-                    % Custom handlers returned no answers,
-                    % so set the authority section of the response and return NOERROR
-                    Message#dns_message{aa = true, authority = Zone#zone.authority};
-                NewRecords ->
-                    % Custom handlers returned answers
-                    Message#dns_message{
-                        aa = true, answers = Message#dns_message.answers ++ NewRecords
-                    }
-            end;
+            % potentially upcoming pipelines will extend
+            Message#dns_message{aa = true, authority = Zone#zone.authority};
         TypeMatches ->
             % There is an exact type match
             Message#dns_message{aa = true, answers = Message#dns_message.answers ++ TypeMatches}

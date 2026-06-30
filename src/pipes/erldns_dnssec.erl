@@ -8,6 +8,22 @@ that being an authoritative (e.g. `m:erldns_resolver`) or recursive
 
 You also need to provide the zone keys for signing, during loading,
 see [`ZONES`](priv/zones/ZONES.md) for more details.
+
+## NSEC type-mapper extension
+
+When a name only carries a custom type (e.g. a record that another pipeline stage synthesizes into
+A/CNAME at query time), the authenticated-denial NSEC record for that name must still advertise the
+_standard_ types the client will actually receive, or validating resolvers reject the answer. A
+mapper widens the NSEC type bitmap accordingly.
+
+A mapper is a `fun((RecordType, QType) -> [Type])` implementing the `c:nsec_rr_type_mapper/2`
+callback. To register one, the owning pipeline stage calls `add_nsec_type_mapper/3` from its own
+`c:erldns_pipeline:prepare/1`:
+
+```erlang
+prepare(Opts) ->
+    erldns_dnssec:add_nsec_type_mapper(Opts, [?CUSTOM_TYPE], fun ?MODULE:nsec_rr_type_mapper/2).
+```
 """.
 
 -include_lib("dns_erlang/include/dns.hrl").
@@ -19,10 +35,27 @@ see [`ZONES`](priv/zones/ZONES.md) for more details.
 -export([prepare/1, call/2, deps/0]).
 -export([get_signed_records/1, get_signed_zone_records/1]).
 -export([rrsig_for_zone_rrset/2]).
+-export([add_nsec_type_mapper/3]).
 
 -ifdef(TEST).
--export([handle/6, requires_key_signing_key/1, choose_signer_for_rrset/2, find_unique_lookups/1]).
+-export([handle/7, requires_key_signing_key/1, choose_signer_for_rrset/2, find_unique_lookups/1]).
+-export([map_nsec_rr_types/3]).
 -endif.
+
+-doc """
+NSEC type-mapper extension callback.
+
+Pipeline stages that introduce custom record types (e.g. ALIAS) implement this to widen the NSEC
+type bitmap: given a record type present at a name and the query type, return the standard DNS types
+the custom type should be advertised as. The mapper is registered into the pipeline opts with
+`add_nsec_type_mapper/3` from the stage's `c:erldns_pipeline:prepare/1`.
+""".
+-callback nsec_rr_type_mapper(RecordType :: dns:type(), QType :: dns:type()) -> [dns:type()].
+-optional_callbacks([nsec_rr_type_mapper/2]).
+
+-type nsec_type_mapper_fun() :: fun((dns:type(), dns:type()) -> [dns:type()]).
+-type nsec_type_mappers() :: #{dns:type() => nsec_type_mapper_fun()}.
+-export_type([nsec_type_mappers/0, nsec_type_mapper_fun/0]).
 
 -define(NEXT_DNAME_PART, <<"\000">>).
 -define(LOG_METADATA, #{domain => [erldns, pipeline, dnssec]}).
@@ -35,7 +68,22 @@ deps() ->
 -doc "`c:erldns_pipeline:prepare/1` callback.".
 -spec prepare(erldns_pipeline:opts()) -> erldns_pipeline:opts().
 prepare(Opts) ->
-    Opts#{dnssec => false}.
+    Opts#{dnssec => false, nsec_type_mappers => maps:get(nsec_type_mappers, Opts, #{})}.
+
+-doc """
+Register an NSEC type mapper for the given record types into the pipeline opts.
+
+Extension pipes call this from their own `c:erldns_pipeline:prepare/1`. Because every pipe's
+`prepare/1` contributes to the single, shared pipeline opts that is later merged into every query,
+the mappers are available to this module's `call/2` at run-time as a plain map lookup — no global
+registry, no process hop.
+""".
+-spec add_nsec_type_mapper(erldns_pipeline:opts(), [dns:type()], nsec_type_mapper_fun()) ->
+    erldns_pipeline:opts().
+add_nsec_type_mapper(Opts, RecordTypes, Fun) when is_function(Fun, 2) ->
+    Mappers0 = maps:get(nsec_type_mappers, Opts, #{}),
+    Mappers1 = lists:foldl(fun(T, Acc) -> Acc#{T => Fun} end, Mappers0, RecordTypes),
+    Opts#{nsec_type_mappers => Mappers1}.
 
 -doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
@@ -46,12 +94,13 @@ call(
         query_name := QName,
         query_type := QType,
         query_labels := QLabels,
-        auth_zone := #zone{} = Zone
+        auth_zone := #zone{} = Zone,
+        nsec_type_mappers := Mappers
     } = Opts
 ) ->
     RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Msg)),
     Opts1 = Opts#{dnssec => RequestDnssec},
-    {handle(Msg, Zone, QLabels, QName, QType, RequestDnssec), Opts1};
+    {handle(Msg, Zone, QLabels, QName, QType, Mappers, RequestDnssec), Opts1};
 call(Msg, Opts) ->
     RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Msg)),
     {Msg, Opts#{dnssec => RequestDnssec}}.
@@ -148,32 +197,33 @@ requires_key_signing_key(RRs) ->
     ).
 
 %%% Internal functions
--spec handle(Msg, Zone, QLabels, QName, QType, RequestDnssec) -> Return when
+-spec handle(Msg, Zone, QLabels, QName, QType, Mappers, RequestDnssec) -> Return when
     Msg :: dns:message(),
     Zone :: erldns:zone(),
     QLabels :: dns:labels(),
     QName :: dns:dname(),
     QType :: dns:type(),
+    Mappers :: nsec_type_mappers(),
     RequestDnssec :: boolean(),
     Return :: dns:message().
 %% DNSSEC not requested, leave
-handle(Msg, _, _, _, _, false) ->
+handle(Msg, _, _, _, _, _, false) ->
     Msg;
 %% compact-denial-of-existence §3.5: Responses to explicit queries for NXNAME
-handle(Msg, _, _, _, ?DNS_TYPE_NXNAME, _) ->
+handle(Msg, _, _, _, ?DNS_TYPE_NXNAME, _, _) ->
     Msg#dns_message{rc = ?DNS_RCODE_FORMERR, authority = []};
 %% DNSSEC requested, zone unsigned, nothing to do
-handle(Msg, #zone{keysets = []}, _, _, _, _) ->
+handle(Msg, #zone{keysets = []}, _, _, _, _, _) ->
     Msg;
 %% DNSSEC requested, zone signed, no answers found, return NSEC.
-handle(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QType, _) ->
+handle(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QType, Mappers, _) ->
     #dns_message{authority = MsgAuths} = Msg,
     #zone{labels = ZLabels, authority = [Authority | _]} = Zone,
     Ttl = minimum_soa_ttl(Authority),
     ApexRRSigRRs = erldns_zone_cache:get_records_by_name_and_type(Zone, ZLabels, ?DNS_TYPE_RRSIG),
     SoaRRSigRecords = maybe_get_soa_rrsig_records(ApexRRSigRRs, MsgAuths),
     RecordTypesForQname = record_types_for_name(Zone, QLabels),
-    NsecRrTypes = erldns_handler:call_map_nsec_rr_types(QType, RecordTypesForQname),
+    NsecRrTypes = map_nsec_rr_types(QType, RecordTypesForQname, Mappers),
     NextDname = <<?NEXT_DNAME_PART/binary, ".", QName/binary>>,
     NsecRecord =
         #dns_rr{
@@ -190,7 +240,7 @@ handle(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QType, _) ->
     Msg1 = Msg#dns_message{ad = true, rc = ?DNS_RCODE_NOERROR, authority = Auth},
     sign_unsigned(Msg1, Zone);
 %% DNSSEC requested, zone signed, answers ready and need signing
-handle(Msg, Zone, _, _, _, _) ->
+handle(Msg, Zone, _, _, _, _, _) ->
     ?LOG_DEBUG(#{what => dnssec_requested, name => Zone#zone.name}, ?LOG_METADATA),
     AnswerSignatures = find_rrsigs(Zone, Msg#dns_message.answers),
     AuthoritySignatures = find_rrsigs(Zone, Msg#dns_message.authority),
@@ -257,11 +307,14 @@ find_unsigned_records(Records) ->
 %% This will look for both exact and wildcard matches AT the QNAME label count
 %% without attempting to walk down to the root.
 record_types_for_name(Zone, QLabels) ->
+    %% The literal type lists are kept in ascending DNS type-code order
+    %% (RRSIG=46 < NSEC=47 < NXNAME=128), so they are already sorted as the
+    %% NSEC bitmap requires and need no run-time sort.
     case erldns_zone_cache:get_records_by_name_resolved(Zone, QLabels) of
         ent ->
-            lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]);
+            [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC];
         nxdomain ->
-            lists:sort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME]);
+            [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME];
         {_, RecordsAtName} ->
             types_covered_from_records(RecordsAtName)
     end.
@@ -269,6 +322,24 @@ record_types_for_name(Zone, QLabels) ->
 types_covered_from_records(RecordsAtName) ->
     TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
     lists:usort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC | TypesCovered]).
+
+%% Widen the NSEC type bitmap for any custom record types present at the name, using the mappers
+%% frozen into the pipeline opts by extension pipes (see `add_nsec_type_mapper/3`).
+-spec map_nsec_rr_types(dns:type(), [dns:type()], nsec_type_mappers()) -> [dns:type()].
+map_nsec_rr_types(_QType, Types, Mappers) when map_size(Mappers) =:= 0 ->
+    Types;
+map_nsec_rr_types(QType, Types, Mappers) ->
+    lists:usort(
+        lists:flatmap(
+            fun(Type) ->
+                case Mappers of
+                    #{Type := Fun} -> Fun(Type, QType);
+                    _ -> [Type]
+                end
+            end,
+            Types
+        )
+    ).
 
 -compile({inline, [minimum_soa_ttl/1]}).
 -spec minimum_soa_ttl(dns:rr()) -> dns:ttl().
