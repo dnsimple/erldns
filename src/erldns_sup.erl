@@ -17,7 +17,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0]).
+-export([start_link/0, start_listeners/0]).
 -export([gc/0, gc_registered/0, gc_registered/1]).
 
 -export([init/1]).
@@ -25,6 +25,12 @@
 -spec start_link() -> supervisor:startlink_ret().
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, noargs).
+
+%% Start the DNS listeners on request, for when they were not started at boot
+%% (`autostart_listeners` set to `false`).
+-spec start_listeners() -> supervisor:startchild_ret().
+start_listeners() ->
+    supervisor:start_child(?MODULE, supervisor(erldns_listeners)).
 
 %% Garbage collect all processes.
 -spec gc() -> integer().
@@ -49,10 +55,16 @@ init(_Args) ->
     Children =
         [
             supervisor(erldns_zones),
-            supervisor(erldns_pipeline),
-            supervisor(erldns_listeners)
+            supervisor(erldns_pipeline)
+            | listener_children(application:get_env(erldns, autostart_listeners, true))
         ],
     {ok, {SupFlags, Children}}.
+
+-spec listener_children(boolean()) -> [supervisor:child_spec()].
+listener_children(true) ->
+    [supervisor(erldns_listeners)];
+listener_children(false) ->
+    [].
 
 supervisor(Module) ->
     #{id => Module, start => {Module, start_link, []}, type => supervisor}.
