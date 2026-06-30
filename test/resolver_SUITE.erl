@@ -43,7 +43,6 @@ resolve_authoritative_host_not_found(_) ->
 
 resolve_authoritative_zone_cut(_) ->
     erldns_zone_cache:start_link(),
-    erldns_handler:start_link(),
     Qname = ~"delegated.resolve_auth_zone_cut.com",
     NSRecord = [#dns_rr{name = Qname, type = ?DNS_TYPE_NS}],
     ZoneName = dns_domain:to_lower(~"resolve_auth_zone_cut.com"),
@@ -68,7 +67,6 @@ resolve_authoritative_zone_cut(_) ->
 
 resolve_authoritative_zone_cut_with_cnames(_) ->
     erldns_zone_cache:start_link(),
-    erldns_handler:start_link(),
     Qname = ~"delegated.resolve_auth_zone_cut_cnames.com",
     CnameRecords =
         [
@@ -108,7 +106,6 @@ resolve_authoritative_zone_cut_with_cnames(_) ->
 %% target rather than the CNAME owner name.
 resolve_authoritative_zone_cut_with_cname_chain_through_wildcard(_) ->
     erldns_zone_cache:start_link(),
-    erldns_handler:start_link(),
     ZoneName = dns_domain:to_lower(~"chain-zone-cut.example"),
     Qname = ~"ffog.chain-zone-cut.example",
     SoaData = #dns_rrdata_soa{
@@ -164,7 +161,6 @@ resolve_authoritative_zone_cut_with_cname_chain_through_wildcard(_) ->
 %% wildcard test above.
 resolve_authoritative_zone_cut_with_plain_cname_chain(_) ->
     erldns_zone_cache:start_link(),
-    erldns_handler:start_link(),
     ZoneName = dns_domain:to_lower(~"plain-chain-zone-cut.example"),
     Qname = ~"a.plain-chain-zone-cut.example",
     SoaData = #dns_rrdata_soa{
@@ -217,7 +213,6 @@ resolve_authoritative_zone_cut_with_plain_cname_chain(_) ->
 %% owner-based behavior so that regression would fail loudly.
 resolve_authoritative_zone_cut_drops_occluded_cname(_) ->
     erldns_zone_cache:start_link(),
-    erldns_handler:start_link(),
     ZoneName = dns_domain:to_lower(~"occluded-cname.example"),
     Qname = ~"occluded.delegated.occluded-cname.example",
     SoaData = #dns_rrdata_soa{
@@ -264,7 +259,6 @@ resolve_authoritative_zone_cut_drops_occluded_cname(_) ->
 %% Without label-based comparison, restart_delegated_query/5 loops forever.
 resolve_authoritative_self_delegation_trailing_dot_name_mismatch(_) ->
     erldns_zone_cache:start_link(),
-    erldns_handler:start_link(),
     ZoneName = dns_domain:to_lower(~"self-deleg-trailing-dot.example"),
     %% A record owner name WITH trailing dot; NS owner WITHOUT — same labels, distinct binaries
     ARecordOwnerName = ~"ns2.self-deleg-trailing-dot.example.",
@@ -333,7 +327,6 @@ resolve_authoritative_self_delegation_trailing_dot_name_mismatch(_) ->
 %% the depth counter prevents runaway recursion.
 resolve_authoritative_max_depth_returns_servfail(_) ->
     erldns_zone_cache:start_link(),
-    erldns_handler:start_link(),
     ZoneName = dns_domain:to_lower(~"deep-cname.example"),
     ChainLen = ?MAX_RESOLUTION_DEPTH + 1,
     SoaData = #dns_rrdata_soa{
