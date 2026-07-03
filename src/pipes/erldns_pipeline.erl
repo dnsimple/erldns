@@ -566,7 +566,6 @@ init(noargs) ->
             worker(erldns_pg, pg, [erldns]),
             worker(erldns_packet_cache),
             worker(erldns_query_throttle),
-            worker(erldns_handler),
             worker(erldns_pipeline_worker),
             erldns_async_pool:child_spec()
         ],

@@ -21,7 +21,9 @@ all() ->
         verify_zsk_signed_alg16,
         test_signer_selection_logic,
         test_requires_key_signing_key_function,
-        find_rrsigs_deduplicates_by_name_and_type
+        find_rrsigs_deduplicates_by_name_and_type,
+        add_nsec_type_mapper_accumulates,
+        map_nsec_rr_types_widens_custom_types
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -39,7 +41,6 @@ init_per_testcase(_, Config) ->
     FileName = filename:join([code:priv_dir(erldns), "zones/example.com.json"]),
     application:set_env(erldns, zones, #{path => FileName, strict => true}),
     erldns_zones:start_link(),
-    erldns_handler:start_link(),
     Config.
 
 -spec end_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> term().
@@ -58,7 +59,7 @@ verify_ksk_signed(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -88,7 +89,7 @@ verify_ksk_signed_alg13(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -118,7 +119,7 @@ verify_ksk_signed_alg14(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -160,7 +161,7 @@ verify_zsk_signed(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -201,7 +202,7 @@ verify_zsk_signed_alg13(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -242,7 +243,7 @@ verify_zsk_signed_alg14(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -272,7 +273,7 @@ verify_ksk_signed_alg15(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -302,7 +303,7 @@ verify_ksk_signed_alg16(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -343,7 +344,7 @@ verify_zsk_signed_alg15(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -384,7 +385,7 @@ verify_zsk_signed_alg16(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -528,4 +529,24 @@ find_rrsigs_deduplicates_by_name_and_type(_Config) ->
         lists:sort(R1),
         lists:sort(R2),
         "find_unique_lookups must deduplicate by (name, type); duplicate records must not duplicate RRSIGs"
+    ).
+
+%% add_nsec_type_mapper/3 creates the map on first use and folds each record type to the mapper fun.
+add_nsec_type_mapper_accumulates(_Config) ->
+    Fun1 = fun(_, _) -> [?DNS_TYPE_A] end,
+    Fun2 = fun(_, _) -> [?DNS_TYPE_CNAME] end,
+    Opts0 = #{},
+    Opts1 = erldns_dnssec:add_nsec_type_mapper(Opts0, [30001], Fun1),
+    Opts2 = erldns_dnssec:add_nsec_type_mapper(Opts1, [30002], Fun2),
+    ?assertMatch(#{nsec_type_mappers := #{30001 := Fun1, 30002 := Fun2}}, Opts2).
+
+%% map_nsec_rr_types/3 widens custom record types using the registered mappers; with no mappers it
+%% returns the input unchanged.
+map_nsec_rr_types_widens_custom_types(_Config) ->
+    Types = [2, 30001, 46],
+    ?assertEqual(Types, erldns_dnssec:map_nsec_rr_types(?DNS_TYPE_A, Types, #{})),
+    Mappers = #{30001 => fun(_, _) -> [?DNS_TYPE_A] end},
+    ?assertEqual(
+        [?DNS_TYPE_A, 2, 46],
+        erldns_dnssec:map_nsec_rr_types(?DNS_TYPE_A, Types, Mappers)
     ).
