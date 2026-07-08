@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v11.0.1
+
+### Fixed
+
+- Added the DNS binary payload to logs when the UDP decode crashes
+
 ## v11.0.0
 
 ### Added
