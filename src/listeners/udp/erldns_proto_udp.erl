@@ -150,7 +150,9 @@ handle_udp_work(Socket, IpAddr, Port, TS, Bin) ->
         handle_decoded(Socket, IpAddr, Port, TS, Decoded)
     catch
         Class:Reason:Stacktrace ->
-            ExceptionMetadata = #{kind => Class, reason => Reason, stacktrace => Stacktrace},
+            ExceptionMetadata = #{
+                kind => Class, reason => Reason, stacktrace => Stacktrace, binary => Bin
+            },
             raise_event(error, ExceptionMetadata)
     end.
 
