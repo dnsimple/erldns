@@ -30,7 +30,7 @@ init_per_suite(Config0) ->
             {zones, #{path => code:priv_dir(dnstest)}}
         ]}
     ],
-    Config = app_helper:start_erldns(Config0, AppConfig),
+    Config = app_helper:start_per_suite(Config0, AppConfig),
     DnsTestConfig = [{dnstest, [{inet4, {127, 0, 0, 1}}, {port, 8053}]}],
     application:set_env(DnsTestConfig),
     {ok, _} = application:ensure_all_started([dnstest]),

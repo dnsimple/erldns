@@ -43,7 +43,7 @@ init_per_suite(Config0) ->
             ]}
         ]}
     ],
-    Config = app_helper:start_erldns(Config0, AppConfig),
+    Config = app_helper:start_per_suite(Config0, AppConfig),
     [{port, AdminPort} | Config].
 
 -spec end_per_suite(ct_suite:ct_config()) -> term().

@@ -151,7 +151,7 @@ autostart_listeners_started_on_request(Config) ->
             ]}
         ]}
     ],
-    Config1 = app_helper:start_erldns(Config, AppConfig),
+    Config1 = app_helper:start_per_testcase(Config, AppConfig),
     Node = app_helper:get_node(Config1),
     ?assertEqual(undefined, erpc:call(Node, erlang, whereis, [erldns_listeners])),
     ?assertMatch({ok, _}, erpc:call(Node, erldns, start_listeners, [])),
@@ -330,7 +330,7 @@ standard_transport_creates_both(Config) ->
             ]}
         ]}
     ],
-    Config1 = app_helper:start_erldns(Config, AppConfig),
+    Config1 = app_helper:start_per_testcase(Config, AppConfig),
     Node = app_helper:get_node(Config1),
     Stats = erpc:call(Node, erldns_listeners, get_stats, []),
     ?assert(maps:is_key({?FUNCTION_NAME, udp}, Stats)),
@@ -969,7 +969,7 @@ sched_mon_coverage(Config) ->
             {packet_pipeline, []}
         ]}
     ],
-    Config1 = app_helper:start_erldns(Config, AppConfig),
+    Config1 = app_helper:start_per_testcase(Config, AppConfig),
     Node = app_helper:get_node(Config1),
     Children = erpc:call(Node, supervisor, which_children, [erldns_listeners]),
     {_, Mon, _, _} = lists:keyfind(erldns_sch_mon, 1, Children),
@@ -981,7 +981,7 @@ sched_mon_coverage(Config) ->
 stats(Config) ->
     Listeners = [#{name => stats_1, port => 0}, #{name => stats_2, port => 8054}],
     AppConfig = [{erldns, [{listeners, Listeners}]}],
-    Config1 = app_helper:start_erldns(Config, AppConfig),
+    Config1 = app_helper:start_per_testcase(Config, AppConfig),
     Node = app_helper:get_node(Config1),
     ?assertMatch(
         #{
@@ -1026,7 +1026,7 @@ reset_queues(Config) ->
             {packet_pipeline, [fun sleeping_pipe/2]}
         ]}
     ],
-    Config1 = app_helper:start_erldns(Config, AppConfig),
+    Config1 = app_helper:start_per_testcase(Config, AppConfig),
     Node = app_helper:get_node(Config1),
     ct:sleep(100),
     UdpPort = app_helper:get_configured_port(Config1, ?FUNCTION_NAME, udp),
@@ -1263,7 +1263,7 @@ prepare_test(Config, Name, Transport, TelemetryEvent, Pipeline, CustomOpts) ->
             {packet_pipeline, Pipeline}
         ]}
     ],
-    Config1 = app_helper:start_erldns(Config, AppConfig),
+    Config1 = app_helper:start_per_testcase(Config, AppConfig),
     Node = app_helper:get_node(Config1),
     put(node, Node),
     % Attach telemetry handler on peer node that forwards to test node

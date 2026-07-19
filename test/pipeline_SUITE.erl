@@ -733,7 +733,7 @@ start_integration_peer(Config, Name, Transport, Pipeline) ->
             {packet_pipeline, Pipeline}
         ]}
     ],
-    Config1 = app_helper:start_erldns(Config, AppConfig),
+    Config1 = app_helper:start_per_testcase(Config, AppConfig),
     Node = app_helper:get_node(Config1),
     ct:sleep(100),
     Port = app_helper:get_configured_port(Config1, Name, Transport),
