@@ -9,10 +9,11 @@
 % This gives ±7.5% jitter to break synchronization
 -define(JITTER_PERCENT, 0.15).
 -define(LOG_METADATA, #{domain => [erldns, listeners, udp]}).
+-define(CALL_TIMEOUT, 5000).
 
 -behaviour(gen_server).
 
--export([start_link/2, init/1, handle_call/3, handle_cast/2, handle_info/2]).
+-export([start_link/2, get_socket/1, init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -record(udp_acceptor, {
     name :: atom(),
@@ -27,6 +28,10 @@
 start_link(Name, SocketOpts) ->
     gen_server:start_link(?MODULE, {Name, SocketOpts}, []).
 
+-spec get_socket(pid()) -> gen_udp:socket().
+get_socket(Acceptor) ->
+    gen_server:call(Acceptor, get_socket, ?CALL_TIMEOUT).
+
 -spec init({atom(), [gen_udp:open_option()]}) -> {ok, state()}.
 init({Name, SocketOpts}) ->
     process_flag(trap_exit, true),
@@ -34,7 +39,10 @@ init({Name, SocketOpts}) ->
     Socket = create_socket(SocketOpts),
     {ok, #udp_acceptor{name = Name, socket = Socket}}.
 
--spec handle_call(term(), gen_server:from(), state()) -> {reply, not_implemented, state()}.
+-spec handle_call(term(), gen_server:from(), state()) ->
+    {reply, not_implemented | gen_udp:socket(), state()}.
+handle_call(get_socket, _From, #udp_acceptor{socket = Socket} = State) ->
+    {reply, Socket, State};
 handle_call(Call, From, State) ->
     ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, ?LOG_METADATA),
     {reply, not_implemented, State}.

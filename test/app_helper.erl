@@ -63,27 +63,14 @@ get_configured_port(Config, Name, udp) ->
     erpc:call(Node, fun() ->
         try
             Children = supervisor:which_children(erldns_listeners),
-            case lists:keyfind({Name, udp}, 1, Children) of
-                {_, Sup, _, _} ->
-                    ChildSpecs = supervisor:which_children(Sup),
-                    case ChildSpecs of
-                        [{erldns_proto_udp_acceptor_sup, AccSup, _, _} | _] ->
-                            AccChildren = supervisor:which_children(AccSup),
-                            case AccChildren of
-                                [{_, AcceptorPid, _, _} | _] ->
-                                    State = sys:get_state(AcceptorPid),
-                                    Socket = element(3, State),
-                                    {ok, {_, Port}} = inet:sockname(Socket),
-                                    Port;
-                                _ ->
-                                    error(no_udp_acceptor)
-                            end;
-                        _ ->
-                            error(no_udp_acceptor_sup)
-                    end;
-                _ ->
-                    error(no_udp_listener)
-            end
+            {_, Sup, _, _} = lists:keyfind({Name, udp}, 1, Children),
+            {_, AccSup, _, _} = lists:keyfind(
+                erldns_proto_udp_acceptor_sup, 1, supervisor:which_children(Sup)
+            ),
+            [{_, Acceptor, _, _} | _] = supervisor:which_children(AccSup),
+            Socket = erldns_proto_udp_acceptor:get_socket(Acceptor),
+            {ok, {_, Port}} = inet:sockname(Socket),
+            Port
         catch
             _:Reason ->
                 error({failed_to_get_udp_port, Reason})
