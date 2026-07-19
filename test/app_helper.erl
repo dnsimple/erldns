@@ -6,6 +6,7 @@
     stop/1,
     get_node/1,
     get_configured_port/3,
+    reserve_port/0,
     attach_telemetry_remote/4
 ]).
 
@@ -99,6 +100,14 @@ get_configured_port(_Config, _, standard) ->
 
 get_node(Config) ->
     proplists:get_value(node, Config).
+
+%% For listeners needing the same known port on UDP and TCP, where `port => 0'
+%% would resolve a different one per protocol.
+reserve_port() ->
+    {ok, Socket} = gen_tcp:listen(0, [{active, false}]),
+    {ok, Port} = inet:port(Socket),
+    ok = gen_tcp:close(Socket),
+    Port.
 
 %% Attach telemetry handler on peer node that forwards events to test node
 attach_telemetry_remote(Node, Name, Types, TestPid) when is_list(Types) ->

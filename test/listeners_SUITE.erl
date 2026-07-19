@@ -979,7 +979,7 @@ sched_mon_coverage(Config) ->
     ?assert(erpc:call(Node, erlang, is_process_alive, [Mon])).
 
 stats(Config) ->
-    Listeners = [#{name => stats_1, port => 0}, #{name => stats_2, port => 8054}],
+    Listeners = [#{name => stats_1, port => 0}, #{name => stats_2, port => 0}],
     AppConfig = [{erldns, [{listeners, Listeners}]}],
     Config1 = app_helper:start_per_testcase(Config, AppConfig),
     Node = app_helper:get_node(Config1),
