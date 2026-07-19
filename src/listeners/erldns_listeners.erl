@@ -106,6 +106,15 @@ By default, it is `1`. The number of TCP and UDP acceptors will be of this size,
 while the number of UDP workers will be 4x and the maximum number of TCP workers will be 1024x.
 Note that the UDP pool is static, while the TCP pool is dynamic.
 See `m:wpool` and `m:ranch` respectively for details.
+
+How many of those acceptors do any work depends on the host platform, since they
+share a port and the kernel decides which socket a packet reaches:
+- Linux and FreeBSD spread traffic across all of them.
+- macOS, OpenBSD and NetBSD bind every socket but deliver everything to one, so
+  the remaining acceptors receive nothing.
+- Windows refuses to bind a second socket to a port already in use, so a listener
+  there runs one acceptor and one listen socket whatever this is set to. Worker
+  pools are unaffected.
 """.
 -type parallel_factor() :: 1..512.
 
@@ -116,6 +125,12 @@ It can contain the following keys:
 - `Name` is any desired name in the form of an atom,
 - `IP` is `any`, in which case it will listen on all interfaces,
     or a valid ip address in tuple, binary, or string format. Default is `any`.
+    What `any` binds varies by platform: Windows and OpenBSD allow no dual-stack
+    socket, so it binds IPv4 only and warns at boot, and serving IPv6 there needs
+    a second listener with `ip => "::"`. FreeBSD binds one socket per family,
+    because a dual-stack socket there receives IPv4 traffic without spreading it
+    across the acceptors. A listener given an explicit address is unaffected
+    everywhere.
 - `Port` is a valid port number. Default is `53`.
 - `Transport` is the transport protocol: `udp`, `tcp`, `tls`, or `standard`
     (creates both UDP and TCP). Default is `standard`.
@@ -246,9 +261,9 @@ get_stats() ->
 
 get_stats({erldns_sch_mon, _, _, _}, Stats) ->
     Stats;
-get_stats({{ranch_embedded_sup, {?MODULE, {_, tcp}}}, _, _, _} = Child, Stats) ->
-    erldns_proto_tcp_config:get_stats(Child, Stats);
-get_stats({{ranch_embedded_sup, {?MODULE, {_, tls}}}, _, _, _} = Child, Stats) ->
+get_stats({{ranch_embedded_sup, {?MODULE, Ref}}, _, _, _} = Child, Stats) when
+    element(2, Ref) =:= tcp; element(2, Ref) =:= tls
+->
     erldns_proto_tcp_config:get_stats(Child, Stats);
 get_stats({{_, udp}, _, _, [erldns_proto_udp_sup]} = Child, Stats) ->
     erldns_proto_udp_config:get_stats(Child, Stats).
@@ -267,12 +282,11 @@ child_spec(Config) ->
     IpConfig = get_ip(Config),
     PFactor = get_pfactor(Config),
     Opts = maps:get(opts, Config, #{}),
-    SocketOpts = [{port, Port} | IpConfig],
+    SocketOpts = socket_opts(Name, [{port, Port} | IpConfig]),
     case Transport of
         standard ->
-            [UdpSup] = child_spec_for_transport(udp, Name, PFactor, SocketOpts, Opts),
-            [TcpSup] = child_spec_for_transport(tcp, Name, PFactor, SocketOpts, Opts),
-            [UdpSup, TcpSup];
+            child_spec_for_transport(udp, Name, PFactor, SocketOpts, Opts) ++
+                child_spec_for_transport(tcp, Name, PFactor, SocketOpts, Opts);
         _ ->
             child_spec_for_transport(Transport, Name, PFactor, SocketOpts, Opts)
     end.
@@ -285,6 +299,26 @@ child_spec_for_transport(tcp, Name, PFactor, SocketOpts0, Opts) ->
     erldns_proto_tcp_config:tcp_child_spec(Name, PFactor, SocketOpts0, Opts);
 child_spec_for_transport(tls, Name, PFactor, SocketOpts0, Opts) ->
     erldns_proto_tcp_config:tls_child_spec(Name, PFactor, SocketOpts0, Opts).
+
+-spec socket_opts(name(), [dynamic()]) -> [dynamic()].
+socket_opts(Name, Requested) ->
+    Opts = erldns_config:socket_opts(Requested, os:type()),
+    case lists:member({ipv6_v6only, false}, Requested) andalso not lists:member(inet6, Opts) of
+        true ->
+            ?LOG_WARNING(
+                #{
+                    what => listener_ipv4_only,
+                    listener => Name,
+                    os => os:type(),
+                    reason => ipv6_v6only_not_supported,
+                    remediation => ~"add another listener bound to :: to also serve IPv6"
+                },
+                #{domain => [erldns, listeners]}
+            );
+        false ->
+            ok
+    end,
+    Opts.
 
 -spec get_ip(config()) -> list().
 get_ip(Config) ->

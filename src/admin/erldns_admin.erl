@@ -126,16 +126,17 @@ ensure_valid_config() ->
 
 -spec socket_opts(inet:port_number()) -> [gen_tcp:option()].
 socket_opts(Port) ->
-    [
-        inet6,
-        {ipv6_v6only, false},
-        {ip, any},
-        {port, Port},
-        {nodelay, true},
-        {keepalive, true},
-        {reuseport, true},
-        {reuseport_lb, true}
-    ].
+    erldns_config:socket_opts(
+        [
+            inet6,
+            {ipv6_v6only, false},
+            {ip, any},
+            {port, Port},
+            {nodelay, true},
+            {keepalive, true}
+        ],
+        os:type()
+    ).
 
 -spec config_port(env(), false | {true, dynamic()}) -> {ok, 1..65535} | error.
 config_port(Env, MaybeTls) ->

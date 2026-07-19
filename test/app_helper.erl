@@ -29,7 +29,7 @@ start_per_testcase(Config, Env) ->
 
 %% A failed boot exits the caller rather than returning an error.
 start_peer(Attempt) ->
-    try ?CT_PEER(#{args => ["+S 2 -pa" | code:get_path()], host => "127.0.0.1"}) of
+    try ?CT_PEER(#{args => ["+S", "2", "-pa" | code:get_path()], host => "127.0.0.1"}) of
         {ok, Peer, Node} -> {Peer, Node};
         {error, Reason} -> retry_peer(Reason, Attempt)
     catch

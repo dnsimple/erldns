@@ -19,9 +19,15 @@
 -define(DEF_MAX_TCP_WORKERS, 50).
 
 -spec get_stats(dynamic(), erldns_listeners:stats()) -> erldns_listeners:stats().
-get_stats({{ranch_embedded_sup, {erldns_listeners, {Name, Transport}}}, _, _, _}, Stats) ->
-    #{active_connections := ActiveConns} = ranch:info({erldns_listeners, {Name, Transport}}),
-    Stats#{{Name, Transport} => #{queue_length => ActiveConns}}.
+get_stats({{ranch_embedded_sup, {erldns_listeners, Ref}}, _, _, _}, Stats) ->
+    #{active_connections := ActiveConns} = ranch:info({erldns_listeners, Ref}),
+    Key = {element(1, Ref), element(2, Ref)},
+    maps:update_with(
+        Key,
+        fun(#{queue_length := Queued}) -> #{queue_length => Queued + ActiveConns} end,
+        #{queue_length => ActiveConns},
+        Stats
+    ).
 
 -spec tcp_child_spec(
     erldns_listeners:name(),
@@ -30,9 +36,7 @@ get_stats({{ranch_embedded_sup, {erldns_listeners, {Name, Transport}}}, _, _, _}
     map()
 ) -> [supervisor:child_spec()].
 tcp_child_spec(Name, PFactor, SocketOpts, Opts) ->
-    RanchRef = ranch_ref(Name, tcp),
-    RanchMod = ranch_module(tcp),
-    child_spec(PFactor, SocketOpts, Opts, RanchRef, RanchMod, []).
+    child_specs(Name, tcp, PFactor, SocketOpts, Opts, []).
 
 -spec tls_child_spec(
     erldns_listeners:name(),
@@ -41,12 +45,23 @@ tcp_child_spec(Name, PFactor, SocketOpts, Opts) ->
     map()
 ) -> [supervisor:child_spec()].
 tls_child_spec(Name, PFactor, SocketOpts, Opts) ->
-    RanchRef = ranch_ref(Name, tls),
-    RanchMod = ranch_module(tls),
-    SslOpts = get_tls_opts(Opts),
-    child_spec(PFactor, SocketOpts, Opts, RanchRef, RanchMod, SslOpts).
+    child_specs(Name, tls, PFactor, SocketOpts, Opts, get_tls_opts(Opts)).
 
-child_spec(PFactor, SocketOpts, Opts, RanchRef, RanchMod, SslOpts) ->
+%% One ranch listener per socket family the platform needs bound separately.
+%% The parallelism knobs are shared out between them, so the total number of
+%% acceptors and listen sockets stays what the parallel factor asked for.
+child_specs(Name, Transport, PFactor, SocketOpts, Opts, SslOpts) ->
+    Variants = erldns_config:split_socket_opts(SocketOpts),
+    RanchMod = ranch_module(Transport),
+    Share = length(Variants),
+    lists:append([
+        child_spec(
+            PFactor, Variant, Opts, ranch_ref(Name, Transport, Index), RanchMod, SslOpts, Share
+        )
+     || {Index, Variant} <- lists:enumerate(Variants)
+    ]).
+
+child_spec(PFactor, SocketOpts, Opts, RanchRef, RanchMod, SslOpts, Share) ->
     Parallelism = erlang:system_info(schedulers),
     Timeout = get_tcp_timeout(Opts),
     MaxConnections = get_tcp_max_connections(Opts),
@@ -65,9 +80,9 @@ child_spec(PFactor, SocketOpts, Opts, RanchRef, RanchMod, SslOpts) ->
             }
         },
         max_connections => MaxConnections,
-        num_acceptors => PFactor * Parallelism,
-        num_conns_sups => PFactor * Parallelism,
-        num_listen_sockets => Parallelism,
+        num_acceptors => share(PFactor * Parallelism, Share),
+        num_conns_sups => share(PFactor * Parallelism, Share),
+        num_listen_sockets => share(erldns_config:socket_count(Parallelism), Share),
         handshake_timeout => Timeout,
         socket_opts => FinalSocketOpts
     },
@@ -94,8 +109,16 @@ ranch_module(tcp) ->
 ranch_module(tls) ->
     ranch_ssl.
 
-ranch_ref(Name, Transport) ->
-    {erldns_listeners, {Name, Transport}}.
+%% The first listener keeps the unqualified ref, so a platform that binds one
+%% socket is addressed exactly as before.
+ranch_ref(Name, Transport, 1) ->
+    {erldns_listeners, {Name, Transport}};
+ranch_ref(Name, Transport, Index) ->
+    {erldns_listeners, {Name, Transport, Index}}.
+
+-spec share(pos_integer(), pos_integer()) -> pos_integer().
+share(Wanted, Among) ->
+    max(1, Wanted div Among).
 
 -spec get_tcp_timeout(map()) -> non_neg_integer().
 get_tcp_timeout(ListenerOpts) ->
@@ -148,9 +171,7 @@ tcp_opts(SocketOpts, Timeout) ->
         [
             {send_timeout, Timeout},
             {nodelay, true},
-            {keepalive, true},
-            {reuseport, true},
-            {reuseport_lb, true}
+            {keepalive, true}
         ].
 
 -spec trigger_delayed(term(), term(), term(), term()) -> ok.

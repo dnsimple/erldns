@@ -55,8 +55,6 @@ base_udp_opts() ->
     [
         binary,
         {reuseaddr, true},
-        {reuseport, true},
-        {reuseport_lb, true},
         {read_packets, 1000},
         {recbuf, 1024 * 1024}
     ].

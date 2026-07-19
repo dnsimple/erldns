@@ -1,0 +1,9 @@
+# Windows checks out CRLF by default, which fails `rebar3 fmt --check`.
+* text=auto eol=lf
+
+*.erl text eol=lf
+*.hrl text eol=lf
+*.escript text eol=lf
+*.config text eol=lf
+*.src text eol=lf
+*.sh text eol=lf

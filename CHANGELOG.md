@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v11.1.0
+
+### Fixed
+
+- Listeners and the admin endpoint now adjust their socket options and socket counts to the host platform, ensuring portability to many BSD variants, Windows, and MacOS. (#358).
+
 ## v11.0.1
 
 ### Fixed
