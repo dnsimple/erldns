@@ -35,7 +35,9 @@ groups() ->
             ede_pipeline_refused,
             ede_pipeline_servfail,
             ede_pipeline_creates_optrr,
-            ede_pipeline_appends_to_optrr
+            ede_pipeline_appends_to_optrr,
+            ede_pipeline_optrr_not_first,
+            max_payload_size_optrr_not_first
         ]}
     ].
 
@@ -169,6 +171,83 @@ ede_pipeline_creates_optrr(_Config) ->
     ?assertMatch([#dns_optrr{} | _], Result#dns_message.additional).
 
 %% Test that pipeline appends to existing OPT RR
+%% RFC6891§6.1.1: an OPT RR "MAY be placed anywhere within the additional data
+%% section", and the decoder hands the section back in wire order, so [A, OPT] is
+%% what a legal query yields. Matching only the head made the pipe prepend a
+%% second OPT RR, giving a response with two of them, which that section forbids.
+ede_pipeline_optrr_not_first(_Config) ->
+    ARecord = #dns_rr{
+        name = ~"ns.example.com",
+        type = ?DNS_TYPE_A,
+        class = ?DNS_CLASS_IN,
+        ttl = 300,
+        data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
+    },
+    application:set_env(erldns, edns_ede, #{enabled => true, add_text => true}),
+    PreparedOpts = erldns_edns_ede:prepare(def_opts()),
+    [
+        begin
+            Msg = #dns_message{
+                rc = ?DNS_RCODE_REFUSED, adc = length(Additional), additional = Additional
+            },
+            Result = erldns_edns_ede:call(Msg, PreparedOpts),
+            ResultAdditional = Result#dns_message.additional,
+            OptRRs = [OptRR || #dns_optrr{} = OptRR <- ResultAdditional],
+            %% Exactly one OPT RR, carrying the EDE, and the other records survive
+            ?assertMatch([_], OptRRs, Label),
+            [#dns_optrr{data = Data}] = OptRRs,
+            ?assert(length(Data) > 0, Label),
+            ?assertNotMatch([], erldns_edns:get_ede_errors(Result), Label),
+            ?assertEqual(
+                length([RR || #dns_rr{} = RR <- Additional]),
+                length([RR || #dns_rr{} = RR <- ResultAdditional]),
+                Label
+            )
+        end
+     || {Label, Additional} <- [
+            {"[OPT, A]", [#dns_optrr{dnssec = true}, ARecord]},
+            {"[A, OPT]", [ARecord, #dns_optrr{dnssec = true}]},
+            {"[A, A, OPT]", [ARecord, ARecord, #dns_optrr{dnssec = true}]},
+            {"[A] (no OPT yet)", [ARecord]}
+        ]
+    ].
+
+%% Same placement rule: an oversized payload size was left unclamped whenever the
+%% OPT RR was not the first additional record, so the response could exceed the
+%% fragmentation cap this pipe exists to enforce.
+max_payload_size_optrr_not_first(_Config) ->
+    ARecord = #dns_rr{
+        name = ~"ns.example.com",
+        type = ?DNS_TYPE_A,
+        class = ?DNS_CLASS_IN,
+        ttl = 300,
+        data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
+    },
+    Oversized = #dns_optrr{udp_payload_size = 9999},
+    [
+        begin
+            Msg = #dns_message{
+                adc = length(Additional), additional = Additional
+            },
+            Result = erldns_edns_max_payload_size:call(Msg, #{transport => udp}),
+            [#dns_optrr{udp_payload_size = Size}] =
+                [OptRR || #dns_optrr{} = OptRR <- Result#dns_message.additional],
+            ?assertEqual(1232, Size, Label)
+        end
+     || {Label, Additional} <- [
+            {"[OPT, A]", [Oversized, ARecord]},
+            {"[A, OPT]", [ARecord, Oversized]},
+            {"[A, A, OPT]", [ARecord, ARecord, Oversized]}
+        ]
+    ],
+    %% An in-range size is left alone wherever it sits
+    InRange = #dns_optrr{udp_payload_size = 1232},
+    Msg2 = #dns_message{adc = 2, additional = [ARecord, InRange]},
+    ?assertEqual(
+        [ARecord, InRange],
+        (erldns_edns_max_payload_size:call(Msg2, #{transport => udp}))#dns_message.additional
+    ).
+
 ede_pipeline_appends_to_optrr(_Config) ->
     ExistingOpt = #dns_optrr{dnssec = true},
     Msg = #dns_message{rc = ?DNS_RCODE_REFUSED, additional = [ExistingOpt]},
