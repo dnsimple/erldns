@@ -39,16 +39,24 @@ call(Msg, _) ->
     Msg.
 
 -spec normalize_edns_max_payload_size(dns:message()) -> dns:message().
-normalize_edns_max_payload_size(Message) ->
-    case Message#dns_message.additional of
-        [#dns_optrr{udp_payload_size = Size} = OptRR | RestAdditional] ->
-            case ?MIN_PACKET_SIZE =< Size andalso Size =< ?MAX_PACKET_SIZE of
-                true ->
-                    Message;
-                false ->
-                    OptRR1 = OptRR#dns_optrr{udp_payload_size = ?MAX_PACKET_SIZE},
-                    Message#dns_message{additional = [OptRR1 | RestAdditional]}
-            end;
-        _ ->
-            Message
+normalize_edns_max_payload_size(#dns_message{additional = Additional} = Message) ->
+    case clamp(Additional) of
+        unchanged -> Message;
+        Clamped -> Message#dns_message{additional = Clamped}
     end.
+
+%% RFC6891§6.1.1: an OPT RR may sit anywhere in the additional section,
+-spec clamp([dns:rr() | dns:optrr()]) -> [dns:rr() | dns:optrr()] | unchanged.
+clamp([#dns_optrr{udp_payload_size = Size} = OptRR | Rest]) when
+    Size < ?MIN_PACKET_SIZE; ?MAX_PACKET_SIZE < Size
+->
+    [OptRR#dns_optrr{udp_payload_size = ?MAX_PACKET_SIZE} | Rest];
+clamp([#dns_optrr{} | _]) ->
+    unchanged;
+clamp([RR | Rest]) ->
+    case clamp(Rest) of
+        unchanged -> unchanged;
+        Clamped -> [RR | Clamped]
+    end;
+clamp([]) ->
+    unchanged.

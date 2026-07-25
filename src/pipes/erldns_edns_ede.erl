@@ -100,17 +100,16 @@ create_record(Code, _) ->
     #dns_opt_ede{info_code = Code}.
 
 -spec add_ede_record(dns:message(), dns:optrr_elem()) -> dns:message().
-add_ede_record(Message, Record) ->
-    case Message#dns_message.additional of
-        [#dns_optrr{} = OptRR | RestAdditional] ->
-            %% Append to existing OPT RR
-            UpdatedOptRR = OptRR#dns_optrr{data = [Record | OptRR#dns_optrr.data]},
-            Message#dns_message{additional = [UpdatedOptRR | RestAdditional]};
-        OtherAdditional ->
-            %% Create new OPT RR with EDE
-            NewOptRR = #dns_optrr{data = [Record]},
-            Message#dns_message{additional = [NewOptRR | OtherAdditional]}
-    end.
+add_ede_record(#dns_message{additional = Additional} = Message, Record) ->
+    Message#dns_message{additional = add_ede(Additional, Record)}.
+
+%% RFC6891§6.1.1: an OPT RR may sit anywhere in the additional section,
+add_ede([#dns_optrr{data = Data} = OptRR | Rest], Record) ->
+    [OptRR#dns_optrr{data = [Record | Data]} | Rest];
+add_ede([RR | Rest], Record) ->
+    [RR | add_ede(Rest, Record)];
+add_ede([], Record) ->
+    [#dns_optrr{data = [Record]}].
 
 -spec enabled() -> boolean().
 enabled() ->
