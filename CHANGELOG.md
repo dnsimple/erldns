@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v11.0.2
+
+### Fixed
+
+- The OPT RR is now found anywhere in the additional section (RFC 6891 §6.1.1), not only at its head.
+- Upgrade dns_erlang to `v5.0.14`
+
 ## v11.0.1
 
 ### Fixed
