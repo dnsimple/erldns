@@ -126,6 +126,18 @@ If you want to perform some benchmarks, see the [benchmarking guide](./BENCHMARK
 
 AXFR zone transfers are not currently implemented. The current implementation (`m:erldns_axfr`) is a stub.
 
+## Platform notes
+
+`erldns` adjusts its socket options and socket counts to the host platform,
+
+| Platform | Wildcard `ip => any` binds | Sockets per listener | Load spread across them |
+| --- | --- | --- | --- |
+| Linux | dual-stack, one socket | `parallel_factor × schedulers` | yes |
+| FreeBSD | one socket per family | `parallel_factor × schedulers` | yes |
+| macOS, NetBSD | dual-stack, one socket | `parallel_factor × schedulers` | **no** |
+| OpenBSD | IPv4 only | `parallel_factor × schedulers` | **no** |
+| Windows | IPv4 only | one | **no** |
+
 ## Tests
 
 To run automated tests:

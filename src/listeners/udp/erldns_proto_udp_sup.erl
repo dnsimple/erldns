@@ -31,7 +31,7 @@ init({Name, PFactor, Timeout, SocketOpts}) ->
 child_specs(Name, PFactor, Timeout, SocketOpts) ->
     SchedulersNum = erlang:system_info(schedulers),
     WorkersName = name(Name, erldns_proto_udp),
-    NumAcceptors = PFactor * SchedulersNum,
+    NumAcceptors = erldns_config:socket_count(PFactor * SchedulersNum),
     NumWorkers = 8 * PFactor * SchedulersNum,
     WorkersPool = workers(WorkersName, NumWorkers, Timeout),
     AcceptorsPool = acceptors(WorkersName, NumAcceptors, Timeout, SocketOpts),

@@ -34,25 +34,27 @@ jobs:
         uses: actionshub/yamllint@v1.8.3
 
   test:
-    name: OTP:${{matrix.otp}}-OS:${{ matrix.os }}
+    name: OTP:${{ matrix.otp }}-OS:${{ matrix.os }}
     strategy:
       matrix:
         os: ['ubuntu-24.04']
         otp: ['29', '28', '27']
         rebar3: ['3.27']
     runs-on: ${{ matrix.os }}
+    env:
+      REBAR_CACHE_DIR: ${{ github.workspace }}/.rebar3-cache
     steps:
       - uses: actions/checkout@v7
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{matrix.otp}}
-          rebar3-version: ${{matrix.rebar3}}
+          otp-version: ${{ matrix.otp }}
+          rebar3-version: ${{ matrix.rebar3 }}
       - uses: actions/cache@v6.1.0
         with:
           path: |
-            ~/.cache/rebar3
+            .rebar3-cache
             _build
-          key: v2-${{ runner.os }}-erlang-${{ matrix.otp }}-rebar3-${{ matrix.rebar3 }}-hash-${{hashFiles('rebar.lock')}}-${{hashFiles('rebar.config')}}
+          key: v3-${{ runner.os }}-erlang-${{ matrix.otp }}-rebar3-${{ matrix.rebar3 }}-hash-${{hashFiles('rebar.lock')}}-${{hashFiles('rebar.config')}}
       - run: make build
       - run: make test
       - name: Coveralls
@@ -61,6 +63,63 @@ jobs:
           file: _build/test/covertool/erldns.covertool.xml
           github-token: ${{ secrets.GITHUB_TOKEN }}
           parallel: true
+
+  # Linux proves the code is correct; these prove it can bind and serve, which
+  # is what socket_SUITE asserts. Advisory until they have a green history.
+  platforms:
+    name: OS:${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: true
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos
+            runner: 'macos-15'
+            vm: false
+          - os: windows
+            runner: 'windows-2025'
+            vm: false
+          - os: freebsd
+            runner: 'ubuntu-24.04'
+            vm: true
+            version: '14.3'
+          - os: openbsd
+            runner: 'ubuntu-24.04'
+            vm: true
+            version: '7.7'
+          - os: netbsd
+            runner: 'ubuntu-24.04'
+            vm: true
+            version: '10.1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: erlef/setup-beam@v1
+        if: ${{ !matrix.vm }}
+        with:
+          otp-version: '28'
+          rebar3-version: '3.27'
+      - name: Common Test
+        if: ${{ !matrix.vm }}
+        run: rebar3 ct --suite=test/socket_SUITE --cover=false
+      # Fallback if an image version stops being published: vmactions/*-vm.
+      - uses: cross-platform-actions/action@v0.29.0
+        if: ${{ matrix.vm }}
+        timeout-minutes: 15
+        env:
+          OTP_MAJOR: '28'
+          REBAR3_VSN: '3.27.0'
+        with:
+          operating_system: ${{ matrix.os }}
+          version: ${{ matrix.version }}
+          architecture: x86-64
+          cpu_count: 4
+          memory: 6G
+          # OpenBSD ships ksh, not bash.
+          shell: sh
+          environment_variables: 'OTP_MAJOR REBAR3_VSN'
+          run: ./scripts/ci/bsd.sh
 
   finish:
     needs: test

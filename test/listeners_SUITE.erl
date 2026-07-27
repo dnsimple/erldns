@@ -635,8 +635,8 @@ udp_load_shedding(Config) ->
     % This is difficult to trigger reliably in test environments, so we make the test
     % more lenient - if delayed event doesn't occur, we verify the mechanism exists
     Schedulers = erlang:system_info(schedulers),
-    _WastePids = [spawn_link(fun waste_fun/0) || _ <- lists:seq(1, Schedulers * 3)],
     #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, udp, delayed, [fun expensive_pipe/2]),
+    _WastePids = [spawn_link(fun waste_fun/0) || _ <- lists:seq(1, Schedulers * 3)],
     % Send many UDP requests to increase load and scheduler utilization
     [spawn_link(fun() -> bombard_udp_fun(Port) end) || _ <- lists:seq(1, Schedulers * 30)],
     % Wait for load shedding to trigger (scheduler utilization > 90%)
@@ -979,7 +979,7 @@ sched_mon_coverage(Config) ->
     ?assert(erpc:call(Node, erlang, is_process_alive, [Mon])).
 
 stats(Config) ->
-    Listeners = [#{name => stats_1, port => 0}, #{name => stats_2, port => 8054}],
+    Listeners = [#{name => stats_1, port => 0}, #{name => stats_2, port => 0}],
     AppConfig = [{erldns, [{listeners, Listeners}]}],
     Config1 = app_helper:start_per_testcase(Config, AppConfig),
     Node = app_helper:get_node(Config1),

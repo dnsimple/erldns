@@ -30,11 +30,11 @@ groups() ->
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_suite(Config0) ->
-    AdminPort = 8083,
+    AdminPort = app_helper:reserve_port(),
     FileName = filename:join([code:priv_dir(erldns), "zones/example.com.json"]),
     AppConfig = [
         {erldns, [
-            {listeners, [#{name => inet_1, port => 8053}]},
+            {listeners, [#{name => inet_1, port => 0}]},
             {zones, #{path => FileName}},
             {admin, [
                 {middleware, [example_middleware]},

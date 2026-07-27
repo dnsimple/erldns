@@ -6,6 +6,7 @@
     stop/1,
     get_node/1,
     get_configured_port/3,
+    reserve_port/0,
     attach_telemetry_remote/4
 ]).
 
@@ -28,7 +29,7 @@ start_per_testcase(Config, Env) ->
 
 %% A failed boot exits the caller rather than returning an error.
 start_peer(Attempt) ->
-    try ?CT_PEER(#{args => ["+S 2 -pa" | code:get_path()], host => "127.0.0.1"}) of
+    try ?CT_PEER(#{args => ["+S", "2", "-pa" | code:get_path()], host => "127.0.0.1"}) of
         {ok, Peer, Node} -> {Peer, Node};
         {error, Reason} -> retry_peer(Reason, Attempt)
     catch
@@ -62,27 +63,14 @@ get_configured_port(Config, Name, udp) ->
     erpc:call(Node, fun() ->
         try
             Children = supervisor:which_children(erldns_listeners),
-            case lists:keyfind({Name, udp}, 1, Children) of
-                {_, Sup, _, _} ->
-                    ChildSpecs = supervisor:which_children(Sup),
-                    case ChildSpecs of
-                        [{erldns_proto_udp_acceptor_sup, AccSup, _, _} | _] ->
-                            AccChildren = supervisor:which_children(AccSup),
-                            case AccChildren of
-                                [{_, AcceptorPid, _, _} | _] ->
-                                    State = sys:get_state(AcceptorPid),
-                                    Socket = element(3, State),
-                                    {ok, {_, Port}} = inet:sockname(Socket),
-                                    Port;
-                                _ ->
-                                    error(no_udp_acceptor)
-                            end;
-                        _ ->
-                            error(no_udp_acceptor_sup)
-                    end;
-                _ ->
-                    error(no_udp_listener)
-            end
+            {_, Sup, _, _} = lists:keyfind({Name, udp}, 1, Children),
+            {_, AccSup, _, _} = lists:keyfind(
+                erldns_proto_udp_acceptor_sup, 1, supervisor:which_children(Sup)
+            ),
+            [{_, Acceptor, _, _} | _] = supervisor:which_children(AccSup),
+            Socket = erldns_proto_udp_acceptor:get_socket(Acceptor),
+            {ok, {_, Port}} = inet:sockname(Socket),
+            Port
         catch
             _:Reason ->
                 error({failed_to_get_udp_port, Reason})
@@ -99,6 +87,14 @@ get_configured_port(_Config, _, standard) ->
 
 get_node(Config) ->
     proplists:get_value(node, Config).
+
+%% For listeners needing the same known port on UDP and TCP, where `port => 0'
+%% would resolve a different one per protocol.
+reserve_port() ->
+    {ok, Socket} = gen_tcp:listen(0, [{active, false}]),
+    {ok, Port} = inet:port(Socket),
+    ok = gen_tcp:close(Socket),
+    Port.
 
 %% Attach telemetry handler on peer node that forwards events to test node
 attach_telemetry_remote(Node, Name, Types, TestPid) when is_list(Types) ->

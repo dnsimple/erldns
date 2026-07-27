@@ -13,18 +13,28 @@ start_link(WorkersName, NumAcceptors, Timeout, SocketOpts) ->
 -spec init({erldns_listeners:name(), non_neg_integer(), timeout(), [gen_udp:option()]}) ->
     {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init({WorkersName, NumAcceptors, Timeout, SocketOpts}) ->
+    Variants = erldns_config:split_socket_opts(SocketOpts),
+    %% Never fewer acceptors than families, or a family would go unbound.
+    Count = max(NumAcceptors, length(Variants)),
     Strategy = #{
         strategy => one_for_one,
-        intensity => 1 + ceil(math:log2(NumAcceptors)),
+        intensity => 1 + ceil(math:log2(Count)),
         period => 5
     },
     Acceptors = [
         #{
             id => {erldns_proto_udp_acceptor, WorkerId},
-            start => {erldns_proto_udp_acceptor, start_link, [WorkersName, SocketOpts]},
+            start =>
+                {erldns_proto_udp_acceptor, start_link, [
+                    WorkersName, variant(WorkerId, Variants)
+                ]},
             shutdown => Timeout,
             type => worker
         }
-     || WorkerId <- lists:seq(1, NumAcceptors)
+     || WorkerId <- lists:seq(1, Count)
     ],
     {ok, {Strategy, Acceptors}}.
+
+%% Round-robin, so each family gets an even share of the acceptors.
+variant(WorkerId, Variants) ->
+    lists:nth((WorkerId - 1) rem length(Variants) + 1, Variants).

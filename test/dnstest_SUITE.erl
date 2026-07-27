@@ -24,14 +24,17 @@ groups() ->
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_suite(Config0) ->
+    %% dnstest queries over both UDP and TCP, so both must land on the same
+    %% port and `port => 0' would give them each a different one.
+    Port = app_helper:reserve_port(),
     AppConfig = [
         {erldns, [
-            {listeners, [#{name => inet_1, ip => {127, 0, 0, 1}, port => 8053}]},
+            {listeners, [#{name => inet_1, ip => {127, 0, 0, 1}, port => Port}]},
             {zones, #{path => code:priv_dir(dnstest)}}
         ]}
     ],
     Config = app_helper:start_per_suite(Config0, AppConfig),
-    DnsTestConfig = [{dnstest, [{inet4, {127, 0, 0, 1}}, {port, 8053}]}],
+    DnsTestConfig = [{dnstest, [{inet4, {127, 0, 0, 1}}, {port, Port}]}],
     application:set_env(DnsTestConfig),
     {ok, _} = application:ensure_all_started([dnstest]),
     Config.
