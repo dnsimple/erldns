@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v11.1.1
+
+### Fixed
+
+- Compact denial of existence no longer fails for query names at the 255-octet ceiling, implementing the successor ladder of RFC 4471 §3.1.2.
+
 ## v11.1.0
 
 ### Fixed
