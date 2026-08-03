@@ -44,7 +44,7 @@ prepare(Opts) ->
     choose_signer_for_rrset/2,
     find_unique_lookups/1,
     map_nsec_rr_types/3,
-    next_dname/2
+    next_dname/3
 ]).
 -endif.
 
@@ -230,7 +230,7 @@ handle(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QType, Mappers, _
     SoaRRSigRecords = maybe_get_soa_rrsig_records(ApexRRSigRRs, MsgAuths),
     RecordTypesForQname = record_types_for_name(Zone, QLabels),
     NsecRrTypes = map_nsec_rr_types(QType, RecordTypesForQname, Mappers),
-    NextDname = next_dname(QName, QLabels),
+    NextDname = next_dname(QName, QLabels, Zone),
     NsecRecord =
         #dns_rr{
             name = QName,
@@ -351,13 +351,17 @@ map_nsec_rr_types(QType, Types, Mappers) ->
 %% formed by prepending a label holding a single zero octet. That costs two octets on the wire,
 %% which a QNAME sitting at the 255-octet ceiling cannot afford, so fall back to the successor
 %% ladder of RFC 4471 §3.1.2.
--spec next_dname(dns:dname(), dns:labels()) -> dns:dname().
-next_dname(QName, QLabels) ->
+-spec next_dname(dns:dname(), dns:labels(), erldns:zone()) -> dns:dname().
+next_dname(QName, QLabels, #zone{labels = ZLabels, name = ZoneName}) ->
     case name_wire_size(QLabels) of
         Size when Size =< 253 ->
             <<?NEXT_DNAME_PART/binary, ".", QName/binary>>;
         Size ->
-            dns_domain:join(successor_labels(QLabels, Size))
+            Depth = length(QLabels) - length(ZLabels),
+            case successor_labels(QLabels, Size, Depth) of
+                apex -> ZoneName;
+                Labels -> dns_domain:join(Labels)
+            end
     end.
 
 -spec name_wire_size(dns:labels()) -> pos_integer().
@@ -373,20 +377,24 @@ name_wire_size(Labels) ->
 %% is representable. Applying step 2's action here instead yields `bar\000.<rest>', the true
 %% immediate representable successor, keeping the span empty. RFC 4471 is Experimental and predates
 %% RFC 8198 by eleven years.
--spec successor_labels(dns:labels(), pos_integer()) -> dns:labels().
-successor_labels([Label | Rest], Size) ->
+%%
+%% `Depth' is how many labels below the zone apex the name currently sits, and it bounds the
+%% ascent. Growing the left-most label of the apex itself would name a sibling of the zone, and the
+%% Next Domain Name is a name in this zone (RFC 4034 §4.1.1). At the apex, that section's rule for
+%% the last NSEC of a zone applies instead, and the answer is the apex.
+-spec successor_labels(dns:labels(), pos_integer(), pos_integer()) -> dns:labels() | apex.
+successor_labels([Label | Rest], Size, Depth) when 0 < Depth ->
     LabelSize = byte_size(Label),
     case label_successor(Label, LabelSize, Size) of
-        max when Rest =/= [] ->
-            successor_labels(Rest, Size - LabelSize - 1);
+        max when 1 < Depth ->
+            successor_labels(Rest, Size - LabelSize - 1, Depth - 1);
         max ->
-            %% N was the largest representable name: a name of 254 octets or more cannot be built
-            %% out of 63-octet all-0xff labels alone (three reach 193 octets, four exceed 255),
-            %% so one label is always short enough for `label_successor/3' to answer.
-            [];
+            apex;
         Successor when is_binary(Successor) ->
             [Successor | Rest]
-    end.
+    end;
+successor_labels(_, _, _) ->
+    apex.
 
 %% RFC 4471 §3.1.2 steps 2 and 3: grow the label by an octet of the minimum sort value where both
 %% it and the name have the room, otherwise increment it in place. `max' when neither is possible.

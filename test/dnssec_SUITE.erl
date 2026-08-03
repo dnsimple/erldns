@@ -5,6 +5,7 @@
 
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
+-include_lib("erldns/include/erldns.hrl").
 
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
@@ -29,6 +30,7 @@ all() ->
         next_dname_increments_leftmost_label_at_255,
         next_dname_skips_uppercase_ascii,
         next_dname_ascends_past_saturated_label,
+        next_dname_stops_at_the_zone_apex,
         nsec_signed_for_max_length_qname
     ].
 
@@ -610,6 +612,19 @@ next_dname_ascends_past_saturated_label(_Config) ->
     ?assertEqual([~"bar\000" | Rest], dns_domain:split(Next)),
     assert_valid_successor(QName, Next).
 
+%% The ascent stops at the zone apex. Growing the apex's own left-most label would name a sibling
+%% of the zone, and the Next Domain Name is a name in this zone (RFC 4034 §4.1.1); that section's
+%% rule for the last NSEC of a zone gives the apex instead. Reachable only for an apex long enough
+%% that one saturated label below it reaches the ceiling, so 190 octets or more.
+next_dname_stops_at_the_zone_apex(_Config) ->
+    Label = fun(Len) -> binary:copy(~"a", Len) end,
+    ZoneName =
+        <<(Label(48))/binary, ".", (Label(63))/binary, ".", (Label(63))/binary, ".example.com">>,
+    ?assertEqual(190, byte_size(dns_domain:to_wire(ZoneName))),
+    QName = <<(binary:copy(<<16#ff>>, 63))/binary, ".", ZoneName/binary>>,
+    ?assertEqual(254, byte_size(dns_domain:to_wire(QName))),
+    ?assertEqual(ZoneName, next_dname(QName, ZoneName)).
+
 %% End to end: the compact denial-of-existence NSEC for a max-length QNAME is built and signed
 %% instead of raising `name_too_long' out of the RRSIG canonicalisation.
 nsec_signed_for_max_length_qname(_Config) ->
@@ -634,8 +649,15 @@ nsec_signed_for_max_length_qname(_Config) ->
     #dns_rr{data = #dns_rrdata_nsec{next_dname = Next}} = Nsec,
     assert_valid_successor(QName, Next).
 
+%% Every name the ladder cases build sits two labels below its zone apex, which is all
+%% `next_dname/3' needs of the zone besides its name.
 next_dname(QName) ->
-    erldns_dnssec:next_dname(QName, dns_domain:split(QName)).
+    Labels = dns_domain:split(QName),
+    next_dname(QName, dns_domain:join(lists:nthtail(length(Labels) - 2, Labels))).
+
+next_dname(QName, ZoneName) ->
+    Zone = #zone{labels = dns_domain:split(ZoneName), name = ZoneName},
+    erldns_dnssec:next_dname(QName, dns_domain:split(QName), Zone).
 
 %% The two invariants every branch of the ladder owes: the successor is encodable at all, which is
 %% what the production crash violated, and it sorts after its input, without which the NSEC would
