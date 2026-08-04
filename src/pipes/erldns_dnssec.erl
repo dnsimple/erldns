@@ -38,8 +38,14 @@ prepare(Opts) ->
 -export([add_nsec_type_mapper/3]).
 
 -ifdef(TEST).
--export([handle/7, requires_key_signing_key/1, choose_signer_for_rrset/2, find_unique_lookups/1]).
--export([map_nsec_rr_types/3]).
+-export([
+    handle/7,
+    requires_key_signing_key/1,
+    choose_signer_for_rrset/2,
+    find_unique_lookups/1,
+    map_nsec_rr_types/3,
+    next_dname/3
+]).
 -endif.
 
 -doc """
@@ -224,7 +230,7 @@ handle(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QType, Mappers, _
     SoaRRSigRecords = maybe_get_soa_rrsig_records(ApexRRSigRRs, MsgAuths),
     RecordTypesForQname = record_types_for_name(Zone, QLabels),
     NsecRrTypes = map_nsec_rr_types(QType, RecordTypesForQname, Mappers),
-    NextDname = <<?NEXT_DNAME_PART/binary, ".", QName/binary>>,
+    NextDname = next_dname(QName, QLabels, Zone),
     NsecRecord =
         #dns_rr{
             name = QName,
@@ -340,6 +346,81 @@ map_nsec_rr_types(QType, Types, Mappers) ->
             Types
         )
     ).
+
+%% RFC 9824 §3.1: the NSEC Next Domain Name is the immediate lexicographic successor of the QNAME,
+%% formed by prepending a label holding a single zero octet. That costs two octets on the wire,
+%% which a QNAME sitting at the 255-octet ceiling cannot afford, so fall back to the successor
+%% ladder of RFC 4471 §3.1.2.
+-spec next_dname(dns:dname(), dns:labels(), erldns:zone()) -> dns:dname().
+next_dname(QName, QLabels, #zone{labels = ZLabels, name = ZoneName}) ->
+    case name_wire_size(QLabels) of
+        Size when Size =< 253 ->
+            <<?NEXT_DNAME_PART/binary, ".", QName/binary>>;
+        Size ->
+            Depth = length(QLabels) - length(ZLabels),
+            case successor_labels(QLabels, Size, Depth) of
+                apex -> ZoneName;
+                Labels -> dns_domain:join(Labels)
+            end
+    end.
+
+-spec name_wire_size(dns:labels()) -> pos_integer().
+name_wire_size(Labels) ->
+    lists:foldl(fun(Label, Acc) -> Acc + byte_size(Label) + 1 end, 1, Labels).
+
+%% RFC 4471 §3.1.2 steps 2-4: the smallest name sorting after N and after every name below it.
+%%
+%% Step 4 deviates deliberately. The RFC loops back to step 2, whose guard ("N is one octet shorter
+%% than the maximum DNS name length") can no longer hold once a 64-octet label has been dropped, so
+%% the RFC falls through to step 3 and returns a name past the true successor: for
+%% `<0xff x63>.bar.<rest>' it yields `bas.<rest>', though `barx.<rest>' sorts inside that span and
+%% is representable. Applying step 2's action here instead yields `bar\000.<rest>', the true
+%% immediate representable successor, keeping the span empty. RFC 4471 is Experimental and predates
+%% RFC 8198 by eleven years.
+%%
+%% `Depth' is how many labels below the zone apex the name currently sits, and it bounds the
+%% ascent. Growing the left-most label of the apex itself would name a sibling of the zone, and the
+%% Next Domain Name is a name in this zone (RFC 4034 §4.1.1). At the apex, that section's rule for
+%% the last NSEC of a zone applies instead, and the answer is the apex.
+-spec successor_labels(dns:labels(), pos_integer(), pos_integer()) -> dns:labels() | apex.
+successor_labels([Label | Rest], Size, Depth) when 0 < Depth ->
+    LabelSize = byte_size(Label),
+    case label_successor(Label, LabelSize, Size) of
+        max when 1 < Depth ->
+            successor_labels(Rest, Size - LabelSize - 1, Depth - 1);
+        max ->
+            apex;
+        Successor when is_binary(Successor) ->
+            [Successor | Rest]
+    end;
+successor_labels(_, _, _) ->
+    apex.
+
+%% RFC 4471 §3.1.2 steps 2 and 3: grow the label by an octet of the minimum sort value where both
+%% it and the name have the room, otherwise increment it in place. `max' when neither is possible.
+-spec label_successor(dns:label(), non_neg_integer(), pos_integer()) -> dns:label() | max.
+label_successor(Label, LabelSize, NameSize) when LabelSize =< 62, NameSize =< 254 ->
+    <<Label/binary, 0>>;
+label_successor(Label, LabelSize, _NameSize) ->
+    increment_label(Label, LabelSize).
+
+%% RFC 4471 §3.1.2 step 3: increment the right-most octet below the maximum sort value and drop
+%% everything to its right. Uppercase US-ASCII is skipped because canonical order compares names
+%% lowercased (RFC 4034 §6.1), so 0x41-0x5a never occur in a canonical name and the successor of
+%% $@ is $[. QName arrives lowercased, so that is the only skip that can arise.
+-spec increment_label(dns:label(), non_neg_integer()) -> dns:label() | max.
+increment_label(_, 0) ->
+    max;
+increment_label(Label, Pos) ->
+    Prev = Pos - 1,
+    case Label of
+        <<_:Prev/binary, 16#ff, _/binary>> ->
+            increment_label(Label, Prev);
+        <<Prefix:Prev/binary, $@, _/binary>> ->
+            <<Prefix/binary, $[>>;
+        <<Prefix:Prev/binary, Octet, _/binary>> ->
+            <<Prefix/binary, (Octet + 1)>>
+    end.
 
 -compile({inline, [minimum_soa_ttl/1]}).
 -spec minimum_soa_ttl(dns:rr()) -> dns:ttl().

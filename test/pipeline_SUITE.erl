@@ -6,6 +6,7 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 -define(PIPE_ERROR_EVENT, [erldns, pipeline, error]).
+-define(LOG_REPORT, log_report).
 
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
@@ -116,8 +117,23 @@ init_per_testcase(_, Config) ->
 
 -spec end_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> term().
 end_per_testcase(TC, Config) ->
+    _ = logger:remove_handler(TC),
     erldns_pipeline:delete_pipeline(TC),
     Config.
+
+%% Forward structured reports to this process so a case can assert on what a pipeline failure
+%% actually logs. Keyed by case name, as the pipelines are: `pipe_calls' is a parallel group, so a
+%% shared key would let a sibling's `end_per_testcase/2' tear this down mid-case.
+capture_log_reports(Case) ->
+    _ = logger:remove_handler(Case),
+    logger:add_handler(Case, ?MODULE, #{config => #{pid => self()}}).
+
+%% `logger_handler' callback for `capture_log_reports/0'.
+log(#{msg := {report, #{what := _} = Report}}, #{config := #{pid := Pid}}) ->
+    Pid ! {?LOG_REPORT, Report},
+    ok;
+log(_, _) ->
+    ok.
 
 %% Tests
 terminate_removes_pt(_) ->
@@ -256,6 +272,7 @@ pipe_returns_unexpected_value(_) ->
     assert_telemetry_event(unexpected).
 
 pipe_raises(_) ->
+    ok = capture_log_reports(?FUNCTION_NAME),
     Msg = example_msg(),
     Fun = fun(_, _) -> erlang:error(an_error) end,
     erldns_pipeline:store_pipeline(?FUNCTION_NAME, [Fun]),
@@ -263,7 +280,8 @@ pipe_raises(_) ->
     ?assertMatch(
         #dns_message{tc = false}, erldns_pipeline:call_custom(Msg, def_opts(), ?FUNCTION_NAME)
     ),
-    assert_telemetry_event(exception).
+    assert_telemetry_event(exception),
+    assert_log_report(pipe_failed_with_exception).
 
 simple_prerequisite_satisfied(_) ->
     % Create two mock modules: B depends on A (via callback)
@@ -404,6 +422,17 @@ assert_telemetry_event(Type) ->
             ok
     after 1000 ->
         ct:fail("Telemetry event not triggered: error")
+    end.
+
+%% The report has to carry `reason', not `error'. Downstream error reporters match structured logs
+%% on #{class, reason, stacktrace} and silently drop whatever does not fit, so a rename here costs
+%% the visibility these two logs exist to provide.
+assert_log_report(What) ->
+    receive
+        {?LOG_REPORT, #{what := What, class := _, reason := _, stacktrace := [_ | _]}} ->
+            ok
+    after 1000 ->
+        ct:fail("No log report carrying an exception shape for ~p", [What])
     end.
 
 def_opts() ->

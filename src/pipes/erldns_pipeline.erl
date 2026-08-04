@@ -465,7 +465,7 @@ do_call(Msg, [Pipe | Pipes], Opts) when is_function(Pipe, 2) ->
                     dns_message => Msg,
                     opts => Opts,
                     class => Class,
-                    error => Error,
+                    reason => Error,
                     stacktrace => Stacktrace
                 },
                 ?LOG_METADATA
@@ -521,7 +521,7 @@ execute_work(Msg0, Opts0, [AsyncFun0 | Pipes], Retries) ->
                     dns_message => Msg0,
                     opts => Opts0,
                     class => Class,
-                    error => Error,
+                    reason => Error,
                     stacktrace => Stacktrace
                 },
                 ?LOG_METADATA
