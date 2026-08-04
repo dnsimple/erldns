@@ -17,7 +17,7 @@
 
 -behaviour(supervisor).
 
--export([start_link/0, start_listeners/0]).
+-export([start_link/0, start_listeners/0, stop_listeners/0]).
 -export([gc/0, gc_registered/0, gc_registered/1]).
 
 -export([init/1]).
@@ -27,10 +27,21 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, noargs).
 
 %% Start the DNS listeners on request, for when they were not started at boot
-%% (`autostart_listeners` set to `false`).
+%% (`autostart_listeners` set to `false`), or after `stop_listeners/0`, which keeps the child
+%% spec and therefore makes `supervisor:start_child/2` report `already_present`.
 -spec start_listeners() -> supervisor:startchild_ret().
 start_listeners() ->
-    supervisor:start_child(?MODULE, supervisor(erldns_listeners)).
+    case supervisor:start_child(?MODULE, supervisor(erldns_listeners)) of
+        {error, already_present} ->
+            supervisor:restart_child(?MODULE, erldns_listeners);
+        Result ->
+            Result
+    end.
+
+%% Stop the DNS listeners on request, closing the sockets they bind.
+-spec stop_listeners() -> ok | {error, not_found}.
+stop_listeners() ->
+    supervisor:terminate_child(?MODULE, erldns_listeners).
 
 %% Garbage collect all processes.
 -spec gc() -> integer().

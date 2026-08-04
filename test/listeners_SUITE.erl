@@ -23,7 +23,8 @@ all() ->
         reset_queues,
         stats,
         autostart_listeners_gates_init,
-        autostart_listeners_started_on_request
+        autostart_listeners_started_on_request,
+        listeners_stopped_on_request
     ].
 
 -spec groups() -> [ct_suite:ct_group_def()].
@@ -157,6 +158,31 @@ autostart_listeners_started_on_request(Config) ->
     ?assertMatch({ok, _}, erpc:call(Node, erldns, start_listeners, [])),
     ?assert(is_pid(erpc:call(Node, erlang, whereis, [erldns_listeners]))),
     ?assertMatch({error, {already_started, _}}, erpc:call(Node, erldns, start_listeners, [])),
+    app_helper:stop(Config1).
+
+listeners_stopped_on_request(Config) ->
+    % stop_listeners/0 closes the listeners started at boot and is idempotent; the child spec is
+    % kept, so start_listeners/0 opens them again.
+    AppConfig = [
+        {erldns, [
+            {listeners, [
+                #{
+                    name => ?FUNCTION_NAME,
+                    transport => standard,
+                    port => 0,
+                    opts => #{ingress_request_timeout => ?INGRESS_TIMEOUT}
+                }
+            ]}
+        ]}
+    ],
+    Config1 = app_helper:start_per_testcase(Config, AppConfig),
+    Node = app_helper:get_node(Config1),
+    ?assert(is_pid(erpc:call(Node, erlang, whereis, [erldns_listeners]))),
+    ?assertEqual(ok, erpc:call(Node, erldns, stop_listeners, [])),
+    ?assertEqual(undefined, erpc:call(Node, erlang, whereis, [erldns_listeners])),
+    ?assertEqual(ok, erpc:call(Node, erldns, stop_listeners, [])),
+    ?assertMatch({ok, _}, erpc:call(Node, erldns, start_listeners, [])),
+    ?assert(is_pid(erpc:call(Node, erlang, whereis, [erldns_listeners]))),
     app_helper:stop(Config1).
 
 port_must_be_inet_port(_) ->

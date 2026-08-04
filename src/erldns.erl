@@ -19,7 +19,7 @@ Convenience API to start erldns directly.
 
 -include("erldns.hrl").
 
--export([start/0, start_listeners/0]).
+-export([start/0, start_listeners/0, stop_listeners/0]).
 
 -export_type([keyset/0, zone/0]).
 
@@ -36,7 +36,7 @@ Start the DNS listeners if they were not started at boot.
 When `erldns` is configured with the `autostart_listeners` application environment set to
 `false`, the listeners (and the sockets they bind) are not started during boot. An embedding
 application can then call this once its own resources are ready, so no query is served before
-they exist.
+they exist. Also brings the listeners back after `stop_listeners/0`.
 
 Returns the supervisor child start result. Idempotent: returns `{error, {already_started, _}}`
 when the listeners are already running.
@@ -44,3 +44,17 @@ when the listeners are already running.
 -spec start_listeners() -> supervisor:startchild_ret().
 start_listeners() ->
     erldns_sup:start_listeners().
+
+-doc """
+Stop the DNS listeners, closing the sockets they bind.
+
+The mirror of `start_listeners/0`: an embedding application can call this before tearing down
+the resources its pipeline stages depend on, so no query is served once they are gone. Queries
+in flight are terminated along with the listeners, they are not drained.
+
+Returns `{error, not_found}` when the listeners were never started. Idempotent: returns `ok`
+when they are already stopped.
+""".
+-spec stop_listeners() -> ok | {error, not_found}.
+stop_listeners() ->
+    erldns_sup:stop_listeners().

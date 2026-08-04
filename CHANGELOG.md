@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v11.2.0
+
+### Added
+
+- `erldns:stop_listeners/0` closes the listener sockets on request, the mirror of `erldns:start_listeners/0`.
+
 ## v11.1.1
 
 ### Fixed
