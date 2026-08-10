@@ -9,6 +9,8 @@
 
 -export([decode/2, decode_record/2, parse_keysets/1]).
 
+-type context_options() :: undefined | #{atom() => dynamic()}.
+
 -ifdef(TEST).
 -export([json_record_to_erlang/1]).
 -endif.
@@ -17,7 +19,10 @@
 decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Decoders) ->
     Sha = maps:get(~"sha", Zone, ~""),
     JsonKeys = maps:get(~"keys", Zone, []),
-    Records = lists:map(fun(JsonRecord) -> decode_record(JsonRecord, Decoders) end, JsonRecords),
+    ContextOptions = context_options(),
+    Records = lists:map(
+        fun(JsonRecord) -> decode_record(JsonRecord, Decoders, ContextOptions) end, JsonRecords
+    ),
     FilteredRecords = lists:filter(record_filter(), Records),
     DistinctRecords = lists:usort(FilteredRecords),
     erldns_zone_codec:build_zone(Name, Sha, DistinctRecords, parse_keysets(JsonKeys)).
@@ -25,9 +30,16 @@ decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Decoders) ->
 -spec decode_record(#{binary() => json:decode_value()}, [erldns_zone_codec:decoder()]) ->
     not_implemented | dns:rr().
 decode_record(JsonRecord, Decoders) ->
+    decode_record(JsonRecord, Decoders, context_options()).
+
+-spec decode_record(
+    #{binary() => json:decode_value()}, [erldns_zone_codec:decoder()], context_options()
+) ->
+    not_implemented | dns:rr().
+decode_record(JsonRecord, Decoders, ContextOptions) ->
     maybe
-        true ?= apply_context_options(JsonRecord),
-        not_implemented ?= json_record_to_erlang(JsonRecord),
+        true ?= apply_context_options(JsonRecord, ContextOptions),
+        not_implemented ?= standard_record_to_erlang(JsonRecord),
         not_implemented ?= try_custom_decoders(JsonRecord, Decoders),
         ?LOG_WARNING(#{what => unsupported_record, record => JsonRecord}, ?LOG_METADATA),
         not_implemented
@@ -37,6 +49,32 @@ decode_record(JsonRecord, Decoders) ->
         Value ->
             Value
     end.
+
+-spec standard_record_to_erlang(dynamic()) -> not_implemented | dns:rr().
+standard_record_to_erlang(#{~"type" := TypeBin} = JsonRecord) when
+    is_binary(TypeBin), ~"" =/= TypeBin
+->
+    case dns_names:name_type(TypeBin) of
+        undefined ->
+            case all_digits(TypeBin) of
+                true -> json_record_to_erlang(JsonRecord);
+                false -> not_implemented
+            end;
+        _KnownType ->
+            json_record_to_erlang(JsonRecord)
+    end;
+standard_record_to_erlang(_JsonRecord) ->
+    not_implemented.
+
+%% Matched on bytes rather than through `string:to_integer/1',
+%% which walks the binary as unicode graphemes.
+-spec all_digits(binary()) -> boolean().
+all_digits(<<C, Rest/binary>>) when $0 =< C, C =< $9 ->
+    all_digits(Rest);
+all_digits(~"") ->
+    true;
+all_digits(_) ->
+    false.
 
 -spec parse_keysets([json:decode_value()]) -> [erldns:keyset()].
 parse_keysets([]) ->
@@ -93,21 +131,29 @@ record_filter() ->
 %%
 %% If the context is a list and has at least one condition that passes
 %% then it will be included in the zone
--spec apply_context_options(dynamic()) -> boolean().
-apply_context_options(#{~"context" := Context}) ->
+-spec apply_context_options(dynamic(), context_options()) -> boolean().
+apply_context_options(_JsonRecord, undefined) ->
+    true;
+apply_context_options(#{~"context" := Context}, ContextOptions) ->
+    apply_context_match_empty_check(
+        maps:get(match_empty, ContextOptions, false), Context
+    ) orelse
+        apply_context_list_check(
+            maps:get(allow, ContextOptions, []), Context
+        );
+apply_context_options(#{}, _ContextOptions) ->
+    true.
+
+%% Read once per zone rather than per record: it is an ETS lookup into the application
+%% controller, and a zone holds as many records as it holds.
+-spec context_options() -> context_options().
+context_options() ->
     case application:get_env(erldns, zones, #{}) of
         #{context_options := ContextOptions} when is_map(ContextOptions) ->
-            apply_context_match_empty_check(
-                maps:get(match_empty, ContextOptions, false), Context
-            ) orelse
-                apply_context_list_check(
-                    maps:get(allow, ContextOptions, []), Context
-                );
+            ContextOptions;
         _ ->
-            true
-    end;
-apply_context_options(#{}) ->
-    true.
+            undefined
+    end.
 
 -spec apply_context_list_check(list(), list()) -> boolean().
 apply_context_list_check(ContextAllow, Context) ->
@@ -132,7 +178,7 @@ try_custom_decoders(Data, [Decoder | Rest]) ->
     end.
 
 % Internal converters
--spec json_record_to_erlang(dynamic()) -> not_implemented | dns:rr() | badarg.
+-spec json_record_to_erlang(dynamic()) -> not_implemented | dns:rr().
 json_record_to_erlang(#{~"name" := _, ~"type" := _, ~"ttl" := _, ~"data" := Data} = JsonRecord) when
     Data =/= null
 ->

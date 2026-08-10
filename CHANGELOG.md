@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Changed
+
+- A zone half made of custom types decodes ~70x faster, one almost entirely made of them ~200x; zones of standard types are unaffected.
+
 ## v11.2.0
 
 ### Added
