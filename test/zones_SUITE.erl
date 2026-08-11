@@ -85,6 +85,9 @@ groups() ->
             json_record_svcb_keynnnn_format,
             json_record_null_data,
             json_record_unsupported_type,
+            json_record_numeric_type,
+            json_record_unknown_type_reaches_custom_decoders,
+            json_record_without_type_name_reaches_custom_decoders,
             encode_meta_to_json,
             encode_decode_svcb,
             encode_decode_https,
@@ -1057,6 +1060,79 @@ json_record_unsupported_type(_) ->
             },
             []
         )
+    ).
+
+json_record_numeric_type(_) ->
+    %% A bare numeric type name is a standard record, not a custom one, and must still be
+    %% decoded rather than handed to the custom decoders.
+    ?assertEqual(
+        #dns_rr{
+            name = ~"example.com",
+            type = ?DNS_TYPE_A,
+            data = #dns_rrdata_a{ip = {192, 0, 2, 1}},
+            ttl = 3600
+        },
+        erldns_zone_decoder:decode_record(
+            #{
+                ~"name" => ~"example.com",
+                ~"type" => integer_to_binary(?DNS_TYPE_A),
+                ~"ttl" => 3600,
+                ~"data" => #{~"ip" => ~"192.0.2.1"}
+            },
+            []
+        )
+    ).
+
+json_record_unknown_type_reaches_custom_decoders(_) ->
+    %% A type name dns_erlang does not know belongs to a custom decoder. It is reached
+    %% without dns_json raising on the way, which is what makes a zone of such records
+    %% decode in the same time as a zone of standard ones.
+    %% `TYPE65535' is here because it looks decodable and is not: `dns_names:name_type/1'
+    %% has no clause for RFC 3597's generic spelling and `string:to_integer/1' does not
+    %% strip the prefix, so dns_json rejects it too and it belongs to the custom decoders.
+    Decoder = fun
+        (#{~"type" := Type, ~"name" := Name, ~"ttl" := Ttl}) when
+            Type =:= ~"CUSTOM"; Type =:= ~"TYPE65535"
+        ->
+            #dns_rr{name = Name, type = 30001, ttl = Ttl, data = ~"custom"};
+        (_) ->
+            not_implemented
+    end,
+    lists:foreach(
+        fun(Type) ->
+            ?assertEqual(
+                #dns_rr{name = ~"example.com", type = 30001, ttl = 3600, data = ~"custom"},
+                erldns_zone_decoder:decode_record(
+                    #{
+                        ~"name" => ~"example.com",
+                        ~"type" => Type,
+                        ~"ttl" => 3600,
+                        ~"data" => #{}
+                    },
+                    [Decoder]
+                )
+            )
+        end,
+        [~"CUSTOM", ~"TYPE65535"]
+    ).
+
+json_record_without_type_name_reaches_custom_decoders(_) ->
+    %% `dns_json:from_map/1' guards its record clause on a binary type, so a record without
+    %% one is not a standard record by construction: missing, empty and non-binary alike
+    %% belong to the custom decoders, and are left unread when there are none.
+    Decoder = fun(#{~"name" := Name, ~"ttl" := Ttl}) ->
+        #dns_rr{name = Name, type = 30001, ttl = Ttl, data = ~"custom"}
+    end,
+    Untyped = #{~"name" => ~"example.com", ~"ttl" => 3600, ~"data" => #{}},
+    lists:foreach(
+        fun(JsonRecord) ->
+            ?assertEqual(
+                #dns_rr{name = ~"example.com", type = 30001, ttl = 3600, data = ~"custom"},
+                erldns_zone_decoder:decode_record(JsonRecord, [Decoder])
+            ),
+            ?assertEqual(not_implemented, erldns_zone_decoder:decode_record(JsonRecord, []))
+        end,
+        [Untyped, Untyped#{~"type" => ~""}, Untyped#{~"type" => ?DNS_TYPE_A}]
     ).
 
 json_record_context_filtered(_) ->
