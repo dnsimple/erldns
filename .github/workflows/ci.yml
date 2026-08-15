@@ -104,7 +104,7 @@ jobs:
         if: ${{ !matrix.vm }}
         run: rebar3 ct --suite=test/socket_SUITE --cover=false
       # Fallback if an image version stops being published: vmactions/*-vm.
-      - uses: cross-platform-actions/action@v1.3.0
+      - uses: cross-platform-actions/action@v1.4.0
         if: ${{ matrix.vm }}
         timeout-minutes: 15
         env:
