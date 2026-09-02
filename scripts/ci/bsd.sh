@@ -20,7 +20,7 @@ case "$(uname -s)" in
     OpenBSD)
         sudo pkg_add -I git curl </dev/null || true
         # Plain versioned stems rather than branches, so erlang%27 selects nothing.
-        pkg=$(pkg_info -Q erlang | grep -E '^erlang-[0-9]' | tail -1 || true)
+        pkg=$(pkg_info -Q erlang | grep -E "^erlang-${OTP_MAJOR}\." | tail -1 || true)
         if [ -n "${pkg}" ]; then
             sudo pkg_add -I "${pkg}" </dev/null || true
         fi
