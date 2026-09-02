@@ -89,10 +89,8 @@ jobs:
             runner: 'ubuntu-24.04'
             vm: true
             version: '7.9'
-          - os: netbsd
-            runner: 'ubuntu-24.04'
-            vm: true
-            version: '10.1'
+          # NetBSD is out until pkgsrc lang/erlang moves past 27: no binary OTP 28
+          # exists for it, and building one does not fit an emulated job.
     steps:
       - uses: actions/checkout@v7
       - uses: erlef/setup-beam@v1
