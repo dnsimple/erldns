@@ -20,7 +20,7 @@ case "$(uname -s)" in
     OpenBSD)
         sudo pkg_add -I git curl </dev/null || true
         # Plain versioned stems rather than branches, so erlang%27 selects nothing.
-        pkg=$(pkg_info -Q erlang | grep -E '^erlang-[0-9]' | tail -1 || true)
+        pkg=$(pkg_info -Q erlang | grep -E "^erlang-${OTP_MAJOR}\." | tail -1 || true)
         if [ -n "${pkg}" ]; then
             sudo pkg_add -I "${pkg}" </dev/null || true
         fi
@@ -54,14 +54,14 @@ for candidate in $(candidates); do
     case "${release}" in
         '' | *[!0-9]*) continue ;;
     esac
-    if [ "${release}" -ge 27 ]; then
+    if [ "${release}" -ge 28 ]; then
         ERL="${candidate}"
         break
     fi
 done
 
 if [ -z "${ERL}" ]; then
-    echo "no OTP 27 or newer found among:" >&2
+    echo "no OTP 28 or newer found among:" >&2
     candidates >&2
     ls -d /usr/local/bin/*erl* /usr/pkg/bin/*erl* /usr/local/lib/erlang* /usr/pkg/lib/erlang* >&2 ||
         true

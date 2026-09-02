@@ -67,5 +67,5 @@ When reviewing or writing code:
 - Zone files are JSON format in `priv/zones/` (see `priv/zones/ZONES.md`)
 - Default DNS port: 8053 (UDP/TCP)
 - AXFR zone transfers: Not implemented (stub only)
-- Minimum OTP version: 27
+- Minimum OTP version: 28
 - Coverage requirement: 85% minimum and should only grow
