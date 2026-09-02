@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Changed
+
+- Minimum supported Erlang/OTP is now 28, as required by `worker_pool` 7.
+
 ## v11.2.2
 
 ### Updated

@@ -2,7 +2,7 @@
 
 Serve DNS authoritative responses... with Erlang.
 
-[![Erlang/OTP Versions](https://img.shields.io/badge/erlang%2Fotp-27%7C28-blue)](https://www.erlang.org)
+[![Erlang/OTP Versions](https://img.shields.io/badge/erlang%2Fotp-28%7C29-blue)](https://www.erlang.org)
 [![Build Status](https://github.com/dnsimple/erldns/actions/workflows/ci.yml/badge.svg)](https://github.com/dnsimple/erldns/actions/workflows/ci.yml)
 [![Module Version](https://img.shields.io/hexpm/v/erldns.svg)](https://hex.pm/packages/erldns)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/erldns/)

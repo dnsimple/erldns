@@ -54,14 +54,14 @@ for candidate in $(candidates); do
     case "${release}" in
         '' | *[!0-9]*) continue ;;
     esac
-    if [ "${release}" -ge 27 ]; then
+    if [ "${release}" -ge 28 ]; then
         ERL="${candidate}"
         break
     fi
 done
 
 if [ -z "${ERL}" ]; then
-    echo "no OTP 27 or newer found among:" >&2
+    echo "no OTP 28 or newer found among:" >&2
     candidates >&2
     ls -d /usr/local/bin/*erl* /usr/pkg/bin/*erl* /usr/local/lib/erlang* /usr/pkg/lib/erlang* >&2 ||
         true

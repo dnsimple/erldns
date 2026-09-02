@@ -4,7 +4,7 @@
 
 ### Prerequisites
 
-- Erlang/OTP 27 or 28
+- Erlang/OTP 28 or 29
 - Rebar3
 - Git
 
