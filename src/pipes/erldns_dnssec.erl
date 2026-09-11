@@ -9,6 +9,13 @@ that being an authoritative (e.g. `m:erldns_resolver`) or recursive
 You also need to provide the zone keys for signing, during loading,
 see [`ZONES`](priv/zones/ZONES.md) for more details.
 
+## Delegation points
+
+Referrals follow RFC 4035 §3.1.4: the authority section carries the delegation's DS RRset and
+its RRSIG, or an NSEC at the delegation name proving there is none. NS RRsets at delegation
+points, glue, and records occluded by a cut are never signed (§2.2), and an NSEC at a delegation
+name advertises only NS, DS, RRSIG and NSEC (RFC 4034 §4.1.2).
+
 ## NSEC type-mapper extension
 
 When a name only carries a custom type (e.g. a record that another pipeline stage synthesizes into
@@ -111,25 +118,96 @@ call(Msg, Opts) ->
     RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Msg)),
     {Msg, Opts#{dnssec => RequestDnssec}}.
 
--doc "Get signed records from a zone".
+-doc """
+Get signed records from a zone.
+
+Key records (DNSKEY, CDS, CDNSKEY) are signed with the key signing key, everything else with the
+zone signing key. NS RRsets at delegation points, glue, and any other data occluded by a zone cut
+are not authoritative in this zone and are left unsigned (RFC 4035 §2.2); the DS RRset at a cut is
+the parent's own data and is signed like the rest.
+""".
 -spec get_signed_records(erldns:zone()) -> #{atom() => [dns:rr()]}.
-get_signed_records(#zone{name = ZoneName, records = Records, keysets = Keysets}) ->
-    {ZoneRecords, KeyRecords} = lists:partition(fun filter_cds_cdnskey/1, Records),
+get_signed_records(#zone{
+    name = ZoneName, labels = ZLabels, records = Records, keysets = Keysets
+}) ->
+    {ZoneRecords, KeyRecords} = lists:partition(fun is_zone_record/1, Records),
+    SignableRecords = authoritative_records(ZLabels, ZoneRecords),
     KeyRRSigRecords = lists:flatmap(key_rrset_signer(ZoneName, KeyRecords), Keysets),
-    ZoneRRSigRecords = lists:flatmap(zone_rrset_signer(ZoneName, ZoneRecords), Keysets),
+    ZoneRRSigRecords = lists:flatmap(zone_rrset_signer(ZoneName, SignableRecords), Keysets),
     #{key_rrsig_rrs => KeyRRSigRecords, zone_rrsig_rrs => ZoneRRSigRecords}.
 
--doc "Get signed records from a zone".
+-doc """
+Get the records of a zone signed with the zone signing key.
+
+Same rules as `get_signed_records/1`. Given a single RRset, a delegation is recognised by its NS
+RRset; glue arriving on its own cannot be told apart from ordinary address records.
+""".
 -spec get_signed_zone_records(erldns:zone()) -> [dns:rr()].
-get_signed_zone_records(#zone{name = ZoneName, records = Records, keysets = Keysets}) ->
-    ZoneRecords = lists:filter(fun filter_cds_cdnskey/1, Records),
+get_signed_zone_records(#zone{
+    name = ZoneName, labels = ZLabels, records = Records, keysets = Keysets
+}) ->
+    ZoneRecords = authoritative_records(ZLabels, lists:filter(fun is_zone_record/1, Records)),
     lists:flatmap(zone_rrset_signer(ZoneName, ZoneRecords), Keysets).
 
-filter_cds_cdnskey(#dns_rr{type = Type}) ->
-    (Type =/= ?DNS_TYPE_DS) andalso
-        (Type =/= ?DNS_TYPE_CDS) andalso
+%% DNSKEY, CDS and CDNSKEY take the key signing key (RFC 7344 §4.1). DS is ordinary data of the
+%% parent zone and takes the zone signing key like everything else.
+is_zone_record(#dns_rr{type = Type}) ->
+    (Type =/= ?DNS_TYPE_CDS) andalso
         (Type =/= ?DNS_TYPE_DNSKEY) andalso
         (Type =/= ?DNS_TYPE_CDNSKEY).
+
+%% RFC 4035 §2.2: the NS RRset at a delegation point and the glue below it are not signed, and the
+%% parent serves nothing else at or below a cut, so nothing there is signed either. The DS RRset at
+%% the cut is the exception: it is the parent's statement about the child.
+-spec authoritative_records(dns:labels(), [dns:rr()]) -> [dns:rr()].
+authoritative_records(ZLabels, Records) ->
+    case delegation_points(ZLabels, Records) of
+        Cuts when map_size(Cuts) =:= 0 ->
+            Records;
+        Cuts ->
+            lists:filter(fun(RR) -> is_authoritative(Cuts, RR) end, Records)
+    end.
+
+%% An NS RRset anywhere but the apex marks a zone cut.
+-spec delegation_points(dns:labels(), [dns:rr()]) -> #{dns:labels() => true}.
+delegation_points(ZLabels, Records) ->
+    lists:foldl(
+        fun
+            (#dns_rr{name = Name, type = ?DNS_TYPE_NS}, Acc) ->
+                case name_labels(Name) of
+                    ZLabels -> Acc;
+                    Labels -> Acc#{Labels => true}
+                end;
+            (_, Acc) ->
+                Acc
+        end,
+        #{},
+        Records
+    ).
+
+-spec is_authoritative(#{dns:labels() => true}, dns:rr()) -> boolean().
+is_authoritative(Cuts, #dns_rr{name = Name, type = Type}) ->
+    case nearest_cut(Cuts, name_labels(Name), at) of
+        none -> true;
+        at -> Type =:= ?DNS_TYPE_DS;
+        below -> false
+    end.
+
+%% Walk from the name towards the root; the first cut met says whether the name sits at it or
+%% below it. The apex is never a cut, so authoritative names reach the root without a hit.
+-spec nearest_cut(#{dns:labels() => true}, dns:labels(), at | below) -> none | at | below.
+nearest_cut(_, [], _) ->
+    none;
+nearest_cut(Cuts, [_ | Parent] = Labels, Position) ->
+    case is_map_key(Labels, Cuts) of
+        true -> Position;
+        false -> nearest_cut(Cuts, Parent, below)
+    end.
+
+-compile({inline, [name_labels/1]}).
+-spec name_labels(dns:dname()) -> dns:labels().
+name_labels(Name) ->
+    dns_domain:split(dns_domain:to_lower(Name)).
 
 -doc "Given a zone and a set of records, return the RRSIG records.".
 -spec rrsig_for_zone_rrset(erldns:zone(), [dns:rr()]) -> [dns:rr()].
@@ -221,8 +299,78 @@ handle(Msg, _, _, _, ?DNS_TYPE_NXNAME, _, _) ->
 %% DNSSEC requested, zone unsigned, nothing to do
 handle(Msg, #zone{keysets = []}, _, _, _, _, _) ->
     Msg;
-%% DNSSEC requested, zone signed, no answers found, return NSEC.
-handle(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QType, Mappers, _) ->
+%% DNSSEC requested, zone signed: a referral is completed with the delegation's DS or its denial,
+%% anything else is authoritative data and is signed as such.
+handle(Msg, Zone, QLabels, QName, QType, Mappers, _) ->
+    case referral_ns(Msg) of
+        [] -> handle_authoritative(Msg, Zone, QLabels, QName, QType, Mappers);
+        NSRecords -> handle_referral(Msg, Zone, NSRecords)
+    end.
+
+%% A referral is what the resolver produces for anything at or below a zone cut:
+%% not authoritative, the delegation's NS RRset in the authority section and no SOA.
+-spec referral_ns(dns:message()) -> [dns:rr()].
+referral_ns(#dns_message{aa = true}) ->
+    [];
+referral_ns(#dns_message{authority = Auths}) ->
+    case lists:any(fun erldns_records:is_soa/1, Auths) of
+        true -> [];
+        false -> lists:filter(fun erldns_records:is_ns/1, Auths)
+    end.
+
+%% RFC 4035 §3.1.4: a referral carries the DS RRset and its RRSIG when the delegation is secure,
+%% otherwise the NSEC at the delegation name proving there is no DS. The NS RRset stays unsigned
+%% (§2.2), and no NSEC is derived from the QNAME: the parent holds no authoritative data below the
+%% cut, so an NSEC there would either disclose occluded records or deny a name the child may own.
+%% Any answers are CNAMEs from above the cut that led here, and are signed as usual.
+-spec handle_referral(dns:message(), erldns:zone(), [dns:rr(), ...]) -> dns:message().
+handle_referral(#dns_message{answers = Answers, authority = Auths} = Msg, Zone, [NS | _]) ->
+    #dns_rr{name = CutName} = NS,
+    CutLabels = name_labels(CutName),
+    DelegationProof =
+        case erldns_zone_cache:get_records_by_name_and_type(Zone, CutLabels, ?DNS_TYPE_DS) of
+            [] -> nsec_at_delegation(Zone, CutName, CutLabels);
+            DsRecords -> DsRecords ++ rrsigs_for_rrset(Zone, DsRecords)
+        end,
+    Msg1 = Msg#dns_message{
+        answers = Answers ++ find_rrsigs(Zone, Answers),
+        authority = Auths ++ DelegationProof
+    },
+    sign_unsigned(Msg1, Zone).
+
+%% The NSEC at an insecure delegation point: the parent holds only NS, RRSIG and NSEC there
+%% (RFC 4034 §4.1.2). Glue is not this zone's data and is not advertised.
+-spec nsec_at_delegation(erldns:zone(), dns:dname(), dns:labels()) -> [dns:rr(), ...].
+nsec_at_delegation(#zone{authority = [Authority | _]} = Zone, CutName, CutLabels) ->
+    NsecRecord = #dns_rr{
+        name = CutName,
+        type = ?DNS_TYPE_NSEC,
+        ttl = minimum_soa_ttl(Authority),
+        data = #dns_rrdata_nsec{
+            next_dname = next_dname(CutName, CutLabels, Zone),
+            types = [?DNS_TYPE_NS, ?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]
+        }
+    },
+    [NsecRecord | rrsig_for_zone_rrset(Zone, [NsecRecord])].
+
+%% Pre-signed at zone load when the RRset came in with the zone, signed here otherwise.
+-spec rrsigs_for_rrset(erldns:zone(), [dns:rr(), ...]) -> [dns:rr()].
+rrsigs_for_rrset(Zone, RRs) ->
+    case find_rrsigs(Zone, RRs) of
+        [] -> rrsig_for_zone_rrset(Zone, RRs);
+        RRSigs -> RRSigs
+    end.
+
+-spec handle_authoritative(Msg, Zone, QLabels, QName, QType, Mappers) -> Return when
+    Msg :: dns:message(),
+    Zone :: erldns:zone(),
+    QLabels :: dns:labels(),
+    QName :: dns:dname(),
+    QType :: dns:type(),
+    Mappers :: nsec_type_mappers(),
+    Return :: dns:message().
+%% No answers found, return NSEC.
+handle_authoritative(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QType, Mappers) ->
     #dns_message{authority = MsgAuths} = Msg,
     #zone{labels = ZLabels, authority = [Authority | _]} = Zone,
     Ttl = minimum_soa_ttl(Authority),
@@ -246,8 +394,8 @@ handle(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QType, Mappers, _
     Msg1 = Msg#dns_message{ad = true, rc = ?DNS_RCODE_NOERROR, authority = Auth},
     Msg2 = sign_unsigned(Msg1, Zone),
     erldns_records:rewrite_soa_ttl(Msg2);
-%% DNSSEC requested, zone signed, answers ready and need signing
-handle(Msg, Zone, _, _, _, _, _) ->
+%% Answers ready and need signing
+handle_authoritative(Msg, Zone, _, _, _, _) ->
     ?LOG_DEBUG(#{what => dnssec_requested, name => Zone#zone.name}, ?LOG_METADATA),
     AnswerSignatures = find_rrsigs(Zone, Msg#dns_message.answers),
     AuthoritySignatures = find_rrsigs(Zone, Msg#dns_message.authority),
@@ -324,12 +472,29 @@ record_types_for_name(Zone, QLabels) ->
         nxdomain ->
             [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME];
         {_, RecordsAtName} ->
-            types_covered_from_records(RecordsAtName)
+            case is_delegation_point(Zone, QLabels, RecordsAtName) of
+                true -> delegation_types(RecordsAtName);
+                false -> types_covered_from_records(RecordsAtName)
+            end
     end.
 
 types_covered_from_records(RecordsAtName) ->
     TypesCovered = lists:map(fun(RR) -> RR#dns_rr.type end, RecordsAtName),
     lists:usort([?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC | TypesCovered]).
+
+%% An NS RRset anywhere but the apex marks a zone cut.
+is_delegation_point(#zone{labels = ZLabels}, QLabels, RecordsAtName) ->
+    lists:any(fun erldns_records:is_ns/1, RecordsAtName) andalso
+        not dns_domain:are_equal_labels(ZLabels, QLabels).
+
+%% RFC 4034 §4.1.2: at a delegation point the parent holds NS and, when the delegation is secure,
+%% DS. Glue and anything else stored at the name is not this zone's data and is not advertised.
+%% Type codes in ascending order (NS=2 < DS=43 < RRSIG=46 < NSEC=47), as the bitmap requires.
+delegation_types(RecordsAtName) ->
+    case lists:any(erldns_records:match_type(?DNS_TYPE_DS), RecordsAtName) of
+        true -> [?DNS_TYPE_NS, ?DNS_TYPE_DS, ?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC];
+        false -> [?DNS_TYPE_NS, ?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]
+    end.
 
 %% Widen the NSEC type bitmap for any custom record types present at the name, using the mappers
 %% frozen into the pipeline opts by extension pipes (see `add_nsec_type_mapper/3`).

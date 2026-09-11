@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v11.2.5
+
+- Referrals now carry the delegation's DS RRset and its RRSIG, or an NSEC at the delegation name proving there is none, as RFC 4035 §3.1.4 requires. Previously an NSEC was synthesized at the QNAME from whatever the parent stored below the cut, disclosing occluded records and glue, and the DS was never included.
+- NSEC type bitmaps at delegation points advertise only NS, DS, RRSIG and NSEC, never glue (RFC 4034 §4.1.2).
+- NS RRsets at delegation points, glue, and records occluded by a cut are no longer signed at zone load (RFC 4035 §2.2), and a CNAME chain that ends in a referral no longer attaches an RRSIG to the delegation's NS RRset.
+- DS RRsets are signed with the zone signing key on every path. They were signed with the key signing key at zone load but with the zone signing key when added as an RRset or at query time.
+
 ## v11.2.4
 
 ### Fixed
