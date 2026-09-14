@@ -19,7 +19,8 @@ all() ->
         resolve_authoritative_zone_cut_with_plain_cname_chain,
         resolve_authoritative_zone_cut_drops_occluded_cname,
         resolve_authoritative_self_delegation_trailing_dot_name_mismatch,
-        resolve_authoritative_max_depth_returns_servfail
+        resolve_authoritative_max_depth_returns_servfail,
+        negative_answers_carry_the_soa_minimum_ttl
     ].
 
 %% Tests
@@ -368,3 +369,79 @@ resolve_authoritative_max_depth_returns_servfail(_) ->
     ),
     ?assertEqual(?DNS_RCODE_SERVFAIL, Res#dns_message.rc),
     erldns_zone_cache:delete_zone(ZoneName).
+
+%% RFC 2308 §3: the SOA in the authority section of a negative answer is served at the minimum
+%% of its own TTL and its MINIMUM field, so that resolvers and caches in front of us (an edge
+%% packet cache included) hold the negative answer for the negative TTL and not the SOA TTL.
+%% A query for the SOA itself is a positive answer and keeps the zone TTL.
+negative_answers_carry_the_soa_minimum_ttl(_) ->
+    erldns_zone_cache:start_link(),
+    ZoneName = dns_domain:to_lower(~"negative-ttl.example"),
+    ZoneLabels = dns_domain:split(ZoneName),
+    Soa = #dns_rr{
+        name = ZoneName,
+        type = ?DNS_TYPE_SOA,
+        ttl = 3600,
+        data = #dns_rrdata_soa{
+            mname = ~"ns1.negative-ttl.example",
+            rname = ~"admin.negative-ttl.example",
+            serial = 1,
+            refresh = 86400,
+            retry = 7200,
+            expire = 604800,
+            minimum = 300
+        }
+    },
+    A = #dns_rr{
+        name = ~"a.negative-ttl.example",
+        type = ?DNS_TYPE_A,
+        ttl = 60,
+        data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
+    },
+    Z = #zone{
+        labels = ZoneLabels,
+        reversed_labels = lists:reverse(ZoneLabels),
+        name = ZoneName,
+        authority = [Soa],
+        records = [Soa, A]
+    },
+    erldns_zone_cache:put_zone(Z),
+    NxDomain = resolve(~"nx.negative-ttl.example", ?DNS_TYPE_A),
+    ?assertMatch(
+        #dns_message{
+            aa = true,
+            rc = ?DNS_RCODE_NXDOMAIN,
+            answers = [],
+            authority = [#dns_rr{type = ?DNS_TYPE_SOA, ttl = 300}]
+        },
+        NxDomain
+    ),
+    NoData = resolve(~"a.negative-ttl.example", ?DNS_TYPE_AAAA),
+    ?assertMatch(
+        #dns_message{
+            aa = true,
+            rc = ?DNS_RCODE_NOERROR,
+            answers = [],
+            authority = [#dns_rr{type = ?DNS_TYPE_SOA, ttl = 300}]
+        },
+        NoData
+    ),
+    SoaAnswer = resolve(ZoneName, ?DNS_TYPE_SOA),
+    ?assertMatch(
+        #dns_message{
+            aa = true,
+            rc = ?DNS_RCODE_NOERROR,
+            answers = [#dns_rr{type = ?DNS_TYPE_SOA, ttl = 3600}]
+        },
+        SoaAnswer
+    ),
+    erldns_zone_cache:delete_zone(ZoneName).
+
+%% Drive the resolver pipe the way the pipeline does, so `complete_response/1' runs.
+resolve(QName, QType) ->
+    Msg = #dns_message{questions = [#dns_query{name = QName, type = QType}]},
+    Opts = erldns_resolver:prepare(#{
+        resolved => false, query_labels => dns_domain:split(QName), query_type => QType
+    }),
+    {Answer, _} = erldns_resolver:call(Msg, Opts),
+    Answer.

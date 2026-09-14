@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Fixed
+
+- Negative answers carry the SOA in the authority section, and the RRSIG covering it, at the
+  minimum of the SOA TTL and the SOA MINIMUM field, as RFC 2308 §3 requires.
+
 ## v11.2.3
 
 ### Changed

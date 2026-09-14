@@ -244,7 +244,8 @@ handle(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QType, Mappers, _
     NsecRRSigRecords = rrsig_for_zone_rrset(Zone, [NsecRecord]),
     Auth = lists:append([MsgAuths, [NsecRecord], SoaRRSigRecords, NsecRRSigRecords]),
     Msg1 = Msg#dns_message{ad = true, rc = ?DNS_RCODE_NOERROR, authority = Auth},
-    sign_unsigned(Msg1, Zone);
+    Msg2 = sign_unsigned(Msg1, Zone),
+    erldns_records:rewrite_soa_ttl(Msg2);
 %% DNSSEC requested, zone signed, answers ready and need signing
 handle(Msg, Zone, _, _, _, _, _) ->
     ?LOG_DEBUG(#{what => dnssec_requested, name => Zone#zone.name}, ?LOG_METADATA),
@@ -255,7 +256,8 @@ handle(Msg, Zone, _, _, _, _, _) ->
         answers = Msg#dns_message.answers ++ AnswerSignatures,
         authority = Msg#dns_message.authority ++ AuthoritySignatures
     },
-    sign_unsigned(Msg1, Zone).
+    Msg2 = sign_unsigned(Msg1, Zone),
+    erldns_records:rewrite_soa_ttl(Msg2).
 
 % Find RRSIG record in Apex RRSIG records covering SOA record,
 % but only if SOA is in the Authority Section to begin with
