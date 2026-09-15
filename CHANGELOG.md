@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v11.2.4
+
 ### Fixed
 
 - Negative answers carry the SOA in the authority section, and the RRSIG covering it, at the
