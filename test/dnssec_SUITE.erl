@@ -31,7 +31,8 @@ all() ->
         next_dname_skips_uppercase_ascii,
         next_dname_ascends_past_saturated_label,
         next_dname_stops_at_the_zone_apex,
-        nsec_signed_for_max_length_qname
+        nsec_signed_for_max_length_qname,
+        negative_answer_trims_the_soa_and_its_rrsig
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -694,3 +695,53 @@ name_of_wire_size(Size, Leftmost, Suffix, Filler) ->
             Label = binary:copy(~"a", Chunk),
             name_of_wire_size(Size, Leftmost, Suffix, <<Filler/binary, Label/binary, ".">>)
     end.
+
+%% RFC 2308 §3 with DNSSEC: in a negative answer the SOA in the authority section and the RRSIG
+%% covering it are both served at the SOA MINIMUM, so the RRSet and its signature agree
+%% (RFC 4034 §3) and the signed original TTL is untouched. A positive answer for the SOA keeps
+%% the zone TTL on both, which is what #264 protected.
+negative_answer_trims_the_soa_and_its_rrsig(_) ->
+    ZoneName = dns_domain:to_lower(~"example-dnssec0.com"),
+    ZoneLabels = dns_domain:split(ZoneName),
+    #zone{authority = [Soa]} = Zone = erldns_zone_cache:get_authoritative_zone(ZoneLabels),
+    ?assertMatch(#dns_rr{ttl = 100000, data = #dns_rrdata_soa{minimum = 86400}}, Soa),
+    Do = #dns_optrr{dnssec = true},
+    QName = ~"nx.example-dnssec0.com",
+    QLabels = dns_domain:split(QName),
+    %% The resolver pipe has already trimmed the SOA by the time this pipe runs; the RRSIG
+    %% covering it is only appended here and must be trimmed to match.
+    TrimmedSoa = Soa#dns_rr{ttl = 86400},
+    Negative0 = #dns_message{
+        qc = 1,
+        auc = 1,
+        questions = [#dns_query{name = QName, type = ?DNS_TYPE_A}],
+        authority = [TrimmedSoa],
+        additional = [Do]
+    },
+    Negative = erldns_dnssec:handle(Negative0, Zone, QLabels, QName, ?DNS_TYPE_A, #{}, true),
+    Authority = Negative#dns_message.authority,
+    ?assertMatch([#dns_rr{ttl = 86400}], lists:filter(fun erldns_records:is_soa/1, Authority)),
+    ?assertMatch(
+        [#dns_rr{ttl = 86400, data = #dns_rrdata_rrsig{original_ttl = 100000}}],
+        lists:filter(fun erldns_records:is_soa_rrsig/1, Authority)
+    ),
+    ?assertMatch(
+        [#dns_rr{ttl = 86400}],
+        [RR || #dns_rr{type = ?DNS_TYPE_NSEC} = RR <- Authority]
+    ),
+    Positive0 = #dns_message{
+        qc = 1,
+        anc = 1,
+        questions = [#dns_query{name = ZoneName, type = ?DNS_TYPE_SOA}],
+        answers = [Soa],
+        additional = [Do]
+    },
+    Positive = erldns_dnssec:handle(
+        Positive0, Zone, ZoneLabels, ZoneName, ?DNS_TYPE_SOA, #{}, true
+    ),
+    Answers = Positive#dns_message.answers,
+    ?assertMatch([#dns_rr{ttl = 100000}], lists:filter(fun erldns_records:is_soa/1, Answers)),
+    ?assertMatch(
+        [#dns_rr{ttl = 100000, data = #dns_rrdata_rrsig{original_ttl = 100000}}],
+        lists:filter(fun erldns_records:is_soa_rrsig/1, Answers)
+    ).

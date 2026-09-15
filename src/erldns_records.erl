@@ -83,17 +83,34 @@ minimum_soa_ttl(#dns_rr{} = Record, _) ->
     Record.
 
 -doc """
-According to RFC 2308 the TTL for the SOA record in an NXDOMAIN response
-must be set to the value of the minimum field in the SOA content.
+Trims the negative-caching TTL in the authority section, as RFC 2308 §3 requires.
+
+In a negative answer the SOA carried in the authority section, and the RRSIG covering it, are
+served with the minimum of the SOA TTL and the SOA MINIMUM field. Only the authority section is
+touched: an answer to a query for the SOA itself keeps the zone TTL on both the SOA and its RRSIG,
+so an RRSet and its signature never disagree (RFC 4034 §3). Messages without an SOA in the
+authority section are returned unchanged.
+
+Safe to apply more than once: the resolver trims the SOA before the DNSSEC pipe appends the RRSIG
+covering it, and the second pass brings that RRSIG in line with the already trimmed SOA.
 """.
 -spec rewrite_soa_ttl(dns:message()) -> dns:message().
-rewrite_soa_ttl(Message) ->
-    rewrite_soa_ttl(Message, Message#dns_message.authority, []).
+rewrite_soa_ttl(#dns_message{authority = Authority} = Message) ->
+    case lists:search(fun is_soa/1, Authority) of
+        {value, #dns_rr{ttl = SoaTTL, data = #dns_rrdata_soa{minimum = Minimum}}} ->
+            TTL = erlang:min(SoaTTL, Minimum),
+            Message#dns_message{authority = [negative_ttl(RR, TTL) || RR <- Authority]};
+        _ ->
+            Message
+    end.
 
-rewrite_soa_ttl(Message, [], NewAuthority) ->
-    Message#dns_message{authority = lists:reverse(NewAuthority)};
-rewrite_soa_ttl(Message, [R | Rest], NewAuthority) ->
-    rewrite_soa_ttl(Message, Rest, [minimum_soa_ttl(R, R#dns_rr.data) | NewAuthority]).
+-spec negative_ttl(dns:rr(), dns:ttl()) -> dns:rr().
+negative_ttl(#dns_rr{type = ?DNS_TYPE_SOA} = RR, TTL) ->
+    RR#dns_rr{ttl = TTL};
+negative_ttl(#dns_rr{data = #dns_rrdata_rrsig{type_covered = ?DNS_TYPE_SOA}} = RR, TTL) ->
+    RR#dns_rr{ttl = TTL};
+negative_ttl(RR, _) ->
+    RR.
 
 %% Various matching functions.
 
