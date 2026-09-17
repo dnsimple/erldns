@@ -46,6 +46,7 @@ all() ->
         delegation_proof_is_owned_by_the_lowercased_name,
         sections_of_the_request_are_dropped,
         error_from_the_resolver_is_left_alone,
+        delegation_nsec_ttl_follows_the_soa,
         zone_signing_skips_delegation_ns_glue_and_occluded_records,
         rrset_signing_skips_delegation_ns_and_signs_ds
     ].
@@ -815,8 +816,7 @@ negative_answer_trims_the_soa_and_its_rrsig(_) ->
 %%
 %% Zone signing draws the same line: only own data gets an RRSIG. The delegation NS RRsets,
 %% the glue A records, www.secure CNAME and the NS, DS and CDS at sub.secure get none; secure
-%% DS does, and so do the NSECs of the insecure delegations, signed once here and served with
-%% every referral below them.
+%% DS does. NSECs are never stored: the one at a delegation is signed per query like any other.
 %% ---------------------------------------------------------------------------------------------
 
 %% RFC 4035 §3.1.4: a secure delegation is referred to with its DS RRset and RRSIG. No NSEC is
@@ -842,10 +842,9 @@ referral_below_secure_delegation_carries_ds(_Config) ->
     ).
 
 %% An insecure delegation is referred to with the NSEC at the delegation name, whose bitmap holds
-%% no glue, whether the QNAME is glue below the cut or a name that does not exist there. Its RRSIG
-%% is the one computed at zone load, not one per query.
+%% no glue, whether the QNAME is glue below the cut or a name that does not exist there.
 referral_below_insecure_delegation_denies_ds_at_the_cut(_Config) ->
-    Zone = put_delegation_zone(),
+    put_delegation_zone(),
     Cut = in_zone(~"insecure"),
     #dns_message{aa = false, answers = [], authority = Authority} =
         resolve(in_zone(~"ns1.insecure"), ?DNS_TYPE_A),
@@ -859,11 +858,6 @@ referral_below_insecure_delegation_denies_ds_at_the_cut(_Config) ->
             data = #dns_rrdata_nsec{types = [?DNS_TYPE_NS, ?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]}
         },
         lists:keyfind(?DNS_TYPE_NSEC, #dns_rr.type, Authority)
-    ),
-    Stored = erldns_zone_cache:get_records_by_name_and_type(Zone, Cut, ?DNS_TYPE_RRSIG),
-    ?assertEqual(
-        lists:filter(erldns_records:match_type_covered(?DNS_TYPE_NSEC), Stored),
-        [RR || #dns_rr{type = ?DNS_TYPE_RRSIG} = RR <- Authority]
     ),
     #dns_message{aa = false, answers = [], authority = Authority2} =
         resolve(in_zone(~"nonexistent.insecure"), ?DNS_TYPE_A),
@@ -1026,6 +1020,26 @@ error_from_the_resolver_is_left_alone(_Config) ->
         Msg, erldns_dnssec:handle(Msg, Zone, QLabels, QName, ?DNS_TYPE_A, none, #{}, true)
     ).
 
+%% RFC 4035 §2.2: an RRSIG carries the TTL of the RRset it covers. The NSEC of a delegation takes
+%% the zone's negative TTL and is signed when served, so an SOA update reaches both at once.
+delegation_nsec_ttl_follows_the_soa(_Config) ->
+    Zone = put_delegation_zone(),
+    [Soa] = [RR || #dns_rr{type = ?DNS_TYPE_SOA} = RR <- Zone#zone.records],
+    Data = Soa#dns_rr.data,
+    Soa2 = Soa#dns_rr{data = Data#dns_rrdata_soa{serial = 2, minimum = 600}},
+    ok = erldns_zone_cache:put_zone_rrset(
+        {?DELEGATION_ZONE, ~"2", [Soa2]}, ?DELEGATION_ZONE, ?DNS_TYPE_SOA, 1
+    ),
+    #dns_message{authority = Authority} = resolve(in_zone(~"ns1.insecure"), ?DNS_TYPE_A),
+    [Nsec] = [RR || #dns_rr{type = ?DNS_TYPE_NSEC} = RR <- Authority],
+    [Sig] = [
+        RR
+     || #dns_rr{data = #dns_rrdata_rrsig{type_covered = ?DNS_TYPE_NSEC}} = RR <- Authority
+    ],
+    ?assertEqual(600, Nsec#dns_rr.ttl),
+    ?assertEqual(600, Sig#dns_rr.ttl),
+    ?assertEqual(600, Sig#dns_rr.data#dns_rrdata_rrsig.original_ttl).
+
 zone_signing_skips_delegation_ns_glue_and_occluded_records(_Config) ->
     Zone = delegation_zone(),
     ZskTag = zsk_tag(Zone),
@@ -1041,9 +1055,7 @@ zone_signing_skips_delegation_ns_glue_and_occluded_records(_Config) ->
             {in_zone(~"ns1"), ?DNS_TYPE_A},
             {in_zone(~"target"), ?DNS_TYPE_A},
             {in_zone(~"alias"), ?DNS_TYPE_CNAME},
-            {in_zone(~"secure"), ?DNS_TYPE_DS},
-            {in_zone(~"insecure"), ?DNS_TYPE_NSEC},
-            {in_zone(~"mixed"), ?DNS_TYPE_NSEC}
+            {in_zone(~"secure"), ?DNS_TYPE_DS}
         ]),
         names_and_types_covered(ZoneSigs)
     ),

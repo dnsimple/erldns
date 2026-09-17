@@ -16,7 +16,6 @@ The resolver puts the delegation a response refers to in the pipeline opts as `z
 section carries the delegation's DS RRset and its RRSIG, or an NSEC at the delegation name proving
 there is none. NS RRsets at delegation points, glue, and records occluded by a cut are never signed
 (§2.2), and an NSEC at a delegation name advertises only NS, DS, RRSIG and NSEC (RFC 4034 §4.1.2).
-The NSEC of an insecure delegation is signed once, at zone load.
 
 ## NSEC type-mapper extension
 
@@ -131,19 +130,18 @@ Get signed records from a zone.
 Key records (DNSKEY, CDS, CDNSKEY) are signed with the key signing key, everything else with the
 zone signing key. NS RRsets at delegation points, glue, and any other data occluded by a zone cut
 are not authoritative in this zone and are left unsigned (RFC 4035 §2.2); the DS RRset at a cut is
-the parent's own data and is signed like the rest, and so is the NSEC of an insecure delegation.
+the parent's own data and is signed like the rest.
 """.
 -spec get_signed_records(erldns:zone()) -> #{atom() => [dns:rr()]}.
-get_signed_records(
-    #zone{name = ZoneName, labels = ZLabels, records = Records, keysets = Keysets} = Zone
-) ->
+get_signed_records(#zone{
+    name = ZoneName, labels = ZLabels, records = Records, keysets = Keysets
+}) ->
     Cuts = delegation_points(ZLabels, Records),
     {ZoneRecords, KeyRecords} = lists:partition(
         fun is_zone_record/1, authoritative_records(Cuts, Records)
     ),
-    Nsecs = delegation_nsecs(Zone, Cuts, Records),
     KeyRRSigRecords = lists:flatmap(key_rrset_signer(ZoneName, KeyRecords), Keysets),
-    ZoneRRSigRecords = lists:flatmap(zone_rrset_signer(ZoneName, ZoneRecords ++ Nsecs), Keysets),
+    ZoneRRSigRecords = lists:flatmap(zone_rrset_signer(ZoneName, ZoneRecords), Keysets),
     #{key_rrsig_rrs => KeyRRSigRecords, zone_rrsig_rrs => ZoneRRSigRecords}.
 
 -doc """
@@ -225,20 +223,6 @@ rrset_position(#zone{labels = ZLabels} = Zone, [#dns_rr{name = Name, type = Type
         none when Type =:= ?DNS_TYPE_NS, Labels =/= ZLabels -> at;
         none -> none
     end.
-
-%% The NSEC at each insecure delegation, so that its RRSIG is stored with the zone and referrals
-%% below the cut do not sign one per query. Nested cuts are occluded and get none.
--spec delegation_nsecs(erldns:zone(), cuts(), [dns:rr()]) -> [dns:rr()].
-delegation_nsecs(#zone{authority = []}, _, _) ->
-    [];
-delegation_nsecs(Zone, Cuts, Records) ->
-    Secure = #{name_labels(Name) => true || #dns_rr{name = Name, type = ?DNS_TYPE_DS} <- Records},
-    [
-        nsec(Zone, dns_domain:join(Labels), Labels, delegation_types(false))
-     || Labels := true <- Cuts,
-        not is_map_key(Labels, Secure),
-        at =:= cut_position(Cuts, Labels)
-    ].
 
 -compile({inline, [name_labels/1]}).
 -spec name_labels(dns:dname()) -> dns:labels().
@@ -366,12 +350,10 @@ handle_referral(#dns_message{answers = Answers, authority = Auths} = Msg, Zone, 
     },
     sign_unsigned(Msg1, Zone).
 
-%% Owned by the lowercased delegation name, as canonical form wants. An insecure delegation has
-%% its NSEC signed at zone load, so the RRSIG is looked up before one is computed.
+%% Owned by the lowercased delegation name, as canonical form wants.
 -spec nsec_at_delegation(erldns:zone(), dns:labels(), [dns:type(), ...]) -> [dns:rr(), ...].
 nsec_at_delegation(Zone, CutLabels, Types) ->
-    Nsec = nsec(Zone, dns_domain:join(CutLabels), CutLabels, Types),
-    [Nsec | rrsigs_for_rrset(Zone, [Nsec])].
+    sign_nsec(Zone, dns_domain:join(CutLabels), CutLabels, Types).
 
 %% Pre-signed at zone load when the RRset came in with the zone, signed here otherwise.
 -spec rrsigs_for_rrset(erldns:zone(), [dns:rr(), ...]) -> [dns:rr()].
