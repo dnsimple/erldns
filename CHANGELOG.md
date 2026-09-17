@@ -11,12 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Referrals now carry the delegation's DS RRset and its RRSIG, or an NSEC at the delegation name proving there is none, as RFC 4035 §3.1.4 requires. Previously an NSEC was synthesized at the QNAME from whatever the parent stored below the cut, disclosing occluded records and glue, and the DS was never included.
-- The resolver decides referrals before looking at the records stored at a name and hands the delegation to the DNSSEC pipe in the pipeline opts (`zonecut`), so the response shape and the request's own authority section no longer take part. A nested NS RRset under a delegation is occluded by it: the referral names the topmost cut. A DS query for a name below a cut is a referral; one for the delegation name itself is answered by the parent, also when the delegation's NS points at the delegation name.
-- NSEC type bitmaps at delegation points advertise only NS, DS, RRSIG and NSEC, never glue (RFC 4034 §4.1.2). The NSEC and RRSIG of a referral are owned by the lowercased delegation name, as canonical form requires.
-- NS RRsets at delegation points, glue, records occluded by a cut, and DNSKEY, CDS and CDNSKEY RRsets at or below one are no longer signed at zone load (RFC 4035 §2.2), and a CNAME chain that ends in a referral no longer attaches an RRSIG to the delegation's NS RRset. An RRset added on its own is checked against the cuts in the zone cache.
-- DS RRsets are signed with the zone signing key on every path. They were signed with the key signing key at zone load but with the zone signing key when added as an RRset or at query time.
-- A SERVFAIL, or any other error, from the resolver is no longer completed by the DNSSEC pipe into a NOERROR answer with a signed NSEC and the AD bit set.
+- Referrals carry the delegation's DS RRset and its RRSIG, or an NSEC at the delegation name
+  proving there is none (RFC 4035 §3.1.4). The NSEC was synthesized at the QNAME from whatever
+  the parent stored below the cut, and the DS was never included.
+- The resolver decides a referral before reading the records at a name, at the topmost cut, and
+  passes the delegation to the DNSSEC pipe as the `zonecut` opt; the shape of the response and
+  the request's own authority section no longer take part. A DS query below a cut is a referral,
+  one for the delegation name itself is answered by the parent.
+- Delegation NS RRsets, glue, and records occluded by a cut are no longer signed (RFC 4035
+  §2.2), and the NSEC at a delegation name is owned by its lowercased form and advertises only
+  NS, DS, RRSIG and NSEC (RFC 4034 §4.1.2).
+- DS RRsets are signed with the zone signing key on every path.
+- Errors from the resolver are no longer completed into a signed NOERROR denial with AD set.
 
 ## v11.2.4
 
