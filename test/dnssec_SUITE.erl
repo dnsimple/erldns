@@ -7,6 +7,8 @@
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("erldns/include/erldns.hrl").
 
+-define(DELEGATION_ZONE, ~"example-delegation.com").
+
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
     [
@@ -32,7 +34,21 @@ all() ->
         next_dname_ascends_past_saturated_label,
         next_dname_stops_at_the_zone_apex,
         nsec_signed_for_max_length_qname,
-        negative_answer_trims_the_soa_and_its_rrsig
+        negative_answer_trims_the_soa_and_its_rrsig,
+        referral_below_secure_delegation_carries_ds,
+        referral_below_insecure_delegation_denies_ds_at_the_cut,
+        ns_query_at_secure_delegation_is_a_referral_with_ds,
+        cname_into_delegation_signs_the_chain_but_not_the_ns,
+        nodata_at_insecure_delegation_omits_glue_from_the_nsec,
+        ds_query_at_secure_delegation_is_answered,
+        ds_query_below_a_cut_is_a_referral,
+        nested_cut_refers_to_the_topmost_delegation,
+        delegation_proof_is_owned_by_the_lowercased_name,
+        sections_of_the_request_are_dropped,
+        error_from_the_resolver_is_left_alone,
+        delegation_nsec_ttl_follows_the_soa,
+        zone_signing_skips_delegation_ns_glue_and_occluded_records,
+        rrset_signing_skips_delegation_ns_and_signs_ds
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -54,6 +70,7 @@ init_per_testcase(_, Config) ->
 
 -spec end_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> term().
 end_per_testcase(_, _Config) ->
+    erldns_zone_cache:delete_zone(?DELEGATION_ZONE),
     application:unset_env(erldns, zones),
     ok.
 
@@ -68,7 +85,7 @@ verify_ksk_signed(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -98,7 +115,7 @@ verify_ksk_signed_alg13(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -128,7 +145,7 @@ verify_ksk_signed_alg14(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -170,7 +187,7 @@ verify_zsk_signed(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -211,7 +228,7 @@ verify_zsk_signed_alg13(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -252,7 +269,7 @@ verify_zsk_signed_alg14(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -282,7 +299,7 @@ verify_ksk_signed_alg15(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -312,7 +329,7 @@ verify_ksk_signed_alg16(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -353,7 +370,7 @@ verify_zsk_signed_alg15(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -394,7 +411,7 @@ verify_zsk_signed_alg16(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
     ?assertMatch(
         #dns_message{
             answers =
@@ -640,7 +657,7 @@ nsec_signed_for_max_length_qname(_Config) ->
     },
     Zone = erldns_zone_cache:get_authoritative_zone(QLabels),
     #dns_message{authority = Authority} =
-        erldns_dnssec:handle(Msg0, Zone, QLabels, QName, QType, #{}, true),
+        erldns_dnssec:handle(Msg0, Zone, QLabels, QName, QType, none, #{}, true),
     Nsec = lists:keyfind(?DNS_TYPE_NSEC, #dns_rr.type, Authority),
     ?assertMatch(#dns_rr{name = QName, data = #dns_rrdata_nsec{}}, Nsec),
     ?assertMatch(
@@ -718,7 +735,7 @@ negative_answer_trims_the_soa_and_its_rrsig(_) ->
         authority = [TrimmedSoa],
         additional = [Do]
     },
-    Negative = erldns_dnssec:handle(Negative0, Zone, QLabels, QName, ?DNS_TYPE_A, #{}, true),
+    Negative = erldns_dnssec:handle(Negative0, Zone, QLabels, QName, ?DNS_TYPE_A, none, #{}, true),
     Authority = Negative#dns_message.authority,
     ?assertMatch([#dns_rr{ttl = 86400}], lists:filter(fun erldns_records:is_soa/1, Authority)),
     ?assertMatch(
@@ -737,7 +754,7 @@ negative_answer_trims_the_soa_and_its_rrsig(_) ->
         additional = [Do]
     },
     Positive = erldns_dnssec:handle(
-        Positive0, Zone, ZoneLabels, ZoneName, ?DNS_TYPE_SOA, #{}, true
+        Positive0, Zone, ZoneLabels, ZoneName, ?DNS_TYPE_SOA, none, #{}, true
     ),
     Answers = Positive#dns_message.answers,
     ?assertMatch([#dns_rr{ttl = 100000}], lists:filter(fun erldns_records:is_soa/1, Answers)),
@@ -745,3 +762,419 @@ negative_answer_trims_the_soa_and_its_rrsig(_) ->
         [#dns_rr{ttl = 100000, data = #dns_rrdata_rrsig{original_ttl = 100000}}],
         lists:filter(fun erldns_records:is_soa_rrsig/1, Answers)
     ).
+
+%% ---------------------------------------------------------------------------------------------
+%% Delegation points
+%%
+%% The zone that delegation_zone/0 builds, drawn as a tree. Each name carries what the parent
+%% may do with it:
+%%
+%%   own   the parent's authoritative data: signed, and may own an NSEC
+%%   held  stored for the child (the delegation NS RRset, glue): served in referrals, never
+%%         signed, never a bit in an NSEC (RFC 4035 §2.2, RFC 4034 §4.1.2)
+%%   occl  occluded below a cut: stored, but never served, never signed, never in an NSEC
+%%   none  exists nowhere in the parent
+%%
+%%                              example-delegation.com          own  SOA NS
+%%                                        |
+%%     +----------+----------+------------+----------+------------------+-----------+
+%%     |          |          |                       |                  |           |
+%%    ns1      target      alias                  secure            insecure      Mixed
+%%   own A     own A    own CNAME                held NS            held NS     held NS
+%%                          |                    own  DS            held A (glue at
+%%                          |                    held A (glue)      |     the cut)
+%%   zone cut ==============|=======================|==================|============|=====
+%%   below: the parent is   |                       |                  |            |
+%%   not authoritative      +-CNAME-> www.secure    +-- sub.secure     |         x.mixed
+%%                                    occl CNAME        occl NS DS CDS |          none
+%%                                                            +--------+--------+
+%%                                                            |                 |
+%%                                                      ns1.insecure   nonexistent.insecure
+%%                                                     held A (glue)          none
+%%
+%% A query for any name at or below a cut gets a referral (RFC 4035 §3.1.4): the NS RRset
+%% first and unsigned, then the DS RRset with its RRSIG when the delegation is secure, or the
+%% NSEC owned by the delegation name, bitmap NS RRSIG NSEC, when it is not. Nothing in the
+%% response is owned by the QNAME, whatever the parent stores there. AD stays clear (§3.1.6).
+%% The cut is the topmost one: sub.secure is occluded by secure, and so is everything under it.
+%%
+%%   A   www.secure           -> NS secure, DS secure, RRSIG DS      (occluded CNAME not shown)
+%%   A   www.sub.secure       -> the same: the nested cut is the child's business
+%%   NS  secure               -> NS secure, DS secure, RRSIG DS
+%%   A   alias                -> CNAME alias + RRSIG, then that referral; no RRSIG over NS
+%%   A   ns1.insecure         -> NS insecure, NSEC insecure [NS RRSIG NSEC], RRSIG NSEC
+%%   A   nonexistent.insecure -> the same: only the child can deny a name below its cut
+%%   DS  ns1.insecure         -> the same: a DS below a cut is the child's to deny
+%%   DS  www.secure           -> the referral with DS secure, not the occluded CNAME
+%%   DS  sub.secure           -> the same: the DS at the nested cut is occluded
+%%   DS  insecure             -> authoritative NODATA: SOA + RRSIG, NSEC insecure
+%%                               [NS RRSIG NSEC]; the glue A at insecure stays out of the bitmap
+%%   DS  secure               -> authoritative answer: DS + RRSIG DS, signed with the ZSK,
+%%                               though the delegation's NS points at secure itself
+%%   A   x.mixed              -> NS Mixed as stored; NSEC and RRSIG owned by mixed, the
+%%                               lowercased name canonical form requires
+%%
+%% Zone signing draws the same line: only own data gets an RRSIG. The delegation NS RRsets,
+%% the glue A records, www.secure CNAME and the NS, DS and CDS at sub.secure get none; secure
+%% DS does. NSECs are never stored: the one at a delegation is signed per query like any other.
+%% ---------------------------------------------------------------------------------------------
+
+%% RFC 4035 §3.1.4: a secure delegation is referred to with its DS RRset and RRSIG. No NSEC is
+%% derived from the QNAME, so the CNAME occluded below the cut is not disclosed.
+referral_below_secure_delegation_carries_ds(_Config) ->
+    Zone = put_delegation_zone(),
+    Cut = in_zone(~"secure"),
+    ZskTag = zsk_tag(Zone),
+    #dns_message{aa = false, ad = false, answers = [], authority = Authority} =
+        resolve(in_zone(~"www.secure"), ?DNS_TYPE_A),
+    ?assertEqual(
+        lists:sort([{Cut, ?DNS_TYPE_NS}, {Cut, ?DNS_TYPE_DS}, {Cut, ?DNS_TYPE_RRSIG}]),
+        names_and_types(Authority)
+    ),
+    ?assertMatch(
+        #dns_rr{
+            name = Cut,
+            data = #dns_rrdata_rrsig{
+                type_covered = ?DNS_TYPE_DS, keytag = ZskTag, signers_name = ?DELEGATION_ZONE
+            }
+        },
+        lists:keyfind(?DNS_TYPE_RRSIG, #dns_rr.type, Authority)
+    ).
+
+%% An insecure delegation is referred to with the NSEC at the delegation name, whose bitmap holds
+%% no glue, whether the QNAME is glue below the cut or a name that does not exist there.
+referral_below_insecure_delegation_denies_ds_at_the_cut(_Config) ->
+    put_delegation_zone(),
+    Cut = in_zone(~"insecure"),
+    #dns_message{aa = false, answers = [], authority = Authority} =
+        resolve(in_zone(~"ns1.insecure"), ?DNS_TYPE_A),
+    ?assertEqual(
+        lists:sort([{Cut, ?DNS_TYPE_NS}, {Cut, ?DNS_TYPE_NSEC}, {Cut, ?DNS_TYPE_RRSIG}]),
+        names_and_types(Authority)
+    ),
+    ?assertMatch(
+        #dns_rr{
+            name = Cut,
+            data = #dns_rrdata_nsec{types = [?DNS_TYPE_NS, ?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]}
+        },
+        lists:keyfind(?DNS_TYPE_NSEC, #dns_rr.type, Authority)
+    ),
+    #dns_message{aa = false, answers = [], authority = Authority2} =
+        resolve(in_zone(~"nonexistent.insecure"), ?DNS_TYPE_A),
+    ?assertEqual(names_and_types(Authority), names_and_types(Authority2)).
+
+ns_query_at_secure_delegation_is_a_referral_with_ds(_Config) ->
+    put_delegation_zone(),
+    Cut = in_zone(~"secure"),
+    #dns_message{aa = false, answers = [], authority = Authority} = resolve(Cut, ?DNS_TYPE_NS),
+    ?assertEqual(
+        lists:sort([{Cut, ?DNS_TYPE_NS}, {Cut, ?DNS_TYPE_DS}, {Cut, ?DNS_TYPE_RRSIG}]),
+        names_and_types(Authority)
+    ).
+
+%% RFC 4035 §2.2: the NS RRset at a delegation point is never signed, even on the path where the
+%% resolver has already produced answers and the signer looks up signatures for every section.
+cname_into_delegation_signs_the_chain_but_not_the_ns(_Config) ->
+    put_delegation_zone(),
+    Alias = in_zone(~"alias"),
+    Cut = in_zone(~"secure"),
+    #dns_message{aa = false, answers = Answers, authority = Authority} =
+        resolve(Alias, ?DNS_TYPE_A),
+    ?assertEqual(
+        lists:sort([{Alias, ?DNS_TYPE_CNAME}, {Alias, ?DNS_TYPE_RRSIG}]),
+        names_and_types(Answers)
+    ),
+    ?assertEqual(
+        lists:sort([{Cut, ?DNS_TYPE_NS}, {Cut, ?DNS_TYPE_DS}, {Cut, ?DNS_TYPE_RRSIG}]),
+        names_and_types(Authority)
+    ),
+    ?assertMatch(
+        [#dns_rr{data = #dns_rrdata_rrsig{type_covered = ?DNS_TYPE_DS}}],
+        [RR || #dns_rr{type = ?DNS_TYPE_RRSIG} = RR <- Authority]
+    ).
+
+%% A DS query at an insecure delegation is answered authoritatively; the NSEC proving the DS
+%% absent must not advertise the glue stored at the delegation name.
+nodata_at_insecure_delegation_omits_glue_from_the_nsec(_Config) ->
+    put_delegation_zone(),
+    Cut = in_zone(~"insecure"),
+    #dns_message{aa = true, answers = [], authority = Authority} = resolve(Cut, ?DNS_TYPE_DS),
+    ?assert(lists:any(fun erldns_records:is_soa/1, Authority)),
+    ?assertMatch(
+        #dns_rr{
+            name = Cut,
+            data = #dns_rrdata_nsec{types = [?DNS_TYPE_NS, ?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]}
+        },
+        lists:keyfind(?DNS_TYPE_NSEC, #dns_rr.type, Authority)
+    ).
+
+%% RFC 4035 §3.1.4.1: the DS RRset is the parent's, so a DS query for the delegation name is
+%% answered here, also when the delegation's NS points at that very name.
+ds_query_at_secure_delegation_is_answered(_Config) ->
+    Zone = put_delegation_zone(),
+    Cut = in_zone(~"secure"),
+    ZskTag = zsk_tag(Zone),
+    #dns_message{aa = true, ad = true, answers = Answers, authority = []} =
+        resolve(Cut, ?DNS_TYPE_DS),
+    ?assertMatch(
+        [
+            #dns_rr{name = Cut, type = ?DNS_TYPE_DS},
+            #dns_rr{
+                name = Cut, data = #dns_rrdata_rrsig{type_covered = ?DNS_TYPE_DS, keytag = ZskTag}
+            }
+        ],
+        Answers
+    ).
+
+%% A DS below a cut, be it at glue or at an occluded nested cut, is the child's to deny: the
+%% answer is the referral, not a denial signed by the parent over what it happens to store there.
+ds_query_below_a_cut_is_a_referral(_Config) ->
+    put_delegation_zone(),
+    Insecure = in_zone(~"insecure"),
+    Secure = in_zone(~"secure"),
+    #dns_message{aa = false, ad = false, answers = [], authority = Authority1} =
+        resolve(in_zone(~"ns1.insecure"), ?DNS_TYPE_DS),
+    ?assertEqual(
+        lists:sort([
+            {Insecure, ?DNS_TYPE_NS}, {Insecure, ?DNS_TYPE_NSEC}, {Insecure, ?DNS_TYPE_RRSIG}
+        ]),
+        names_and_types(Authority1)
+    ),
+    #dns_message{aa = false, answers = [], authority = Authority2} =
+        resolve(in_zone(~"www.secure"), ?DNS_TYPE_DS),
+    ?assertEqual(
+        lists:sort([{Secure, ?DNS_TYPE_NS}, {Secure, ?DNS_TYPE_DS}, {Secure, ?DNS_TYPE_RRSIG}]),
+        names_and_types(Authority2)
+    ),
+    #dns_message{aa = false, answers = [], authority = Authority3} =
+        resolve(in_zone(~"sub.secure"), ?DNS_TYPE_DS),
+    ?assertEqual(names_and_types(Authority2), names_and_types(Authority3)).
+
+%% A cut under another cut is occluded by it: the referral names the topmost delegation and
+%% carries its DS, whatever the parent stores deeper down.
+nested_cut_refers_to_the_topmost_delegation(_Config) ->
+    put_delegation_zone(),
+    Cut = in_zone(~"secure"),
+    #dns_message{aa = false, answers = [], authority = Authority} =
+        resolve(in_zone(~"www.sub.secure"), ?DNS_TYPE_A),
+    ?assertEqual(
+        lists:sort([{Cut, ?DNS_TYPE_NS}, {Cut, ?DNS_TYPE_DS}, {Cut, ?DNS_TYPE_RRSIG}]),
+        names_and_types(Authority)
+    ).
+
+%% RFC 4034 §6.1: the NSEC and its RRSIG are owned by the delegation name in canonical, that is
+%% lowercased, form, while the NS RRset is served as stored.
+delegation_proof_is_owned_by_the_lowercased_name(_Config) ->
+    put_delegation_zone(),
+    Stored = in_zone(~"Mixed"),
+    Cut = in_zone(~"mixed"),
+    Next = <<0, ".", Cut/binary>>,
+    #dns_message{aa = false, answers = [], authority = Authority} =
+        resolve(in_zone(~"x.mixed"), ?DNS_TYPE_A),
+    ?assertEqual(
+        lists:sort([{Stored, ?DNS_TYPE_NS}, {Cut, ?DNS_TYPE_NSEC}, {Cut, ?DNS_TYPE_RRSIG}]),
+        names_and_types(Authority)
+    ),
+    ?assertMatch(
+        #dns_rr{data = #dns_rrdata_nsec{next_dname = Next}},
+        lists:keyfind(?DNS_TYPE_NSEC, #dns_rr.type, Authority)
+    ).
+
+%% The request's own answer and authority sections take no part: neither in what is signed nor
+%% in what the response is taken to refer to.
+sections_of_the_request_are_dropped(_Config) ->
+    put_delegation_zone(),
+    Target = in_zone(~"target"),
+    Cut = in_zone(~"secure"),
+    Planted = #dns_rr{
+        name = Target,
+        type = ?DNS_TYPE_NS,
+        ttl = 1,
+        data = #dns_rrdata_ns{dname = ~"ns.attacker.example"}
+    },
+    #dns_message{aa = true, answers = Answers, authority = []} =
+        resolve(Target, ?DNS_TYPE_A, [Planted]),
+    ?assertEqual(
+        lists:sort([{Target, ?DNS_TYPE_A}, {Target, ?DNS_TYPE_RRSIG}]), names_and_types(Answers)
+    ),
+    #dns_message{aa = false, answers = [], authority = Authority} =
+        resolve(in_zone(~"www.secure"), ?DNS_TYPE_A, [Planted]),
+    ?assertEqual(
+        lists:sort([{Cut, ?DNS_TYPE_NS}, {Cut, ?DNS_TYPE_DS}, {Cut, ?DNS_TYPE_RRSIG}]),
+        names_and_types(Authority)
+    ).
+
+%% An error from the resolver denies nothing: it goes out as it is, AD clear and unsigned.
+error_from_the_resolver_is_left_alone(_Config) ->
+    Zone = put_delegation_zone(),
+    QName = in_zone(~"target"),
+    QLabels = dns_domain:split(QName),
+    Msg = #dns_message{
+        qc = 1,
+        aa = false,
+        rc = ?DNS_RCODE_SERVFAIL,
+        questions = [#dns_query{name = QName, type = ?DNS_TYPE_A}],
+        additional = [#dns_optrr{dnssec = true}]
+    },
+    ?assertEqual(
+        Msg, erldns_dnssec:handle(Msg, Zone, QLabels, QName, ?DNS_TYPE_A, none, #{}, true)
+    ).
+
+%% RFC 4035 §2.2: an RRSIG carries the TTL of the RRset it covers. The NSEC of a delegation takes
+%% the zone's negative TTL and is signed when served, so an SOA update reaches both at once.
+delegation_nsec_ttl_follows_the_soa(_Config) ->
+    Zone = put_delegation_zone(),
+    [Soa] = [RR || #dns_rr{type = ?DNS_TYPE_SOA} = RR <- Zone#zone.records],
+    Data = Soa#dns_rr.data,
+    Soa2 = Soa#dns_rr{data = Data#dns_rrdata_soa{serial = 2, minimum = 600}},
+    ok = erldns_zone_cache:put_zone_rrset(
+        {?DELEGATION_ZONE, ~"2", [Soa2]}, ?DELEGATION_ZONE, ?DNS_TYPE_SOA, 1
+    ),
+    #dns_message{authority = Authority} = resolve(in_zone(~"ns1.insecure"), ?DNS_TYPE_A),
+    [Nsec] = [RR || #dns_rr{type = ?DNS_TYPE_NSEC} = RR <- Authority],
+    [Sig] = [
+        RR
+     || #dns_rr{data = #dns_rrdata_rrsig{type_covered = ?DNS_TYPE_NSEC}} = RR <- Authority
+    ],
+    ?assertEqual(600, Nsec#dns_rr.ttl),
+    ?assertEqual(600, Sig#dns_rr.ttl),
+    ?assertEqual(600, Sig#dns_rr.data#dns_rrdata_rrsig.original_ttl).
+
+zone_signing_skips_delegation_ns_glue_and_occluded_records(_Config) ->
+    Zone = delegation_zone(),
+    ZskTag = zsk_tag(Zone),
+    #{zone_rrsig_rrs := ZoneSigs, key_rrsig_rrs := KeySigs} = erldns_dnssec:get_signed_records(
+        Zone
+    ),
+    %% The CDS at sub.secure is occluded like everything else below the cut.
+    ?assertEqual([], KeySigs),
+    ?assertEqual(
+        lists:sort([
+            {?DELEGATION_ZONE, ?DNS_TYPE_SOA},
+            {?DELEGATION_ZONE, ?DNS_TYPE_NS},
+            {in_zone(~"ns1"), ?DNS_TYPE_A},
+            {in_zone(~"target"), ?DNS_TYPE_A},
+            {in_zone(~"alias"), ?DNS_TYPE_CNAME},
+            {in_zone(~"secure"), ?DNS_TYPE_DS}
+        ]),
+        names_and_types_covered(ZoneSigs)
+    ),
+    ?assertMatch(
+        [#dns_rr{data = #dns_rrdata_rrsig{keytag = ZskTag}}],
+        [RR || #dns_rr{data = #dns_rrdata_rrsig{type_covered = ?DNS_TYPE_DS}} = RR <- ZoneSigs]
+    ).
+
+%% An RRset arriving on its own is placed against the cuts the cache holds, so glue and occluded
+%% data added later stay unsigned too, and a new delegation is recognised by its own NS RRset.
+rrset_signing_skips_delegation_ns_and_signs_ds(_Config) ->
+    Zone = put_delegation_zone(),
+    ZskTag = zsk_tag(Zone),
+    RRSet = fun(Name, Type) ->
+        [RR || #dns_rr{name = N, type = T} = RR <- Zone#zone.records, N =:= Name, T =:= Type]
+    end,
+    Sign = fun(Records) -> erldns_dnssec:get_signed_zone_records(Zone#zone{records = Records}) end,
+    NewCut = #dns_rr{
+        name = in_zone(~"fresh"),
+        type = ?DNS_TYPE_NS,
+        ttl = 3600,
+        data = #dns_rrdata_ns{dname = ~"ns1.other.example"}
+    },
+    ?assertEqual([], Sign(RRSet(in_zone(~"secure"), ?DNS_TYPE_NS))),
+    ?assertEqual([], Sign(RRSet(in_zone(~"secure"), ?DNS_TYPE_A))),
+    ?assertEqual([], Sign(RRSet(in_zone(~"ns1.insecure"), ?DNS_TYPE_A))),
+    ?assertEqual([], Sign(RRSet(in_zone(~"www.secure"), ?DNS_TYPE_CNAME))),
+    ?assertEqual([], Sign(RRSet(in_zone(~"sub.secure"), ?DNS_TYPE_DS))),
+    ?assertEqual([], Sign([NewCut])),
+    ?assertMatch(
+        [#dns_rr{data = #dns_rrdata_rrsig{type_covered = ?DNS_TYPE_DS, keytag = ZskTag}}],
+        Sign(RRSet(in_zone(~"secure"), ?DNS_TYPE_DS))
+    ),
+    ?assertMatch(
+        [#dns_rr{data = #dns_rrdata_rrsig{type_covered = ?DNS_TYPE_NS}}],
+        Sign(RRSet(?DELEGATION_ZONE, ?DNS_TYPE_NS))
+    ).
+
+%% Run a question through the resolver and the signer pipes, as the pipeline would.
+resolve(QName, QType) ->
+    resolve(QName, QType, []).
+
+%% The same, with records the request carries in its authority section.
+resolve(QName, QType, RequestAuthority) ->
+    QLabels = dns_domain:split(QName),
+    Msg0 = #dns_message{
+        qc = 1,
+        questions = [#dns_query{name = QName, type = QType}],
+        authority = RequestAuthority,
+        additional = [#dns_optrr{dnssec = true}]
+    },
+    Opts0 = erldns_dnssec:prepare(
+        erldns_resolver:prepare(#{
+            resolved => false, query_name => QName, query_labels => QLabels, query_type => QType
+        })
+    ),
+    {Msg1, Opts1} = erldns_resolver:call(Msg0, Opts0),
+    {Msg2, _} = erldns_dnssec:call(Msg1, Opts1),
+    Msg2.
+
+put_delegation_zone() ->
+    Zone = delegation_zone(),
+    ok = erldns_zone_cache:put_zone(Zone),
+    Zone.
+
+%% The zone drawn at the top of this section: a secure delegation whose name server sits at the
+%% cut itself, hiding a CNAME and a further cut below it; an insecure one, served the same way,
+%% with glue at and below its cut; and an insecure one stored with a capital letter. Signed with
+%% the keys of example-dnssec0.com from the suite's zone file.
+delegation_zone() ->
+    #zone{keysets = Keysets} =
+        erldns_zone_cache:get_authoritative_zone(dns_domain:split(~"example-dnssec0.com")),
+    RR = fun(Name, Type, Data) -> #dns_rr{name = Name, type = Type, ttl = 3600, data = Data} end,
+    Digest = binary:decode_hex(~"a0b9c38cd324182af0ef66830d0a0e85a1d58979c9834e18c871779e040857b7"),
+    Records = [
+        RR(?DELEGATION_ZONE, ?DNS_TYPE_SOA, #dns_rrdata_soa{
+            mname = in_zone(~"ns1"),
+            rname = in_zone(~"hostmaster"),
+            serial = 1,
+            refresh = 3600,
+            retry = 600,
+            expire = 604800,
+            minimum = 300
+        }),
+        RR(?DELEGATION_ZONE, ?DNS_TYPE_NS, #dns_rrdata_ns{dname = in_zone(~"ns1")}),
+        RR(in_zone(~"ns1"), ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 53}}),
+        RR(in_zone(~"target"), ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 10}}),
+        RR(in_zone(~"alias"), ?DNS_TYPE_CNAME, #dns_rrdata_cname{dname = in_zone(~"www.secure")}),
+        RR(in_zone(~"secure"), ?DNS_TYPE_NS, #dns_rrdata_ns{dname = in_zone(~"secure")}),
+        RR(in_zone(~"secure"), ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 98}}),
+        RR(in_zone(~"secure"), ?DNS_TYPE_DS, #dns_rrdata_ds{
+            keytag = 46096, alg = 8, digest_type = 2, digest = Digest
+        }),
+        RR(in_zone(~"www.secure"), ?DNS_TYPE_CNAME, #dns_rrdata_cname{dname = in_zone(~"target")}),
+        RR(in_zone(~"sub.secure"), ?DNS_TYPE_NS, #dns_rrdata_ns{dname = ~"ns1.other.example"}),
+        RR(in_zone(~"sub.secure"), ?DNS_TYPE_DS, #dns_rrdata_ds{
+            keytag = 46096, alg = 8, digest_type = 2, digest = Digest
+        }),
+        RR(in_zone(~"sub.secure"), ?DNS_TYPE_CDS, #dns_rrdata_cds{
+            keytag = 46096, alg = 8, digest_type = 2, digest = Digest
+        }),
+        RR(in_zone(~"insecure"), ?DNS_TYPE_NS, #dns_rrdata_ns{dname = in_zone(~"insecure")}),
+        RR(in_zone(~"insecure"), ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 99}}),
+        RR(in_zone(~"ns1.insecure"), ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 100}}),
+        RR(in_zone(~"Mixed"), ?DNS_TYPE_NS, #dns_rrdata_ns{dname = ~"ns1.other.example"})
+    ],
+    erldns_zone_codec:build_zone(?DELEGATION_ZONE, ~"1", Records, Keysets).
+
+in_zone(Prefix) ->
+    <<Prefix/binary, ".", ?DELEGATION_ZONE/binary>>.
+
+zsk_tag(#zone{keysets = [#keyset{zone_signing_key_tag = Tag} | _]}) ->
+    Tag.
+
+names_and_types(RRs) ->
+    lists:sort([{Name, Type} || #dns_rr{name = Name, type = Type} <- RRs]).
+
+names_and_types_covered(RRSigs) ->
+    lists:sort([
+        {Name, Covered}
+     || #dns_rr{name = Name, data = #dns_rrdata_rrsig{type_covered = Covered}} <- RRSigs
+    ]).

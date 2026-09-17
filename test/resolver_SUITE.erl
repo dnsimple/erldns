@@ -20,6 +20,9 @@ all() ->
         resolve_authoritative_zone_cut_drops_occluded_cname,
         resolve_authoritative_self_delegation_trailing_dot_name_mismatch,
         resolve_authoritative_max_depth_returns_servfail,
+        resolve_authoritative_ds_at_and_below_a_zone_cut,
+        resolve_authoritative_nested_zone_cut_refers_to_the_topmost,
+        resolve_drops_the_sections_of_the_request,
         negative_answers_carry_the_soa_minimum_ttl
     ].
 
@@ -35,8 +38,8 @@ resolve_authoritative_host_not_found(_) ->
         authority = Authority = [#dns_rr{name = ~"resolve_auth_no_host.com", type = ?DNS_TYPE_SOA}]
     },
     Msg = #dns_message{questions = [#dns_query{name = ZoneName, type = ?DNS_TYPE_A}]},
-    A = erldns_resolver:resolve_authoritative(
-        Msg, Z, ZoneName, ZoneLabels, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+    {A, none} = erldns_resolver:resolve_authoritative(
+        Msg, Z, ZoneLabels, ZoneName, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(true, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NXDOMAIN, A#dns_message.rc),
@@ -57,13 +60,14 @@ resolve_authoritative_zone_cut(_) ->
     },
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
     erldns_zone_cache:put_zone(Z),
-    A = erldns_resolver:resolve_authoritative(
-        Msg, Z, Qname, dns_domain:split(Qname), ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+    {A, Cut} = erldns_resolver:resolve_authoritative(
+        Msg, Z, dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
     ?assertEqual(NSRecord, A#dns_message.authority),
     ?assertEqual([], A#dns_message.answers),
+    ?assertEqual(dns_domain:split(Qname), Cut),
     erldns_zone_cache:delete_zone(ZoneName).
 
 resolve_authoritative_zone_cut_with_cnames(_) ->
@@ -91,13 +95,14 @@ resolve_authoritative_zone_cut_with_cnames(_) ->
     },
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
     erldns_zone_cache:put_zone(Z),
-    A = erldns_resolver:resolve_authoritative(
-        Msg, Z, Qname, dns_domain:split(Qname), ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+    {A, Cut} = erldns_resolver:resolve_authoritative(
+        Msg, Z, dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
     ?assertEqual(NSRecord, A#dns_message.authority),
     ?assertEqual(CnameRecords, A#dns_message.answers),
+    ?assertEqual(dns_domain:split(~"delegated-ns.resolve_auth_zone_cut_cnames.com"), Cut),
     erldns_zone_cache:delete_zone(ZoneName).
 
 %% A chain of two CNAMEs in the parent zone where the second hop is matched by a
@@ -146,13 +151,14 @@ resolve_authoritative_zone_cut_with_cname_chain_through_wildcard(_) ->
     ),
     ok = erldns_zone_cache:put_zone(Z),
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
-    A = erldns_resolver:resolve_authoritative(
-        Msg, Z, Qname, dns_domain:split(Qname), ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+    {A, Cut} = erldns_resolver:resolve_authoritative(
+        Msg, Z, dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
     ?assertEqual([DelegationNS], A#dns_message.authority),
     ?assertEqual([Cname1, ExpandedWildcardCname], A#dns_message.answers),
+    ?assertEqual(dns_domain:split(~"dyn.chain-zone-cut.example"), Cut),
     erldns_zone_cache:delete_zone(ZoneName).
 
 %% Plain 2-hop CNAME chain (no wildcard) terminating at a delegated zonecut.
@@ -197,13 +203,14 @@ resolve_authoritative_zone_cut_with_plain_cname_chain(_) ->
     ),
     ok = erldns_zone_cache:put_zone(Z),
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
-    A = erldns_resolver:resolve_authoritative(
-        Msg, Z, Qname, dns_domain:split(Qname), ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+    {A, Cut} = erldns_resolver:resolve_authoritative(
+        Msg, Z, dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
     ?assertEqual([DelegationNS], A#dns_message.authority),
     ?assertEqual([Cname1, Cname2], A#dns_message.answers),
+    ?assertEqual(dns_domain:split(~"delegated.plain-chain-zone-cut.example"), Cut),
     erldns_zone_cache:delete_zone(ZoneName).
 
 %% Occluded data (RFC 5936 §3.5, RFC 2181 §6): records whose owner sits below a
@@ -246,13 +253,14 @@ resolve_authoritative_zone_cut_drops_occluded_cname(_) ->
     ),
     ok = erldns_zone_cache:put_zone(Z),
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
-    A = erldns_resolver:resolve_authoritative(
-        Msg, Z, Qname, dns_domain:split(Qname), ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+    {A, Cut} = erldns_resolver:resolve_authoritative(
+        Msg, Z, dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
     ?assertEqual([DelegationNS], A#dns_message.authority),
     ?assertEqual([], A#dns_message.answers),
+    ?assertEqual(dns_domain:split(~"delegated.occluded-cname.example"), Cut),
     erldns_zone_cache:delete_zone(ZoneName).
 
 %% NS at the same name as the answer (self-delegation) must be detected even when
@@ -302,7 +310,7 @@ resolve_authoritative_self_delegation_trailing_dot_name_mismatch(_) ->
     Pid =
         spawn(fun() ->
             try
-                R = erldns_resolver:resolve_authoritative(
+                {R, _} = erldns_resolver:resolve_authoritative(
                     Msg, Z, QLabels, Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
                 ),
                 Parent ! {ok, R}
@@ -364,10 +372,94 @@ resolve_authoritative_max_depth_returns_servfail(_) ->
     Qname = ~"link0.deep-cname.example",
     QLabels = dns_domain:split(Qname),
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
-    Res = erldns_resolver:resolve_authoritative(
+    {Res, none} = erldns_resolver:resolve_authoritative(
         Msg, Z, QLabels, Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(?DNS_RCODE_SERVFAIL, Res#dns_message.rc),
+    erldns_zone_cache:delete_zone(ZoneName).
+
+%% RFC 4035 §3.1.4.1: the DS RRset is the parent's, so a DS query for the delegation name is
+%% answered here, even when the delegation's NS points at that name; a DS query for anything
+%% below the cut is a referral like any other query there, and so is one at the cut for any
+%% other type.
+resolve_authoritative_ds_at_and_below_a_zone_cut(_) ->
+    erldns_zone_cache:start_link(),
+    ZoneName = dns_domain:to_lower(~"ds-zone-cut.example"),
+    Cut = ~"delegated.ds-zone-cut.example",
+    Below = ~"ns1.delegated.ds-zone-cut.example",
+    NS = #dns_rr{name = Cut, type = ?DNS_TYPE_NS, ttl = 3600, data = #dns_rrdata_ns{dname = Cut}},
+    DS = #dns_rr{
+        name = Cut,
+        type = ?DNS_TYPE_DS,
+        ttl = 3600,
+        data = #dns_rrdata_ds{keytag = 1, alg = 8, digest_type = 2, digest = <<0:256>>}
+    },
+    Glue = #dns_rr{
+        name = Cut, type = ?DNS_TYPE_A, ttl = 3600, data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
+    },
+    BelowGlue = Glue#dns_rr{name = Below, data = #dns_rrdata_a{ip = {192, 0, 2, 2}}},
+    Z = erldns_zone_codec:build_zone(
+        ZoneName, ~"digest", [soa(ZoneName), NS, DS, Glue, BelowGlue], []
+    ),
+    ok = erldns_zone_cache:put_zone(Z),
+    CutLabels = dns_domain:split(Cut),
+    {AtCut, none} = resolve_authoritative(Z, Cut, ?DNS_TYPE_DS),
+    ?assertMatch(
+        #dns_message{aa = true, rc = ?DNS_RCODE_NOERROR, answers = [DS], authority = []}, AtCut
+    ),
+    {BelowCut, CutLabels} = resolve_authoritative(Z, Below, ?DNS_TYPE_DS),
+    ?assertMatch(
+        #dns_message{aa = false, rc = ?DNS_RCODE_NOERROR, answers = [], authority = [NS]}, BelowCut
+    ),
+    {Referral, CutLabels} = resolve_authoritative(Z, Cut, ?DNS_TYPE_A),
+    ?assertMatch(#dns_message{aa = false, answers = [], authority = [NS]}, Referral),
+    erldns_zone_cache:delete_zone(ZoneName).
+
+%% A cut under another cut is occluded by it: the referral is to the topmost delegation.
+resolve_authoritative_nested_zone_cut_refers_to_the_topmost(_) ->
+    erldns_zone_cache:start_link(),
+    ZoneName = dns_domain:to_lower(~"nested-zone-cut.example"),
+    Outer = #dns_rr{
+        name = ~"delegated.nested-zone-cut.example",
+        type = ?DNS_TYPE_NS,
+        ttl = 3600,
+        data = #dns_rrdata_ns{dname = ~"ns-ext.example."}
+    },
+    Inner = Outer#dns_rr{name = ~"sub.delegated.nested-zone-cut.example"},
+    Z = erldns_zone_codec:build_zone(ZoneName, ~"digest", [soa(ZoneName), Outer, Inner], []),
+    ok = erldns_zone_cache:put_zone(Z),
+    {A, Cut} = resolve_authoritative(Z, ~"www.sub.delegated.nested-zone-cut.example", ?DNS_TYPE_A),
+    ?assertEqual(dns_domain:split(~"delegated.nested-zone-cut.example"), Cut),
+    ?assertMatch(#dns_message{aa = false, answers = [], authority = [Outer]}, A),
+    erldns_zone_cache:delete_zone(ZoneName).
+
+%% RFC 1035 §4.1.1: a query carries nothing of use in its answer and authority sections, and
+%% nothing found there makes it into the response.
+resolve_drops_the_sections_of_the_request(_) ->
+    erldns_zone_cache:start_link(),
+    ZoneName = dns_domain:to_lower(~"request-sections.example"),
+    QName = ~"a.request-sections.example",
+    A = #dns_rr{
+        name = QName, type = ?DNS_TYPE_A, ttl = 60, data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
+    },
+    Planted = #dns_rr{
+        name = QName,
+        type = ?DNS_TYPE_NS,
+        ttl = 1,
+        data = #dns_rrdata_ns{dname = ~"ns.attacker.example."}
+    },
+    Z = erldns_zone_codec:build_zone(ZoneName, ~"digest", [soa(ZoneName), A], []),
+    ok = erldns_zone_cache:put_zone(Z),
+    Msg = #dns_message{
+        questions = [#dns_query{name = QName, type = ?DNS_TYPE_A}],
+        answers = [Planted],
+        authority = [Planted]
+    },
+    Opts = erldns_resolver:prepare(#{
+        resolved => false, query_labels => dns_domain:split(QName), query_type => ?DNS_TYPE_A
+    }),
+    {Answer, #{zonecut := none}} = erldns_resolver:call(Msg, Opts),
+    ?assertMatch(#dns_message{aa = true, answers = [A], authority = []}, Answer),
     erldns_zone_cache:delete_zone(ZoneName).
 
 %% RFC 2308 §3: the SOA in the authority section of a negative answer is served at the minimum
@@ -445,3 +537,25 @@ resolve(QName, QType) ->
     }),
     {Answer, _} = erldns_resolver:call(Msg, Opts),
     Answer.
+
+resolve_authoritative(Z, QName, QType) ->
+    Msg = #dns_message{questions = [#dns_query{name = QName, type = QType}]},
+    erldns_resolver:resolve_authoritative(
+        Msg, Z, dns_domain:split(QName), QName, QType, [], ?MAX_RESOLUTION_DEPTH
+    ).
+
+soa(ZoneName) ->
+    #dns_rr{
+        name = ZoneName,
+        type = ?DNS_TYPE_SOA,
+        ttl = 3600,
+        data = #dns_rrdata_soa{
+            mname = <<"ns1.", ZoneName/binary>>,
+            rname = <<"admin.", ZoneName/binary>>,
+            serial = 1,
+            refresh = 3600,
+            retry = 600,
+            expire = 86400,
+            minimum = 300
+        }
+    }.

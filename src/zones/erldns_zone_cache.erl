@@ -82,6 +82,7 @@ zone_labels := dns:labels()
     get_records_by_name_and_type_resolved/3,
     get_authoritative_zone/1,
     get_authoritative_zone/2,
+    get_zonecut/2,
     get_delegations/1,
     get_delegations/2,
     get_rrset_sync_counter/3,
@@ -337,6 +338,37 @@ get_authoritative_zone(Labels, ?DNS_TYPE_DS) ->
     find_authoritative_zone_in_cache_ds(Labels);
 get_authoritative_zone(Labels, _) ->
     get_authoritative_zone(Labels).
+
+-doc #{group => ~"API: Lookups"}.
+-doc """
+Find the zone cut a name sits at or below.
+
+Returns the labels of the topmost name between the apex and the given name that holds an NS
+RRset, with that RRset, or `none`. The apex is not a cut, and a cut under another cut is occluded
+by it, hence the topmost.
+""".
+-spec get_zonecut(erldns:zone(), dns:dname() | dns:labels()) ->
+    none | {dns:labels(), [dns:rr(), ...]}.
+get_zonecut(Zone, Name) when is_binary(Name) ->
+    get_zonecut(Zone, dns_domain:split(Name));
+get_zonecut(#zone{labels = ZL, reversed_labels = RZL}, Labels) when
+    is_list(ZL), is_list(RZL), is_list(Labels)
+->
+    case reduce_record_labels_pre_reversed(RZL, Labels) of
+        false -> none;
+        RecordLabels -> find_zonecut(ZL, RecordLabels, [])
+    end.
+
+%% Reduced labels run from the apex outwards, so the first prefix holding an NS RRset is the
+%% topmost cut.
+find_zonecut(_, [], _) ->
+    none;
+find_zonecut(ZL, [Label | Rest], Prefix) ->
+    RecordLabels = Prefix ++ [Label],
+    case pattern_zone_dname_type(ZL, RecordLabels, ?DNS_TYPE_NS) of
+        [] -> find_zonecut(ZL, Rest, RecordLabels);
+        NSRecords -> {lists:reverse(RecordLabels, ZL), NSRecords}
+    end.
 
 -doc #{group => ~"API: Lookups"}.
 -doc """

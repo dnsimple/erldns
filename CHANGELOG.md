@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v11.3.0
+
+### Fixed
+
+- Referrals carry the delegation's DS RRset and its RRSIG, or an NSEC at the delegation name
+  proving there is none (RFC 4035 §3.1.4). The NSEC was synthesized at the QNAME from whatever
+  the parent stored below the cut, and the DS was never included.
+- The resolver decides a referral before reading the records at a name, at the topmost cut, and
+  passes the delegation to the DNSSEC pipe as the `zonecut` opt; the shape of the response and
+  the request's own authority section no longer take part. A DS query below a cut is a referral,
+  one for the delegation name itself is answered by the parent.
+- Delegation NS RRsets, glue, and records occluded by a cut are no longer signed (RFC 4035
+  §2.2), and the NSEC at a delegation name is owned by its lowercased form and advertises only
+  NS, DS, RRSIG and NSEC (RFC 4034 §4.1.2).
+- DS RRsets are signed with the zone signing key on every path.
+- Errors from the resolver are no longer completed into a signed NOERROR denial with AD set.
+
 ## v11.2.4
 
 ### Fixed
