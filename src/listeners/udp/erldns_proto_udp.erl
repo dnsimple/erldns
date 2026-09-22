@@ -21,8 +21,9 @@
 
 -spec overrun_handler([{atom(), term()}, ...]) -> term().
 overrun_handler(Args) ->
-    ?LOG_WARNING(maps:from_list([{what, request_timeout}, {transport, udp} | Args]), ?LOG_METADATA),
-    telemetry:execute([erldns, request, timeout], #{count => 1}, #{transport => udp}).
+    ArgsMap = maps:from_list([{what, request_timeout}, {transport, udp} | Args]),
+    ?LOG_WARNING(ArgsMap, ?LOG_METADATA),
+    telemetry:execute([erldns, request, timeout], #{count => 1}, ArgsMap).
 
 -spec init(non_neg_integer()) -> {ok, erldns_codel:codel()}.
 init(IngressTimeoutMs) ->

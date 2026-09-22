@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Fixed
+
+- The UDP listener's overrun handler passes wpool's report to `[erldns, request, timeout]`
+  instead of dropping it.
+
 ## v11.3.0
 
 ### Fixed
