@@ -46,7 +46,13 @@ child_spec() ->
         },
         overrun_warning => 5000,
         overrun_handler => [{?MODULE, overrun_handler}],
-        max_overrun_warnings => 2,
+        %% Never kill an overrunning worker. wpool kills with an untrappable exit, and every
+        %% `async_work` cast queued behind the running task sits in that worker's own mailbox,
+        %% so it dies with it and emits nothing; wpool documents the caveat under
+        %% `max_overrun_warnings`. Suspended work is bounded by the suspending pipe's own
+        %% timeouts, so a slow task finishes, and CoDel sheds whatever queued too long behind
+        %% it, reporting each one on `[erldns, request, dropped]`.
+        max_overrun_warnings => infinity,
         enable_queues => false
     },
     wpool:child_spec(?POOL_NAME, WorkerOpts).

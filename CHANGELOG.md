@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v11.3.2
+
+### Fixed
+
+- The pipeline async pool no longer kills a worker that overruns. The kill also discarded
+  whatever that worker had queued in its mailbox, reporting none of it. Overruns are still
+  reported as warnings.
+
 ## v11.3.1
 
 ### Fixed
