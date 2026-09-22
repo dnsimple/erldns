@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The pipeline async pool reports the continuations it sheds. `[erldns, request, dropped]`
+  carried no metadata at all, so consumers matching on it never saw a pool drop, and nothing
+  was logged either. It now carries `what => async_work_dropped` with the query's transport
+  and sojourn time, and logs a notice, as the listeners do.
 - The UDP listener's overrun handler passes wpool's report to `[erldns, request, timeout]`
   instead of dropping it.
 

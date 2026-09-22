@@ -6,6 +6,7 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 -define(PIPE_ERROR_EVENT, [erldns, pipeline, error]).
+-define(DROPPED_EVENT, [erldns, request, dropped]).
 -define(LOG_REPORT, log_report).
 
 -spec all() -> [ct_suite:ct_test_def()].
@@ -66,7 +67,8 @@ groups() ->
             pipe_suspend_resumes_remaining_pipeline,
             continuation_execute_work,
             continuation_resume,
-            continuation_execute_and_resume
+            continuation_execute_and_resume,
+            async_pool_drop_reports_itself
         ]},
         {suspension_integration, [parallel], [
             udp_basic_pipeline_works,
@@ -88,6 +90,9 @@ groups() ->
 init_per_suite(Config) ->
     application:ensure_all_started([telemetry]),
     ok = telemetry:attach(?MODULE, ?PIPE_ERROR_EVENT, fun ?MODULE:telemetry_handler/4, []),
+    ok = telemetry:attach(
+        {?MODULE, dropped}, ?DROPPED_EVENT, fun ?MODULE:telemetry_handler/4, []
+    ),
     Config.
 
 -spec init_per_group(atom(), ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -108,6 +113,7 @@ end_per_group(_, Config) ->
 
 -spec end_per_suite(ct_suite:ct_config()) -> term().
 end_per_suite(_) ->
+    _ = telemetry:detach({?MODULE, dropped}),
     application:stop(telemetry).
 
 -spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -564,6 +570,31 @@ continuation_execute_and_resume(_) ->
     Result = erldns_pipeline:resume_pipeline(Cont),
     ?assertEqual(true, Result#dns_message.aa),
     ?assertEqual(true, Result#dns_message.tc).
+
+%% Verify a continuation the async pool sheds says so, rather than vanishing silently.
+async_pool_drop_reports_itself(_) ->
+    AsyncFun = fun(M, O) -> {M, O} end,
+    SuspendFun = fun(M, O) -> {suspend, M, O, AsyncFun} end,
+    erldns_pipeline:store_pipeline(?FUNCTION_NAME, [SuspendFun]),
+    Opts = (def_opts())#{monotonic_time => erlang:monotonic_time()},
+    {suspend, Cont} = erldns_pipeline:call_custom(example_msg(), Opts, ?FUNCTION_NAME),
+    %% CoDel only sheds from a queue it can see, so give the worker a backlog to measure.
+    self() ! filler,
+    self() ! filler,
+    Work = {async_work, self(), Cont},
+    %% The first pass only arms the drop timer: CoDel waits a whole interval above target
+    %% before it sheds anything.
+    {noreply, Codel} = erldns_async_pool:handle_cast(Work, erldns_codel:new(1, 0)),
+    timer:sleep(5),
+    ?assertMatch({noreply, _}, erldns_async_pool:handle_cast(Work, Codel)),
+    receive
+        {?DROPPED_EVENT, Metadata} ->
+            ?assertMatch(
+                #{what := async_work_dropped, transport := udp, sojourn_time_us := _}, Metadata
+            )
+    after 1000 ->
+        ct:fail("the async pool shed a continuation without reporting it")
+    end.
 
 %% ===================================================================
 %% Suspension Integration Tests
