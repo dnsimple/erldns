@@ -62,7 +62,12 @@ count := non_neg_integer()
 - Metadata:
 ```erlang
 transport := udp | tcp
+what => request_timeout | async_worker_overrun
+alert => overrun | max_overrun_limit
 ```
+Also emitted by the pipeline async pool, not only by a listener. `what` says which, and on both
+the wpool overrun keys follow: `alert` is `max_overrun_limit` for the overrun that kills the
+worker, and `overrun` for the warnings before it.
 
 ### `[erldns, request, dropped]`
 - Measurements:
@@ -72,7 +77,12 @@ count := non_neg_integer()
 - Metadata:
 ```erlang
 transport := udp | tcp
+what => request_dropped | async_work_dropped
+sojourn_time_us => non_neg_integer()
 ```
+Also emitted by the pipeline async pool shedding a suspended continuation, which `what`
+distinguishes from a listener shedding its own queue. `transport` is the one the query arrived
+on either way.
 
 ### `[erldns, request, delayed]`
 - Measurements:

@@ -130,7 +130,15 @@ process_work(Codel, ReplyToPid, Continuation, Budget) ->
             run_blocking_work_and_reply(ReplyToPid, Continuation),
             {noreply, Codel1};
         {drop, Codel1} ->
-            telemetry:execute([erldns, request, dropped], #{count => 1}, #{}),
+            Metadata = #{
+                what => async_work_dropped,
+                transport => maps:get(transport, Opts),
+                ingress_ts => IngressTs,
+                current_ts => Now,
+                sojourn_time_us => erlang:convert_time_unit(Now - IngressTs, native, microsecond)
+            },
+            telemetry:execute([erldns, request, dropped], #{count => 1}, Metadata),
+            ?LOG_NOTICE(Metadata, ?LOG_METADATA),
             drop_loop(Codel1, Budget)
     end.
 
