@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v11.3.1
+
 ### Fixed
 
 - The pipeline async pool reports the continuations it sheds. `[erldns, request, dropped]`
