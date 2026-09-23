@@ -163,7 +163,9 @@ drop_loop(Codel, Budget) ->
     ReplyToPid :: pid(),
     Continuation :: erldns_pipeline:continuation().
 run_blocking_work_and_reply(ReplyToPid, Continuation) ->
-    case erldns_pipeline:execute_work(Continuation) of
+    Result = erldns_pipeline:execute_work(Continuation),
+    telemetry:execute([erldns, pipeline, resume], #{count => 1}, #{cont => Continuation}),
+    case Result of
         halt ->
             ok;
         Continuation1 ->

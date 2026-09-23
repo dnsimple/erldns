@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v11.4.0
+
+### Added
+
+- The pipeline async pool emits `[erldns, pipeline, resume]` when it finishes a suspended
+  continuation, pairing the `[erldns, pipeline, suspend]` it emits on accepting one. Both are
+  now documented.
+
 ## v11.3.2
 
 ### Fixed

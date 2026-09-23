@@ -145,6 +145,26 @@ exception in a pipe, exception in async work, or suspend loop detection.
 - **Metadata (exception in async pool worker):**
     `#{what => async_work_failed, class => ..., reason => ..., stacktrace => ...}`
 
+### `[erldns, pipeline, suspend]`
+
+Emitted when a suspended continuation is handed to the async pool. Only the UDP listener
+does that: TCP runs the continuation inline on its request worker and emits nothing.
+
+- **Measurements:** `#{count => 1}`
+- **Metadata:** `#{cont => continuation()}`
+
+### `[erldns, pipeline, resume]`
+
+Emitted when the async pool finishes a suspended continuation, however the work ended.
+
+A continuation the pool accepts ends in exactly one of three events: this one;
+`[erldns, request, dropped]` with `what => async_work_dropped`, if it was shed; or
+`[erldns, pipeline, error]` with `what => async_work_failed`, if the worker raised around it.
+The exception is a worker that dies, which takes its continuations with it unreported.
+
+- **Measurements:** `#{count => 1}`
+- **Metadata:** `#{cont => continuation()}`, the continuation as it was suspended
+
 ## Examples
 
 Here's an example of a function pipe that arbitrarily sets the truncated bit

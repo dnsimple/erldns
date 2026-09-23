@@ -7,6 +7,7 @@
 -include_lib("dns_erlang/include/dns.hrl").
 -define(PIPE_ERROR_EVENT, [erldns, pipeline, error]).
 -define(DROPPED_EVENT, [erldns, request, dropped]).
+-define(RESUME_EVENT, [erldns, pipeline, resume]).
 -define(LOG_REPORT, log_report).
 
 -spec all() -> [ct_suite:ct_test_def()].
@@ -68,7 +69,8 @@ groups() ->
             continuation_execute_work,
             continuation_resume,
             continuation_execute_and_resume,
-            async_pool_drop_reports_itself
+            async_pool_drop_reports_itself,
+            async_pool_finish_reports_itself
         ]},
         {suspension_integration, [parallel], [
             udp_basic_pipeline_works,
@@ -93,6 +95,9 @@ init_per_suite(Config) ->
     ok = telemetry:attach(
         {?MODULE, dropped}, ?DROPPED_EVENT, fun ?MODULE:telemetry_handler/4, []
     ),
+    ok = telemetry:attach(
+        {?MODULE, resume}, ?RESUME_EVENT, fun ?MODULE:telemetry_handler/4, []
+    ),
     Config.
 
 -spec init_per_group(atom(), ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -114,6 +119,7 @@ end_per_group(_, Config) ->
 -spec end_per_suite(ct_suite:ct_config()) -> term().
 end_per_suite(_) ->
     _ = telemetry:detach({?MODULE, dropped}),
+    _ = telemetry:detach({?MODULE, resume}),
     application:stop(telemetry).
 
 -spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -595,6 +601,26 @@ async_pool_drop_reports_itself(_) ->
     after 1000 ->
         ct:fail("the async pool shed a continuation without reporting it")
     end.
+
+%% Verify a continuation the async pool finishes says so, whether it resumes or halts, so the
+%% pool's own events account for every continuation it accepts.
+async_pool_finish_reports_itself(_) ->
+    Suspend = fun(AsyncFun) -> fun(M, O) -> {suspend, M, O, AsyncFun} end end,
+    Opts = (def_opts())#{monotonic_time => erlang:monotonic_time()},
+    lists:foreach(
+        fun(AsyncFun) ->
+            erldns_pipeline:store_pipeline(?FUNCTION_NAME, [Suspend(AsyncFun)]),
+            {suspend, Cont} = erldns_pipeline:call_custom(example_msg(), Opts, ?FUNCTION_NAME),
+            Work = {async_work, self(), Cont},
+            ?assertMatch({noreply, _}, erldns_async_pool:handle_cast(Work, erldns_codel:new(500))),
+            receive
+                {?RESUME_EVENT, #{cont := Cont}} -> ok
+            after 1000 ->
+                ct:fail("the async pool finished a continuation without reporting it")
+            end
+        end,
+        [fun(M, O) -> {M, O} end, fun(_, _) -> halt end]
+    ).
 
 %% ===================================================================
 %% Suspension Integration Tests
