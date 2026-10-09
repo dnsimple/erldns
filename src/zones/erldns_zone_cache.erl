@@ -853,7 +853,6 @@ publish_staged(#zone{name = Name, labels = ZoneLabels, gen = Gen} = Zone) ->
         _ ->
             ok
     end,
-    delete_zone_sync_counters(ZoneLabels),
     Metadata = #{zone_name => Name, zone_labels => ZoneLabels},
     telemetry:execute([erldns, zone, put], #{count => 1}, Metadata),
     ok.

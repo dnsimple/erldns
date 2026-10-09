@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default), as are a deleted zone's.
 - `#zone{}` has a new `gen` field, so code matching on it needs recompiling. Lookups need a
   header read from the cache: one built by the caller finds no records.
+- Replacing a zone keeps its rrset sync counters; only `delete_zone/1` clears them.
 
 ### Added
 
