@@ -802,7 +802,7 @@ json_record_svcb_unknown_param(_) ->
 json_record_svcb_ech_param(_) ->
     Name = ~"example.com",
     ECHData = <<1, 2, 3, 4, 5>>,
-    %% ECH parameter is stored as binary in the decoder
+    %% JSON carries the ECHConfigList in base64; the record holds the raw octets
     ?assertEqual(
         #dns_rr{
             name = Name,
@@ -825,7 +825,7 @@ json_record_svcb_ech_param(_) ->
                 ~"svc_priority" => 1,
                 ~"target_name" => ~"target.example.com",
                 ~"svc_params" => #{
-                    ~"ech" => ECHData
+                    ~"ech" => base64:encode(ECHData)
                 }
             }
         })

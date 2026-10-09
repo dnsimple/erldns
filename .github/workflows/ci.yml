@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   markdown-lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
@@ -26,7 +26,7 @@ jobs:
           config_file: ".markdownlint.yaml"
 
   yaml-lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
@@ -37,7 +37,7 @@ jobs:
     name: OTP:${{ matrix.otp }}-OS:${{ matrix.os }}
     strategy:
       matrix:
-        os: ['ubuntu-24.04']
+        os: ['ubuntu-26.04']
         otp: ['29', '28']
         rebar3: ['3.27']
     runs-on: ${{ matrix.os }}
@@ -82,11 +82,11 @@ jobs:
             runner: 'windows-2025'
             vm: false
           - os: freebsd
-            runner: 'ubuntu-24.04'
+            runner: 'ubuntu-26.04'
             vm: true
             version: '14.3'
           - os: openbsd
-            runner: 'ubuntu-24.04'
+            runner: 'ubuntu-26.04'
             vm: true
             version: '7.9'
           # NetBSD is out until pkgsrc lang/erlang moves past 27: no binary OTP 28
@@ -122,7 +122,7 @@ jobs:
   finish:
     needs: test
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Close parallel build
         uses: coverallsapp/github-action@v2
