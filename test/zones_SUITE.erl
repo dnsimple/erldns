@@ -153,6 +153,7 @@ groups() ->
             discard_zone_spares_a_published_zone,
             staged_zone_is_dropped_with_its_owner,
             staged_zone_outlives_a_hand_off_while_its_owner_lives,
+            staging_that_fails_leaves_nothing_behind,
             replaced_zone_is_dropped_after_the_grace_period
         ]}
     ].
@@ -2957,6 +2958,26 @@ staged_zone_outlives_a_hand_off_while_its_owner_lives(_) ->
     end,
     _ = sys:get_state(erldns_zone_cache),
     ?assertMatch([_], erldns_zone_cache:get_zone_records(ZoneName)).
+
+%% A staging that fails, here on a key that cannot sign, writes nothing: a caller that catches the
+%% error and carries on would otherwise leave an entry behind that no exit of its own cleans up.
+staging_that_fails_leaves_nothing_behind(_) ->
+    ZoneName = unique_name(unsignable),
+    Unsignable = #keyset{
+        key_signing_key = not_a_key,
+        key_signing_key_tag = 1,
+        key_signing_alg = 8,
+        zone_signing_key = not_a_key,
+        zone_signing_key_tag = 2,
+        zone_signing_alg = 8,
+        inception = 0,
+        valid_until = 1
+    },
+    Staged = ets:info(erldns_staged_zones, size),
+    ?assertError(
+        _, erldns_zone_cache:stage_zone({ZoneName, ~"v1", [soa_rr(ZoneName)], [Unsignable]})
+    ),
+    ?assertEqual(Staged, ets:info(erldns_staged_zones, size)).
 
 stage_elsewhere(Input) ->
     Parent = self(),

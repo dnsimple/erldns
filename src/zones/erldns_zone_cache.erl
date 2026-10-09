@@ -619,8 +619,6 @@ stage_zone(#zone{name = Name} = Zone) ->
     NormalizedName = dns_domain:to_lower(Name),
     ZoneLabels = dns_domain:split(NormalizedName),
     Gen = erlang:unique_integer([positive, monotonic]),
-    true = ets:insert(erldns_staged_zones, {Gen, ZoneLabels, self()}),
-    gen_server:cast(?MODULE, {watch, self()}),
     SignedZone = sign_zone(Zone#zone{
         name = NormalizedName,
         labels = ZoneLabels,
@@ -628,7 +626,12 @@ stage_zone(#zone{name = Name} = Zone) ->
         gen = Gen
     }),
     NamedRecords = build_named_index(SignedZone#zone.records),
-    put_zone_records(prepare_zone_records(ZoneLabels, Gen, NamedRecords)),
+    Entries = prepare_zone_records(ZoneLabels, Gen, NamedRecords),
+    % Nothing is written until everything that can fail has run, and the owner is watched before
+    % its staging entry exists, so an owner dying at any point leaves nothing behind.
+    gen_server:cast(?MODULE, {watch, self()}),
+    true = ets:insert(erldns_staged_zones, {Gen, ZoneLabels, self()}),
+    put_zone_records(Entries),
     SignedZone#zone{records = []};
 stage_zone({Name, Sha, Records}) ->
     stage_zone({Name, Sha, Records, []});
