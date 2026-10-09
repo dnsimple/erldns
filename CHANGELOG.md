@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v12.0.0
+
 ### Changed
 
 - Replacing a zone is atomic: a query sees the old zone or the new one, never one with records
