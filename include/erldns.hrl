@@ -23,7 +23,8 @@
     authority = [] :: dns:authority(),
     record_count = 0 :: non_neg_integer(),
     records = [] :: [dns:rr()],
-    keysets = [] :: [erldns:keyset()]
+    keysets = [] :: [erldns:keyset()],
+    gen = 0 :: non_neg_integer()
 }).
 
 -define(DNSKEY_ZSK_TYPE, 256).

@@ -147,7 +147,14 @@ groups() ->
             delete_zone_rrset_records_zone_not_found,
             rrset_sync_counter_dname_and_trailing_dot_same_key,
             delete_zone_cleans_sync_counters,
-            put_zone_cleans_sync_counters
+            put_zone_keeps_sync_counters,
+            put_zone_never_hides_names_it_keeps,
+            staged_zone_goes_live_on_commit,
+            discard_zone_spares_a_published_zone,
+            staged_zone_is_dropped_with_its_owner,
+            staged_zone_outlives_a_hand_off_while_its_owner_lives,
+            staging_that_fails_leaves_nothing_behind,
+            replaced_zone_is_dropped_after_the_grace_period
         ]}
     ].
 
@@ -267,7 +274,7 @@ encode_meta_to_json_dnssec(Config) ->
     RecordName = ~"example-dnssec.com",
     Records = erldns_zone_cache:get_zone_records(ZoneName),
     Z = erldns_zone_codec:build_zone(ZoneName, ~"", Records, []),
-    Data = erldns_zone_codec:encode(Z, #{mode => {zone_records_to_json, RecordName}}),
+    Data = erldns_zone_codec:encode(cached(Z), #{mode => {zone_records_to_json, RecordName}}),
     JSON = iolist_to_binary(json:encode(Data)),
     ?assert(is_binary(JSON)),
     ?assertMatch(L when 8 =:= length(L), json:decode(JSON)).
@@ -1566,7 +1573,7 @@ encode_decode_svcb(_) ->
     },
     Zone = erldns_zone_codec:build_zone(Name, ~"ver", [Record, RecordWithParams], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_, _], Encoded),
     [EncodedRecord, EncodedRecordWithParams] = lists:sort(Encoded),
     ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 120}, EncodedRecord),
@@ -1602,7 +1609,7 @@ encode_decode_https(_) ->
     },
     Zone = erldns_zone_codec:build_zone(Name, ~"ver", [Record, RecordWithParams], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_, _], Encoded),
     [EncodedRecord, EncodedRecordWithParams] = lists:sort(Encoded),
     ?assertMatch(#{~"type" := ~"HTTPS", ~"name" := _, ~"ttl" := 3600}, EncodedRecord),
@@ -1622,7 +1629,7 @@ encode_decode_openpgpkey(_) ->
     },
     Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"OPENPGPKEY", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1649,7 +1656,7 @@ encode_decode_smimea(_) ->
     },
     Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"SMIMEA", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1669,7 +1676,7 @@ encode_decode_uri(_) ->
     },
     Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"URI", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1684,7 +1691,7 @@ encode_decode_wallet(_) ->
     },
     Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"WALLET", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1699,7 +1706,7 @@ encode_decode_eui48(_) ->
     },
     Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"EUI48", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1714,7 +1721,7 @@ encode_decode_eui64(_) ->
     },
     Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"EUI64", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1734,7 +1741,7 @@ encode_decode_csync(_) ->
     },
     Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"CSYNC", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1755,7 +1762,7 @@ encode_decode_dsync(_) ->
     },
     Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"DSYNC", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1780,7 +1787,7 @@ encode_decode_zonemd(_) ->
     },
     Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(Zone, #{mode => zone_records_to_json}),
+    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"ZONEMD", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -2794,16 +2801,227 @@ delete_zone_cleans_sync_counters(_) ->
         "counter should be cleaned up after zone deletion"
     ).
 
-put_zone_cleans_sync_counters(_) ->
+%% A reload carries no counters, so the ones already applied keep guarding the zone against older
+%% updates that arrive after it. Only deleting the zone forgets them.
+put_zone_keeps_sync_counters(_) ->
     ZoneName = unique_name(put_zone_sync),
     ZoneLabels = dns_domain:split(ZoneName),
-    RRFqdn = dns_domain:join([~"www", ZoneName]),
-    SOA = #dns_rr{
+    RRFqdn = <<"www.", ZoneName/binary>>,
+    Record = a_rr(RRFqdn, {1, 2, 3, 4}),
+    ok = erldns_zone_cache:put_zone({ZoneName, ~"v1", [soa_rr(ZoneName), Record]}),
+    ok = erldns_zone_cache:put_zone_rrset({ZoneName, ~"v2", [Record]}, RRFqdn, ?DNS_TYPE_A, 99),
+    ok = erldns_zone_cache:put_zone({ZoneName, ~"v3", [soa_rr(ZoneName)]}),
+    ?assertEqual(
+        99,
+        erldns_zone_cache:get_rrset_sync_counter(ZoneLabels, dns_domain:split(RRFqdn), ?DNS_TYPE_A)
+    ).
+
+%% Readers resolve names that every version of a zone holds while the zone is replaced over and
+%% over, and must never find one missing.
+put_zone_never_hides_names_it_keeps(_) ->
+    ZoneName = unique_name(atomic_put),
+    Names = [<<(integer_to_binary(N))/binary, ".", ZoneName/binary>> || N <- lists:seq(1, 20000)],
+    Version = fun(Ip) -> [soa_rr(ZoneName) | [a_rr(Name, Ip) || Name <- Names]] end,
+    ok = erldns_zone_cache:put_zone({ZoneName, ~"v1", Version({192, 0, 2, 1})}),
+    Sample = [lists:nth(N, Names) || N <- [1, 5000, 10000, 15000, 20000]],
+    Stop = atomics:new(1, []),
+    Parent = self(),
+    Readers = [
+        spawn_link(fun() -> Parent ! {self(), read_until_stopped(ZoneName, Sample, Stop, 0, 0)} end)
+     || _ <- lists:seq(1, 4)
+    ],
+    [
+        ok = erldns_zone_cache:put_zone({ZoneName, integer_to_binary(V), Version({192, 0, 2, V})})
+     || V <- lists:seq(2, 6)
+    ],
+    atomics:put(Stop, 1, 1),
+    Results = [
+        receive
+            {Reader, Result} -> Result
+        end
+     || Reader <- Readers
+    ],
+    ?assert(lists:all(fun({Reads, _}) -> Reads > 0 end, Results)),
+    ?assertEqual([0, 0, 0, 0], [Missing || {_, Missing} <- Results]).
+
+read_until_stopped(ZoneName, Names, Stop, Reads, Missing) ->
+    case atomics:get(Stop, 1) of
+        1 ->
+            {Reads, Missing};
+        0 ->
+            Zone = erldns_zone_cache:get_authoritative_zone(dns_domain:split(ZoneName)),
+            Found = [resolve_a(Zone, Name) || Name <- Names],
+            Gone = length([nxdomain || nxdomain <- Found]),
+            read_until_stopped(ZoneName, Names, Stop, Reads + length(Names), Missing + Gone)
+    end.
+
+%% A staged zone is reachable only through its own header until it is committed, and what is
+%% staged onto it in between goes live with it. A header read before the commit keeps reading
+%% the version it was read at.
+staged_zone_goes_live_on_commit(_) ->
+    ZoneName = unique_name(staged),
+    Www = <<"www.", ZoneName/binary>>,
+    Mail = <<"mail.", ZoneName/binary>>,
+    ok = erldns_zone_cache:put_zone(
+        {ZoneName, ~"v1", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 1})]}
+    ),
+    Staged0 = erldns_zone_cache:stage_zone(
+        {ZoneName, ~"v2", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 2})]}
+    ),
+    Staged1 = erldns_zone_cache:stage_zone_rrset(
+        Staged0, Mail, ?DNS_TYPE_A, [a_rr(Mail, {192, 0, 2, 3})]
+    ),
+    Staged = erldns_zone_cache:stage_zone_rrset_deletion(Staged1, Www, ?DNS_TYPE_A),
+    ?assertEqual(2, Staged#zone.record_count),
+    Live = erldns_zone_cache:lookup_zone(ZoneName),
+    ?assertEqual(~"v1", Live#zone.version),
+    ?assertMatch(
+        {exact, [#dns_rr{data = #dns_rrdata_a{ip = {192, 0, 2, 1}}}]}, resolve_a(Live, Www)
+    ),
+    ?assertEqual(nxdomain, resolve_a(Live, Mail)),
+    ok = erldns_zone_cache:commit_zone(Staged),
+    Committed = erldns_zone_cache:lookup_zone(ZoneName),
+    ?assertEqual(~"v2", Committed#zone.version),
+    ?assertEqual(nxdomain, resolve_a(Committed, Www)),
+    ?assertMatch(
+        {exact, [#dns_rr{data = #dns_rrdata_a{ip = {192, 0, 2, 3}}}]}, resolve_a(Committed, Mail)
+    ),
+    ?assertMatch(
+        {exact, [#dns_rr{data = #dns_rrdata_a{ip = {192, 0, 2, 1}}}]}, resolve_a(Live, Www)
+    ).
+
+%% A staged zone that will not go live is dropped; dropping one that went live already is a no-op,
+%% since its records are the ones being served.
+discard_zone_spares_a_published_zone(_) ->
+    ZoneName = unique_name(discard),
+    Www = <<"www.", ZoneName/binary>>,
+    ok = erldns_zone_cache:put_zone(
+        {ZoneName, ~"v1", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 1})]}
+    ),
+    Discarded = erldns_zone_cache:stage_zone(
+        {ZoneName, ~"v2", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 2})]}
+    ),
+    ok = erldns_zone_cache:discard_zone(Discarded),
+    ?assertEqual([], erldns_zone_cache:get_zone_records(Discarded)),
+    Published = erldns_zone_cache:stage_zone(
+        {ZoneName, ~"v3", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 3})]}
+    ),
+    ok = erldns_zone_cache:commit_zone(Published),
+    ok = erldns_zone_cache:discard_zone(Published),
+    ok = erldns_zone_cache:commit_zone(Published),
+    ?assertMatch([_, _], erldns_zone_cache:get_zone_records(ZoneName)).
+
+%% A process that stages a zone and dies before settling it would leave its records behind, out of
+%% reach of anything keyed by zone. A commit arriving later finds nothing to publish, and takes with
+%% it whatever was written into the generation meanwhile.
+staged_zone_is_dropped_with_its_owner(_) ->
+    ZoneName = unique_name(abandoned),
+    Www = <<"www.", ZoneName/binary>>,
+    ok = erldns_zone_cache:put_zone(
+        {ZoneName, ~"v1", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 1})]}
+    ),
+    Staged = stage_elsewhere({ZoneName, ~"v2", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 2})]}),
+    eventually(fun() -> [] =:= erldns_zone_cache:get_zone_records(Staged) end),
+    Mail = <<"mail.", ZoneName/binary>>,
+    Late = erldns_zone_cache:stage_zone_rrset(Staged, Mail, ?DNS_TYPE_A, [
+        a_rr(Mail, {192, 0, 2, 3})
+    ]),
+    ?assertEqual({error, not_staged}, erldns_zone_cache:commit_zone(Late)),
+    ?assertEqual([], erldns_zone_cache:get_zone_records(Late)),
+    ?assertMatch(
+        {exact, [#dns_rr{data = #dns_rrdata_a{ip = {192, 0, 2, 1}}}]},
+        resolve_a(erldns_zone_cache:lookup_zone(ZoneName), Www)
+    ).
+
+%% Only the owner's exit drops a staged zone: another process may settle it while the owner lives,
+%% as erldnsimple's monitor does for its fetchers, and its exit afterwards changes nothing.
+staged_zone_outlives_a_hand_off_while_its_owner_lives(_) ->
+    ZoneName = unique_name(handed_off),
+    Www = <<"www.", ZoneName/binary>>,
+    Parent = self(),
+    Owner = spawn(fun() ->
+        Parent !
+            {staged, erldns_zone_cache:stage_zone({ZoneName, ~"v1", [a_rr(Www, {192, 0, 2, 1})]})},
+        receive
+            exit -> ok
+        end
+    end),
+    Staged =
+        receive
+            {staged, Zone} -> Zone
+        end,
+    ok = erldns_zone_cache:commit_zone(Staged),
+    Ref = monitor(process, Owner),
+    Owner ! exit,
+    receive
+        {'DOWN', Ref, process, Owner, _} -> ok
+    end,
+    _ = sys:get_state(erldns_zone_cache),
+    ?assertMatch([_], erldns_zone_cache:get_zone_records(ZoneName)).
+
+%% A staging that fails, here on a key that cannot sign, writes nothing: a caller that catches the
+%% error and carries on would otherwise leave an entry behind that no exit of its own cleans up.
+staging_that_fails_leaves_nothing_behind(_) ->
+    ZoneName = unique_name(unsignable),
+    Unsignable = #keyset{
+        key_signing_key = not_a_key,
+        key_signing_key_tag = 1,
+        key_signing_alg = 8,
+        zone_signing_key = not_a_key,
+        zone_signing_key_tag = 2,
+        zone_signing_alg = 8,
+        inception = 0,
+        valid_until = 1
+    },
+    Staged = ets:info(erldns_staged_zones, size),
+    ?assertError(
+        _, erldns_zone_cache:stage_zone({ZoneName, ~"v1", [soa_rr(ZoneName)], [Unsignable]})
+    ),
+    ?assertEqual(Staged, ets:info(erldns_staged_zones, size)).
+
+stage_elsewhere(Input) ->
+    Parent = self(),
+    {Pid, Ref} = spawn_monitor(fun() -> Parent ! {staged, erldns_zone_cache:stage_zone(Input)} end),
+    receive
+        {'DOWN', Ref, process, Pid, normal} -> ok
+    end,
+    receive
+        {staged, Staged} -> Staged
+    end.
+
+%% The records a commit or a delete leaves behind are dropped once the grace period has passed.
+replaced_zone_is_dropped_after_the_grace_period(_) ->
+    application:set_env(erldns, zones, #{grace_period => 0}),
+    ZoneName = unique_name(grace),
+    Www = <<"www.", ZoneName/binary>>,
+    ok = erldns_zone_cache:put_zone(
+        {ZoneName, ~"v1", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 1})]}
+    ),
+    Replaced = erldns_zone_cache:lookup_zone(ZoneName),
+    ok = erldns_zone_cache:put_zone(
+        {ZoneName, ~"v2", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 2})]}
+    ),
+    eventually(fun() -> [] =:= erldns_zone_cache:get_zone_records(Replaced) end),
+    Deleted = erldns_zone_cache:lookup_zone(ZoneName),
+    ?assertMatch([_, _], erldns_zone_cache:get_zone_records(Deleted)),
+    erldns_zone_cache:delete_zone(ZoneName),
+    ?assertEqual(zone_not_found, erldns_zone_cache:lookup_zone(ZoneName)),
+    eventually(fun() -> [] =:= erldns_zone_cache:get_zone_records(Deleted) end).
+
+%% Lookups go through the generation of a header read from the cache, not of one built by hand.
+cached(#zone{name = Name}) ->
+    erldns_zone_cache:lookup_zone(dns_domain:to_lower(Name)).
+
+resolve_a(Zone, Name) ->
+    erldns_zone_cache:get_records_by_name_and_type_resolved(Zone, Name, ?DNS_TYPE_A).
+
+soa_rr(ZoneName) ->
+    #dns_rr{
         name = ZoneName,
         type = ?DNS_TYPE_SOA,
         data = #dns_rrdata_soa{
-            mname = dns_domain:join([~"ns1", ZoneName]),
-            rname = dns_domain:join([~"admin", ZoneName]),
+            mname = <<"ns1.", ZoneName/binary>>,
+            rname = <<"admin.", ZoneName/binary>>,
             serial = 1,
             refresh = 1,
             retry = 1,
@@ -2811,29 +3029,24 @@ put_zone_cleans_sync_counters(_) ->
             minimum = 1
         },
         ttl = 3600
-    },
-    Record = #dns_rr{
-        name = RRFqdn,
-        type = ?DNS_TYPE_A,
-        ttl = 300,
-        data = #dns_rrdata_a{ip = {1, 2, 3, 4}}
-    },
-    ok = erldns_zone_cache:put_zone({ZoneName, ~"v1", [SOA, Record]}),
-    %% Create a sync counter via put_zone_rrset
-    ok = erldns_zone_cache:put_zone_rrset({ZoneName, ~"v2", [Record]}, RRFqdn, ?DNS_TYPE_A, 99),
-    ?assertEqual(
-        99,
-        erldns_zone_cache:get_rrset_sync_counter(ZoneLabels, dns_domain:split(RRFqdn), ?DNS_TYPE_A),
-        "counter should exist before zone replacement"
-    ),
-    %% Replace the zone via put_zone (full reload)
-    ok = erldns_zone_cache:put_zone({ZoneName, ~"v3", [SOA]}),
-    %% Counter must be gone (default 0) — old RRset no longer exists
-    ?assertEqual(
-        0,
-        erldns_zone_cache:get_rrset_sync_counter(ZoneLabels, dns_domain:split(RRFqdn), ?DNS_TYPE_A),
-        "counter should be cleaned up after zone replacement"
-    ).
+    }.
+
+a_rr(Name, Ip) ->
+    #dns_rr{name = Name, type = ?DNS_TYPE_A, ttl = 300, data = #dns_rrdata_a{ip = Ip}}.
+
+eventually(Fun) ->
+    eventually(Fun, 100).
+
+eventually(Fun, 0) ->
+    ?assert(Fun());
+eventually(Fun, Tries) ->
+    case Fun() of
+        true ->
+            ok;
+        false ->
+            ct:sleep(10),
+            eventually(Fun, Tries - 1)
+    end.
 
 init_supervision_tree(Config, Role) ->
     Self = self(),

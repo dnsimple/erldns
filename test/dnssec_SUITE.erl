@@ -1117,9 +1117,10 @@ resolve(QName, QType, RequestAuthority) ->
     Msg2.
 
 put_delegation_zone() ->
-    Zone = delegation_zone(),
+    #zone{records = Records} = Zone = delegation_zone(),
     ok = erldns_zone_cache:put_zone(Zone),
-    Zone.
+    %% Lookups go through the generation of a header read from the cache, not of one built by hand.
+    (erldns_zone_cache:lookup_zone(?DELEGATION_ZONE))#zone{records = Records}.
 
 %% The zone drawn at the top of this section: a secure delegation whose name server sits at the
 %% cut itself, hiding a CNAME and a further cut below it; an insecure one, served the same way,
