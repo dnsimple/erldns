@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Changed
+
+- Replacing a zone is atomic: a query sees the old zone or the new one, never one with records
+  missing. The replaced records are deleted after the new `zones.grace_period` (30 seconds by
+  default), as are a deleted zone's.
+- `#zone{}` has a new `gen` field, so code matching on it needs recompiling. Lookups need a
+  header read from the cache: one built by the caller finds no records.
+
+### Added
+
+- `stage_zone/1` and `commit_zone/1`, which split `put_zone/1`, with `discard_zone/1`,
+  `stage_zone_rrset/4` and `stage_zone_rrset_deletion/3` to handle a staged zone. A staged zone
+  is dropped if the process that staged it exits before settling it.
+
+### Fixed
+
+- `put_zone_rrset/4` takes the RRSIGs it keeps from the zone it writes to, not from a child
+  zone whose apex is the record's name.
+
 ## v11.4.0
 
 ### Added

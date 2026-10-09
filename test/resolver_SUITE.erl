@@ -61,7 +61,7 @@ resolve_authoritative_zone_cut(_) ->
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
     erldns_zone_cache:put_zone(Z),
     {A, Cut} = erldns_resolver:resolve_authoritative(
-        Msg, Z, dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+        Msg, cached(Z), dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
@@ -96,7 +96,7 @@ resolve_authoritative_zone_cut_with_cnames(_) ->
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
     erldns_zone_cache:put_zone(Z),
     {A, Cut} = erldns_resolver:resolve_authoritative(
-        Msg, Z, dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+        Msg, cached(Z), dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
@@ -152,7 +152,7 @@ resolve_authoritative_zone_cut_with_cname_chain_through_wildcard(_) ->
     ok = erldns_zone_cache:put_zone(Z),
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
     {A, Cut} = erldns_resolver:resolve_authoritative(
-        Msg, Z, dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+        Msg, cached(Z), dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
@@ -204,7 +204,7 @@ resolve_authoritative_zone_cut_with_plain_cname_chain(_) ->
     ok = erldns_zone_cache:put_zone(Z),
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
     {A, Cut} = erldns_resolver:resolve_authoritative(
-        Msg, Z, dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+        Msg, cached(Z), dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
@@ -254,7 +254,7 @@ resolve_authoritative_zone_cut_drops_occluded_cname(_) ->
     ok = erldns_zone_cache:put_zone(Z),
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
     {A, Cut} = erldns_resolver:resolve_authoritative(
-        Msg, Z, dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+        Msg, cached(Z), dns_domain:split(Qname), Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(false, A#dns_message.aa),
     ?assertEqual(?DNS_RCODE_NOERROR, A#dns_message.rc),
@@ -311,7 +311,7 @@ resolve_authoritative_self_delegation_trailing_dot_name_mismatch(_) ->
         spawn(fun() ->
             try
                 {R, _} = erldns_resolver:resolve_authoritative(
-                    Msg, Z, QLabels, Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+                    Msg, cached(Z), QLabels, Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
                 ),
                 Parent ! {ok, R}
             catch
@@ -373,7 +373,7 @@ resolve_authoritative_max_depth_returns_servfail(_) ->
     QLabels = dns_domain:split(Qname),
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
     {Res, none} = erldns_resolver:resolve_authoritative(
-        Msg, Z, QLabels, Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
+        Msg, cached(Z), QLabels, Qname, ?DNS_TYPE_A, [], ?MAX_RESOLUTION_DEPTH
     ),
     ?assertEqual(?DNS_RCODE_SERVFAIL, Res#dns_message.rc),
     erldns_zone_cache:delete_zone(ZoneName).
@@ -541,8 +541,12 @@ resolve(QName, QType) ->
 resolve_authoritative(Z, QName, QType) ->
     Msg = #dns_message{questions = [#dns_query{name = QName, type = QType}]},
     erldns_resolver:resolve_authoritative(
-        Msg, Z, dns_domain:split(QName), QName, QType, [], ?MAX_RESOLUTION_DEPTH
+        Msg, cached(Z), dns_domain:split(QName), QName, QType, [], ?MAX_RESOLUTION_DEPTH
     ).
+
+%% Lookups go through the generation of a header read from the cache, not of one built by hand.
+cached(#zone{name = Name}) ->
+    erldns_zone_cache:lookup_zone(dns_domain:to_lower(Name)).
 
 soa(ZoneName) ->
     #dns_rr{

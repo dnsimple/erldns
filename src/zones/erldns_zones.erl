@@ -22,6 +22,7 @@ For more details about its subsections, see:
         strict => true,
         format => auto,
         timeout => timer:minutes(5),
+        grace_period => timer:seconds(30),
         codecs => [sample_custom_zone_codec],
         context_options => #{match_empty => true, allow => [<<"anycast">>, <<"AMS">>, <<"TKO">>]}
     }},
@@ -54,6 +55,9 @@ Zone configuration.
 
 - `timeout`: specify how long zone loading can take before being aborted. Defaults to 30 minutes.
 
+- `grace_period`: how long, in milliseconds, the records of a replaced or deleted zone stay
+  readable for queries that started on them, before they are deleted. Defaults to 30 seconds.
+
 - `codecs`: a list of modules that implement the `m:erldns_zone_codec` behaviour.
 
 - `context_options`: allow you to filter loading certain records in a zone
@@ -67,6 +71,7 @@ See `m:erldns_zone_loader` for more details.
     strict => boolean(),
     format => format(),
     timeout => timeout(),
+    grace_period => non_neg_integer(),
     codecs => [module()],
     context_options => #{
         match_empty => boolean(),
