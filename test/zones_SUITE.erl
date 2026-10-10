@@ -151,6 +151,7 @@ groups() ->
             put_zone_never_hides_names_it_keeps,
             staged_zone_goes_live_on_commit,
             discard_zone_spares_a_published_zone,
+            replaced_zone_outlives_a_late_settle,
             staged_zone_is_dropped_with_its_owner,
             staged_zone_outlives_a_hand_off_while_its_owner_lives,
             staging_that_fails_leaves_nothing_behind,
@@ -2911,10 +2912,36 @@ discard_zone_spares_a_published_zone(_) ->
     ok = erldns_zone_cache:commit_zone(Published),
     ?assertMatch([_, _], erldns_zone_cache:get_zone_records(ZoneName)).
 
+%% A zone that a commit or a delete replaced stays readable for the grace period, however often it
+%% is committed or discarded again meanwhile: a query that read its header may still be resolving.
+replaced_zone_outlives_a_late_settle(_) ->
+    ZoneName = unique_name(late_settle),
+    Www = <<"www.", ZoneName/binary>>,
+    First = erldns_zone_cache:stage_zone(
+        {ZoneName, ~"v1", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 1})]}
+    ),
+    ok = erldns_zone_cache:commit_zone(First),
+    Second = erldns_zone_cache:stage_zone(
+        {ZoneName, ~"v2", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 2})]}
+    ),
+    ok = erldns_zone_cache:commit_zone(Second),
+    ok = erldns_zone_cache:discard_zone(First),
+    ?assertEqual({error, not_staged}, erldns_zone_cache:commit_zone(First)),
+    erldns_zone_cache:delete_zone(ZoneName),
+    ok = erldns_zone_cache:discard_zone(Second),
+    ?assertEqual({error, not_staged}, erldns_zone_cache:commit_zone(Second)),
+    ?assertMatch(
+        {exact, [#dns_rr{data = #dns_rrdata_a{ip = {192, 0, 2, 1}}}]}, resolve_a(First, Www)
+    ),
+    ?assertMatch(
+        {exact, [#dns_rr{data = #dns_rrdata_a{ip = {192, 0, 2, 2}}}]}, resolve_a(Second, Www)
+    ).
+
 %% A process that stages a zone and dies before settling it would leave its records behind, out of
 %% reach of anything keyed by zone. A commit arriving later finds nothing to publish, and takes with
-%% it whatever was written into the generation meanwhile.
+%% it whatever was written into the generation meanwhile, once the grace period has passed.
 staged_zone_is_dropped_with_its_owner(_) ->
+    application:set_env(erldns, zones, #{grace_period => 0}),
     ZoneName = unique_name(abandoned),
     Www = <<"www.", ZoneName/binary>>,
     ok = erldns_zone_cache:put_zone(
@@ -2927,7 +2954,7 @@ staged_zone_is_dropped_with_its_owner(_) ->
         a_rr(Mail, {192, 0, 2, 3})
     ]),
     ?assertEqual({error, not_staged}, erldns_zone_cache:commit_zone(Late)),
-    ?assertEqual([], erldns_zone_cache:get_zone_records(Late)),
+    eventually(fun() -> [] =:= erldns_zone_cache:get_zone_records(Late) end),
     ?assertMatch(
         {exact, [#dns_rr{data = #dns_rrdata_a{ip = {192, 0, 2, 1}}}]},
         resolve_a(erldns_zone_cache:lookup_zone(ZoneName), Www)

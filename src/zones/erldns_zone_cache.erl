@@ -85,7 +85,9 @@ zone_labels := dns:labels()
 %% 4. `erldns_staged_zones`:
 %% Holds `{<generation>, <zone labels>, <owner pid>}` for every generation staged and not yet
 %% committed or discarded. Committing, discarding, and dropping it when its owner exits each start
-%% by taking this entry, so exactly one of them decides what becomes of the generation.
+%% by taking this entry, so exactly one of them decides what becomes of the generation. Only one
+%% that took it may drop the generation at once, as nothing has published it; any other drop waits
+%% out the grace period, as lookups may still be reading a generation that was published.
 
 -behaviour(gen_server).
 
@@ -644,8 +646,8 @@ stage_zone({Name, Sha, Records, Keys}) ->
 Publish a zone staged with `stage_zone/1`, replacing the zone's previous version if any.
 
 The records it replaces are deleted once the `grace_period` has passed. Returns
-`{error, not_staged}` if the zone was discarded, or dropped because the process that staged it
-exited; committing a zone already published again is a no-op.
+`{error, not_staged}` if the zone was discarded, dropped because the process that staged it
+exited, or replaced since it was published; committing a zone that is still live again is a no-op.
 """.
 -spec commit_zone(erldns:zone()) -> ok | {error, not_staged}.
 commit_zone(#zone{gen = Gen} = Zone) ->
@@ -658,8 +660,11 @@ commit_zone(#zone{gen = Gen} = Zone) ->
 -doc "Drop the records of a zone staged with `stage_zone/1`, unless it has since been published.".
 -spec discard_zone(erldns:zone()) -> ok.
 discard_zone(#zone{gen = Gen} = Zone) ->
-    _ = ets:take(erldns_staged_zones, Gen),
-    _ = settled(Zone),
+    _ =
+        case ets:take(erldns_staged_zones, Gen) of
+            [_] -> drop_generation(Gen);
+            [] -> settled(Zone)
+        end,
     ok.
 
 -doc #{group => ~"API: Mutations"}.
@@ -860,15 +865,17 @@ publish_staged(#zone{name = Name, labels = ZoneLabels, gen = Gen} = Zone) ->
     telemetry:execute([erldns, zone, put], #{count => 1}, Metadata),
     ok.
 
-%% A generation whose staging entry is gone was published, or dropped. Records written into a
-%% dropped one since are dropped too: nothing can publish it any more.
+%% A generation whose staging entry is gone was published, or dropped. One that no header names now
+%% was dropped, or replaced while lookups may still be reading it, so it is dropped once the grace
+%% period has passed, as a replaced one is. That also drops records written into a dropped one
+%% since: nothing can publish it any more.
 -spec settled(erldns:zone()) -> ok | {error, not_staged}.
 settled(#zone{labels = ZoneLabels, gen = Gen}) ->
     case ets:lookup_element(erldns_zones_table, ZoneLabels, #zone.gen, none) of
         Gen ->
             ok;
         _ ->
-            drop_generation(Gen),
+            retire_generation(Gen),
             {error, not_staged}
     end.
 
