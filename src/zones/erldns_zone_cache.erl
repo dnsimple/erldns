@@ -1223,9 +1223,9 @@ pattern_zone_dname(Gen, Labels) ->
     Pattern = {{{Gen, Labels, '_'}, '$1'}, [], ['$1']},
     lists:append(ets:select(erldns_zone_records_typed, [Pattern])).
 
+%% A fully bound key needs no match spec to compile and free on every call.
 pattern_zone_dname_type(Gen, Labels, Type) ->
-    Pattern = {{{Gen, Labels, Type}, '$1'}, [], ['$1']},
-    lists:append(ets:select(erldns_zone_records_typed, [Pattern])).
+    ets:lookup_element(erldns_zone_records_typed, {Gen, Labels, Type}, 2, []).
 
 pattern_zone_dname_exists(Gen, Labels) ->
     Pattern = {{{Gen, Labels, '_'}, '_'}, [], [true]},
