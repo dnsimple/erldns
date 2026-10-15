@@ -30,6 +30,17 @@ defmodule ZoneCacheBench do
   @txt 16
   @aaaa 28
 
+  # One fun per module, with `m` replaced by the module at compile time: a call through a variable
+  # is a dynamic apply, which would add the same cost to both sides.
+  defmacrop both(fun) do
+    for mod <- [@baseline, :erldns_zone_cache] do
+      Macro.prewalk(fun, fn
+        {:m, _, ctx} when is_atom(ctx) -> mod
+        ast -> ast
+      end)
+    end
+  end
+
   def run(num_zones, ref) do
     load_baseline(ref)
     :rand.seed(:exsss, {1, 2, 3})
@@ -50,41 +61,40 @@ defmodule ZoneCacheBench do
     ent = List.to_tuple(for {z, [_, _ | _] = l} <- names, do: {z, tl(l)})
 
     cases = [
-      {"get_zonecut, no cut", leaf, fn m, {z, l} -> m.get_zonecut(z, l) end},
+      {"get_zonecut, no cut", leaf, both(fn {z, l} -> m.get_zonecut(z, l) end)},
       {"typed fetch, present (A)", leaf,
-       fn m, {z, l} -> m.get_records_by_name_and_type(z, l, @a) end},
+       both(fn {z, l} -> m.get_records_by_name_and_type(z, l, @a) end)},
       {"typed fetch, absent (NS)", leaf,
-       fn m, {z, l} -> m.get_records_by_name_and_type(z, l, @ns) end},
-      {"is_name_in_zone, yes", leaf, fn m, {z, l} -> m.is_name_in_zone(z, l) end},
-      {"is_name_in_zone, no", missing, fn m, {z, l} -> m.is_name_in_zone(z, l) end},
-      {"zone_name_existence, ent", ent, fn m, {z, l} -> m.zone_name_existence(z, l) end},
-      {"zone_name_existence, nxdomain", missing, fn m, {z, l} -> m.zone_name_existence(z, l) end},
-      {"resolved A, exact", leaf, &resolved(&1, &2, @a)},
-      {"resolved MX, no data", leaf, &resolved(&1, &2, @mx)},
-      {"resolved A, ent", ent, &resolved(&1, &2, @a)},
-      {"resolved A, nxdomain", missing, &resolved(&1, &2, @a)}
+       both(fn {z, l} -> m.get_records_by_name_and_type(z, l, @ns) end)},
+      {"is_name_in_zone, yes", leaf, both(fn {z, l} -> m.is_name_in_zone(z, l) end)},
+      {"is_name_in_zone, no", missing, both(fn {z, l} -> m.is_name_in_zone(z, l) end)},
+      {"zone_name_existence, ent", ent, both(fn {z, l} -> m.zone_name_existence(z, l) end)},
+      {"zone_name_existence, nxdomain", missing,
+       both(fn {z, l} -> m.zone_name_existence(z, l) end)},
+      {"resolved A, exact", leaf,
+       both(fn {z, l} -> m.get_records_by_name_and_type_resolved(z, l, @a) end)},
+      {"resolved MX, no data", leaf,
+       both(fn {z, l} -> m.get_records_by_name_and_type_resolved(z, l, @mx) end)},
+      {"resolved A, ent", ent,
+       both(fn {z, l} -> m.get_records_by_name_and_type_resolved(z, l, @a) end)},
+      {"resolved A, nxdomain", missing,
+       both(fn {z, l} -> m.get_records_by_name_and_type_resolved(z, l, @a) end)}
     ]
 
-    for {name, queries, f} <- cases, i <- 0..999 do
+    for {name, queries, [base, this]} <- cases, i <- 0..999 do
       q = elem(queries, i)
-      f.(@baseline, q) == f.(:erldns_zone_cache, q) or raise "#{name} differs on #{inspect(q)}"
+      base.(q) == this.(q) or raise "#{name} differs on #{inspect(q)}"
     end
 
-    Benchee.run(
-      %{
-        ref => fn {f, q} -> f.(@baseline, q) end,
-        "this tree" => fn {f, q} -> f.(:erldns_zone_cache, q) end
-      },
-      inputs: for({name, queries, f} <- cases, do: {name, {queries, f}}),
-      before_each: fn {queries, f} ->
-        {f, elem(queries, :rand.uniform(tuple_size(queries)) - 1)}
-      end,
-      warmup: 1,
-      time: 5
-    )
+    for {name, queries, [base, this]} <- cases do
+      Benchee.run(%{ref => base, "this tree" => this},
+        inputs: [{name, queries}],
+        before_each: fn queries -> elem(queries, :rand.uniform(tuple_size(queries)) - 1) end,
+        warmup: 1,
+        time: 5
+      )
+    end
   end
-
-  defp resolved(m, {z, l}, type), do: m.get_records_by_name_and_type_resolved(z, l, type)
 
   # Compiles the cache module as of the ref under another name; its lookups read the same tables.
   defp load_baseline(ref) do
