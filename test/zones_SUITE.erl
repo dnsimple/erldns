@@ -154,7 +154,8 @@ groups() ->
             staged_zone_is_dropped_with_its_owner,
             staged_zone_outlives_a_hand_off_while_its_owner_lives,
             staging_that_fails_leaves_nothing_behind,
-            replaced_zone_is_dropped_after_the_grace_period
+            replaced_zone_is_dropped_after_the_grace_period,
+            lookups_match_the_select_reference
         ]}
     ].
 
@@ -3007,6 +3008,212 @@ replaced_zone_is_dropped_after_the_grace_period(_) ->
     erldns_zone_cache:delete_zone(ZoneName),
     ?assertEqual(zone_not_found, erldns_zone_cache:lookup_zone(ZoneName)),
     eventually(fun() -> [] =:= erldns_zone_cache:get_zone_records(Deleted) end).
+
+%% Compares every lookup built on lookup_element/4 and next/2 with the select-based helpers it
+%% replaced, kept below as ref_*, over every name, ancestor and missing child of two zones written
+%% back to back, so that next/2 runs off the first one into the second, and off the table's end.
+lookups_match_the_select_reference(_) ->
+    Names = [
+        {~"", [soa, ns, a]},
+        {~"www", [a, aaaa]},
+        {~"*", [a]},
+        {~"a.b.c", [a]},
+        {~"*.a.b.c", [a]},
+        {~"*.x.ent", [a]},
+        {~"sub", [a]},
+        {~"host.sub", [a]},
+        {~"*.sub", [aaaa]},
+        {~"deleg", [ns]},
+        {~"ns.deleg", [a]},
+        {~"z.ent2", [ns]},
+        {~"zzz", [a]}
+    ],
+    Zones = [
+        equiv_zone(~"equiv-one.test", Names), equiv_zone(~"equiv-two.test", lists:sublist(Names, 5))
+    ],
+    [#zone{gen = Gen1}, #zone{gen = Gen2}] = Zones,
+    %% Past the last name of the first zone lies the second; past the second, nothing.
+    ?assertMatch({Gen2, _, _}, ets:next(erldns_zone_records_typed, {Gen1, [~"zzzz"], -1})),
+    ?assertEqual('$end_of_table', ets:next(erldns_zone_records_typed, {Gen2, [~"zzzz"], -1})),
+    Results = lists:flatmap(fun equiv_check/1, Zones),
+    ?assertEqual([], [R || {_, _, Ref, New} = R <- Results, Ref =/= New]),
+    Seen = fun(Check) -> lists:usort([outcome(New) || {C, _, _, New} <- Results, C =:= Check]) end,
+    ?assertEqual([ent, exact, none], Seen(classify)),
+    ?assertEqual([ent, exact, nxdomain, wildcard], Seen(existence)),
+    ?assertEqual(
+        [ent, exact, exact_empty, nxdomain, wildcard, wildcard_empty], Seen(typed_resolved)
+    ),
+    lists:foreach(fun(#zone{name = Name}) -> erldns_zone_cache:delete_zone(Name) end, Zones).
+
+equiv_zone(ZoneName, Names) ->
+    Records = [
+        equiv_rr(join_name(Name, ZoneName), Type, ZoneName)
+     || {Name, Types} <- Names, Type <- Types
+    ],
+    ok = erldns_zone_cache:put_zone({ZoneName, ~"v1", Records}),
+    #zone{} = erldns_zone_cache:lookup_zone(ZoneName).
+
+join_name(~"", ZoneName) -> ZoneName;
+join_name(Name, ZoneName) -> <<Name/binary, ".", ZoneName/binary>>.
+
+equiv_rr(Name, soa, ZoneName) ->
+    (soa_rr(ZoneName))#dns_rr{name = Name};
+equiv_rr(Name, ns, ZoneName) ->
+    Data = #dns_rrdata_ns{dname = <<"ns.", ZoneName/binary>>},
+    #dns_rr{name = Name, type = ?DNS_TYPE_NS, ttl = 300, data = Data};
+equiv_rr(Name, a, _) ->
+    a_rr(Name, {192, 0, 2, 1});
+equiv_rr(Name, aaaa, _) ->
+    Data = #dns_rrdata_aaaa{ip = {16#2001, 16#db8, 0, 0, 0, 0, 0, 1}},
+    #dns_rr{name = Name, type = ?DNS_TYPE_AAAA, ttl = 300, data = Data}.
+
+%% Every name in the zone, each of its ancestors, and a child and grandchild that do not exist.
+equiv_check(#zone{labels = ZL, gen = Gen} = Zone) ->
+    Stored = lists:usort([L || {{G, L, _}, _} <- ets:tab2list(erldns_zone_records_typed), G =:= Gen]),
+    Queries = lists:usort(
+        [[~"zzzz"], [~"0"]] ++
+            [Q || L <- Stored, Q <- prefixes(L) ++ [L ++ [~"nope"], L ++ [~"nope", ~"deeper"]]]
+    ),
+    Types = [?DNS_TYPE_A, ?DNS_TYPE_AAAA, ?DNS_TYPE_NS, ?DNS_TYPE_SOA, ?DNS_TYPE_MX],
+    lists:flatmap(
+        fun(R) ->
+            Labels = lists:reverse(R, ZL),
+            [
+                {classify, R, ref_class(ref_exists(Gen, R), ref_exists(Gen, R ++ '_')),
+                    erldns_zone_cache:classify(Gen, R)},
+                {existence, R, ref_existence(Gen, R),
+                    erldns_zone_cache:zone_name_existence(Zone, Labels)},
+                {resolved, R, ref_resolved(Gen, R, '_'),
+                    erldns_zone_cache:get_records_by_name_resolved(Zone, Labels)},
+                {in_zone, R, ref_exists(Gen, R), erldns_zone_cache:is_name_in_zone(Zone, Labels)},
+                {in_any_zone, R, ref_in_any_zone(Gen, R), erldns_zone_cache:is_in_any_zone(Labels)},
+                {zonecut, R, ref_zonecut(ZL, Gen, R, []),
+                    erldns_zone_cache:get_zonecut(Zone, Labels)}
+            ] ++
+                lists:flatmap(
+                    fun(T) ->
+                        [
+                            {typed, {R, T}, ref_typed(Gen, R, T),
+                                erldns_zone_cache:get_records_by_name_and_type(Zone, Labels, T)},
+                            {typed_resolved, {R, T}, ref_resolved(Gen, R, T),
+                                erldns_zone_cache:get_records_by_name_and_type_resolved(
+                                    Zone, Labels, T
+                                )}
+                        ]
+                    end,
+                    Types
+                )
+        end,
+        Queries
+    ).
+
+%% `exact` stands for a row at L, and anything but `none` for a row at L or below it, L ++ '_'.
+ref_class(true, true) -> exact;
+ref_class(false, true) -> ent;
+ref_class(false, false) -> none.
+
+prefixes(L) ->
+    [lists:sublist(L, N) || N <- lists:seq(0, length(L))].
+
+outcome({exact, []}) -> exact_empty;
+outcome({wildcard, []}) -> wildcard_empty;
+outcome({Tag, [_ | _]}) -> Tag;
+outcome(Other) -> Other.
+
+ref_all(Gen, Labels) ->
+    lists:append(ets:select(erldns_zone_records_typed, [{{{Gen, Labels, '_'}, '$1'}, [], ['$1']}])).
+
+ref_typed(Gen, Labels, Type) ->
+    lists:append(
+        ets:select(erldns_zone_records_typed, [{{{Gen, Labels, Type}, '$1'}, [], ['$1']}])
+    ).
+
+ref_exists(Gen, Labels) ->
+    Pattern = {{{Gen, Labels, '_'}, '_'}, [], [true]},
+    case ets:select(erldns_zone_records_typed, [Pattern], 1) of
+        {[true], _Continuation} -> true;
+        '$end_of_table' -> false
+    end.
+
+ref_fetch(Gen, Labels, '_') -> ref_all(Gen, Labels);
+ref_fetch(Gen, Labels, Type) -> ref_typed(Gen, Labels, Type).
+
+ref_existence(Gen, Labels) ->
+    case ref_exists(Gen, Labels) of
+        true ->
+            exact;
+        false ->
+            case ref_exists(Gen, Labels ++ '_') of
+                true -> ent;
+                false -> ref_wildcard_existence(Gen, lists:reverse(Labels))
+            end
+    end.
+
+ref_wildcard_existence(_Gen, []) ->
+    nxdomain;
+ref_wildcard_existence(Gen, [_ | ParentReversed] = PathReversed) ->
+    case ref_exists(Gen, lists:reverse(PathReversed) ++ '_') of
+        true ->
+            ref_wildcard_existence(Gen, ParentReversed);
+        false ->
+            case ref_exists(Gen, lists:reverse(ParentReversed, [~"*"])) of
+                true -> wildcard;
+                false -> ref_wildcard_existence(Gen, ParentReversed)
+            end
+    end.
+
+ref_resolved(Gen, Labels, Type) ->
+    case ref_fetch(Gen, Labels, Type) of
+        [_ | _] = Records ->
+            {exact, Records};
+        [] when Type =/= '_' ->
+            case ref_exists(Gen, Labels) of
+                true -> {exact, []};
+                false -> ref_missing(Gen, Labels, Type)
+            end;
+        [] ->
+            ref_missing(Gen, Labels, Type)
+    end.
+
+ref_missing(Gen, Labels, Type) ->
+    case ref_exists(Gen, Labels ++ '_') of
+        true -> ent;
+        false -> ref_resolved_wildcard(Gen, Labels, Type)
+    end.
+
+ref_resolved_wildcard(_Gen, [], _Type) ->
+    nxdomain;
+ref_resolved_wildcard(Gen, Labels, Type) ->
+    Parent = lists:droplast(Labels),
+    case ref_exists(Gen, Labels ++ '_') of
+        true ->
+            ref_resolved_wildcard(Gen, Parent, Type);
+        false ->
+            WildcardPath = Parent ++ [~"*"],
+            case ref_fetch(Gen, WildcardPath, Type) of
+                [_ | _] = Records ->
+                    {wildcard, Records};
+                [] ->
+                    case ref_exists(Gen, WildcardPath) of
+                        true -> {wildcard, []};
+                        false -> ref_resolved_wildcard(Gen, Parent, Type)
+                    end
+            end
+    end.
+
+ref_in_any_zone(Gen, []) ->
+    ref_exists(Gen, []);
+ref_in_any_zone(Gen, [_ | ParentLabels] = Labels) ->
+    ref_exists(Gen, Labels) orelse ref_in_any_zone(Gen, ParentLabels).
+
+ref_zonecut(_, _, [], _) ->
+    none;
+ref_zonecut(ZL, Gen, [Label | Rest], Prefix) ->
+    Labels = Prefix ++ [Label],
+    case ref_typed(Gen, Labels, ?DNS_TYPE_NS) of
+        [] -> ref_zonecut(ZL, Gen, Rest, Labels);
+        NSRecords -> {lists:reverse(Labels, ZL), NSRecords}
+    end.
 
 %% Lookups go through the generation of a header read from the cache, not of one built by hand.
 cached(#zone{name = Name}) ->

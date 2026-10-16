@@ -95,6 +95,8 @@ zone_labels := dns:labels()
 
 -define(LOG_METADATA, #{domain => [erldns, zones]}).
 -define(DEFAULT_GRACE_PERIOD, 30000).
+%% Sorts before every RR type, which are all non-negative.
+-define(BEFORE_ANY_TYPE, -1).
 
 -type generation() :: non_neg_integer().
 %% The processes that have staged a zone, each monitored once.
@@ -169,6 +171,10 @@ It can be:
 ]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2]).
+
+-ifdef(TEST).
+-export([classify/2]).
+-endif.
 
 -doc #{group => ~"API: Lookups"}.
 -doc """
@@ -485,7 +491,7 @@ is_name_in_zone(#zone{labels = ZL, reversed_labels = RZL, gen = Gen}, Labels) wh
         false ->
             false;
         RecordLabels ->
-            pattern_zone_dname_exists(Gen, RecordLabels)
+            exact =:= classify(Gen, RecordLabels)
     end.
 
 -doc #{group => ~"API: Boolean Operations"}.
@@ -966,16 +972,10 @@ make_improper_list(List) ->
 %% Gen: the generation holding the zone's records
 %% RecordLabels: zone-order path within zone (e.g. ["a", "b", "c"] for c.b.a.example.com)
 zone_name_existence_1(Gen, RecordLabels) ->
-    case pattern_zone_dname_exists(Gen, RecordLabels) of
-        true ->
-            exact;
-        false ->
-            case pattern_zone_dname_exists(Gen, make_improper_list(RecordLabels)) of
-                true ->
-                    ent;
-                false ->
-                    check_wildcard_existence(Gen, lists:reverse(RecordLabels))
-            end
+    case classify(Gen, RecordLabels) of
+        exact -> exact;
+        ent -> ent;
+        none -> check_wildcard_existence(Gen, lists:reverse(RecordLabels))
     end.
 
 %% Climb parent path looking for a wildcard match.
@@ -987,12 +987,12 @@ check_wildcard_existence(_Gen, []) ->
     nxdomain;
 check_wildcard_existence(Gen, [_ | ParentReversed] = PathReversed) ->
     ZoneOrderPath = lists:reverse(PathReversed),
-    case pattern_zone_dname_exists(Gen, make_improper_list(ZoneOrderPath)) of
-        true ->
+    case none =:= classify(Gen, ZoneOrderPath) of
+        false ->
             %% Current path is an ENT — wildcard blocked at this level, climb further
             check_wildcard_existence(Gen, ParentReversed);
-        false ->
-            case pattern_zone_dname_exists(Gen, lists:reverse(ParentReversed, [~"*"])) of
+        true ->
+            case exact =:= classify(Gen, lists:reverse(ParentReversed, [~"*"])) of
                 true ->
                     wildcard;
                 false ->
@@ -1010,9 +1010,10 @@ get_records_resolved_1(Gen, RecordLabels, Type) ->
             {exact, Records};
         [] when Type =/= '_' ->
             %% Typed query returned nothing — check if the node itself exists (NOERROR, no data)
-            case pattern_zone_dname_exists(Gen, RecordLabels) of
-                true -> {exact, []};
-                false -> exact_missing_ent_or_wildcard(Gen, RecordLabels, Type)
+            case classify(Gen, RecordLabels) of
+                exact -> {exact, []};
+                ent -> ent;
+                none -> get_records_resolved_wildcard_1(Gen, RecordLabels, Type)
             end;
         [] ->
             %% Untyped query returned nothing — node doesn't exist for this name
@@ -1020,12 +1021,9 @@ get_records_resolved_1(Gen, RecordLabels, Type) ->
     end.
 
 exact_missing_ent_or_wildcard(Gen, RecordLabels, Type) ->
-    HasDescendantsPath = make_improper_list(RecordLabels),
-    case pattern_zone_dname_exists(Gen, HasDescendantsPath) of
-        true ->
-            ent;
-        false ->
-            get_records_resolved_wildcard_1(Gen, RecordLabels, Type)
+    case classify(Gen, RecordLabels) of
+        none -> get_records_resolved_wildcard_1(Gen, RecordLabels, Type);
+        _ -> ent
     end.
 
 %% Climb parent path looking for wildcard records.
@@ -1036,18 +1034,18 @@ get_records_resolved_wildcard_1(_Gen, [], _Type) ->
     nxdomain;
 get_records_resolved_wildcard_1(Gen, RecordLabels, Type) ->
     Parent = lists:droplast(RecordLabels),
-    case pattern_zone_dname_exists(Gen, make_improper_list(RecordLabels)) of
-        true ->
+    case none =:= classify(Gen, RecordLabels) of
+        false ->
             %% Current path is an ENT — wildcard blocked, climb further
             get_records_resolved_wildcard_1(Gen, Parent, Type);
-        false ->
+        true ->
             WildcardPath = Parent ++ [~"*"],
             WildcardRrs = fetch_records(Gen, WildcardPath, Type),
             case WildcardRrs of
                 [_ | _] ->
                     {wildcard, WildcardRrs};
                 [] ->
-                    case pattern_zone_dname_exists(Gen, WildcardPath) of
+                    case exact =:= classify(Gen, WildcardPath) of
                         true ->
                             %% Wildcard node exists but no records of requested type
                             {wildcard, []};
@@ -1076,9 +1074,9 @@ match_labels([_ | _], [_ | _]) ->
 
 %% expects name to be already normalized
 is_name_in_any_zone_helper(Gen, []) ->
-    pattern_zone_dname_exists(Gen, []);
+    exact =:= classify(Gen, []);
 is_name_in_any_zone_helper(Gen, [_ | ParentLabels] = RecordLabels) ->
-    pattern_zone_dname_exists(Gen, RecordLabels) orelse
+    exact =:= classify(Gen, RecordLabels) orelse
         is_name_in_any_zone_helper(Gen, ParentLabels).
 
 find_authoritative_zone_in_cache([]) ->
@@ -1227,13 +1225,22 @@ pattern_zone_dname(Gen, Labels) ->
 pattern_zone_dname_type(Gen, Labels, Type) ->
     ets:lookup_element(erldns_zone_records_typed, {Gen, Labels, Type}, 2, []).
 
-pattern_zone_dname_exists(Gen, Labels) ->
-    Pattern = {{{Gen, Labels, '_'}, '_'}, [], [true]},
-    case ets:select(erldns_zone_records_typed, [Pattern], 1) of
-        {[true], _Continuation} ->
-            true;
-        '$end_of_table' ->
-            false
+%% `exact`: a row at the labels. `ent`: none there, but one below. `none`: neither.
+%% The first key after `{Gen, Labels, ?BEFORE_ANY_TYPE}` is a row at the labels if there is one,
+%% else one below them if there is one: the lists extending `Labels` sort right after it. A single
+%% descent answers both, with no match spec to compile.
+-spec classify(generation(), dns:labels()) -> exact | ent | none.
+classify(Gen, Labels) ->
+    case ets:next(erldns_zone_records_typed, {Gen, Labels, ?BEFORE_ANY_TYPE}) of
+        {Gen, Labels, _} ->
+            exact;
+        {Gen, Below, _} when is_list(Below) ->
+            case lists:prefix(Labels, Below) of
+                true -> ent;
+                false -> none
+            end;
+        _ ->
+            none
     end.
 
 fetch_records(Gen, Labels, '_') ->
