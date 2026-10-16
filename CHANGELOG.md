@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Discarding or committing again a zone that was since replaced no longer deletes its records
   before the grace period has passed, while queries may still be reading them.
 
+### Updated
+
+- Some performance improvements at zone lookups (#379, #380)
+
 ## v12.0.0
 
 ### Changed
