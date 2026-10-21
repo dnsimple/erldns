@@ -64,7 +64,7 @@ call(Msg, Opts) ->
         false ->
             Msg;
         true ->
-            AsyncFun = fun(M, _O, _Ctx) ->
+            AsyncFun = fun(M, _O) ->
                 %% This runs in the async pool, blocking is OK here
                 resolve_external(M)
             end,
