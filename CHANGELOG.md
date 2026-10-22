@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v12.0.2
+
+### Updated
+
+- dns_erlang updated with performance improvements
+- Fixed a documentation typo for suspending pipelines
+
 ## v12.0.1
 
 ### Fixed
