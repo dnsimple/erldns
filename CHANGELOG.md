@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Fixed
+
+- `erldns:stop_listeners/0` also terminates suspended queries.
+
+### Changed
+
+- `erldns_listeners:reset_queues/0` also empties the async pool queue.
+
 ## v12.0.2
 
 ### Updated

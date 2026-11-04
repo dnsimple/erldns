@@ -50,7 +50,7 @@ Stop the DNS listeners, closing the sockets they bind.
 
 The mirror of `start_listeners/0`: an embedding application can call this before tearing down
 the resources its pipeline stages depend on, so no query is served once they are gone. Queries
-in flight are terminated along with the listeners, they are not drained.
+in flight, suspended ones included, are terminated along with the listeners, they are not drained.
 
 Returns `{error, not_found}` when the listeners were never started. Idempotent: returns `ok`
 when they are already stopped.
