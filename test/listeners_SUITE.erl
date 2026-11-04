@@ -24,7 +24,8 @@ all() ->
         stats,
         autostart_listeners_gates_init,
         autostart_listeners_started_on_request,
-        listeners_stopped_on_request
+        listeners_stopped_on_request,
+        suspended_queries_stopped_with_listeners
     ].
 
 -spec groups() -> [ct_suite:ct_group_def()].
@@ -184,6 +185,43 @@ listeners_stopped_on_request(Config) ->
     ?assertMatch({ok, _}, erpc:call(Node, erldns, start_listeners, [])),
     ?assert(is_pid(erpc:call(Node, erlang, whereis, [erldns_listeners]))),
     app_helper:stop(Config1).
+
+suspended_queries_stopped_with_listeners(Config) ->
+    % A query suspended in the async pool must not outlive stop_listeners/0, or it would keep
+    % running against the resources the embedding application tears down next.
+    AppConfig = [
+        {erldns, [
+            {listeners, [#{name => ?FUNCTION_NAME, transport => udp, port => 0}]},
+            {packet_pipeline, [blocking_suspend_pipe(self())]}
+        ]}
+    ],
+    Config1 = app_helper:start_per_testcase(Config, AppConfig),
+    Node = app_helper:get_node(Config1),
+    Port = app_helper:get_configured_port(Config1, ?FUNCTION_NAME, udp),
+    {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+    ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, packet()),
+    AsyncWorker =
+        receive
+            {suspended, Pid} -> Pid
+        after 5000 -> ct:fail(query_not_suspended)
+        end,
+    Ref = monitor(process, AsyncWorker),
+    ?assertEqual(ok, erpc:call(Node, erldns, stop_listeners, [])),
+    receive
+        {'DOWN', Ref, process, AsyncWorker, _} -> ok
+    after 1000 -> ct:fail(suspended_query_outlived_listeners)
+    end,
+    gen_udp:close(Socket),
+    app_helper:stop(Config1).
+
+blocking_suspend_pipe(TestPid) ->
+    fun(Msg, Opts) ->
+        AsyncFun = fun(_, _) ->
+            TestPid ! {suspended, self()},
+            timer:sleep(infinity)
+        end,
+        {suspend, Msg, Opts, AsyncFun}
+    end.
 
 port_must_be_inet_port(_) ->
     application:set_env(erldns, listeners, [#{name => ?FUNCTION_NAME, port => bad_port}]),

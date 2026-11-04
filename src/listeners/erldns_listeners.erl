@@ -265,12 +265,13 @@ reset_queues() ->
 -doc "Get statistics about all listeners.".
 -spec get_stats() -> stats().
 get_stats() ->
-    Acc1 = erldns_async_pool:get_stats(),
     Children = supervisor:which_children(?MODULE),
-    lists:foldl(fun get_stats/2, Acc1, Children).
+    lists:foldl(fun get_stats/2, #{}, Children).
 
 get_stats({erldns_sch_mon, _, _, _}, Stats) ->
     Stats;
+get_stats({erldns_async_pool, _, _, _}, Stats) ->
+    maps:merge(Stats, erldns_async_pool:get_stats());
 get_stats({{ranch_embedded_sup, {?MODULE, Ref}}, _, _, _} = Child, Stats) when
     element(2, Ref) =:= tcp; element(2, Ref) =:= tls
 ->
@@ -282,7 +283,8 @@ get_stats({{_, udp}, _, _, [erldns_proto_udp_sup]} = Child, Stats) ->
 child_specs() ->
     Listeners = application:get_env(erldns, listeners, []),
     SchedMon = #{id => erldns_sch_mon, start => {erldns_sch_mon, start_link, []}, type => worker},
-    [SchedMon | lists:flatmap(fun child_spec/1, Listeners)].
+    % Started before the listeners and stopped after them: their UDP workers hand it work.
+    [SchedMon, erldns_async_pool:child_spec() | lists:flatmap(fun child_spec/1, Listeners)].
 
 -spec child_spec(config()) -> [supervisor:child_spec()].
 child_spec(Config) ->
