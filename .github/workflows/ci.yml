@@ -67,7 +67,7 @@ jobs:
   # Linux proves the code is correct; these prove it can bind and serve, which
   # is what socket_SUITE asserts. Advisory until they have a green history.
   platforms:
-    name: OS:${{ matrix.os }}
+    name: OTP:${{ matrix.otp }}-OS:${{ matrix.os }}${{ matrix.version && format('-{0}', matrix.version) || '' }}
     runs-on: ${{ matrix.runner }}
     continue-on-error: true
     timeout-minutes: 15
@@ -78,17 +78,22 @@ jobs:
           - os: macos
             runner: 'macos-15'
             vm: false
+            otp: '29'
           - os: windows
             runner: 'windows-2025'
             vm: false
+            otp: '29'
           - os: freebsd
             runner: 'ubuntu-26.04'
             vm: true
             version: '14.3'
+            otp: '29'
+          # 8.0 is the first OpenBSD to package OTP 29.
           - os: openbsd
             runner: 'ubuntu-26.04'
             vm: true
-            version: '7.9'
+            version: '8.0'
+            otp: '29'
           # NetBSD is out until pkgsrc lang/erlang moves past 27: no binary OTP 28
           # exists for it, and building one does not fit an emulated job.
     steps:
@@ -96,17 +101,17 @@ jobs:
       - uses: erlef/setup-beam@v1
         if: ${{ !matrix.vm }}
         with:
-          otp-version: '28'
+          otp-version: ${{ matrix.otp }}
           rebar3-version: '3.27'
       - name: Common Test
         if: ${{ !matrix.vm }}
         run: rebar3 ct --suite=test/socket_SUITE --cover=false
       # Fallback if an image version stops being published: vmactions/*-vm.
-      - uses: cross-platform-actions/action@v1.6.0
+      - uses: cross-platform-actions/action@v1.7.0
         if: ${{ matrix.vm }}
         timeout-minutes: 15
         env:
-          OTP_MAJOR: '28'
+          OTP_MAJOR: ${{ matrix.otp }}
           REBAR3_VSN: '3.27.0'
         with:
           operating_system: ${{ matrix.os }}
