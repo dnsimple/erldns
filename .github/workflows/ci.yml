@@ -88,11 +88,6 @@ jobs:
             vm: true
             version: '14.3'
             otp: '29'
-          - os: openbsd
-            runner: 'ubuntu-26.04'
-            vm: true
-            version: '7.9'
-            otp: '28'
           # 8.0 is the first OpenBSD to package OTP 29.
           - os: openbsd
             runner: 'ubuntu-26.04'
