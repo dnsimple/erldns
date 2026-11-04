@@ -78,11 +78,11 @@ jobs:
           - os: macos
             runner: 'macos-15'
             vm: false
-            otp: '28'
+            otp: '29'
           - os: windows
             runner: 'windows-2025'
             vm: false
-            otp: '28'
+            otp: '29'
           - os: freebsd
             runner: 'ubuntu-26.04'
             vm: true
