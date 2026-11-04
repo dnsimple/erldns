@@ -14,8 +14,10 @@ SHIM="${PWD}/.ci-bin"
 # git: rebar3 resolves every test-profile dep, one of which is a git dep.
 case "$(uname -s)" in
     FreeBSD)
-        sudo pkg install -y git curl "erlang-runtime${OTP_MAJOR}" </dev/null ||
-            sudo pkg install -y git curl erlang </dev/null
+        # ca_root_nss: rebar3 reads the OS trust store, and 14.x has no bundle
+        # in base at any path public_key checks.
+        sudo pkg install -y git curl ca_root_nss "erlang-runtime${OTP_MAJOR}" </dev/null ||
+            sudo pkg install -y git curl ca_root_nss erlang </dev/null
         ;;
     OpenBSD)
         sudo pkg_add -I git curl </dev/null || true

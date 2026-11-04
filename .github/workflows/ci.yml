@@ -39,7 +39,7 @@ jobs:
       matrix:
         os: ['ubuntu-26.04']
         otp: ['29', '28']
-        rebar3: ['3.27']
+        rebar3: ['3.28']
     runs-on: ${{ matrix.os }}
     env:
       REBAR_CACHE_DIR: ${{ github.workspace }}/.rebar3-cache
@@ -102,7 +102,7 @@ jobs:
         if: ${{ !matrix.vm }}
         with:
           otp-version: ${{ matrix.otp }}
-          rebar3-version: '3.27'
+          rebar3-version: '3.28'
       - name: Common Test
         if: ${{ !matrix.vm }}
         run: rebar3 ct --suite=test/socket_SUITE --cover=false
@@ -112,7 +112,7 @@ jobs:
         timeout-minutes: 15
         env:
           OTP_MAJOR: ${{ matrix.otp }}
-          REBAR3_VSN: '3.27.0'
+          REBAR3_VSN: '3.28.0'
         with:
           operating_system: ${{ matrix.os }}
           version: ${{ matrix.version }}
