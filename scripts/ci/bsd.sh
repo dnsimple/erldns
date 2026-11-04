@@ -3,8 +3,8 @@
 #
 # Not `make test`: these run emulated, and everything host-independent is
 # already enforced on the Linux legs. The platforms disagree on where Erlang
-# lands and what it is called, so install and then discover: a package
-# reshuffle then fails here instead of testing on a stale OTP.
+# lands and what it is called, so install and then discover OTP_MAJOR exactly:
+# a package reshuffle then fails here instead of testing another OTP.
 set -eu
 
 : "${OTP_MAJOR:?OTP_MAJOR must be set}"
@@ -54,14 +54,14 @@ for candidate in $(candidates); do
     case "${release}" in
         '' | *[!0-9]*) continue ;;
     esac
-    if [ "${release}" -ge 28 ]; then
+    if [ "${release}" -eq "${OTP_MAJOR}" ]; then
         ERL="${candidate}"
         break
     fi
 done
 
 if [ -z "${ERL}" ]; then
-    echo "no OTP 28 or newer found among:" >&2
+    echo "no OTP ${OTP_MAJOR} found among:" >&2
     candidates >&2
     ls -d /usr/local/bin/*erl* /usr/pkg/bin/*erl* /usr/local/lib/erlang* /usr/pkg/lib/erlang* >&2 ||
         true
