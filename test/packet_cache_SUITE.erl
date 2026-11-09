@@ -13,7 +13,8 @@ all() ->
         is_enabled_default,
         start_when_disabled,
         start_when_enabled_with_default_ttl,
-        start_when_enabled_with_custom_ttl
+        start_when_enabled_with_custom_ttl,
+        errors_are_not_cached
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -51,6 +52,18 @@ start_when_enabled_with_custom_ttl(_) ->
     ?assertMatch({ok, _}, pg:start_link(erldns)),
     ?assertMatch({ok, _}, erldns_packet_cache:start_link()),
     test_calls().
+
+errors_are_not_cached(_) ->
+    application:set_env(erldns, packet_cache, #{}),
+    ?assertMatch({ok, _}, pg:start_link(erldns)),
+    ?assertMatch({ok, _}, erldns_packet_cache:start_link()),
+    Qs = [#dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A}],
+    Msg0 = #dns_message{qc = 1, questions = Qs},
+    Opts = erldns_packet_cache:prepare(def_opts()),
+    {Msg1, Opts1} = erldns_packet_cache:call(Msg0, Opts),
+    ServFail = Msg1#dns_message{aa = true, rc = ?DNS_RCODE_SERVFAIL},
+    ?assertEqual(ServFail, erldns_packet_cache:call(ServFail, Opts1)),
+    ?assertMatch({_, #{erldns_packet_cache := miss}}, erldns_packet_cache:call(Msg0, Opts)).
 
 test_calls() ->
     Qs = [#dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A}],

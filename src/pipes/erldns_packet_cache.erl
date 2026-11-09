@@ -41,8 +41,10 @@ prepare(Opts) ->
 
 -doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
-%% We are authoritative so cache the packet and return the message.
-call(#dns_message{aa = true} = Msg, #{?MODULE := miss} = Opts) ->
+%% Only authoritative answers are cached, and not errors, which may be transient.
+call(#dns_message{aa = true, rc = RC} = Msg, #{?MODULE := miss} = Opts) when
+    RC =:= ?DNS_RCODE_NOERROR; RC =:= ?DNS_RCODE_NXDOMAIN
+->
     Key = {Msg#dns_message.questions, Msg#dns_message.additional},
     segmented_cache:put_entry(?MODULE, Key, Msg),
     {Msg, Opts#{?MODULE := cached}};

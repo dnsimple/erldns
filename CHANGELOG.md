@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Fixed
+
+- The packet cache no longer caches SERVFAIL or other errors, only NOERROR and NXDOMAIN (#393).
+
 ## v12.0.3
 
 ### Fixed
