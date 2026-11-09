@@ -42,10 +42,9 @@ prepare(Opts) ->
 -doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
 %% Only authoritative answers are cached, and not errors, which may be transient.
-call(#dns_message{aa = true, rc = RC} = Msg, #{?MODULE := miss} = Opts) when
+call(#dns_message{aa = true, rc = RC} = Msg, #{?MODULE := {miss, Key}} = Opts) when
     RC =:= ?DNS_RCODE_NOERROR; RC =:= ?DNS_RCODE_NXDOMAIN
 ->
-    Key = {Msg#dns_message.questions, Msg#dns_message.additional},
     segmented_cache:put_entry(?MODULE, Key, Msg),
     {Msg, Opts#{?MODULE := cached}};
 call(Msg, #{?MODULE := false} = Opts) ->
@@ -56,7 +55,8 @@ call(Msg, #{?MODULE := false} = Opts) ->
             Opts1 = Opts#{?MODULE := cached, resolved => true},
             {Msg1, Opts1};
         not_found ->
-            {Msg, Opts#{?MODULE := miss}}
+            %% The answer is stored under the request's key: resolving adds to its sections.
+            {Msg, Opts#{?MODULE := {miss, Key}}}
     end;
 call(Msg, _) ->
     Msg.
