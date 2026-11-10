@@ -16,7 +16,8 @@ what the response would send back. This pipe makes it the response's:
   which dns_erlang answers with BADVERS when it doesn't support it.
 - Over UDP, the payload size is capped, see below.
 
-A query without an OPT RR gets none back (RFC 6891 §7).
+A query without an OPT RR gets none back (RFC 6891 §7). Any other record the query carries in its
+additional section is dropped: the response's additional records are its own.
 
 ## EDNS extensions
 
@@ -56,10 +57,12 @@ prepare(Opts) ->
 
 -doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
+call(#dns_message{additional = []} = Msg, _) ->
+    Msg;
 call(#dns_message{additional = Additional} = Msg, #{transport := Transport} = Opts) ->
     case lists:keyfind(dns_optrr, 1, Additional) of
         false ->
-            Msg;
+            Msg#dns_message{adc = 0, additional = []};
         #dns_optrr{data = []} = OptRR ->
             with_optrr(Msg, OptRR, response_optrr(OptRR, Transport));
         #dns_optrr{data = Options} = OptRR ->
@@ -142,11 +145,13 @@ response_optrr(#dns_optrr{ext_rcode = ?DNS_ERCODE_NOERROR, data = []} = OptRR, _
 response_optrr(OptRR, _) ->
     OptRR#dns_optrr{ext_rcode = ?DNS_ERCODE_NOERROR, data = []}.
 
+%% The query's OPT RR becomes the only additional record. The header count is set here too, as
+%% pipes that stop the pipeline early skip erldns_section_counter.
 -spec with_optrr(dns:message(), dns:optrr(), dns:optrr()) -> dns:message().
-with_optrr(Msg, OptRR, OptRR) ->
+with_optrr(#dns_message{adc = 1, additional = [OptRR]} = Msg, OptRR, OptRR) ->
     Msg;
-with_optrr(#dns_message{additional = Additional} = Msg, _, OptRR) ->
-    Msg#dns_message{additional = lists:keyreplace(dns_optrr, 1, Additional, OptRR)}.
+with_optrr(Msg, _, OptRR) ->
+    Msg#dns_message{adc = 1, additional = [OptRR]}.
 
 %% Folding from the right lets the first option of each code overwrite later ones.
 -spec query_edns_options([dns:optrr_elem()]) -> query_edns_options().

@@ -29,6 +29,7 @@ groups() ->
             query_options_keep_first_of_each_code,
             query_without_optrr_is_untouched,
             optrr_without_options_is_untouched,
+            query_records_are_dropped,
             add_option_to_optrr_anywhere,
             add_option_without_optrr,
             resolver_requires_edns,
@@ -186,8 +187,21 @@ query_without_optrr_is_untouched(_) ->
     ?assertEqual(Msg, erldns_edns:call(Msg, edns_opts(udp))).
 
 optrr_without_options_is_untouched(_) ->
-    Msg = query([glue(), #dns_optrr{udp_payload_size = 1232, dnssec = true}]),
+    Msg = query([#dns_optrr{udp_payload_size = 1232, dnssec = true}]),
     ?assertEqual(Msg, erldns_edns:call(Msg, edns_opts(udp))).
+
+%% The response's additional records are its own: only the OPT RR stays, and the header count with
+%% it, which pipes that stop the pipeline early rely on.
+query_records_are_dropped(_) ->
+    OptRR = #dns_optrr{udp_payload_size = 1232},
+    ?assertMatch(
+        #dns_message{adc = 1, additional = [OptRR]},
+        erldns_edns:call(query([glue(), OptRR, glue()]), edns_opts(udp))
+    ),
+    ?assertMatch(
+        #dns_message{adc = 0, additional = []},
+        erldns_edns:call(query([glue()]), edns_opts(udp))
+    ).
 
 add_option_to_optrr_anywhere(_) ->
     Nsid = #dns_opt_nsid{data = ~"ns1"},
@@ -369,7 +383,7 @@ max_payload_size_optrr_not_first(_Config) ->
     InRange = #dns_optrr{udp_payload_size = 1232},
     Msg2 = #dns_message{adc = 2, additional = [ARecord, InRange]},
     ?assertEqual(
-        [ARecord, InRange],
+        [InRange],
         (erldns_edns:call(Msg2, #{transport => udp}))#dns_message.additional
     ).
 
