@@ -270,6 +270,9 @@ The dependencies of a pipe module.
 Contains the following keys:
 - `prerequisites` is a list of module pipes that must appear earlier in the pipeline
 - `dependents` is a list of module pipes that must appear later in the pipeline
+
+A pipe that appears more than once is placed by its first appearance, so a dependent may not appear
+before it at all.
 """.
 -type deps() :: #{prerequisites => [module()], dependents => [module()]}.
 
@@ -324,8 +327,9 @@ Trigger the pipeline at run-time. See `t:return/0` for details.
 -doc """
 Declare dependencies on other pipes.
 
-This pipe will only work correctly if the listed pipes appear earlier in the pipeline configuration.
-The pipeline will fail to start if dependencies are not satisfied.
+This pipe will only work correctly if its prerequisites appear earlier in the pipeline
+configuration and its dependents later, see `t:deps/0`. The pipeline will fail to start if
+dependencies are not satisfied.
 
 Example:
 ```erlang
@@ -689,13 +693,15 @@ validate_deps_satisfied(Module, OriginalPipes, Deps) ->
     % which is impossible, otherwise "After" always starts with the module itself
     {ModulesDefinedBefore, [Module | ModulesDefinedAfter]} =
         lists:splitwith(fun(P) -> P =/= Module end, OriginalPipes),
+    % The module is placed by its first appearance, so a dependent may not also appear before it
+    ModulesOnlyAfter = [P || P <- ModulesDefinedAfter, not lists:member(P, ModulesDefinedBefore)],
     Prerequisites = maps:get(prerequisites, Deps, []),
     Dependents = maps:get(dependents, Deps, []),
     PreHint = ~"Prerequisite must appear earlier in pipeline",
     DepHint = ~"Dependent must appear later in pipeline",
     maybe
         ok ?= ensure_satisfied(Module, ModulesDefinedBefore, PreHint, Prerequisites),
-        ensure_satisfied(Module, ModulesDefinedAfter, DepHint, Dependents)
+        ensure_satisfied(Module, ModulesOnlyAfter, DepHint, Dependents)
     end.
 
 -spec ensure_satisfied(module(), [pipe()], binary(), [module()]) -> ok | {error, dynamic()}.

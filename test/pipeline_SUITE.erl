@@ -52,6 +52,7 @@ groups() ->
             prerequisite_order_violated,
             dependency_order_violated,
             every_dependency_is_checked,
+            dependent_must_follow_every_appearance,
             multiple_dependencies_satisfied,
             transitive_dependencies_satisfied,
             backward_compatible_no_deps,
@@ -383,6 +384,19 @@ every_dependency_is_checked(_) ->
         erldns_pipeline:store_pipeline(?FUNCTION_NAME, [pipe_b, pipe_c])
     ),
     meck:unload([pipe_a, pipe_b, pipe_c]).
+
+%% A pipe that appears twice, such as erldns_packet_cache, is placed by its first appearance, so a
+%% pipe between the two does not come before it.
+dependent_must_follow_every_appearance(_) ->
+    meck:new([pipe_a, pipe_b], [non_strict]),
+    [meck:expect(Pipe, call, fun(Msg, _) -> Msg end) || Pipe <- [pipe_a, pipe_b]],
+    meck:expect(pipe_a, deps, fun() -> #{dependents => [pipe_b]} end),
+    ?assertError(
+        {badpipe, {unsatisfied_dependency, #{pipe := pipe_a, requires := pipe_b}}},
+        erldns_pipeline:store_pipeline(?FUNCTION_NAME, [pipe_b, pipe_a, pipe_b])
+    ),
+    ?assertEqual(ok, erldns_pipeline:store_pipeline(?FUNCTION_NAME, [pipe_a, pipe_b, pipe_b])),
+    meck:unload([pipe_a, pipe_b]).
 
 multiple_dependencies_satisfied(_) ->
     % Create three mock modules: C depends on both A and B (via callback)
