@@ -9,6 +9,11 @@ once early in the processing pipeline, after `m:erldns_questions`, and once _aft
 Names are compared case-insensitively, and an answer from the cache carries the ID, RD bit and
 question of the request it answers.
 
+An answer is looked up by the question and the additional section as it is at that point, which
+holds the response's OPT RR (see `m:erldns_edns`). A pipe that adds an option depending on the
+query must run before the first cache, so that queries asking for different options are cached
+apart.
+
 ## Configuration
 
 ```erlang

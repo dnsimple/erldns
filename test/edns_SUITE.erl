@@ -19,8 +19,20 @@ groups() ->
     [
         {all, [parallel], [
             {group, payload_size},
+            {group, query_options},
             {group, ede_tests},
             dnssec_extraction
+        ]},
+        {query_options, [parallel], [
+            prepare_sets_no_query_options,
+            query_options_move_to_opts,
+            query_options_keep_first_of_each_code,
+            query_without_optrr_is_untouched,
+            optrr_without_options_is_untouched,
+            add_option_to_optrr_anywhere,
+            add_option_without_optrr,
+            resolver_requires_edns,
+            every_option_is_keyed_by_its_code
         ]},
         {payload_size, [parallel], [
             tcp_does_nothing,
@@ -137,6 +149,107 @@ dnssec_extraction(_Config) ->
     ?assert(erldns_edns:dnssec_ok(Do)),
     ?assertNot(erldns_edns:dnssec_ok(NoDo)),
     ?assertNot(erldns_edns:dnssec_ok(NoOpt)).
+
+%%% Query options
+
+prepare_sets_no_query_options(_) ->
+    ?assertMatch(#{query_edns_options := #{}}, erldns_edns:prepare(def_opts())).
+
+%% RFC 6891 §6.1.2: the query's options are not sent back. The fixed part of the OPT RR is,
+%% except for the extended RCODE.
+query_options_move_to_opts(_) ->
+    Nsid = #dns_opt_nsid{data = <<>>},
+    Cookie = #dns_opt_cookie{client = <<1:64>>},
+    Unknown = #dns_opt_unknown{id = 65001, bin = <<16#ab, 16#cd>>},
+    OptRR = #dns_optrr{
+        udp_payload_size = 1232,
+        ext_rcode = 1,
+        version = 1,
+        dnssec = true,
+        data = [Nsid, Cookie, Unknown]
+    },
+    {Msg, Opts} = erldns_edns:call(query([OptRR]), edns_opts(udp)),
+    ?assertEqual([OptRR#dns_optrr{ext_rcode = 0, data = []}], Msg#dns_message.additional),
+    ?assertEqual(
+        #{?DNS_EOPTCODE_NSID => Nsid, ?DNS_EOPTCODE_COOKIE => Cookie, 65001 => Unknown},
+        maps:get(query_edns_options, Opts)
+    ).
+
+query_options_keep_first_of_each_code(_) ->
+    First = #dns_opt_cookie{client = <<1:64>>},
+    OptRR = #dns_optrr{data = [First, #dns_opt_cookie{client = <<2:64>>}]},
+    {_, Opts} = erldns_edns:call(query([OptRR]), edns_opts(tcp)),
+    ?assertEqual(#{?DNS_EOPTCODE_COOKIE => First}, maps:get(query_edns_options, Opts)).
+
+query_without_optrr_is_untouched(_) ->
+    Msg = query([]),
+    ?assertEqual(Msg, erldns_edns:call(Msg, edns_opts(udp))).
+
+optrr_without_options_is_untouched(_) ->
+    Msg = query([glue(), #dns_optrr{udp_payload_size = 1232, dnssec = true}]),
+    ?assertEqual(Msg, erldns_edns:call(Msg, edns_opts(udp))).
+
+add_option_to_optrr_anywhere(_) ->
+    Nsid = #dns_opt_nsid{data = ~"ns1"},
+    [
+        ?assertEqual(
+            Expected, (erldns_edns:add_option(query(Additional), Nsid))#dns_message.additional
+        )
+     || {Additional, Expected} <- [
+            {[#dns_optrr{}], [#dns_optrr{data = [Nsid]}]},
+            {[glue(), #dns_optrr{}], [glue(), #dns_optrr{data = [Nsid]}]}
+        ]
+    ].
+
+add_option_without_optrr(_) ->
+    Msg = query([glue()]),
+    ?assertEqual(Msg, erldns_edns:add_option(Msg, #dns_opt_nsid{data = ~"ns1"})).
+
+%% The resolver answers with the additional section it is given, which is the response's only once
+%% erldns_edns has run.
+resolver_requires_edns(_) ->
+    ?assertError(
+        {badpipe, {unsatisfied_dependency, #{pipe := erldns_resolver, requires := erldns_edns}}},
+        erldns_pipeline:store_pipeline(?FUNCTION_NAME, [erldns_questions, erldns_resolver])
+    ).
+
+every_option_is_keyed_by_its_code(_) ->
+    Options = #{
+        ?DNS_EOPTCODE_LLQ => #dns_opt_llq{opcode = 1, errorcode = 0, id = 1, leaselife = 60},
+        ?DNS_EOPTCODE_UL => #dns_opt_ul{lease = 60},
+        ?DNS_EOPTCODE_NSID => #dns_opt_nsid{data = <<>>},
+        ?DNS_EOPTCODE_OWNER => #dns_opt_owner{
+            primary_mac = <<1:48>>, wakeup_mac = <<>>, password = <<>>
+        },
+        ?DNS_EOPTCODE_ECS => #dns_opt_ecs{
+            family = 1, source_prefix_length = 0, scope_prefix_length = 0, address = <<>>
+        },
+        ?DNS_EOPTCODE_COOKIE => #dns_opt_cookie{client = <<1:64>>},
+        ?DNS_EOPTCODE_EDE => #dns_opt_ede{info_code = 0},
+        65001 => #dns_opt_unknown{id = 65001, bin = <<>>}
+    },
+    OptRR = #dns_optrr{data = maps:values(Options)},
+    {_, Opts} = erldns_edns:call(query([OptRR]), edns_opts(tcp)),
+    ?assertEqual(Options, maps:get(query_edns_options, Opts)).
+
+query(Additional) ->
+    #dns_message{
+        qc = 1,
+        adc = length(Additional),
+        questions = [#dns_query{name = ~"example.com", type = ?DNS_TYPE_A}],
+        additional = Additional
+    }.
+
+glue() ->
+    #dns_rr{
+        name = ~"ns.example.com",
+        type = ?DNS_TYPE_A,
+        ttl = 300,
+        data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
+    }.
+
+edns_opts(Transport) ->
+    erldns_edns:prepare(def_opts(#{transport => Transport})).
 
 %%% EDE Tests
 

@@ -16,7 +16,8 @@ all() ->
         start_when_enabled_with_custom_ttl,
         errors_are_not_cached,
         answers_with_additional_records_are_hit,
-        names_are_case_insensitive
+        names_are_case_insensitive,
+        query_options_do_not_split_entries
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -85,6 +86,22 @@ names_are_case_insensitive(_) ->
     ?assertEqual(
         Answer#dns_message{id = 42, rd = true, questions = Msg2#dns_message.questions}, Hit
     ).
+
+%% erldns_edns takes the query's options out of the message, so queries that only differ by them,
+%% such as each client's cookie, share an entry, and none of them is sent back.
+query_options_do_not_split_entries(_) ->
+    start_cache(),
+    [Msg0, Msg1] = [with_cookie(query(~"example.com", ?DNS_TYPE_A), C) || C <- [1, 2]],
+    {Msg2, Opts2} = erldns_packet_cache:call(Msg0, opts(Msg0)),
+    Answer = Msg2#dns_message{aa = true, answers = [#dns_rr{name = ~"example.com"}]},
+    {_, #{erldns_packet_cache := cached}} = erldns_packet_cache:call(Answer, Opts2),
+    {Hit, #{resolved := true}} = erldns_packet_cache:call(Msg1, opts(Msg1)),
+    ?assertMatch(#dns_message{additional = [#dns_optrr{data = []}]}, Hit).
+
+with_cookie(Msg, Client) ->
+    OptRR = #dns_optrr{data = [#dns_opt_cookie{client = <<Client:64>>}]},
+    {Msg1, _} = erldns_edns:call(Msg#dns_message{additional = [OptRR]}, def_opts()),
+    Msg1.
 
 test_calls() ->
     Msg0 = query(~"example.com", ?DNS_TYPE_A),
