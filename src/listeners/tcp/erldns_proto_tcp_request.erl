@@ -111,7 +111,7 @@ measure_time(Response, TS0, EncodedResponse) ->
         duration => TS1 - TS0,
         response_size => byte_size(EncodedResponse)
     },
-    DnsSec = proplists:get_bool(dnssec, erldns_edns:get_opts(Response)),
+    DnsSec = erldns_edns:dnssec_ok(Response),
     Metadata = #{
         transport => tcp,
         dnssec => DnsSec,

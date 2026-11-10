@@ -9,6 +9,20 @@ that being an authoritative (e.g. `m:erldns_resolver`) or recursive
 You also need to provide the zone keys for signing, during loading,
 see [`ZONES`](priv/zones/ZONES.md) for more details.
 
+## Configuration
+
+```erlang
+{erldns, [
+    {dnssec, #{
+        authenticated_data => false %% Set AD on answers from signed zones (default: false)
+    }}
+]}
+```
+
+RFC 4035 §3.1.6 lets an authoritative server set AD only when explicitly configured to, and only for
+zones it obtained by secure means: enable it only if zones reach erldns over an authenticated
+channel.
+
 ## Delegation points
 
 The resolver puts the delegation a response refers to in the pipeline opts as `zonecut`
@@ -86,7 +100,18 @@ deps() ->
 -doc "`c:erldns_pipeline:prepare/1` callback.".
 -spec prepare(erldns_pipeline:opts()) -> erldns_pipeline:opts().
 prepare(Opts) ->
-    Opts#{dnssec => false, nsec_type_mappers => maps:get(nsec_type_mappers, Opts, #{})}.
+    Opts#{
+        dnssec => false,
+        nsec_type_mappers => maps:get(nsec_type_mappers, Opts, #{}),
+        dnssec_authenticated_data => authenticated_data()
+    }.
+
+-spec authenticated_data() -> boolean().
+authenticated_data() ->
+    case application:get_env(erldns, dnssec, #{}) of
+        #{authenticated_data := Bool} when is_boolean(Bool) -> Bool;
+        _ -> false
+    end.
 
 -doc """
 Register an NSEC type mapper for the given record types into the pipeline opts.
@@ -114,14 +139,18 @@ call(
         query_labels := QLabels,
         auth_zone := #zone{} = Zone,
         zonecut := Zonecut,
-        nsec_type_mappers := Mappers
+        nsec_type_mappers := Mappers,
+        dnssec_authenticated_data := AD
     } = Opts
 ) ->
-    RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Msg)),
+    RequestDnssec = erldns_edns:dnssec_ok(Msg),
     Opts1 = Opts#{dnssec => RequestDnssec},
-    {handle(Msg, Zone, QLabels, QName, QType, Zonecut, Mappers, RequestDnssec), Opts1};
+    case RequestDnssec of
+        false -> {Msg, Opts1};
+        true -> {handle(Msg, Zone, QLabels, QName, QType, Zonecut, Mappers, AD), Opts1}
+    end;
 call(Msg, Opts) ->
-    RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Msg)),
+    RequestDnssec = erldns_edns:dnssec_ok(Msg),
     {Msg, Opts#{dnssec => RequestDnssec}}.
 
 -doc """
@@ -301,7 +330,7 @@ requires_key_signing_key(RRs) ->
     ).
 
 %%% Internal functions
--spec handle(Msg, Zone, QLabels, QName, QType, Zonecut, Mappers, RequestDnssec) -> Return when
+-spec handle(Msg, Zone, QLabels, QName, QType, Zonecut, Mappers, AD) -> Return when
     Msg :: dns:message(),
     Zone :: erldns:zone(),
     QLabels :: dns:labels(),
@@ -309,11 +338,8 @@ requires_key_signing_key(RRs) ->
     QType :: dns:type(),
     Zonecut :: erldns_resolver:zonecut(),
     Mappers :: nsec_type_mappers(),
-    RequestDnssec :: boolean(),
+    AD :: boolean(),
     Return :: dns:message().
-%% DNSSEC not requested, leave
-handle(Msg, _, _, _, _, _, _, false) ->
-    Msg;
 %% compact-denial-of-existence §3.5: Responses to explicit queries for NXNAME
 handle(Msg, _, _, _, ?DNS_TYPE_NXNAME, _, _, _) ->
     Msg#dns_message{rc = ?DNS_RCODE_FORMERR, authority = []};
@@ -329,8 +355,8 @@ handle(#dns_message{rc = RC} = Msg, _, _, _, _, _, _, _) when
 %% anything else is authoritative data and is signed as such.
 handle(Msg, Zone, _, _, _, CutLabels, _, _) when is_list(CutLabels) ->
     handle_referral(Msg, Zone, CutLabels);
-handle(Msg, Zone, QLabels, QName, QType, none, Mappers, _) ->
-    handle_authoritative(Msg, Zone, QLabels, QName, QType, Mappers).
+handle(Msg, Zone, QLabels, QName, QType, none, Mappers, AD) ->
+    handle_authoritative(Msg, Zone, QLabels, QName, QType, Mappers, AD).
 
 %% RFC 4035 §3.1.4: a referral carries the DS RRset and its RRSIG when the delegation is secure,
 %% otherwise the NSEC at the delegation name proving there is no DS. The NS RRset stays unsigned
@@ -363,32 +389,33 @@ rrsigs_for_rrset(Zone, RRs) ->
         RRSigs -> RRSigs
     end.
 
--spec handle_authoritative(Msg, Zone, QLabels, QName, QType, Mappers) -> Return when
+-spec handle_authoritative(Msg, Zone, QLabels, QName, QType, Mappers, AD) -> Return when
     Msg :: dns:message(),
     Zone :: erldns:zone(),
     QLabels :: dns:labels(),
     QName :: dns:dname(),
     QType :: dns:type(),
     Mappers :: nsec_type_mappers(),
+    AD :: boolean(),
     Return :: dns:message().
 %% No answers found, return NSEC.
-handle_authoritative(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QType, Mappers) ->
+handle_authoritative(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QType, Mappers, AD) ->
     #dns_message{authority = MsgAuths} = Msg,
     #zone{labels = ZLabels} = Zone,
     ApexRRSigRRs = erldns_zone_cache:get_records_by_name_and_type(Zone, ZLabels, ?DNS_TYPE_RRSIG),
     SoaRRSigRecords = maybe_get_soa_rrsig_records(ApexRRSigRRs, MsgAuths),
     [NsecRecord | NsecRRSigRecords] = nsec_at_name(Zone, QLabels, QName, QType, Mappers),
     Auth = lists:append([MsgAuths, [NsecRecord], SoaRRSigRecords, NsecRRSigRecords]),
-    Msg1 = Msg#dns_message{ad = true, rc = ?DNS_RCODE_NOERROR, authority = Auth},
+    Msg1 = Msg#dns_message{ad = AD, rc = ?DNS_RCODE_NOERROR, authority = Auth},
     Msg2 = sign_unsigned(Msg1, Zone),
     erldns_records:rewrite_soa_ttl(Msg2);
 %% Answers ready and need signing
-handle_authoritative(Msg, Zone, _, _, _, _) ->
+handle_authoritative(Msg, Zone, _, _, _, _, AD) ->
     ?LOG_DEBUG(#{what => dnssec_requested, name => Zone#zone.name}, ?LOG_METADATA),
     AnswerSignatures = find_rrsigs(Zone, Msg#dns_message.answers),
     AuthoritySignatures = find_rrsigs(Zone, Msg#dns_message.authority),
     Msg1 = Msg#dns_message{
-        ad = true,
+        ad = AD,
         answers = Msg#dns_message.answers ++ AnswerSignatures,
         authority = Msg#dns_message.authority ++ AuthoritySignatures
     },

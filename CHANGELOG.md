@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `erldns_packet_cache` requires `erldns_questions` earlier in the pipeline.
+- Answers from signed zones no longer set AD, as RFC 4035 §3.1.6 requires unless explicitly
+  configured; `{dnssec, #{authenticated_data => true}}` sets it again (#394).
 
 ## v12.0.3
 

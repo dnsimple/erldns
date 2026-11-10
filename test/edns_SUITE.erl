@@ -19,7 +19,8 @@ groups() ->
     [
         {all, [parallel], [
             {group, payload_size},
-            {group, ede_tests}
+            {group, ede_tests},
+            dnssec_extraction
         ]},
         {payload_size, [parallel], [
             tcp_does_nothing,
@@ -125,6 +126,17 @@ udp_does_nothing_if_reasonable_value(_) ->
         qc = 1, anc = 1, adc = 1, questions = [Q], answers = [Ans], additional = [Ad]
     },
     ?assertEqual(Msg, erldns_edns_max_payload_size:call(Msg, Opts)).
+
+dnssec_extraction(_Config) ->
+    Glue = #dns_rr{name = ~"ns1.example.com", type = ?DNS_TYPE_A},
+    Do = #dns_message{additional = [Glue, #dns_optrr{dnssec = true}]},
+    NoDo = #dns_message{additional = [Glue, #dns_optrr{}]},
+    NoOpt = #dns_message{additional = [Glue]},
+    ?assertEqual([{dnssec, true}], erldns_edns:get_opts(Do)),
+    ?assertEqual([], erldns_edns:get_opts(NoDo)),
+    ?assert(erldns_edns:dnssec_ok(Do)),
+    ?assertNot(erldns_edns:dnssec_ok(NoDo)),
+    ?assertNot(erldns_edns:dnssec_ok(NoOpt)).
 
 %%% EDE Tests
 
