@@ -4,6 +4,8 @@
 -behaviour(ct_suite).
 
 -define(MAX_PACKET_SIZE, 1232).
+-define(WIRE_ZONE, ~"wire.example").
+-define(WIRE_NAME, ~"www.wire.example").
 
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
@@ -11,7 +13,8 @@
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
     [
-        {group, all}
+        {group, all},
+        {group, wire}
     ].
 
 -spec groups() -> [ct_suite:ct_group_def()].
@@ -19,9 +22,26 @@ groups() ->
     [
         {all, [parallel], [
             {group, payload_size},
+            {group, query_options},
             {group, ede_tests},
             dnssec_extraction
         ]},
+        {query_options, [parallel], [
+            prepare_sets_no_query_options,
+            query_options_move_to_opts,
+            query_options_keep_first_of_each_code,
+            query_without_optrr_is_untouched,
+            optrr_without_options_is_untouched,
+            add_option_to_optrr_anywhere,
+            add_option_without_optrr,
+            resolver_and_cache_require_edns,
+            every_option_is_keyed_by_its_code,
+            unknown_records_are_keyed_by_name,
+            update_options_of_the_response
+        ]},
+        {wire, [], [{group, udp}, {group, tcp}]},
+        {udp, [], wire_tests()},
+        {tcp, [], wire_tests()},
         {payload_size, [parallel], [
             tcp_does_nothing,
             udp_leaves_additional_empty_if_provided_empty,
@@ -52,11 +72,39 @@ end_per_suite(Config) ->
     application:unset_env(erldns, edns_ede),
     Config.
 
+%% Queries over the wire, to a node running the pipeline below.
+wire_tests() ->
+    [
+        wire_unknown_options_are_not_sent_back
+    ].
+
+wire_pipeline() ->
+    [
+        erldns_edns,
+        erldns_questions,
+        erldns_query_throttle,
+        erldns_packet_cache,
+        erldns_resolver_recursive,
+        erldns_resolver,
+        erldns_dnssec,
+        erldns_sorter,
+        erldns_section_counter,
+        erldns_packet_cache,
+        erldns_empty_verification
+    ].
+
 -spec init_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> ct_suite:ct_config().
+init_per_group(wire, Config) ->
+    Env = [{use_root_hints, false}, {packet_pipeline, wire_pipeline()}],
+    app_helper:start_listening(Config, Env, [wire_zone()]);
+init_per_group(Transport, Config) when Transport =:= udp; Transport =:= tcp ->
+    [{transport, Transport} | Config];
 init_per_group(_, Config) ->
     Config.
 
 -spec end_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> term().
+end_per_group(wire, Config) ->
+    app_helper:stop(Config);
 end_per_group(_, _Config) ->
     ok.
 
@@ -137,6 +185,127 @@ dnssec_extraction(_Config) ->
     ?assert(erldns_edns:dnssec_ok(Do)),
     ?assertNot(erldns_edns:dnssec_ok(NoDo)),
     ?assertNot(erldns_edns:dnssec_ok(NoOpt)).
+
+%%% Query options
+
+prepare_sets_no_query_options(_) ->
+    ?assertMatch(#{query_edns_options := #{}}, erldns_edns:prepare(def_opts())).
+
+%% RFC 6891 §6.1.2: the query's options are not sent back. The fixed part of the OPT RR is,
+%% except for the extended RCODE.
+query_options_move_to_opts(_) ->
+    Nsid = #dns_opt_nsid{data = <<>>},
+    Cookie = #dns_opt_cookie{client = <<1:64>>},
+    Unknown = #dns_opt_unknown{id = 65001, bin = <<16#ab, 16#cd>>},
+    OptRR = #dns_optrr{
+        udp_payload_size = 1232,
+        ext_rcode = 1,
+        version = 1,
+        dnssec = true,
+        data = [Nsid, Cookie, Unknown]
+    },
+    {Msg, Opts} = erldns_edns:call(query([OptRR]), edns_opts(udp)),
+    ?assertEqual([OptRR#dns_optrr{ext_rcode = 0, data = []}], Msg#dns_message.additional),
+    ?assertEqual(
+        #{?DNS_EOPTCODE_NSID => Nsid, ?DNS_EOPTCODE_COOKIE => Cookie, 65001 => Unknown},
+        maps:get(query_edns_options, Opts)
+    ).
+
+query_options_keep_first_of_each_code(_) ->
+    First = #dns_opt_cookie{client = <<1:64>>},
+    OptRR = #dns_optrr{data = [First, #dns_opt_cookie{client = <<2:64>>}]},
+    {_, Opts} = erldns_edns:call(query([OptRR]), edns_opts(tcp)),
+    ?assertEqual(#{?DNS_EOPTCODE_COOKIE => First}, maps:get(query_edns_options, Opts)).
+
+query_without_optrr_is_untouched(_) ->
+    Msg = query([]),
+    ?assertEqual(Msg, erldns_edns:call(Msg, edns_opts(udp))).
+
+optrr_without_options_is_untouched(_) ->
+    Msg = query([glue(), #dns_optrr{udp_payload_size = 1232, dnssec = true}]),
+    ?assertEqual(Msg, erldns_edns:call(Msg, edns_opts(udp))).
+
+add_option_to_optrr_anywhere(_) ->
+    Nsid = #dns_opt_nsid{data = ~"ns1"},
+    [
+        ?assertEqual(
+            Expected, (erldns_edns:add_option(query(Additional), Nsid))#dns_message.additional
+        )
+     || {Additional, Expected} <- [
+            {[#dns_optrr{}], [#dns_optrr{data = [Nsid]}]},
+            {[glue(), #dns_optrr{}], [glue(), #dns_optrr{data = [Nsid]}]}
+        ]
+    ].
+
+add_option_without_optrr(_) ->
+    Msg = query([glue()]),
+    ?assertEqual(Msg, erldns_edns:add_option(Msg, #dns_opt_nsid{data = ~"ns1"})).
+
+%% The resolver answers with the additional section it is given, and the cache looks answers up by
+%% it, which is the response's only once erldns_edns has run.
+resolver_and_cache_require_edns(_) ->
+    [
+        ?assertError(
+            {badpipe, {unsatisfied_dependency, #{pipe := Pipe, requires := erldns_edns}}},
+            erldns_pipeline:store_pipeline(?FUNCTION_NAME, [erldns_questions, Pipe])
+        )
+     || Pipe <- [erldns_resolver, erldns_packet_cache]
+    ].
+
+every_option_is_keyed_by_its_code(_) ->
+    Options = #{
+        ?DNS_EOPTCODE_LLQ => #dns_opt_llq{opcode = 1, errorcode = 0, id = 1, leaselife = 60},
+        ?DNS_EOPTCODE_UL => #dns_opt_ul{lease = 60},
+        ?DNS_EOPTCODE_NSID => #dns_opt_nsid{data = <<>>},
+        ?DNS_EOPTCODE_OWNER => #dns_opt_owner{
+            primary_mac = <<1:48>>, wakeup_mac = <<>>, password = <<>>
+        },
+        ?DNS_EOPTCODE_ECS => #dns_opt_ecs{
+            family = 1, source_prefix_length = 0, scope_prefix_length = 0, address = <<>>
+        },
+        ?DNS_EOPTCODE_COOKIE => #dns_opt_cookie{client = <<1:64>>},
+        ?DNS_EOPTCODE_EDE => #dns_opt_ede{info_code = 0},
+        65001 => #dns_opt_unknown{id = 65001, bin = <<>>}
+    },
+    OptRR = #dns_optrr{data = maps:values(Options)},
+    {_, Opts} = erldns_edns:call(query([OptRR]), edns_opts(tcp)),
+    ?assertEqual(Options, maps:get(query_edns_options, Opts)).
+
+%% A record a newer dns_erlang could decode, such as padding, does not crash the pipe.
+unknown_records_are_keyed_by_name(_) ->
+    Padding = {dns_opt_padding, <<0, 0>>},
+    {Msg, Opts} = erldns_edns:call(query([#dns_optrr{data = [Padding]}]), edns_opts(tcp)),
+    ?assertMatch(#dns_message{additional = [#dns_optrr{data = []}]}, Msg),
+    ?assertEqual(#{dns_opt_padding => Padding}, maps:get(query_edns_options, Opts)).
+
+update_options_of_the_response(_) ->
+    Nsid = #dns_opt_nsid{data = ~"ns1"},
+    Replace = fun(_) -> [Nsid] end,
+    ?assertMatch(
+        #dns_message{additional = [_, #dns_optrr{data = [Nsid]}]},
+        erldns_edns:update_options(query([glue(), #dns_optrr{data = [Nsid, Nsid]}]), Replace)
+    ),
+    NoOpt = query([glue()]),
+    ?assertEqual(NoOpt, erldns_edns:update_options(NoOpt, Replace)).
+
+query(Additional) ->
+    #dns_message{
+        qc = 1,
+        adc = length(Additional),
+        questions = [#dns_query{name = ~"example.com", type = ?DNS_TYPE_A}],
+        additional = Additional
+    }.
+
+glue() ->
+    #dns_rr{
+        name = ~"ns.example.com",
+        type = ?DNS_TYPE_A,
+        ttl = 300,
+        data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
+    }.
+
+edns_opts(Transport) ->
+    erldns_edns:prepare(def_opts(#{transport => Transport})).
 
 %%% EDE Tests
 
@@ -272,6 +441,51 @@ ede_pipeline_appends_to_optrr(_Config) ->
     ?assert(length(ResultOptRR#dns_optrr.data) > 0),
     %% Verify EDE is present
     ?assertNotMatch([], erldns_edns:get_ede_errors(Result)).
+
+%%% Over the wire
+
+%% RFC 6891 §6.1.2
+wire_unknown_options_are_not_sent_back(Config) ->
+    Options = [
+        #dns_opt_unknown{id = 65001, bin = <<16#ab, 16#cd>>}, #dns_opt_cookie{client = <<1:64>>}
+    ],
+    ?assertMatch(
+        #dns_message{
+            rc = ?DNS_RCODE_NOERROR,
+            answers = [_],
+            additional = [#dns_optrr{dnssec = true, data = []}]
+        },
+        app_helper:exchange(Config, wire_query(?WIRE_NAME, Options, true))
+    ).
+
+wire_query(Name, Options, DnssecOk) ->
+    #dns_message{
+        id = dns:random_id(),
+        qc = 1,
+        adc = 1,
+        questions = [#dns_query{name = Name, type = ?DNS_TYPE_A}],
+        additional = [#dns_optrr{udp_payload_size = 1232, dnssec = DnssecOk, data = Options}]
+    }.
+
+wire_zone() ->
+    Soa = #dns_rr{
+        name = ?WIRE_ZONE,
+        type = ?DNS_TYPE_SOA,
+        ttl = 3600,
+        data = #dns_rrdata_soa{
+            mname = <<"ns1.", ?WIRE_ZONE/binary>>,
+            rname = <<"admin.", ?WIRE_ZONE/binary>>,
+            serial = 1,
+            refresh = 3600,
+            retry = 600,
+            expire = 86400,
+            minimum = 300
+        }
+    },
+    A = #dns_rr{
+        name = ?WIRE_NAME, type = ?DNS_TYPE_A, ttl = 60, data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
+    },
+    erldns_zone_codec:build_zone(?WIRE_ZONE, ~"digest", [Soa, A], []).
 
 def_opts() ->
     erldns_pipeline:def_opts().

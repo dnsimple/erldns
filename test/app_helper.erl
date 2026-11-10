@@ -7,10 +7,13 @@
     get_node/1,
     get_configured_port/3,
     reserve_port/0,
-    attach_telemetry_remote/4
+    attach_telemetry_remote/4,
+    start_listening/3,
+    exchange/2
 ]).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("dns_erlang/include/dns_records.hrl").
 
 -define(PEER_ATTEMPTS, 3).
 
@@ -87,6 +90,40 @@ get_configured_port(_Config, _, standard) ->
 
 get_node(Config) ->
     proplists:get_value(node, Config).
+
+%% Start erldns on a peer, with Env on top of a listener on 127.0.0.1 and with Zones loaded. The
+%% listener's UDP and TCP share a port, kept in the config as `port'. Stop it with stop/1.
+start_listening(Config, Env, Zones) ->
+    Port = reserve_port(),
+    Listener = #{name => inet_1, ip => {127, 0, 0, 1}, port => Port},
+    Config1 = start_per_suite(Config, [{erldns, [{listeners, [Listener]} | Env]}]),
+    Node = get_node(Config1),
+    [ok = erpc:call(Node, erldns_zone_cache, put_zone, [Zone]) || Zone <- Zones],
+    [{port, Port} | Config1].
+
+%% Send a query, as a message or already encoded, to the listener started by start_listening/3,
+%% over the config's `transport', and decode the response.
+exchange(Config, #dns_message{} = Query) ->
+    exchange(Config, dns:encode_message(Query));
+exchange(Config, Bin) when is_binary(Bin) ->
+    Port = proplists:get_value(port, Config),
+    Response =
+        case proplists:get_value(transport, Config) of
+            udp ->
+                {ok, Socket} = gen_udp:open(0, [binary, {active, false}]),
+                ok = gen_udp:send(Socket, {127, 0, 0, 1}, Port, Bin),
+                {ok, {_, _, Packet}} = gen_udp:recv(Socket, 0, 5000),
+                ok = gen_udp:close(Socket),
+                Packet;
+            tcp ->
+                Opts = [binary, {active, false}, {packet, 2}],
+                {ok, Socket} = gen_tcp:connect({127, 0, 0, 1}, Port, Opts, 5000),
+                ok = gen_tcp:send(Socket, Bin),
+                {ok, Packet} = gen_tcp:recv(Socket, 0, 5000),
+                ok = gen_tcp:close(Socket),
+                Packet
+        end,
+    dns:decode_message(Response).
 
 %% For listeners needing the same known port on UDP and TCP, where `port => 0'
 %% would resolve a different one per protocol.

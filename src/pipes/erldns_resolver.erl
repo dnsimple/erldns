@@ -52,7 +52,7 @@ or an exception (mapped to SERVFAIL).
 -spec deps() -> erldns_pipeline:deps().
 deps() ->
     #{
-        prerequisites => [erldns_questions],
+        prerequisites => [erldns_edns, erldns_questions],
         dependents => [erldns_sorter, erldns_section_counter]
     }.
 

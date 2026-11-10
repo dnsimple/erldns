@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A pipe placed between the two `erldns_packet_cache` appearances no longer passes for coming
   before the cache: a pipe is placed by its first appearance, and its dependents may not appear
   before it at all.
+- Responses no longer send back the EDNS options of the query, such as an empty NSID or the
+  client's cookie, nor its extended RCODE (#389).
 
 ### Changed
 
@@ -32,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   configured; `{dnssec, #{authenticated_data => true}}` sets it again (#394).
 - `erldns_edns` replaces `erldns_edns_max_payload_size` and goes first in the pipeline, before
   `erldns_questions`.
+- `erldns_edns` moves the query's EDNS options to the `query_edns_options` pipeline option, a map
+  from option code to option, and pipes add the response's with `erldns_edns:add_option/2`.
+  `erldns_resolver` and `erldns_packet_cache` require `erldns_edns`.
+- Queries that only differ by their EDNS options, such as each client's cookie, share packet cache
+  entries.
 
 ## v12.0.3
 
