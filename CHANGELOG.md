@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Added
+
+- A pipe's `deps/0` can list a dependency as `{optional, Module}`: it need not be in the pipeline,
+  but must be in its place when it is.
+
 ### Fixed
 
 - The packet cache no longer caches SERVFAIL or other errors, only NOERROR and NXDOMAIN (#393).
