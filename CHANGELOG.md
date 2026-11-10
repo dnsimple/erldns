@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before it at all.
 - Responses no longer send back the EDNS options of the query, such as an empty NSID or the
   client's cookie, nor its extended RCODE (#389).
+- Responses no longer send back other records the query carries in its additional section, and
+  REFUSED answers no longer send back its answer and authority sections.
 
 ### Changed
 

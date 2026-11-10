@@ -23,6 +23,7 @@ all() ->
         resolve_authoritative_ds_at_and_below_a_zone_cut,
         resolve_authoritative_nested_zone_cut_refers_to_the_topmost,
         resolve_drops_the_sections_of_the_request,
+        refused_drops_the_sections_of_the_request,
         negative_answers_carry_the_soa_minimum_ttl
     ].
 
@@ -461,6 +462,32 @@ resolve_drops_the_sections_of_the_request(_) ->
     {Answer, #{zonecut := none}} = erldns_resolver:call(Msg, Opts),
     ?assertMatch(#dns_message{aa = true, answers = [A], authority = []}, Answer),
     erldns_zone_cache:delete_zone(ZoneName).
+
+%% A name outside every zone is refused, and the request's answer and authority sections are not
+%% sent back: a NOTIFY carries an SOA in its answer section.
+refused_drops_the_sections_of_the_request(_) ->
+    erldns_zone_cache:start_link(),
+    QName = ~"refused.example",
+    Planted = #dns_rr{
+        name = QName, type = ?DNS_TYPE_NS, ttl = 1, data = #dns_rrdata_ns{dname = ~"ns.example."}
+    },
+    Msg = #dns_message{
+        questions = [#dns_query{name = QName, type = ?DNS_TYPE_A}],
+        answers = [Planted],
+        authority = [Planted]
+    },
+    Opts = erldns_resolver:prepare(#{
+        resolved => false, query_labels => dns_domain:split(QName), query_type => ?DNS_TYPE_A
+    }),
+    application:set_env(erldns, use_root_hints, false),
+    try
+        ?assertMatch(
+            #dns_message{rc = ?DNS_RCODE_REFUSED, answers = [], authority = []},
+            erldns_resolver:call(Msg, Opts)
+        )
+    after
+        application:unset_env(erldns, use_root_hints)
+    end.
 
 %% RFC 2308 §3: the SOA in the authority section of a negative answer is served at the minimum
 %% of its own TTL and its MINIMUM field, so that resolvers and caches in front of us (an edge
