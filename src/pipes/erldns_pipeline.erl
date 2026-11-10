@@ -24,6 +24,12 @@ The following are enabled by default, see their documentation for details:
 - `m:erldns_section_counter`
 - `m:erldns_empty_verification`
 
+## Optional pipes
+
+The following can be added, see their documentation for where:
+
+- `m:erldns_edns_ede`
+
 ## Types of pipelines
 
 There are two kind of pipes: function pipes and module pipes.

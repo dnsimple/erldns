@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `erldns_resolver` and `erldns_packet_cache` require `erldns_edns`.
 - Queries that only differ by their EDNS options, such as each client's cookie, share packet cache
   entries.
+- `erldns_edns_ede` requires `erldns_edns`, and no longer adds an OPT RR to the response of a
+  query that had none, as RFC 6891 §7 forbids.
 
 ## v12.0.3
 
