@@ -78,7 +78,7 @@ tcp_does_nothing(_) ->
     Msg = #dns_message{
         qc = 1, anc = 1, adc = 1, questions = [Q], answers = [Ans], additional = [Ad]
     },
-    ?assertEqual(Msg, erldns_edns_max_payload_size:call(Msg, Opts)).
+    ?assertEqual(Msg, erldns_edns:call(Msg, Opts)).
 
 udp_leaves_additional_empty_if_provided_empty(_) ->
     Name = ~"example.com",
@@ -86,7 +86,7 @@ udp_leaves_additional_empty_if_provided_empty(_) ->
     Q = #dns_query{name = Name, type = ?DNS_TYPE_A},
     Ans = #dns_rr{name = Name, type = ?DNS_TYPE_A, data = #dns_rrdata_a{ip = {1, 2, 3, 4}}},
     Msg = #dns_message{qc = 1, anc = 1, questions = [Q], answers = [Ans]},
-    ?assertEqual(Msg, erldns_edns_max_payload_size:call(Msg, Opts)).
+    ?assertEqual(Msg, erldns_edns:call(Msg, Opts)).
 
 udp_replaces_if_below_minimum(_) ->
     Name = ~"example.com",
@@ -99,7 +99,7 @@ udp_replaces_if_below_minimum(_) ->
     },
     ?assertEqual(
         Msg#dns_message{additional = [Ad#dns_optrr{udp_payload_size = ?MAX_PACKET_SIZE}]},
-        erldns_edns_max_payload_size:call(Msg, Opts)
+        erldns_edns:call(Msg, Opts)
     ).
 
 udp_replaces_if_above_maximum(_) ->
@@ -113,7 +113,7 @@ udp_replaces_if_above_maximum(_) ->
     },
     ?assertEqual(
         Msg#dns_message{additional = [Ad#dns_optrr{udp_payload_size = ?MAX_PACKET_SIZE}]},
-        erldns_edns_max_payload_size:call(Msg, Opts)
+        erldns_edns:call(Msg, Opts)
     ).
 
 udp_does_nothing_if_reasonable_value(_) ->
@@ -125,7 +125,7 @@ udp_does_nothing_if_reasonable_value(_) ->
     Msg = #dns_message{
         qc = 1, anc = 1, adc = 1, questions = [Q], answers = [Ans], additional = [Ad]
     },
-    ?assertEqual(Msg, erldns_edns_max_payload_size:call(Msg, Opts)).
+    ?assertEqual(Msg, erldns_edns:call(Msg, Opts)).
 
 dnssec_extraction(_Config) ->
     Glue = #dns_rr{name = ~"ns1.example.com", type = ?DNS_TYPE_A},
@@ -241,7 +241,7 @@ max_payload_size_optrr_not_first(_Config) ->
             Msg = #dns_message{
                 adc = length(Additional), additional = Additional
             },
-            Result = erldns_edns_max_payload_size:call(Msg, #{transport => udp}),
+            Result = erldns_edns:call(Msg, #{transport => udp}),
             [#dns_optrr{udp_payload_size = Size}] =
                 [OptRR || #dns_optrr{} = OptRR <- Result#dns_message.additional],
             ?assertEqual(1232, Size, Label)
@@ -257,7 +257,7 @@ max_payload_size_optrr_not_first(_Config) ->
     Msg2 = #dns_message{adc = 2, additional = [ARecord, InRange]},
     ?assertEqual(
         [ARecord, InRange],
-        (erldns_edns_max_payload_size:call(Msg2, #{transport => udp}))#dns_message.additional
+        (erldns_edns:call(Msg2, #{transport => udp}))#dns_message.additional
     ).
 
 ede_pipeline_appends_to_optrr(_Config) ->
