@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `erldns_edns_nsid` identifies the server to clients that ask, with NSID (RFC 5001) and the
   `id.server` and `hostname.bind` CH TXT queries (RFC 4892), once `{edns_nsid, #{id => Id}}` is
   set (#390).
+- `erldns_edns_ecs` supports EDNS Client Subnet (RFC 7871): it answers malformed options with
+  FORMERR, gives pipes the client's network in the `client_subnet` pipeline option, and sends the
+  option back with the scope those pipes set with `erldns_edns_ecs:set_scope/2`. It is not in the
+  default pipeline.
 
 ### Fixed
 

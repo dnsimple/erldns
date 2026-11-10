@@ -24,6 +24,7 @@ additional section is dropped: the response's additional records are its own.
 An EDNS option is handled by a pipe of its own, which lists `erldns_edns` as a prerequisite, reads
 the query's option from `query_edns_options` and adds the response's with `add_option/2`.
 
+- `m:erldns_edns_ecs` gives pipes the client's network with EDNS Client Subnet (RFC 7871).
 - `m:erldns_edns_ede` adds Extended DNS Errors (RFC 8914) to error responses.
 - `m:erldns_edns_nsid` identifies the server with NSID (RFC 5001).
 
