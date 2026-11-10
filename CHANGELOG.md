@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A pipe's `deps/0` can list a dependency as `{optional, Module}`: it need not be in the pipeline,
   but must be in its place when it is.
+- `erldns_edns_nsid` identifies the server to clients that ask, with NSID (RFC 5001) and the
+  `id.server` and `hostname.bind` CH TXT queries (RFC 4892), once `{edns_nsid, #{id => Id}}` is
+  set (#390).
 
 ### Fixed
 
