@@ -48,7 +48,7 @@ groups() ->
             ede_pipeline_noerror_no_ede,
             ede_pipeline_refused,
             ede_pipeline_servfail,
-            ede_pipeline_creates_optrr,
+            ede_pipeline_needs_query_optrr,
             ede_pipeline_appends_to_optrr,
             ede_pipeline_optrr_not_first,
             max_payload_size_optrr_not_first
@@ -280,34 +280,33 @@ ede_extraction(_Config) ->
 
 %% Test that NXDOMAIN does NOT get EDE (it's a valid negative response)
 ede_pipeline_nxdomain_no_ede(_Config) ->
-    Msg = #dns_message{rc = ?DNS_RCODE_NXDOMAIN},
+    Msg = #dns_message{rc = ?DNS_RCODE_NXDOMAIN, additional = [#dns_optrr{}]},
     Result = erldns_edns_ede:call(Msg, def_opts(#{resolved => true})),
     ?assertEqual([], erldns_edns:get_ede_errors(Result)).
 
 %% Test that NOERROR does NOT get EDE (it's a successful response)
 ede_pipeline_noerror_no_ede(_Config) ->
-    Msg = #dns_message{rc = ?DNS_RCODE_NOERROR},
+    Msg = #dns_message{rc = ?DNS_RCODE_NOERROR, additional = [#dns_optrr{}]},
     Result = erldns_edns_ede:call(Msg, def_opts(#{resolved => true})),
     ?assertEqual([], erldns_edns:get_ede_errors(Result)).
 
 %% Test that REFUSED with resolved=false gets NOT_AUTHORITATIVE
 ede_pipeline_refused(_Config) ->
-    Msg = #dns_message{rc = ?DNS_RCODE_REFUSED},
+    Msg = #dns_message{rc = ?DNS_RCODE_REFUSED, additional = [#dns_optrr{}]},
     Result = erldns_edns_ede:call(Msg, def_opts()),
     ?assertMatch([{?DNS_EDE_NOT_AUTHORITATIVE, _}], erldns_edns:get_ede_errors(Result)).
 
 %% Test that SERVFAIL gets OTHER_ERROR by default
 ede_pipeline_servfail(_Config) ->
-    Msg = #dns_message{rc = ?DNS_RCODE_SERVFAIL},
+    Msg = #dns_message{rc = ?DNS_RCODE_SERVFAIL, additional = [#dns_optrr{}]},
     Result = erldns_edns_ede:call(Msg, def_opts()),
     ?assertMatch([{?DNS_EDE_OTHER_ERROR, _}], erldns_edns:get_ede_errors(Result)).
 
-%% Test that pipeline creates OPT RR if it doesn't exist
-ede_pipeline_creates_optrr(_Config) ->
+%% RFC 6891 §7: a query without an OPT RR gets none back, so no EDE either.
+ede_pipeline_needs_query_optrr(_Config) ->
     Msg = #dns_message{rc = ?DNS_RCODE_REFUSED},
     PreparedOpts = erldns_edns_ede:prepare(def_opts()),
-    Result = erldns_edns_ede:call(Msg, PreparedOpts),
-    ?assertMatch([#dns_optrr{} | _], Result#dns_message.additional).
+    ?assertEqual(Msg, erldns_edns_ede:call(Msg, PreparedOpts)).
 
 %% Test that pipeline appends to existing OPT RR
 %% RFC6891§6.1.1: an OPT RR "MAY be placed anywhere within the additional data
@@ -346,8 +345,7 @@ ede_pipeline_optrr_not_first(_Config) ->
      || {Label, Additional} <- [
             {"[OPT, A]", [#dns_optrr{dnssec = true}, ARecord]},
             {"[A, OPT]", [ARecord, #dns_optrr{dnssec = true}]},
-            {"[A, A, OPT]", [ARecord, ARecord, #dns_optrr{dnssec = true}]},
-            {"[A] (no OPT yet)", [ARecord]}
+            {"[A, A, OPT]", [ARecord, ARecord, #dns_optrr{dnssec = true}]}
         ]
     ].
 
