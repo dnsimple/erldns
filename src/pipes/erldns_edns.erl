@@ -12,8 +12,9 @@ what the response would send back. This pipe makes it the response's:
   none: a server must ignore options it doesn't understand (RFC 6891 §6.1.2), and sending one back
   would claim support for it. A response only carries the options pipes add with `add_option/2`.
 - The extended RCODE is reset to 0.
-- The DO bit is kept, as it must be copied to the response (RFC 3225 §3), and so is the version,
-  which dns_erlang answers with BADVERS when it doesn't support it.
+- The DO bit is kept, as it must be copied to the response (RFC 3225 §3).
+- A query with an EDNS version above 0 gets BADVERS, with no answer and no options, and the
+  pipeline stops there (RFC 6891 §6.1.3).
 - Over UDP, the payload size is capped, see below.
 
 A query without an OPT RR gets none back (RFC 6891 §7). Any other record the query carries in its
@@ -147,6 +148,10 @@ get_ede_errors([], Acc) ->
 %% Make the query's OPT RR the response's, and move its options to the pipeline opts.
 -spec handle_optrr(dns:message(), dns:optrr(), erldns_pipeline:opts()) ->
     erldns_pipeline:return().
+handle_optrr(Msg, #dns_optrr{version = Version} = OptRR, #{transport := Transport}) when
+    Version > ?DNS_EDNS_MAX_VERSION
+->
+    {stop, badvers(Msg, response_optrr(OptRR, Transport))};
 handle_optrr(Msg, #dns_optrr{data = []} = OptRR, #{transport := Transport}) ->
     with_optrr(Msg, OptRR, Transport);
 handle_optrr(Msg, #dns_optrr{data = Options} = OptRR, #{transport := Transport} = Opts) ->
@@ -180,6 +185,25 @@ with_optrr(
     Msg;
 with_optrr(Msg, OptRR, Transport) ->
     Msg#dns_message{adc = 1, additional = [response_optrr(OptRR, Transport)]}.
+
+%% BADVERS (16) is an extended RCODE of 1 over a header RCODE of 0. The pipeline stops here, so the
+%% header counts are set too.
+-spec badvers(dns:message(), dns:optrr()) -> dns:message().
+badvers(Msg, OptRR) ->
+    Msg#dns_message{
+        qr = true,
+        aa = false,
+        ad = false,
+        rc = ?DNS_RCODE_NOERROR,
+        anc = 0,
+        auc = 0,
+        adc = 1,
+        answers = [],
+        authority = [],
+        additional = [
+            OptRR#dns_optrr{version = ?DNS_EDNS_MAX_VERSION, ext_rcode = ?DNS_ERCODE_BADVERS}
+        ]
+    }.
 
 %% Folding from the right lets the first option of each code overwrite later ones.
 -spec query_edns_options([dns:optrr_elem()]) -> query_edns_options().

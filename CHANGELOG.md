@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   client's cookie, nor its extended RCODE (#389).
 - Responses no longer send back other records the query carries in its additional section, and
   REFUSED answers no longer send back its answer and authority sections.
+- A query with an EDNS version above 0 gets BADVERS and nothing else, as RFC 6891 §6.1.3 requires,
+  instead of an answer with BADVERS.
 
 ### Changed
 

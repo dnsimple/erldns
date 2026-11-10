@@ -33,6 +33,7 @@ groups() ->
             query_without_optrr_is_untouched,
             optrr_without_options_is_untouched,
             query_records_are_dropped,
+            unsupported_version_gets_badvers,
             add_option_to_optrr_anywhere,
             add_option_without_optrr,
             resolver_and_cache_require_edns,
@@ -78,7 +79,8 @@ wire_tests() ->
     [
         wire_unknown_options_are_not_sent_back,
         wire_refused_carries_only_ede,
-        wire_query_without_edns_gets_no_optrr
+        wire_query_without_edns_gets_no_optrr,
+        wire_unsupported_version_gets_badvers
     ].
 
 wire_pipeline() ->
@@ -204,7 +206,6 @@ query_options_move_to_opts(_) ->
     OptRR = #dns_optrr{
         udp_payload_size = 1232,
         ext_rcode = 1,
-        version = 1,
         dnssec = true,
         data = [Nsid, Cookie, Unknown]
     },
@@ -240,6 +241,34 @@ query_records_are_dropped(_) ->
     ?assertMatch(
         #dns_message{adc = 0, additional = []},
         erldns_edns:call(query([glue()]), edns_opts(udp))
+    ).
+
+%% RFC 6891 §6.1.3: BADVERS and nothing else, at version 0, the highest this server implements.
+unsupported_version_gets_badvers(_) ->
+    OptRR = #dns_optrr{
+        udp_payload_size = 4096, version = 1, dnssec = true, data = [#dns_opt_nsid{data = <<>>}]
+    },
+    Query = (query([OptRR]))#dns_message{auc = 1, authority = [glue()]},
+    ?assertMatch(
+        {stop, #dns_message{
+            qr = true,
+            rc = ?DNS_RCODE_NOERROR,
+            anc = 0,
+            auc = 0,
+            adc = 1,
+            answers = [],
+            authority = [],
+            additional = [
+                #dns_optrr{
+                    udp_payload_size = 1232,
+                    ext_rcode = ?DNS_ERCODE_BADVERS,
+                    version = 0,
+                    dnssec = true,
+                    data = []
+                }
+            ]
+        }},
+        erldns_edns:call(Query, edns_opts(udp))
     ).
 
 add_option_to_optrr_anywhere(_) ->
@@ -500,6 +529,21 @@ wire_query_without_edns_gets_no_optrr(Config) ->
             {?WIRE_NAME, ?DNS_RCODE_NOERROR}, {~"elsewhere.example", ?DNS_RCODE_REFUSED}
         ]
     ].
+
+%% RFC 6891 §6.1.3. dns_erlang won't encode a version above 0, so the query's OPT RR, encoded last
+%% and without options, gets its version byte set by hand.
+wire_unsupported_version_gets_badvers(Config) ->
+    Bin = dns:encode_message(wire_query(?WIRE_NAME, [], false)),
+    Head = byte_size(Bin) - 5,
+    <<Prefix:Head/binary, 0, Flags:2/binary, 0:16>> = Bin,
+    ?assertMatch(
+        #dns_message{
+            rc = ?DNS_RCODE_NOERROR,
+            answers = [],
+            additional = [#dns_optrr{version = 0, ext_rcode = ?DNS_ERCODE_BADVERS, data = []}]
+        },
+        app_helper:exchange(Config, <<Prefix/binary, 1, Flags/binary, 0:16>>)
+    ).
 
 wire_query(Name, Options, DnssecOk) ->
     #dns_message{
