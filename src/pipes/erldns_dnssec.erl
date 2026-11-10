@@ -143,14 +143,14 @@ call(
         dnssec_authenticated_data := AD
     } = Opts
 ) ->
-    RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Msg)),
+    RequestDnssec = erldns_edns:dnssec_ok(Msg),
     Opts1 = Opts#{dnssec => RequestDnssec},
     case RequestDnssec of
         false -> {Msg, Opts1};
         true -> {handle(Msg, Zone, QLabels, QName, QType, Zonecut, Mappers, AD), Opts1}
     end;
 call(Msg, Opts) ->
-    RequestDnssec = proplists:get_bool(dnssec, erldns_edns:get_opts(Msg)),
+    RequestDnssec = erldns_edns:dnssec_ok(Msg),
     {Msg, Opts#{dnssec => RequestDnssec}}.
 
 -doc """

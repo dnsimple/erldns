@@ -3,7 +3,7 @@
 
 -include_lib("dns_erlang/include/dns_records.hrl").
 
--export([get_opts/1, get_ede_errors/1]).
+-export([get_opts/1, dnssec_ok/1, get_ede_errors/1]).
 
 %% Get a property list of EDNS0 options.
 %%
@@ -21,6 +21,14 @@ get_opts([_RR | Rest], Opts) ->
     get_opts(Rest, Opts);
 get_opts([], Opts) ->
     lists:reverse(Opts).
+
+%% Whether the message's OPT RR sets the DO bit (RFC 3225).
+-spec dnssec_ok(dns:message()) -> boolean().
+dnssec_ok(#dns_message{additional = Additional}) ->
+    case lists:keyfind(dns_optrr, 1, Additional) of
+        #dns_optrr{dnssec = DnssecOk} -> DnssecOk;
+        false -> false
+    end.
 
 %% Extract Extended DNS Errors from a message.
 %%
