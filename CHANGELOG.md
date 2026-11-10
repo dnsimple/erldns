@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Added
+
+- `erldns_edns_nsid` identifies the server to clients that ask, with NSID (RFC 5001) and the
+  `id.server` and `hostname.bind` CH TXT queries (RFC 4892), once `{edns_nsid, #{id => Id}}` is
+  set (#390).
+
 ### Fixed
 
 - The packet cache no longer caches SERVFAIL or other errors, only NOERROR and NXDOMAIN (#393).

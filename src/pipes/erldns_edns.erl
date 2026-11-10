@@ -25,6 +25,7 @@ An EDNS option is handled by a pipe of its own, which lists `erldns_edns` as a p
 the query's option from `query_edns_options` and adds the response's with `add_option/2`.
 
 - `m:erldns_edns_ede` adds Extended DNS Errors (RFC 8914) to error responses.
+- `m:erldns_edns_nsid` identifies the server with NSID (RFC 5001).
 
 A pipe that adds an option depending on the query must run before the first
 `m:erldns_packet_cache`, which looks answers up by the response's OPT RR as it is at that point.
