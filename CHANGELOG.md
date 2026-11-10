@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The packet cache now hits answers with additional records, such as glue for NS and MX targets.
 - The packet cache ignores the case of names, and a hit answers with the request's question, ID
   and RD bit (#391).
+- `erldns_pipeline` now checks every dependency a pipe declares, where it only checked the last
+  of each list. A pipeline that used to start can now fail to, for example without
+  `erldns_sorter` after `erldns_resolver`, or without `erldns_questions` before `erldns_dnssec`.
 
 ### Changed
 
