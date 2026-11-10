@@ -13,7 +13,10 @@ all() ->
         is_enabled_default,
         start_when_disabled,
         start_when_enabled_with_default_ttl,
-        start_when_enabled_with_custom_ttl
+        start_when_enabled_with_custom_ttl,
+        errors_are_not_cached,
+        answers_with_additional_records_are_hit,
+        names_are_case_insensitive
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -52,13 +55,43 @@ start_when_enabled_with_custom_ttl(_) ->
     ?assertMatch({ok, _}, erldns_packet_cache:start_link()),
     test_calls().
 
+errors_are_not_cached(_) ->
+    start_cache(),
+    Msg0 = query(~"example.com", ?DNS_TYPE_A),
+    Opts = opts(Msg0),
+    {Msg1, Opts1} = erldns_packet_cache:call(Msg0, Opts),
+    ServFail = Msg1#dns_message{aa = true, rc = ?DNS_RCODE_SERVFAIL},
+    ?assertEqual(ServFail, erldns_packet_cache:call(ServFail, Opts1)),
+    ?assertMatch({_, #{erldns_packet_cache := {miss, _}}}, erldns_packet_cache:call(Msg0, Opts)).
+
+answers_with_additional_records_are_hit(_) ->
+    start_cache(),
+    Msg0 = (query(~"example.com", ?DNS_TYPE_MX))#dns_message{additional = [#dns_optrr{}]},
+    Opts = opts(Msg0),
+    {Msg1, Opts1} = erldns_packet_cache:call(Msg0, Opts),
+    Glue = #dns_rr{name = <<"mx.example.com">>, type = ?DNS_TYPE_A},
+    Answer = Msg1#dns_message{aa = true, additional = [#dns_optrr{}, Glue]},
+    {_, #{erldns_packet_cache := cached}} = erldns_packet_cache:call(Answer, Opts1),
+    ?assertMatch({Answer, #{resolved := true}}, erldns_packet_cache:call(Msg0, Opts)).
+
+names_are_case_insensitive(_) ->
+    start_cache(),
+    Msg0 = query(~"Example.COM", ?DNS_TYPE_A),
+    {Msg1, Opts1} = erldns_packet_cache:call(Msg0, opts(Msg0)),
+    Answer = Msg1#dns_message{qr = true, aa = true, answers = [#dns_rr{name = ~"example.com"}]},
+    {_, #{erldns_packet_cache := cached}} = erldns_packet_cache:call(Answer, Opts1),
+    Msg2 = (query(~"eXAMPLE.com", ?DNS_TYPE_A))#dns_message{id = 42, rd = true},
+    {Hit, #{resolved := true}} = erldns_packet_cache:call(Msg2, opts(Msg2)),
+    ?assertEqual(
+        Answer#dns_message{id = 42, rd = true, questions = Msg2#dns_message.questions}, Hit
+    ).
+
 test_calls() ->
-    Qs = [#dns_query{name = <<"example.com">>, type = ?DNS_TYPE_A}],
-    Msg0 = #dns_message{qc = 1, questions = Qs},
-    Opts = erldns_packet_cache:prepare(def_opts()),
+    Msg0 = query(~"example.com", ?DNS_TYPE_A),
+    Opts = opts(Msg0),
     %% test that the first call is a miss
     {Msg1, Opts1} = erldns_packet_cache:call(Msg0, Opts),
-    ?assertMatch(#{erldns_packet_cache := miss}, Opts1),
+    ?assertMatch(#{erldns_packet_cache := {miss, _}}, Opts1),
     %% test that a consecutive call with Authoritative flag seg to true gets cached
     {_Msg2, Opts2} = erldns_packet_cache:call(Msg1#dns_message{aa = true}, Opts1),
     ?assertMatch(#{erldns_packet_cache := cached}, Opts2),
@@ -71,7 +104,19 @@ test_calls() ->
     %% test that after a cleared cache next checks are misses
     _ = erldns_packet_cache:clear(),
     {_, Opts4} = erldns_packet_cache:call(Msg0, Opts),
-    ?assertMatch(#{erldns_packet_cache := miss}, Opts4).
+    ?assertMatch(#{erldns_packet_cache := {miss, _}}, Opts4).
+
+start_cache() ->
+    application:set_env(erldns, packet_cache, #{}),
+    {ok, _} = pg:start_link(erldns),
+    {ok, _} = erldns_packet_cache:start_link().
+
+query(Name, Type) ->
+    #dns_message{qc = 1, questions = [#dns_query{name = Name, type = Type}]}.
+
+opts(Msg) ->
+    {Msg, Opts} = erldns_questions:call(Msg, erldns_packet_cache:prepare(def_opts())),
+    Opts.
 
 def_opts() ->
     erldns_pipeline:def_opts().

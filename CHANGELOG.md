@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Fixed
+
+- The packet cache no longer caches SERVFAIL or other errors, only NOERROR and NXDOMAIN (#393).
+- The packet cache now hits answers with additional records, such as glue for NS and MX targets.
+- The packet cache ignores the case of names, and a hit answers with the request's question, ID
+  and RD bit (#391).
+
+### Changed
+
+- `erldns_packet_cache` requires `erldns_questions` earlier in the pipeline.
+
 ## v12.0.3
 
 ### Fixed
