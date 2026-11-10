@@ -41,6 +41,7 @@ all() ->
         cname_into_delegation_signs_the_chain_but_not_the_ns,
         nodata_at_insecure_delegation_omits_glue_from_the_nsec,
         ds_query_at_secure_delegation_is_answered,
+        ad_is_set_only_when_configured,
         ds_query_below_a_cut_is_a_referral,
         nested_cut_refers_to_the_topmost_delegation,
         delegation_proof_is_owned_by_the_lowercased_name,
@@ -72,6 +73,7 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, _Config) ->
     erldns_zone_cache:delete_zone(?DELEGATION_ZONE),
     application:unset_env(erldns, zones),
+    application:unset_env(erldns, dnssec),
     ok.
 
 verify_ksk_signed(_) ->
@@ -85,7 +87,7 @@ verify_ksk_signed(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, false),
     ?assertMatch(
         #dns_message{
             answers =
@@ -115,7 +117,7 @@ verify_ksk_signed_alg13(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, false),
     ?assertMatch(
         #dns_message{
             answers =
@@ -145,7 +147,7 @@ verify_ksk_signed_alg14(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, false),
     ?assertMatch(
         #dns_message{
             answers =
@@ -187,7 +189,7 @@ verify_zsk_signed(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, false),
     ?assertMatch(
         #dns_message{
             answers =
@@ -228,7 +230,7 @@ verify_zsk_signed_alg13(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, false),
     ?assertMatch(
         #dns_message{
             answers =
@@ -269,7 +271,7 @@ verify_zsk_signed_alg14(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, false),
     ?assertMatch(
         #dns_message{
             answers =
@@ -299,7 +301,7 @@ verify_ksk_signed_alg15(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, false),
     ?assertMatch(
         #dns_message{
             answers =
@@ -329,7 +331,7 @@ verify_ksk_signed_alg16(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, false),
     ?assertMatch(
         #dns_message{
             answers =
@@ -370,7 +372,7 @@ verify_zsk_signed_alg15(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, false),
     ?assertMatch(
         #dns_message{
             answers =
@@ -411,7 +413,7 @@ verify_zsk_signed_alg16(_) ->
         qc = 1, anc = 1, auc = 1, questions = [Q], answers = [A], additional = [Ad]
     },
     Zone = erldns_zone_cache:get_authoritative_zone(Labels),
-    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, true),
+    Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, false),
     ?assertMatch(
         #dns_message{
             answers =
@@ -657,7 +659,7 @@ nsec_signed_for_max_length_qname(_Config) ->
     },
     Zone = erldns_zone_cache:get_authoritative_zone(QLabels),
     #dns_message{authority = Authority} =
-        erldns_dnssec:handle(Msg0, Zone, QLabels, QName, QType, none, #{}, true),
+        erldns_dnssec:handle(Msg0, Zone, QLabels, QName, QType, none, #{}, false),
     Nsec = lists:keyfind(?DNS_TYPE_NSEC, #dns_rr.type, Authority),
     ?assertMatch(#dns_rr{name = QName, data = #dns_rrdata_nsec{}}, Nsec),
     ?assertMatch(
@@ -735,7 +737,9 @@ negative_answer_trims_the_soa_and_its_rrsig(_) ->
         authority = [TrimmedSoa],
         additional = [Do]
     },
-    Negative = erldns_dnssec:handle(Negative0, Zone, QLabels, QName, ?DNS_TYPE_A, none, #{}, true),
+    Negative = erldns_dnssec:handle(
+        Negative0, Zone, QLabels, QName, ?DNS_TYPE_A, none, #{}, false
+    ),
     Authority = Negative#dns_message.authority,
     ?assertMatch([#dns_rr{ttl = 86400}], lists:filter(fun erldns_records:is_soa/1, Authority)),
     ?assertMatch(
@@ -754,7 +758,7 @@ negative_answer_trims_the_soa_and_its_rrsig(_) ->
         additional = [Do]
     },
     Positive = erldns_dnssec:handle(
-        Positive0, Zone, ZoneLabels, ZoneName, ?DNS_TYPE_SOA, none, #{}, true
+        Positive0, Zone, ZoneLabels, ZoneName, ?DNS_TYPE_SOA, none, #{}, false
     ),
     Answers = Positive#dns_message.answers,
     ?assertMatch([#dns_rr{ttl = 100000}], lists:filter(fun erldns_records:is_soa/1, Answers)),
@@ -914,7 +918,7 @@ ds_query_at_secure_delegation_is_answered(_Config) ->
     Zone = put_delegation_zone(),
     Cut = in_zone(~"secure"),
     ZskTag = zsk_tag(Zone),
-    #dns_message{aa = true, ad = true, answers = Answers, authority = []} =
+    #dns_message{aa = true, ad = false, answers = Answers, authority = []} =
         resolve(Cut, ?DNS_TYPE_DS),
     ?assertMatch(
         [
@@ -925,6 +929,17 @@ ds_query_at_secure_delegation_is_answered(_Config) ->
         ],
         Answers
     ).
+
+%% RFC 4035 §3.1.6: authoritative data is reported authentic only when configured to be.
+ad_is_set_only_when_configured(_Config) ->
+    put_delegation_zone(),
+    Answer = in_zone(~"target"),
+    Denial = in_zone(~"missing"),
+    ?assertMatch(#dns_message{ad = false, answers = [_ | _]}, resolve(Answer, ?DNS_TYPE_A)),
+    ?assertMatch(#dns_message{ad = false, answers = []}, resolve(Denial, ?DNS_TYPE_A)),
+    application:set_env(erldns, dnssec, #{authenticated_data => true}),
+    ?assertMatch(#dns_message{ad = true, answers = [_ | _]}, resolve(Answer, ?DNS_TYPE_A)),
+    ?assertMatch(#dns_message{ad = true, answers = []}, resolve(Denial, ?DNS_TYPE_A)).
 
 %% A DS below a cut, be it at glue or at an occluded nested cut, is the child's to deny: the
 %% answer is the referral, not a denial signed by the parent over what it happens to store there.
@@ -1017,7 +1032,7 @@ error_from_the_resolver_is_left_alone(_Config) ->
         additional = [#dns_optrr{dnssec = true}]
     },
     ?assertEqual(
-        Msg, erldns_dnssec:handle(Msg, Zone, QLabels, QName, ?DNS_TYPE_A, none, #{}, true)
+        Msg, erldns_dnssec:handle(Msg, Zone, QLabels, QName, ?DNS_TYPE_A, none, #{}, false)
     ).
 
 %% RFC 4035 §2.2: an RRSIG carries the TTL of the RRset it covers. The NSEC of a delegation takes
