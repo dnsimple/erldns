@@ -691,27 +691,21 @@ validate_deps_satisfied(Module, OriginalPipes, Deps) ->
         lists:splitwith(fun(P) -> P =/= Module end, OriginalPipes),
     Prerequisites = maps:get(prerequisites, Deps, []),
     Dependents = maps:get(dependents, Deps, []),
-    DepHint = ~"Prerequisite must appear earlier in pipeline",
-    PreHint = ~"Dependent must appear later in pipeline",
-    PreSafisfied = ensure_satisfied(Module, ModulesDefinedBefore, PreHint, Prerequisites),
-    DepSafisfied = ensure_satisfied(Module, ModulesDefinedAfter, DepHint, Dependents),
-    case {PreSafisfied, DepSafisfied} of
-        {true, true} -> ok;
-        {{error, Reason}, _} -> {error, Reason};
-        {_, {error, Reason}} -> {error, Reason}
+    PreHint = ~"Prerequisite must appear earlier in pipeline",
+    DepHint = ~"Dependent must appear later in pipeline",
+    maybe
+        ok ?= ensure_satisfied(Module, ModulesDefinedBefore, PreHint, Prerequisites),
+        ensure_satisfied(Module, ModulesDefinedAfter, DepHint, Dependents)
     end.
 
-ensure_satisfied(Module, ModulesDefinedBefore, Hint, List) ->
-    Fun = fun(Requires, _) ->
-        lists:member(Requires, ModulesDefinedBefore) orelse
-            {error,
-                {unsatisfied_dependency, #{
-                    pipe => Module,
-                    requires => Requires,
-                    hint => Hint
-                }}}
-    end,
-    lists:foldl(Fun, true, List).
+-spec ensure_satisfied(module(), [pipe()], binary(), [module()]) -> ok | {error, dynamic()}.
+ensure_satisfied(Module, Pipes, Hint, Required) ->
+    case [Requires || Requires <- Required, not lists:member(Requires, Pipes)] of
+        [] ->
+            ok;
+        [Requires | _] ->
+            {error, {unsatisfied_dependency, #{pipe => Module, requires => Requires, hint => Hint}}}
+    end.
 
 def_opts() ->
     #{

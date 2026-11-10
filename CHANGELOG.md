@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The packet cache now hits answers with additional records, such as glue for NS and MX targets.
 - The packet cache ignores the case of names, and a hit answers with the request's question, ID
   and RD bit (#391).
+- A pipeline fails to start when any of a pipe's dependencies is missing, not only the last one
+  it lists.
 
 ### Changed
 
