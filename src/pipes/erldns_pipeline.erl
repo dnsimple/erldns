@@ -706,14 +706,13 @@ validate_deps_satisfied(Module, OriginalPipes, Deps) ->
     IsEarlier = fun(Dep) -> lists:member(Dep, Before) end,
     IsLater = fun(Dep) -> lists:member(Dep, After) andalso not lists:member(Dep, Before) end,
     IsPresent = fun(Dep) -> lists:member(Dep, OriginalPipes) end,
+    Prerequisites = maps:get(prerequisites, Deps, []),
+    Dependents = maps:get(dependents, Deps, []),
     PreHint = ~"Prerequisite must appear earlier in pipeline",
     DepHint = ~"Dependent must appear later in pipeline",
     maybe
-        ok ?=
-            ensure_satisfied(
-                Module, maps:get(prerequisites, Deps, []), IsEarlier, IsPresent, PreHint
-            ),
-        ensure_satisfied(Module, maps:get(dependents, Deps, []), IsLater, IsPresent, DepHint)
+        ok ?= ensure_satisfied(Module, Prerequisites, IsEarlier, IsPresent, PreHint),
+        ensure_satisfied(Module, Dependents, IsLater, IsPresent, DepHint)
     end.
 
 -spec ensure_satisfied(Module, Dependencies, IsPlaced, IsPresent, Hint) ->
@@ -725,7 +724,8 @@ when
     IsPresent :: fun((module()) -> boolean()),
     Hint :: binary().
 ensure_satisfied(Module, Dependencies, IsPlaced, IsPresent, Hint) ->
-    case [D || D <- Dependencies, not is_satisfied(D, IsPlaced, IsPresent)] of
+    Unsatisfied = [D || D <- Dependencies, not is_satisfied(D, IsPlaced, IsPresent)],
+    case Unsatisfied of
         [] ->
             ok;
         [Dependency | _] ->
