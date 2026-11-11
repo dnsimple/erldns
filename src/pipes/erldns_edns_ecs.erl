@@ -84,7 +84,9 @@ prepare(Opts) ->
 call(Msg, #{query_edns_options := #{?DNS_EOPTCODE_ECS := Ecs}} = Opts) ->
     case client_subnet(Ecs) of
         {ok, Subnet} ->
-            {erldns_edns:add_option(Msg, Ecs), Opts#{client_subnet => Subnet}};
+            Msg1 = erldns_edns:add_option(Msg, Ecs),
+            Opts1 = Opts#{client_subnet => Subnet},
+            {Msg1, Opts1};
         error ->
             {stop, formerr(Msg)}
     end;
@@ -99,9 +101,8 @@ Does nothing when the response has no ECS option.
 """.
 -spec set_scope(dns:message(), 0..128) -> dns:message().
 set_scope(Msg, Scope) when is_integer(Scope), 0 =< Scope ->
-    erldns_edns:update_options(Msg, fun(Options) ->
-        [with_scope(Option, Scope) || Option <- Options]
-    end).
+    WithScope = fun(Options) -> [with_scope(Option, Scope) || Option <- Options] end,
+    erldns_edns:update_options(Msg, WithScope).
 
 -spec with_scope(dns:optrr_elem(), 0..128) -> dns:optrr_elem().
 with_scope(#dns_opt_ecs{family = Family} = Ecs, Scope) ->
@@ -119,8 +120,10 @@ client_subnet(#dns_opt_ecs{
     maybe
         {ok, Bits} ?= address_bits(Family),
         true ?= Source =< Bits andalso byte_size(Address) =:= (Source + 7) div 8,
-        <<_:Source, 0:(bit_size(Address) - Source)>> ?= Address,
-        {ok, {address(Family, Address), Source}}
+        Padding = bit_size(Address) - Source,
+        <<_:Source, 0:Padding>> ?= Address,
+        Ip = address(Family, Address),
+        {ok, {Ip, Source}}
     else
         _ -> error
     end;
@@ -142,7 +145,8 @@ address(?FAMILY_IPV6, Address) ->
 
 -spec pad(binary(), 4 | 16) -> binary().
 pad(Address, Size) ->
-    <<Address/binary, 0:((Size - byte_size(Address)) * 8)>>.
+    Padding = (Size - byte_size(Address)) * 8,
+    <<Address/binary, 0:Padding>>.
 
 %% The pipeline stops here, so the header counts are set too.
 -spec formerr(dns:message()) -> dns:message().
