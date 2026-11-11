@@ -86,8 +86,10 @@ Does nothing when the message has no OPT RR: a query without one gets none back 
 update_options(#dns_message{additional = Additional} = Msg, Fun) ->
     case lists:keyfind(dns_optrr, 1, Additional) of
         #dns_optrr{data = Options} = OptRR ->
-            OptRR1 = OptRR#dns_optrr{data = Fun(Options)},
-            Msg#dns_message{additional = lists:keyreplace(dns_optrr, 1, Additional, OptRR1)};
+            Options1 = Fun(Options),
+            OptRR1 = OptRR#dns_optrr{data = Options1},
+            Additional1 = lists:keyreplace(dns_optrr, 1, Additional, OptRR1),
+            Msg#dns_message{additional = Additional1};
         false ->
             Msg
     end.
@@ -151,21 +153,22 @@ get_ede_errors([], Acc) ->
 handle_optrr(Msg, #dns_optrr{version = Version} = OptRR, #{transport := Transport}) when
     Version > ?DNS_EDNS_MAX_VERSION
 ->
-    {stop, badvers(Msg, response_optrr(OptRR, Transport))};
+    OptRR1 = response_optrr(OptRR, Transport),
+    {stop, badvers(Msg, OptRR1)};
 handle_optrr(Msg, #dns_optrr{data = []} = OptRR, #{transport := Transport}) ->
     with_optrr(Msg, OptRR, Transport);
 handle_optrr(Msg, #dns_optrr{data = Options} = OptRR, #{transport := Transport} = Opts) ->
-    {with_optrr(Msg, OptRR, Transport), Opts#{query_edns_options => query_edns_options(Options)}}.
+    Msg1 = with_optrr(Msg, OptRR, Transport),
+    QueryEdnsOptions = query_edns_options(Options),
+    Opts1 = Opts#{query_edns_options => QueryEdnsOptions},
+    {Msg1, Opts1}.
 
 %% The query's OPT RR without its options or extended RCODE, and over UDP with the payload size
 %% capped.
 -spec response_optrr(dns:optrr(), erldns_pipeline:transport()) -> dns:optrr().
 response_optrr(#dns_optrr{udp_payload_size = Size} = OptRR, Transport) ->
-    OptRR#dns_optrr{
-        udp_payload_size = payload_size(Transport, Size),
-        ext_rcode = ?DNS_ERCODE_NOERROR,
-        data = []
-    }.
+    Size1 = payload_size(Transport, Size),
+    OptRR#dns_optrr{udp_payload_size = Size1, ext_rcode = ?DNS_ERCODE_NOERROR, data = []}.
 
 -spec payload_size(erldns_pipeline:transport(), dns:uint16()) -> dns:uint16().
 payload_size(udp, Size) when Size < ?MIN_PACKET_SIZE; ?MAX_PACKET_SIZE < Size ->
@@ -184,12 +187,14 @@ with_optrr(
 ) when Transport =/= udp; ?MIN_PACKET_SIZE =< Size, Size =< ?MAX_PACKET_SIZE ->
     Msg;
 with_optrr(Msg, OptRR, Transport) ->
-    Msg#dns_message{adc = 1, additional = [response_optrr(OptRR, Transport)]}.
+    OptRR1 = response_optrr(OptRR, Transport),
+    Msg#dns_message{adc = 1, additional = [OptRR1]}.
 
 %% BADVERS (16) is an extended RCODE of 1 over a header RCODE of 0. The pipeline stops here, so the
 %% header counts are set too.
 -spec badvers(dns:message(), dns:optrr()) -> dns:message().
 badvers(Msg, OptRR) ->
+    OptRR1 = OptRR#dns_optrr{version = ?DNS_EDNS_MAX_VERSION, ext_rcode = ?DNS_ERCODE_BADVERS},
     Msg#dns_message{
         qr = true,
         aa = false,
@@ -200,15 +205,17 @@ badvers(Msg, OptRR) ->
         adc = 1,
         answers = [],
         authority = [],
-        additional = [
-            OptRR#dns_optrr{version = ?DNS_EDNS_MAX_VERSION, ext_rcode = ?DNS_ERCODE_BADVERS}
-        ]
+        additional = [OptRR1]
     }.
 
 %% Folding from the right lets the first option of each code overwrite later ones.
 -spec query_edns_options([dns:optrr_elem()]) -> query_edns_options().
 query_edns_options(Options) ->
-    lists:foldr(fun(Option, Acc) -> Acc#{code(Option) => Option} end, #{}, Options).
+    Add = fun(Option, Acc) ->
+        Code = code(Option),
+        Acc#{Code => Option}
+    end,
+    lists:foldr(Add, #{}, Options).
 
 -spec code(dns:optrr_elem()) -> dns:eoptcode() | atom().
 code(#dns_opt_llq{}) -> ?DNS_EOPTCODE_LLQ;

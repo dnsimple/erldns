@@ -69,7 +69,8 @@ call(#dns_message{} = Msg, Opts) ->
         undefined ->
             Msg;
         Code ->
-            erldns_edns:add_option(Msg, create_record(Code, Opts))
+            Record = create_record(Code, Opts),
+            erldns_edns:add_option(Msg, Record)
     end.
 
 %% Determine which EDE codes to add based on message and options.
