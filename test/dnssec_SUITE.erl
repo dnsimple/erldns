@@ -49,7 +49,8 @@ all() ->
         error_from_the_resolver_is_left_alone,
         delegation_nsec_ttl_follows_the_soa,
         zone_signing_skips_delegation_ns_glue_and_occluded_records,
-        rrset_signing_skips_delegation_ns_and_signs_ds
+        rrset_signing_skips_delegation_ns_and_signs_ds,
+        hinfo_answering_any_is_signed
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -1055,6 +1056,23 @@ delegation_nsec_ttl_follows_the_soa(_Config) ->
     ?assertEqual(600, Sig#dns_rr.ttl),
     ?assertEqual(600, Sig#dns_rr.data#dns_rrdata_rrsig.original_ttl).
 
+%% RFC 8482 §4.2: the HINFO that answers ANY is signed when the query sets DO.
+hinfo_answering_any_is_signed(_Config) ->
+    Zone = put_delegation_zone(),
+    Target = in_zone(~"target"),
+    ZskTag = zsk_tag(Zone),
+    #dns_message{answers = [HInfo, RRSig]} = resolve(Target, ?DNS_TYPE_ANY),
+    ?assertMatch(#dns_rr{name = Target, type = ?DNS_TYPE_HINFO}, HInfo),
+    ?assertMatch(
+        #dns_rr{
+            name = Target,
+            data = #dns_rrdata_rrsig{
+                type_covered = ?DNS_TYPE_HINFO, keytag = ZskTag, signers_name = ?DELEGATION_ZONE
+            }
+        },
+        RRSig
+    ).
+
 zone_signing_skips_delegation_ns_glue_and_occluded_records(_Config) ->
     Zone = delegation_zone(),
     ZskTag = zsk_tag(Zone),
@@ -1124,7 +1142,11 @@ resolve(QName, QType, RequestAuthority) ->
     },
     Opts0 = erldns_dnssec:prepare(
         erldns_resolver:prepare(#{
-            resolved => false, query_name => QName, query_labels => QLabels, query_type => QType
+            resolved => false,
+            query_name => QName,
+            query_labels => QLabels,
+            query_type => QType,
+            transport => udp
         })
     ),
     {Msg1, Opts1} = erldns_resolver:call(Msg0, Opts0),

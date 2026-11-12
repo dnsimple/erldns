@@ -17,7 +17,8 @@ all() ->
         errors_are_not_cached,
         answers_with_additional_records_are_hit,
         names_are_case_insensitive,
-        query_options_do_not_split_entries
+        query_options_do_not_split_entries,
+        any_is_cached_per_transport
     ].
 
 -spec init_per_suite(ct_suite:ct_config()) -> ct_suite:ct_config().
@@ -97,6 +98,18 @@ query_options_do_not_split_entries(_) ->
     {_, #{erldns_packet_cache := cached}} = erldns_packet_cache:call(Answer, Opts2),
     {Hit, #{resolved := true}} = erldns_packet_cache:call(Msg1, opts(Msg1)),
     ?assertMatch(#dns_message{additional = [#dns_optrr{data = []}]}, Hit).
+
+%% A full answer to ANY over TCP is not served to UDP, where ANY is answered minimally.
+any_is_cached_per_transport(_) ->
+    start_cache(),
+    Msg0 = query(~"example.com", ?DNS_TYPE_ANY),
+    Udp = opts(Msg0),
+    Tcp = Udp#{transport := tcp},
+    {Msg1, Tcp1} = erldns_packet_cache:call(Msg0, Tcp),
+    Answer = Msg1#dns_message{aa = true, answers = [#dns_rr{name = ~"example.com"}]},
+    {_, #{erldns_packet_cache := cached}} = erldns_packet_cache:call(Answer, Tcp1),
+    ?assertMatch({_, #{erldns_packet_cache := {miss, _}}}, erldns_packet_cache:call(Msg0, Udp)),
+    ?assertMatch({Answer, #{resolved := true}}, erldns_packet_cache:call(Msg0, Tcp)).
 
 with_cookie(Msg, Client) ->
     OptRR = #dns_optrr{data = [#dns_opt_cookie{client = <<Client:64>>}]},

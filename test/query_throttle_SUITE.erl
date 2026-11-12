@@ -66,7 +66,7 @@ start_when_enabled_with_custom_limit(_) ->
     test_calls(5).
 
 test_calls(Limit) ->
-    Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_ANY},
+    Q = #dns_query{name = <<"example.com">>, type = ?DNS_TYPE_RRSIG},
     Msg0 = #dns_message{qc = 1, questions = [Q]},
     Opts = erldns_query_throttle:prepare(def_opts()),
     throttled(Msg0, Limit, Opts#{host := {1, 2, 3, 4}}),
@@ -94,13 +94,11 @@ throttled(Msg0, Limit, Opts) ->
     ).
 
 not_throttled(Msg0, Q, Opts) ->
-    %% Test that regular queries are not throttled
-    Regular = Msg0#dns_message{questions = [Q#dns_query{type = ?DNS_TYPE_A}]},
-    [erldns_query_throttle:call(Regular, Opts) || _ <- lists:seq(1, 10)],
-    ?assertMatch(
-        #dns_message{},
-        erldns_query_throttle:call(Regular, Opts)
-    ),
+    %% Test that regular queries are not throttled, nor ANY, which is answered minimally
+    [
+        regular(Msg0#dns_message{questions = [Q#dns_query{type = T}]}, Opts)
+     || T <- [?DNS_TYPE_A, ?DNS_TYPE_ANY]
+    ],
     %% Test that TCP queries are not throttled
     ?assertMatch(
         #dns_message{},
@@ -115,6 +113,10 @@ not_throttled(Msg0, Q, Opts) ->
         #dns_message{},
         erldns_query_throttle:call(Msg0, Opts#{host := {0, 0, 0, 0, 0, 0, 0, 1}})
     ).
+
+regular(Msg, Opts) ->
+    [erldns_query_throttle:call(Msg, Opts) || _ <- lists:seq(1, 10)],
+    ?assertMatch(#dns_message{}, erldns_query_throttle:call(Msg, Opts)).
 
 def_opts() ->
     erldns_pipeline:def_opts().

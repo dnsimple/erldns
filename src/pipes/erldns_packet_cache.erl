@@ -63,7 +63,8 @@ call(#dns_message{aa = true, rc = RC} = Msg, #{?MODULE := {miss, Key}} = Opts) w
     {Msg, Opts#{?MODULE := cached}};
 call(Msg, #{?MODULE := false, query_name := QName, query_type := QType} = Opts) ->
     #dns_message{id = Id, rd = RD, questions = [#dns_query{class = Class}] = Qs} = Msg,
-    Key = {QName, QType, Class, Msg#dns_message.additional},
+    KeyType = key_type(QType, Opts),
+    Key = {QName, KeyType, Class, Msg#dns_message.additional},
     case segmented_cache:get_entry(?MODULE, Key) of
         #dns_message{} = CachedResponse ->
             Msg1 = CachedResponse#dns_message{id = Id, rd = RD, questions = Qs},
@@ -75,6 +76,14 @@ call(Msg, #{?MODULE := false, query_name := QName, query_type := QType} = Opts) 
     end;
 call(Msg, _) ->
     Msg.
+
+%% The answer to ANY can depend on the transport it came over (RFC 8482 §4.4).
+-spec key_type(dns:type(), erldns_pipeline:opts()) ->
+    dns:type() | {dns:type(), erldns_pipeline:transport()}.
+key_type(?DNS_TYPE_ANY, #{transport := Transport}) ->
+    {?DNS_TYPE_ANY, Transport};
+key_type(QType, _) ->
+    QType.
 
 -doc false.
 -spec start_link() -> ignore | gen_server:start_ret().

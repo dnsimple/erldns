@@ -8,6 +8,7 @@
 -include_lib("erldns/include/erldns.hrl").
 
 -define(MAX_RESOLUTION_DEPTH, 32).
+-define(ANY_ZONE, ~"minimal-any.example").
 
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
@@ -25,8 +26,24 @@ all() ->
         resolve_authoritative_nested_zone_cut_refers_to_the_topmost,
         resolve_drops_the_sections_of_the_request,
         refused_drops_the_sections_of_the_request,
-        negative_answers_carry_the_soa_minimum_ttl
+        negative_answers_carry_the_soa_minimum_ttl,
+        any_over_udp_is_answered_with_an_hinfo,
+        any_keeps_the_cname_or_the_hinfo_of_the_name,
+        minimal_any_is_configured_per_transport,
+        {group, wire}
     ].
+
+-spec groups() -> [ct_suite:ct_group_def()].
+groups() ->
+    [{wire, [], [wire_any_is_minimal_over_udp_only]}].
+
+-spec init_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> ct_suite:ct_config().
+init_per_group(wire, Config) ->
+    app_helper:start_listening(Config, [], [any_zone()]).
+
+-spec end_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> term().
+end_per_group(wire, Config) ->
+    app_helper:stop(Config).
 
 %% Tests
 resolve_authoritative_host_not_found(_) ->
@@ -580,14 +597,146 @@ negative_answers_carry_the_soa_minimum_ttl(_) ->
     ),
     erldns_zone_cache:delete_zone(ZoneName).
 
+%% RFC 8482 §4.2: ANY at a name with records gets one HINFO, without glue for the records it
+%% replaces; a name without records is answered as for any other type.
+any_over_udp_is_answered_with_an_hinfo(_) ->
+    ZoneName = put_any_zone(),
+    Ede = #dns_opt_ede{info_code = ?DNS_EDE_NOT_SUPPORTED},
+    Apex = hinfo(ZoneName, 3600),
+    ?assertMatch(
+        #dns_message{
+            aa = true,
+            rc = ?DNS_RCODE_NOERROR,
+            answers = [Apex],
+            additional = [#dns_optrr{data = [Ede]}]
+        },
+        resolve(ZoneName, ?DNS_TYPE_ANY)
+    ),
+    Wild = hinfo(~"a.wild.minimal-any.example", 3600),
+    ?assertMatch(
+        #dns_message{answers = [Wild]}, resolve(~"a.wild.minimal-any.example", ?DNS_TYPE_ANY)
+    ),
+    ?assertMatch(
+        #dns_message{rc = ?DNS_RCODE_NXDOMAIN, answers = [], additional = [#dns_optrr{data = []}]},
+        resolve(~"nx.minimal-any.example", ?DNS_TYPE_ANY)
+    ),
+    erldns_zone_cache:delete_zone(ZoneName).
+
+%% A CNAME is the only record at its name, and an HINFO RRset is not masked by a synthesised one
+%% (RFC 8482 §6).
+any_keeps_the_cname_or_the_hinfo_of_the_name(_) ->
+    ZoneName = put_any_zone(),
+    ?assertMatch(
+        #dns_message{
+            answers = [#dns_rr{type = ?DNS_TYPE_CNAME}], additional = [#dns_optrr{data = []}]
+        },
+        resolve(~"cname.minimal-any.example", ?DNS_TYPE_ANY)
+    ),
+    Host = #dns_rrdata_hinfo{cpu = ~"x86", os = ~"Linux"},
+    ?assertMatch(
+        #dns_message{
+            answers = [#dns_rr{type = ?DNS_TYPE_HINFO, data = Host}],
+            additional = [#dns_optrr{data = [#dns_opt_ede{}]}]
+        },
+        resolve(~"host.minimal-any.example", ?DNS_TYPE_ANY)
+    ),
+    erldns_zone_cache:delete_zone(ZoneName).
+
+%% By default ANY over TCP gets every record at the name, and their glue.
+minimal_any_is_configured_per_transport(_) ->
+    ZoneName = put_any_zone(),
+    Full = [
+        {ZoneName, ?DNS_TYPE_SOA},
+        {ZoneName, ?DNS_TYPE_NS},
+        {ZoneName, ?DNS_TYPE_MX},
+        {~"mail.minimal-any.example", ?DNS_TYPE_A},
+        {~"ns1.minimal-any.example", ?DNS_TYPE_A}
+    ],
+    Tcp = resolve(ZoneName, ?DNS_TYPE_ANY, tcp),
+    ?assertEqual(lists:sort(Full), names_and_types(Tcp)),
+    application:set_env(erldns, minimal_any, #{udp => false, tcp => true, hinfo_ttl => 60}),
+    try
+        Udp = resolve(ZoneName, ?DNS_TYPE_ANY, udp),
+        ?assertEqual(lists:sort(Full), names_and_types(Udp)),
+        Apex = hinfo(ZoneName, 60),
+        ?assertMatch(#dns_message{answers = [Apex]}, resolve(ZoneName, ?DNS_TYPE_ANY, tcp))
+    after
+        application:unset_env(erldns, minimal_any),
+        erldns_zone_cache:delete_zone(ZoneName)
+    end.
+
+%% Through the default pipeline, packet cache included: a full answer over TCP is not served over
+%% UDP, which gets the HINFO and EDE 21.
+wire_any_is_minimal_over_udp_only(Config) ->
+    Query = #dns_message{
+        id = 1,
+        qc = 1,
+        adc = 1,
+        questions = [#dns_query{name = ?ANY_ZONE, type = ?DNS_TYPE_ANY}],
+        additional = [#dns_optrr{udp_payload_size = 1232}]
+    },
+    Tcp = [{transport, tcp} | Config],
+    Udp = [{transport, udp} | Config],
+    Full = app_helper:exchange(Tcp, Query),
+    ?assertMatch(#dns_message{anc = 3, adc = 3}, Full),
+    Ede = #dns_opt_ede{info_code = ?DNS_EDE_NOT_SUPPORTED},
+    ?assertMatch(
+        #dns_message{
+            answers = [#dns_rr{type = ?DNS_TYPE_HINFO}], additional = [#dns_optrr{data = [Ede]}]
+        },
+        app_helper:exchange(Udp, Query)
+    ),
+    ?assertEqual(Full, app_helper:exchange(Tcp, Query)).
+
 %% Drive the resolver pipe the way the pipeline does, so `complete_response/1' runs.
 resolve(QName, QType) ->
-    Msg = #dns_message{questions = [#dns_query{name = QName, type = QType}]},
+    resolve(QName, QType, udp).
+
+resolve(QName, QType, Transport) ->
+    Msg = #dns_message{
+        questions = [#dns_query{name = QName, type = QType}], additional = [#dns_optrr{}]
+    },
     Opts = erldns_resolver:prepare(#{
-        resolved => false, query_labels => dns_domain:split(QName), query_type => QType
+        resolved => false,
+        query_labels => dns_domain:split(QName),
+        query_type => QType,
+        transport => Transport
     }),
     {Answer, _} = erldns_resolver:call(Msg, Opts),
     Answer.
+
+put_any_zone() ->
+    erldns_zone_cache:start_link(),
+    ok = erldns_zone_cache:put_zone(any_zone()),
+    ?ANY_ZONE.
+
+%% Records whose answers to ANY differ: an apex with glue for its NS and MX, a CNAME, a name with
+%% its own HINFO, and a wildcard.
+any_zone() ->
+    RR = fun(Name, Type, Data) -> #dns_rr{name = Name, type = Type, ttl = 3600, data = Data} end,
+    Records = [
+        soa(?ANY_ZONE),
+        RR(?ANY_ZONE, ?DNS_TYPE_NS, #dns_rrdata_ns{dname = ~"ns1.minimal-any.example"}),
+        RR(?ANY_ZONE, ?DNS_TYPE_MX, #dns_rrdata_mx{
+            preference = 10, exchange = ~"mail.minimal-any.example"
+        }),
+        RR(~"ns1.minimal-any.example", ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 1}}),
+        RR(~"mail.minimal-any.example", ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 2}}),
+        RR(~"cname.minimal-any.example", ?DNS_TYPE_CNAME, #dns_rrdata_cname{dname = ?ANY_ZONE}),
+        RR(~"host.minimal-any.example", ?DNS_TYPE_HINFO, #dns_rrdata_hinfo{
+            cpu = ~"x86", os = ~"Linux"
+        }),
+        RR(~"host.minimal-any.example", ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 3}}),
+        RR(~"*.wild.minimal-any.example", ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 4}})
+    ],
+    erldns_zone_codec:build_zone(?ANY_ZONE, ~"digest", Records, []).
+
+hinfo(Name, TTL) ->
+    Data = #dns_rrdata_hinfo{cpu = ~"RFC8482", os = ~""},
+    #dns_rr{name = Name, type = ?DNS_TYPE_HINFO, ttl = TTL, data = Data}.
+
+names_and_types(#dns_message{answers = Answers, additional = Additional}) ->
+    lists:sort([{Name, Type} || #dns_rr{name = Name, type = Type} <- Answers ++ Additional]).
 
 resolve_authoritative(Z, QName, QType) ->
     Msg = #dns_message{questions = [#dns_query{name = QName, type = QType}]},
