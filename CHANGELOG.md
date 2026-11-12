@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   query sets DO, and Extended DNS Error 21, instead of every record at the name. A CNAME or HINFO
   RRset at the name still answers. `{minimal_any, #{udp => false}}` turns this off, `tcp => true`
   turns it on over TCP, and `hinfo_ttl` sets the HINFO's TTL, 3600 by default (#395).
+- The packet cache keeps answers to ANY apart by transport.
 
 ## v12.0.3
 

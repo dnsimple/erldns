@@ -29,8 +29,21 @@ all() ->
         negative_answers_carry_the_soa_minimum_ttl,
         any_over_udp_is_answered_with_an_hinfo,
         any_keeps_the_cname_or_the_hinfo_of_the_name,
-        minimal_any_is_configured_per_transport
+        minimal_any_is_configured_per_transport,
+        {group, wire}
     ].
+
+-spec groups() -> [ct_suite:ct_group_def()].
+groups() ->
+    [{wire, [], [wire_any_is_minimal_over_udp_only]}].
+
+-spec init_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> ct_suite:ct_config().
+init_per_group(wire, Config) ->
+    app_helper:start_listening(Config, [], [any_zone()]).
+
+-spec end_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> term().
+end_per_group(wire, Config) ->
+    app_helper:stop(Config).
 
 %% Tests
 resolve_authoritative_host_not_found(_) ->
@@ -651,6 +664,29 @@ minimal_any_is_configured_per_transport(_) ->
         application:unset_env(erldns, minimal_any),
         erldns_zone_cache:delete_zone(ZoneName)
     end.
+
+%% Through the default pipeline, packet cache included: a full answer over TCP is not served over
+%% UDP, which gets the HINFO and EDE 21.
+wire_any_is_minimal_over_udp_only(Config) ->
+    Query = #dns_message{
+        id = 1,
+        qc = 1,
+        adc = 1,
+        questions = [#dns_query{name = ?ANY_ZONE, type = ?DNS_TYPE_ANY}],
+        additional = [#dns_optrr{udp_payload_size = 1232}]
+    },
+    Tcp = [{transport, tcp} | Config],
+    Udp = [{transport, udp} | Config],
+    Full = app_helper:exchange(Tcp, Query),
+    ?assertMatch(#dns_message{anc = 3, adc = 3}, Full),
+    Ede = #dns_opt_ede{info_code = ?DNS_EDE_NOT_SUPPORTED},
+    ?assertMatch(
+        #dns_message{
+            answers = [#dns_rr{type = ?DNS_TYPE_HINFO}], additional = [#dns_optrr{data = [Ede]}]
+        },
+        app_helper:exchange(Udp, Query)
+    ),
+    ?assertEqual(Full, app_helper:exchange(Tcp, Query)).
 
 %% Drive the resolver pipe the way the pipeline does, so `complete_response/1' runs.
 resolve(QName, QType) ->
