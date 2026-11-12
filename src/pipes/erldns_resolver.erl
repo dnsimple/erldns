@@ -398,7 +398,8 @@ resolve_best_match_with_wildcard(
     resolve_best_match_with_wildcard_cname(Message, QType, CnameChain, CnameRecords).
 
 % Handle the case where the wildcard is a CNAME in the zone.
-% If the QType was CNAME then answer, otherwise determine if the CNAME should be followed
+% If the QType was CNAME or ANY then answer, as for an exact match, otherwise determine if the
+% CNAME should be followed
 -spec resolve_best_match_with_wildcard_cname(
     Message :: dns:message(),
     QType :: dns:type(),
@@ -406,7 +407,9 @@ resolve_best_match_with_wildcard(
     CnameRecords :: [dns:rr(), ...]
 ) ->
     resolution().
-resolve_best_match_with_wildcard_cname(Message, ?DNS_TYPE_CNAME, _CnameChain, CnameRecords) ->
+resolve_best_match_with_wildcard_cname(Message, QType, _CnameChain, CnameRecords) when
+    QType =:= ?DNS_TYPE_CNAME; QType =:= ?DNS_TYPE_ANY
+->
     Message#dns_message{aa = true, answers = Message#dns_message.answers ++ CnameRecords};
 resolve_best_match_with_wildcard_cname(
     Message, _QType, CnameChain, [CnameRecord | _] = CnameRecords
