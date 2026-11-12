@@ -111,8 +111,20 @@ to_crypto_key(KeyBin) ->
     DecodedKey = public_key:pem_entry_decode(lists:last(public_key:pem_decode(KeyBin))),
     extract_key(DecodedKey).
 
-extract_key(#'RSAPrivateKey'{publicExponent = E, modulus = M, privateExponent = N}) ->
-    [E, M, N];
+%% An RSA key with the numbers crypto signs by the CRT with, about twice as fast
+%% as without them, each as its big-endian bytes, which crypto takes as they are
+%% where it converts an integer on every signature
+extract_key(#'RSAPrivateKey'{
+    publicExponent = E,
+    modulus = N,
+    privateExponent = D,
+    prime1 = P1,
+    prime2 = P2,
+    exponent1 = E1,
+    exponent2 = E2,
+    coefficient = C
+}) ->
+    [binary:encode_unsigned(Number) || Number <- [E, N, D, P1, P2, E1, E2, C]];
 extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'secp256r1'}}) ->
     Key;
 extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'secp384r1'}}) ->
