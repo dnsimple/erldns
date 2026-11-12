@@ -36,8 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `erldns_packet_cache` requires `erldns_questions` earlier in the pipeline.
 - Answers from signed zones no longer set AD, as RFC 4035 §3.1.6 requires unless explicitly
   configured; `{dnssec, #{authenticated_data => true}}` sets it again (#394).
-- `erldns_edns` replaces `erldns_edns_max_payload_size` and goes first in the pipeline, before
-  `erldns_questions`.
+- `erldns_edns` replaces `erldns_edns_max_payload_size` and goes first in the pipeline: a pipeline
+  with `erldns_questions` before it fails to start.
 - `erldns_edns` moves the query's EDNS options to the `query_edns_options` pipeline option, a map
   from option code to option, and pipes add the response's with `erldns_edns:add_option/2`.
   `erldns_resolver` and `erldns_packet_cache` require `erldns_edns`.

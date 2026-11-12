@@ -37,6 +37,7 @@ groups() ->
             add_option_to_optrr_anywhere,
             add_option_without_optrr,
             resolver_and_cache_require_edns,
+            goes_before_questions,
             every_option_is_keyed_by_its_code,
             unknown_records_are_keyed_by_name,
             update_options_of_the_response
@@ -80,6 +81,7 @@ wire_tests() ->
         wire_unknown_options_are_not_sent_back,
         wire_refused_carries_only_ede,
         wire_query_without_edns_gets_no_optrr,
+        wire_query_without_question_gets_no_options,
         wire_unsupported_version_gets_badvers
     ].
 
@@ -297,6 +299,15 @@ resolver_and_cache_require_edns(_) ->
         )
      || Pipe <- [erldns_resolver, erldns_packet_cache]
     ].
+
+%% erldns_questions ends the pipeline for a query without a question, which must not skip this pipe.
+goes_before_questions(_) ->
+    ?assertError(
+        {badpipe, {unsatisfied_dependency, #{pipe := erldns_edns, requires := erldns_questions}}},
+        erldns_pipeline:store_pipeline(?FUNCTION_NAME, [erldns_questions, erldns_edns])
+    ),
+    ?assertEqual(ok, erldns_pipeline:store_pipeline(?FUNCTION_NAME, [erldns_edns])),
+    erldns_pipeline:delete_pipeline(?FUNCTION_NAME).
 
 every_option_is_keyed_by_its_code(_) ->
     Options = #{
@@ -529,6 +540,16 @@ wire_query_without_edns_gets_no_optrr(Config) ->
             {?WIRE_NAME, ?DNS_RCODE_NOERROR}, {~"elsewhere.example", ?DNS_RCODE_REFUSED}
         ]
     ].
+
+%% erldns_questions ends the pipeline for a query without a question, after erldns_edns has run.
+wire_query_without_question_gets_no_options(Config) ->
+    Unknown = #dns_opt_unknown{id = 65001, bin = <<16#ab, 16#cd>>},
+    Query = wire_query(?WIRE_NAME, [Unknown], false),
+    NoQuestion = Query#dns_message{qc = 0, questions = []},
+    ?assertMatch(
+        #dns_message{qr = true, qc = 0, adc = 1, additional = [#dns_optrr{data = []}]},
+        app_helper:exchange(Config, NoQuestion)
+    ).
 
 %% RFC 6891 §6.1.3. dns_erlang won't encode a version above 0, so the query's OPT RR, encoded last
 %% and without options, gets its version byte set by hand.

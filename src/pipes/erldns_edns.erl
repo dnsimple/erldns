@@ -2,7 +2,8 @@
 -moduledoc """
 Separate the query's EDNS (RFC 6891) from the response's.
 
-Put this pipe first in the pipeline; `m:erldns_resolver` requires it.
+Put this pipe first in the pipeline. `m:erldns_resolver` requires it, and `m:erldns_questions` must
+come after it, as it ends the pipeline for a query without a question.
 
 The pipeline turns the query into the response, so the OPT RR in the query's additional section is
 what the response would send back. This pipe makes it the response's:
@@ -46,7 +47,7 @@ limit at which the response is truncated.
 -define(MIN_PACKET_SIZE, 512).
 -define(MAX_PACKET_SIZE, 1232).
 
--export([prepare/1, call/2]).
+-export([deps/0, prepare/1, call/2]).
 -export([update_options/2, add_option/2, dnssec_ok/1]).
 -export([get_opts/1, get_ede_errors/1]).
 
@@ -58,6 +59,11 @@ record's name.
 """.
 -type query_edns_options() :: #{dns:eoptcode() | atom() => dns:optrr_elem()}.
 -export_type([query_edns_options/0]).
+
+-doc "`c:erldns_pipeline:deps/0` callback.".
+-spec deps() -> erldns_pipeline:deps().
+deps() ->
+    #{dependents => [{optional, erldns_questions}]}.
 
 -doc "`c:erldns_pipeline:prepare/1` callback.".
 -spec prepare(erldns_pipeline:opts()) -> erldns_pipeline:opts().
