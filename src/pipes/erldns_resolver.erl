@@ -13,6 +13,26 @@ or `none` for an authoritative answer, so that later pipes such as `m:erldns_dns
 response refers to without inferring it from the message. A DS query for the delegation name itself
 is answered by this zone, whose data the DS RRset is (RFC 4035 §3.1.4.1).
 
+## Minimal answers to ANY
+
+ANY at a name that owns records is answered as RFC 8482 §4.2 describes, with a single
+`HINFO "RFC8482" ""` and Extended DNS Error 21 (Not Supported), instead of every record at the
+name. A name that owns a CNAME is still answered with it, and one that owns an HINFO RRset with
+that RRset (§6). `m:erldns_dnssec` signs the HINFO when the query sets DO.
+
+By default this applies over UDP only: a TCP client cannot spoof its address, so it cannot turn an
+ANY query into an amplification attack.
+
+```erlang
+{erldns, [
+    {minimal_any, #{
+        udp => true, %% Answer ANY minimally over UDP (default: true)
+        tcp => false, %% Answer ANY minimally over TCP (default: false)
+        hinfo_ttl => 3600 %% TTL of the HINFO (default: 3600)
+    }}
+]}
+```
+
 ## Telemetry events
 
 ### `[erldns, pipeline, resolver, error]`
@@ -33,6 +53,7 @@ or an exception (mapped to SERVFAIL).
 -endif.
 
 -define(MAX_RESOLUTION_DEPTH, 32).
+-define(DEFAULT_HINFO_TTL, 3600).
 
 -behaviour(erldns_pipeline).
 
@@ -59,7 +80,8 @@ deps() ->
 -doc "`c:erldns_pipeline:prepare/1` callback.".
 -spec prepare(erldns_pipeline:opts()) -> erldns_pipeline:opts().
 prepare(Opts) ->
-    Opts#{auth_zone => zone_not_found, zonecut => none}.
+    MinimalAny = minimal_any_config(),
+    Opts#{auth_zone => zone_not_found, zonecut => none, minimal_any => MinimalAny}.
 
 -doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
@@ -68,7 +90,8 @@ call(Msg, #{resolved := false, query_labels := QLabels, query_type := QType} = O
     case erldns_zone_cache:get_authoritative_zone(QLabels, QType) of
         #zone{} = Zone ->
             #dns_message{questions = [#dns_query{name = QName}]} = Msg,
-            {Msg1, Zonecut} = resolve(Msg, Zone, QLabels, QName, QType),
+            MinimalAny = minimal_any(QType, Opts),
+            {Msg1, Zonecut} = resolve(Msg, Zone, QLabels, QName, QType, MinimalAny),
             Msg2 = complete_response(Msg1),
             {Msg2, Opts#{auth_zone => Zone, resolved => true, zonecut => Zonecut}};
         Error when Error =:= not_authoritative; Error =:= zone_not_found ->
@@ -81,17 +104,42 @@ call(Msg, #{resolved := false, query_labels := QLabels, query_type := QType} = O
 call(Msg, _) ->
     Msg.
 
+%% The transports that answer ANY minimally, each with the TTL of the HINFO it answers with.
+-spec minimal_any_config() -> #{erldns_pipeline:transport() => dns:ttl()}.
+minimal_any_config() ->
+    Config = application:get_env(erldns, minimal_any, #{}),
+    Transports = maps:merge(#{udp => true, tcp => false}, maps:with([udp, tcp], Config)),
+    TTL =
+        case Config of
+            #{hinfo_ttl := Value} when is_integer(Value), 0 =< Value -> Value;
+            _ -> ?DEFAULT_HINFO_TTL
+        end,
+    #{Transport => TTL || Transport := true <- Transports}.
+
+%% The TTL of the HINFO that answers ANY over the query's transport, or false to answer in full.
+-spec minimal_any(dns:type(), erldns_pipeline:opts()) -> false | dns:ttl().
+minimal_any(?DNS_TYPE_ANY, #{transport := Transport, minimal_any := MinimalAny}) ->
+    maps:get(Transport, MinimalAny, false);
+minimal_any(_, _) ->
+    false.
+
 %% Start the resolution process on the given question. Assumes only one question. Whatever the
 %% request carried in its answer and authority sections is not ours to answer with.
 %% Handlers can escape the control flow by throwing `{error, rcode, RCODE}`.
--spec resolve(dns:message(), erldns:zone(), dns:labels(), dns:dname(), dns:type()) ->
-    {dns:message(), zonecut()}.
-resolve(Msg0, Zone, QLabels, QName, QType) ->
+-spec resolve(Msg, Zone, QLabels, QName, QType, MinimalAny) -> {Msg, zonecut()} when
+    Msg :: dns:message(),
+    Zone :: erldns:zone(),
+    QLabels :: dns:labels(),
+    QName :: dns:dname(),
+    QType :: dns:type(),
+    MinimalAny :: false | dns:ttl().
+resolve(Msg0, Zone, QLabels, QName, QType, MinimalAny) ->
     Msg = Msg0#dns_message{answers = [], authority = []},
     try
         {Msg1, Zonecut} =
             resolve_authoritative(Msg, Zone, QLabels, QName, QType, [], ?MAX_RESOLUTION_DEPTH),
-        {additional_processing(Msg1, Zone), Zonecut}
+        Msg2 = minimal_answer(Msg1, Zonecut, MinimalAny),
+        {additional_processing(Msg2, Zone), Zonecut}
     catch
         throw:{error, rcode, RC} ->
             telemetry:execute([erldns, pipeline, resolver, error], #{count => 1}, #{rc => RC}),
@@ -111,6 +159,33 @@ resolve(Msg0, Zone, QLabels, QName, QType) ->
                 rc => ?DNS_RCODE_SERVFAIL
             }),
             {Msg#dns_message{aa = false, rc = ?DNS_RCODE_SERVFAIL}, none}
+    end.
+
+%% RFC 8482 §4.2: the records at the name answering ANY give way to one HINFO, the name's own if it
+%% has one (§6). A CNAME already answers alone.
+-spec minimal_answer(dns:message(), zonecut(), false | dns:ttl()) -> dns:message().
+minimal_answer(Msg, _, false) ->
+    Msg;
+minimal_answer(#dns_message{answers = [#dns_rr{name = Owner} | _] = Answers} = Msg, none, TTL) ->
+    case lists:any(fun erldns_records:is_cname/1, Answers) of
+        true ->
+            Msg;
+        false ->
+            HInfo = hinfo(Owner, TTL, Answers),
+            Msg1 = Msg#dns_message{answers = HInfo},
+            erldns_edns:add_option(Msg1, #dns_opt_ede{info_code = ?DNS_EDE_NOT_SUPPORTED})
+    end;
+minimal_answer(Msg, _, _) ->
+    Msg.
+
+-spec hinfo(dns:dname(), dns:ttl(), [dns:rr()]) -> [dns:rr(), ...].
+hinfo(Owner, TTL, Answers) ->
+    case lists:filter(erldns_records:match_type(?DNS_TYPE_HINFO), Answers) of
+        [] ->
+            Data = #dns_rrdata_hinfo{cpu = ~"RFC8482", os = ~""},
+            [#dns_rr{name = Owner, type = ?DNS_TYPE_HINFO, ttl = TTL, data = Data}];
+        HInfo ->
+            HInfo
     end.
 
 %% RFC 1034 §4.3.2 step 3b: a name at or below a zone cut takes the query out of this zone's data

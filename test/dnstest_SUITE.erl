@@ -30,7 +30,9 @@ init_per_suite(Config0) ->
     AppConfig = [
         {erldns, [
             {listeners, [#{name => inet_1, ip => {127, 0, 0, 1}, port => Port}]},
-            {zones, #{path => code:priv_dir(dnstest)}}
+            {zones, #{path => code:priv_dir(dnstest)}},
+            %% dnstest expects conventional answers to ANY, see resolver_SUITE for minimal ones.
+            {minimal_any, #{udp => false}}
         ]}
     ],
     Config = app_helper:start_per_suite(Config0, AppConfig),
