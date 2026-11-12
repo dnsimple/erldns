@@ -56,8 +56,8 @@ groups() ->
             udp_notimp_raises_error_returns_notimp,
             udp_not_a_question_raises_error_returns_nothing
         ]},
-        {tcp, [parallel], tcp_tls_tests()},
-        {tls, [parallel], tcp_tls_tests()}
+        {tcp, [parallel], [reset_before_init | tcp_tls_tests()]},
+        {tls, [parallel], [handshake_aborted | tcp_tls_tests()]}
     ].
 
 tcp_tls_tests() ->
@@ -816,6 +816,42 @@ normal_client_close_no_init_error(Config) ->
     close_socket(Transport, Socket),
     assert_no_telemetry_event().
 
+%% The handshake is handed over by hand, to have the peer gone by the time init runs.
+reset_before_init(_Config) ->
+    ok = telemetry:attach(
+        ?FUNCTION_NAME, [erldns, request, error], fun telemetry_handler/4, self()
+    ),
+    {ok, Listen} = gen_tcp:listen(0, [binary, {active, false}]),
+    {ok, Port} = inet:port(Listen),
+    Client = connect_socket(tcp, {127, 0, 0, 1}, Port),
+    {ok, Socket} = gen_tcp:accept(Listen),
+    ok = inet:setopts(Client, [{linger, {true, 0}}]),
+    close_socket(tcp, Client),
+    wait_for_reset(Socket),
+    Opts = #{
+        max_concurrent_queries => 1,
+        ingress_request_timeout => 1000,
+        idle_timeout_ms => 1000,
+        request_timeout_ms => 1000
+    },
+    Ref = make_ref(),
+    {ok, Pid} = erldns_proto_tcp:start_link(Ref, ranch_tcp, Opts),
+    MRef = monitor(process, Pid),
+    ok = gen_tcp:controlling_process(Socket, Pid),
+    Pid ! {handshake, Ref, ranch_tcp, Socket, 1000},
+    receive
+        {'DOWN', MRef, process, Pid, Reason} -> ?assertEqual(normal, Reason)
+    end,
+    assert_no_telemetry_event(),
+    telemetry:detach(?FUNCTION_NAME),
+    gen_tcp:close(Listen).
+
+handshake_aborted(Config) ->
+    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, tls, error, []),
+    Socket = connect_socket(tcp, {127, 0, 0, 1}, Port),
+    close_socket(tcp, Socket),
+    assert_no_telemetry_event().
+
 %% Test that TCP/TLS listener handles ingress timeouts correctly.
 %% When ingress timeout occurs (packet not received in time), a 'dropped' event
 %% should be emitted. Note: Ingress timeout is for receiving the packet, not processing.
@@ -1146,6 +1182,15 @@ request_response(Transport, Socket, Packet, _) when Transport =:= tcp; Transport
     ?assertMatch(#dns_message{}, Response),
     Response.
 
+wait_for_reset(Socket) ->
+    case inet:peername(Socket) of
+        {ok, _} ->
+            ct:sleep(10),
+            wait_for_reset(Socket);
+        {error, _} ->
+            ok
+    end.
+
 telemetry_handler(EventName, Measurements, Metadata, Pid) ->
     ct:pal("EventName ~p~n", [EventName]),
     Pid ! {EventName, Measurements, Metadata}.
@@ -1160,8 +1205,8 @@ assert_telemetry_event(Type) ->
 
 assert_no_telemetry_event() ->
     receive
-        {[erldns, pipeline, Name], _, _} ->
-            ct:fail("Telemetry event triggered: ~p", [Name])
+        {[erldns, request, Type], _, Metadata} ->
+            ct:fail("Telemetry event triggered: ~p ~p", [Type, Metadata])
     after 500 ->
         ok
     end.

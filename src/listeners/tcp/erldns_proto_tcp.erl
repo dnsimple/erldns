@@ -70,21 +70,30 @@ init({Ref, Transport, Opts, StartTime}) ->
                 request_timeout_ms := RequestTimeoutMs
             } = Opts,
             {ok, Socket} = ranch:handshake(Ref),
-            {ok, {IpAddr, Port}} = get_peername(Socket, SocketType),
-            ok = set_socket_active(Socket, SocketType),
-            #state{
-                socket = Socket,
-                socket_type = SocketType,
-                connection_start_time = StartTime,
-                ingress_timeout_ms = IngressTimeoutMs,
-                idle_timeout_ms = IdleTimeoutMs,
-                request_timeout_ms = RequestTimeoutMs,
-                max_concurrent_queries = MaxConcurrentQueries,
-                ip_address = IpAddr,
-                port = Port,
-                timer_ref = erlang:start_timer(IngressTimeoutMs, self(), ingress)
-            }
+            maybe
+                {ok, {IpAddr, Port}} ?= get_peername(Socket, SocketType),
+                ok ?= set_socket_active(Socket, SocketType),
+                #state{
+                    socket = Socket,
+                    socket_type = SocketType,
+                    connection_start_time = StartTime,
+                    ingress_timeout_ms = IngressTimeoutMs,
+                    idle_timeout_ms = IdleTimeoutMs,
+                    request_timeout_ms = RequestTimeoutMs,
+                    max_concurrent_queries = MaxConcurrentQueries,
+                    ip_address = IpAddr,
+                    port = Port,
+                    timer_ref = erlang:start_timer(IngressTimeoutMs, self(), ingress)
+                }
+            else
+                {error, SocketError} ->
+                    close_socket(Socket, SocketType),
+                    connection_lost(SocketError)
+            end
         catch
+            %% How ranch exits when the TLS handshake fails
+            exit:{shutdown, {Reason, _Peer}} ->
+                connection_lost(Reason);
             Class:Reason:Stacktrace ->
                 ExceptionMetadata = #{
                     what => connection_init_failed,
@@ -101,6 +110,14 @@ init({Ref, Transport, Opts, StartTime}) ->
         #state{} -> gen_server:enter_loop(?MODULE, [], MaybeState);
         _ -> MaybeState
     end.
+
+%% The client left before the connection was set up, which is not an error on our side
+-spec connection_lost(term()) -> {stop, normal}.
+connection_lost(Reason) ->
+    ?LOG_DEBUG(
+        #{what => connection_lost_on_init, transport => tcp, reason => Reason}, ?LOG_METADATA
+    ),
+    {stop, normal}.
 
 -spec handle_call(dynamic(), gen_server:from(), state()) -> {reply, dynamic(), state()}.
 handle_call(_Request, _From, State) ->
@@ -326,7 +343,7 @@ close_socket(Socket, tcp) ->
 close_socket(Socket, ssl) ->
     ssl:close(Socket).
 
--spec set_socket_active(socket(), socket_type()) -> ok.
+-spec set_socket_active(socket(), socket_type()) -> ok | {error, term()}.
 set_socket_active(Socket, tcp) ->
     inet:setopts(Socket, [{active, once}]);
 set_socket_active(Socket, ssl) ->
