@@ -4,10 +4,16 @@ A basic packet cache that is used to avoid multiple lookups for the
 same question received within the cache TTL.
 
 In order to work correctly, it should be added to the packet pipeline twice,
-once early in the processing pipeline, after `m:erldns_questions`, and once _after_ the resolver.
+once early in the processing pipeline, after `m:erldns_edns` and `m:erldns_questions`, and once
+_after_ the resolver.
 
 Names are compared case-insensitively, and an answer from the cache carries the ID, RD bit and
 question of the request it answers.
+
+An answer is looked up by the question and the additional section as it is at that point, which
+holds the response's OPT RR (see `m:erldns_edns`). A pipe that adds an option depending on the
+query must run before the first cache, so that queries asking for different options are cached
+apart.
 
 ## Configuration
 
@@ -37,7 +43,7 @@ question of the request it answers.
 -doc "`c:erldns_pipeline:deps/0` callback.".
 -spec deps() -> erldns_pipeline:deps().
 deps() ->
-    #{prerequisites => [erldns_questions]}.
+    #{prerequisites => [erldns_edns, erldns_questions]}.
 
 -doc "`c:erldns_pipeline:prepare/1` callback.".
 -spec prepare(erldns_pipeline:opts()) -> disabled | erldns_pipeline:opts().

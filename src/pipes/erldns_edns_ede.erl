@@ -35,8 +35,8 @@ This handler examines the DNS response and adds appropriate EDE options based on
 EDE codes are only added for error responses (SERVFAIL, REFUSED, FORMERR).
 Valid negative responses like NXDOMAIN do not include EDE codes.
 
-The handler automatically creates an OPT RR if one doesn't exist
-and appends EDE options to existing OPT RR.
+EDE options go in the response's OPT RR, through `erldns_edns:add_option/2`, so a query without an
+OPT RR gets none (RFC 6891 §7). The pipe requires `m:erldns_edns`.
 
 ## References
 
@@ -47,7 +47,12 @@ and appends EDE options to existing OPT RR.
 
 -behaviour(erldns_pipeline).
 
--export([call/2, prepare/1]).
+-export([deps/0, prepare/1, call/2]).
+
+-doc "`c:erldns_pipeline:deps/0` callback.".
+-spec deps() -> erldns_pipeline:deps().
+deps() ->
+    #{prerequisites => [erldns_edns]}.
 
 -doc "`c:erldns_pipeline:prepare/1` callback.".
 -spec prepare(erldns_pipeline:opts()) -> erldns_pipeline:opts().
@@ -65,7 +70,7 @@ call(#dns_message{} = Msg, Opts) ->
             Msg;
         Code ->
             Record = create_record(Code, Opts),
-            add_ede_record(Msg, Record)
+            erldns_edns:add_option(Msg, Record)
     end.
 
 %% Determine which EDE codes to add based on message and options.
@@ -98,18 +103,6 @@ create_record(Code, #{?MODULE := true}) ->
     end;
 create_record(Code, _) ->
     #dns_opt_ede{info_code = Code}.
-
--spec add_ede_record(dns:message(), dns:optrr_elem()) -> dns:message().
-add_ede_record(#dns_message{additional = Additional} = Message, Record) ->
-    Message#dns_message{additional = add_ede(Additional, Record)}.
-
-%% RFC6891§6.1.1: an OPT RR may sit anywhere in the additional section,
-add_ede([#dns_optrr{data = Data} = OptRR | Rest], Record) ->
-    [OptRR#dns_optrr{data = [Record | Data]} | Rest];
-add_ede([RR | Rest], Record) ->
-    [RR | add_ede(Rest, Record)];
-add_ede([], Record) ->
-    [#dns_optrr{data = [Record]}].
 
 -spec enabled() -> boolean().
 enabled() ->

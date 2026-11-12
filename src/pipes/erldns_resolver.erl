@@ -52,7 +52,7 @@ or an exception (mapped to SERVFAIL).
 -spec deps() -> erldns_pipeline:deps().
 deps() ->
     #{
-        prerequisites => [erldns_questions],
+        prerequisites => [erldns_edns, erldns_questions],
         dependents => [erldns_sorter, erldns_section_counter]
     }.
 
@@ -72,7 +72,9 @@ call(Msg, #{resolved := false, query_labels := QLabels, query_type := QType} = O
             Msg2 = complete_response(Msg1),
             {Msg2, Opts#{auth_zone => Zone, resolved => true, zonecut => Zonecut}};
         Error when Error =:= not_authoritative; Error =:= zone_not_found ->
-            Msg1 = Msg#dns_message{aa = false, rc = ?DNS_RCODE_REFUSED},
+            Msg1 = Msg#dns_message{
+                aa = false, rc = ?DNS_RCODE_REFUSED, answers = [], authority = []
+            },
             Msg2 = optionally_add_root_hints(Msg1),
             complete_response(Msg2)
     end;

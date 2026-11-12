@@ -13,8 +13,8 @@ be injected as a new pipe handler in the right order.
 
 The following are enabled by default, see their documentation for details:
 
+- `m:erldns_edns`
 - `m:erldns_questions`
-- `m:erldns_edns_max_payload_size`
 - `m:erldns_query_throttle`
 - `m:erldns_packet_cache`
 - `m:erldns_resolver_recursive`
@@ -23,6 +23,12 @@ The following are enabled by default, see their documentation for details:
 - `m:erldns_sorter`
 - `m:erldns_section_counter`
 - `m:erldns_empty_verification`
+
+## Optional pipes
+
+The following can be added, see their documentation for where:
+
+- `m:erldns_edns_ede`
 
 ## Types of pipelines
 
@@ -94,8 +100,8 @@ Pool behaviour:
 ```erlang
 {erldns, [
     {packet_pipeline, [
+        erldns_edns,
         erldns_questions,
-        erldns_edns_max_payload_size,
         erldns_query_throttle,
         erldns_packet_cache,
         erldns_resolver_recursive,
@@ -368,8 +374,8 @@ deps() ->
 -endif.
 
 -define(DEFAULT_PACKET_PIPELINE, [
+    erldns_edns,
     erldns_questions,
-    erldns_edns_max_payload_size,
     erldns_query_throttle,
     erldns_packet_cache,
     erldns_resolver_recursive,
