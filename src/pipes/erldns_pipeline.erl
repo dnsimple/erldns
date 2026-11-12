@@ -29,6 +29,7 @@ The following are enabled by default, see their documentation for details:
 The following can be added, see their documentation for where:
 
 - `m:erldns_edns_ede`
+- `m:erldns_edns_nsid`
 
 ## Types of pipelines
 
