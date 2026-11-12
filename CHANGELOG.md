@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of an answer with BADVERS.
 - A TCP or TLS client that disconnects right after connecting, or during the TLS handshake, no
   longer causes a `connection_init_failed` error log and `[erldns, request, error]` event.
+- ANY at a name matched by a wildcard CNAME is answered with the CNAME, as at a name that owns
+  one, instead of following it and answering with every record at its target.
 
 ### Changed
 

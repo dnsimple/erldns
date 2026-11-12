@@ -16,6 +16,7 @@ all() ->
         resolve_authoritative_zone_cut,
         resolve_authoritative_zone_cut_with_cnames,
         resolve_authoritative_zone_cut_with_cname_chain_through_wildcard,
+        any_at_a_wildcard_cname_is_answered_with_the_cname,
         resolve_authoritative_zone_cut_with_plain_cname_chain,
         resolve_authoritative_zone_cut_drops_occluded_cname,
         resolve_authoritative_self_delegation_trailing_dot_name_mismatch,
@@ -160,6 +161,29 @@ resolve_authoritative_zone_cut_with_cname_chain_through_wildcard(_) ->
     ?assertEqual([DelegationNS], A#dns_message.authority),
     ?assertEqual([Cname1, ExpandedWildcardCname], A#dns_message.answers),
     ?assertEqual(dns_domain:split(~"dyn.chain-zone-cut.example"), Cut),
+    erldns_zone_cache:delete_zone(ZoneName).
+
+%% ANY matches every type, CNAME included (RFC 1034 §3.7.1), so a CNAME answers ANY and is not
+%% followed: step 3a of RFC 1034 §4.3.2 for a name that owns one, step 3c as amended by RFC 4592
+%% §3.3.3 for a name a wildcard CNAME matches.
+any_at_a_wildcard_cname_is_answered_with_the_cname(_) ->
+    erldns_zone_cache:start_link(),
+    ZoneName = dns_domain:to_lower(~"wildcard-cname-any.example"),
+    QName = ~"www.wildcard-cname-any.example",
+    Cname = #dns_rr{
+        name = ~"*.wildcard-cname-any.example",
+        type = ?DNS_TYPE_CNAME,
+        ttl = 3600,
+        data = #dns_rrdata_cname{dname = ZoneName}
+    },
+    A = #dns_rr{
+        name = ZoneName, type = ?DNS_TYPE_A, ttl = 3600, data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
+    },
+    Z = erldns_zone_codec:build_zone(ZoneName, ~"digest", [soa(ZoneName), Cname, A], []),
+    ok = erldns_zone_cache:put_zone(Z),
+    Expanded = Cname#dns_rr{name = QName},
+    {Answer, none} = resolve_authoritative(Z, QName, ?DNS_TYPE_ANY),
+    ?assertMatch(#dns_message{aa = true, answers = [Expanded]}, Answer),
     erldns_zone_cache:delete_zone(ZoneName).
 
 %% Plain 2-hop CNAME chain (no wildcard) terminating at a delegated zonecut.
