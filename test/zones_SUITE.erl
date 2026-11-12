@@ -148,6 +148,8 @@ groups() ->
             rrset_sync_counter_dname_and_trailing_dot_same_key,
             delete_zone_cleans_sync_counters,
             put_zone_keeps_sync_counters,
+            put_rrset_sync_counter_lowers_it,
+            put_rrset_sync_counter_same_key_however_spelled,
             put_zone_never_hides_names_it_keeps,
             staged_zone_goes_live_on_commit,
             discard_zone_spares_a_published_zone,
@@ -2818,6 +2820,30 @@ put_zone_keeps_sync_counters(_) ->
         erldns_zone_cache:get_rrset_sync_counter(ZoneLabels, dns_domain:split(RRFqdn), ?DNS_TYPE_A)
     ).
 
+%% Lowered, the counter no longer declines a deletion it would have before, and the records are
+%% left as they were until one comes.
+put_rrset_sync_counter_lowers_it(_) ->
+    {ZoneName, RRFqdn} = zone_with_counted_rrset(put_counter_lower, 99),
+    Records = erldns_zone_cache:get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_A),
+    ?assertEqual(ok, erldns_zone_cache:put_rrset_sync_counter(ZoneName, RRFqdn, ?DNS_TYPE_A, 3)),
+    ?assertEqual(3, rrset_sync_counter(ZoneName, RRFqdn)),
+    ?assertEqual(Records, erldns_zone_cache:get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_A)),
+    ok = erldns_zone_cache:delete_zone_rrset(ZoneName, ~"v1", RRFqdn, ?DNS_TYPE_A, 4),
+    ?assertEqual([], erldns_zone_cache:get_records_by_name_and_type(RRFqdn, ?DNS_TYPE_A)),
+    ?assertEqual(4, rrset_sync_counter(ZoneName, RRFqdn)).
+
+put_rrset_sync_counter_same_key_however_spelled(_) ->
+    {ZoneName, RRFqdn} = zone_with_counted_rrset(put_counter_spelling, 99),
+    Upper = string:uppercase(RRFqdn),
+    ok = erldns_zone_cache:put_rrset_sync_counter(
+        string:uppercase(ZoneName), Upper, ?DNS_TYPE_A, 3
+    ),
+    ?assertEqual(3, rrset_sync_counter(ZoneName, RRFqdn)),
+    ZoneLabels = dns_domain:split(ZoneName),
+    RRFqdnLabels = dns_domain:split(RRFqdn),
+    ok = erldns_zone_cache:put_rrset_sync_counter(ZoneLabels, RRFqdnLabels, ?DNS_TYPE_A, 2),
+    ?assertEqual(2, rrset_sync_counter(ZoneName, RRFqdn)).
+
 %% Readers resolve names that every version of a zone holds while the zone is replaced over and
 %% over, and must never find one missing.
 put_zone_never_hides_names_it_keeps(_) ->
@@ -3267,6 +3293,20 @@ soa_rr(ZoneName) ->
 
 a_rr(Name, Ip) ->
     #dns_rr{name = Name, type = ?DNS_TYPE_A, ttl = 300, data = #dns_rrdata_a{ip = Ip}}.
+
+%% A zone whose www A RRSet was last written at `Counter`.
+zone_with_counted_rrset(TestCase, Counter) ->
+    ZoneName = unique_name(TestCase),
+    RRFqdn = <<"www.", ZoneName/binary>>,
+    Record = a_rr(RRFqdn, {192, 0, 2, 1}),
+    ok = erldns_zone_cache:put_zone({ZoneName, ~"v1", [soa_rr(ZoneName), Record]}),
+    ok = erldns_zone_cache:put_zone_rrset(
+        {ZoneName, ~"v1", [Record]}, RRFqdn, ?DNS_TYPE_A, Counter
+    ),
+    {ZoneName, RRFqdn}.
+
+rrset_sync_counter(ZoneName, RRFqdn) ->
+    erldns_zone_cache:get_rrset_sync_counter(ZoneName, RRFqdn, ?DNS_TYPE_A).
 
 eventually(Fun) ->
     eventually(Fun, 100).

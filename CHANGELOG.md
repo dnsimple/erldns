@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `erldns_edns_nsid` identifies the server to clients that ask, with NSID (RFC 5001) and the
   `id.server` and `hostname.bind` CH TXT queries (RFC 4892), once `{edns_nsid, #{id => Id}}` is
   set (#390).
+- `erldns_zone_cache:put_rrset_sync_counter/4` sets an RRSet's sync counter to any value, even a
+  lower one, without touching its records.
 
 ### Fixed
 

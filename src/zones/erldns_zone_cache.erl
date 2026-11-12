@@ -169,7 +169,8 @@ It can be:
     delete_zone/1,
     update_zone_records_and_digest/3,
     put_zone_rrset/4,
-    delete_zone_rrset/5
+    delete_zone_rrset/5,
+    put_rrset_sync_counter/4
 ]).
 
 -export([start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2]).
@@ -836,6 +837,29 @@ delete_zone_rrset(ZoneName, Digest, RRFqdn, Type, Counter) ->
         zone_not_found ->
             zone_not_found
     end.
+
+-doc #{group => ~"API: Mutations"}.
+-doc """
+Set an RRSet's sync counter to `Counter`, whatever it held, and leave its records as they are.
+
+`put_zone_rrset/4` sets the counter only along with the RRSet's records, and `delete_zone_rrset/5`
+declines a deletion below it. This is for a caller whose source of updates has gone back to a lower
+counter, and that has brought the RRSet's records in line by other means, such as by fetching the
+whole zone. Lowering the counter also lets through a late update that the higher one would have
+declined.
+""".
+-spec put_rrset_sync_counter(
+    dns:dname() | dns:labels(), dns:dname() | dns:labels(), dns:type(), integer()
+) -> ok.
+put_rrset_sync_counter(ZoneName, RRFqdn, Type, Counter) when is_binary(ZoneName) ->
+    ZoneNameLabels = dns_domain:split(dns_domain:to_lower(ZoneName)),
+    put_rrset_sync_counter(ZoneNameLabels, RRFqdn, Type, Counter);
+put_rrset_sync_counter(ZoneNameLabels, RRFqdn, Type, Counter) when is_binary(RRFqdn) ->
+    RRFqdnLabels = dns_domain:split(dns_domain:to_lower(RRFqdn)),
+    put_rrset_sync_counter(ZoneNameLabels, RRFqdnLabels, Type, Counter);
+put_rrset_sync_counter(ZoneNameLabels, RRFqdnLabels, Type, Counter) ->
+    write_rrset_sync_counter(ZoneNameLabels, RRFqdnLabels, Type, Counter),
+    ok.
 
 -doc #{group => ~"API: Mutations"}.
 -doc "Given a zone name, list of records, and a digest, update the zone metadata in cache.".
