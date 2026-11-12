@@ -1,9 +1,10 @@
 -module(erldns_query_throttle).
 -moduledoc """
-Stateful query throttling. Currently only throttles `ANY` queries.
+Stateful throttling of RRSIG queries over UDP.
 
-We should throttle `ANY` and `RRSIG` queries to discourage use of our authoritative name servers
-for reflection/amplification attacks.
+An RRSIG query draws every signature at the name, so a small query to a spoofed address can draw a
+large answer. A client over the limit gets an empty, truncated answer, and retries over TCP. ANY
+queries are answered minimally instead, see `m:erldns_resolver`.
 
 ## Configuration
 
@@ -87,15 +88,8 @@ start_link() ->
 -spec should_throttle(dns:message(), host(), non_neg_integer()) ->
     false | {true, non_neg_integer()}.
 should_throttle(#dns_message{questions = Questions}, Host, Limit) ->
-    HasAny = lists:any(
-        fun
-            (#dns_query{type = ?DNS_TYPE_ANY}) -> true;
-            (#dns_query{type = ?DNS_TYPE_RRSIG}) -> true;
-            (#dns_query{type = _}) -> false
-        end,
-        Questions
-    ),
-    HasAny andalso should_throttle(Host, Limit).
+    HasRRSig = lists:keymember(?DNS_TYPE_RRSIG, #dns_query.type, Questions),
+    HasRRSig andalso should_throttle(Host, Limit).
 
 -spec should_throttle(host(), non_neg_integer()) -> false | {true, non_neg_integer()}.
 should_throttle({127, 0, 0, 1}, _) ->
