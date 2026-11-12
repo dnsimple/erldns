@@ -51,6 +51,10 @@ groups() ->
             simple_dependency_satisfied,
             prerequisite_order_violated,
             dependency_order_violated,
+            every_dependency_is_checked,
+            dependent_must_follow_every_appearance,
+            optional_dependencies_may_be_absent,
+            optional_dependencies_must_be_in_place,
             multiple_dependencies_satisfied,
             transitive_dependencies_satisfied,
             backward_compatible_no_deps,
@@ -355,6 +359,71 @@ dependency_order_violated(_) ->
         {badpipe, {unsatisfied_dependency, #{pipe := pipe_a, requires := pipe_b}}},
         erldns_pipeline:store_pipeline(?FUNCTION_NAME, Pipes)
     ),
+    meck:unload([pipe_a, pipe_b]).
+
+%% Not only the last dependency of each list.
+every_dependency_is_checked(_) ->
+    meck:new([pipe_a, pipe_b, pipe_c], [non_strict]),
+    [meck:expect(Pipe, call, fun(Msg, _) -> Msg end) || Pipe <- [pipe_a, pipe_b, pipe_c]],
+    meck:expect(pipe_b, deps, fun() -> #{prerequisites => [pipe_a, pipe_c]} end),
+    ?assertError(
+        {badpipe,
+            {unsatisfied_dependency, #{
+                pipe := pipe_b,
+                requires := pipe_a,
+                hint := ~"Prerequisite must appear earlier in pipeline"
+            }}},
+        erldns_pipeline:store_pipeline(?FUNCTION_NAME, [pipe_c, pipe_b])
+    ),
+    meck:expect(pipe_b, deps, fun() -> #{dependents => [pipe_a, pipe_c]} end),
+    ?assertError(
+        {badpipe,
+            {unsatisfied_dependency, #{
+                pipe := pipe_b,
+                requires := pipe_a,
+                hint := ~"Dependent must appear later in pipeline"
+            }}},
+        erldns_pipeline:store_pipeline(?FUNCTION_NAME, [pipe_b, pipe_c])
+    ),
+    meck:unload([pipe_a, pipe_b, pipe_c]).
+
+%% A pipe that appears twice, such as erldns_packet_cache, is placed by its first appearance, so a
+%% pipe between the two does not come before it.
+dependent_must_follow_every_appearance(_) ->
+    meck:new([pipe_a, pipe_b], [non_strict]),
+    [meck:expect(Pipe, call, fun(Msg, _) -> Msg end) || Pipe <- [pipe_a, pipe_b]],
+    meck:expect(pipe_a, deps, fun() -> #{dependents => [pipe_b]} end),
+    ?assertError(
+        {badpipe, {unsatisfied_dependency, #{pipe := pipe_a, requires := pipe_b}}},
+        erldns_pipeline:store_pipeline(?FUNCTION_NAME, [pipe_b, pipe_a, pipe_b])
+    ),
+    ?assertEqual(ok, erldns_pipeline:store_pipeline(?FUNCTION_NAME, [pipe_a, pipe_b, pipe_b])),
+    meck:unload([pipe_a, pipe_b]).
+
+optional_dependencies_may_be_absent(_) ->
+    meck:new(pipe_a, [non_strict]),
+    meck:expect(pipe_a, call, fun(Msg, _) -> Msg end),
+    meck:expect(pipe_a, deps, fun() ->
+        #{prerequisites => [{optional, pipe_b}], dependents => [{optional, pipe_c}]}
+    end),
+    ?assertEqual(ok, erldns_pipeline:store_pipeline(?FUNCTION_NAME, [pipe_a])),
+    meck:unload(pipe_a).
+
+optional_dependencies_must_be_in_place(_) ->
+    meck:new([pipe_a, pipe_b], [non_strict]),
+    [meck:expect(Pipe, call, fun(Msg, _) -> Msg end) || Pipe <- [pipe_a, pipe_b]],
+    meck:expect(pipe_a, deps, fun() -> #{prerequisites => [{optional, pipe_b}]} end),
+    ?assertError(
+        {badpipe, {unsatisfied_dependency, #{pipe := pipe_a, requires := pipe_b}}},
+        erldns_pipeline:store_pipeline(?FUNCTION_NAME, [pipe_a, pipe_b])
+    ),
+    ?assertEqual(ok, erldns_pipeline:store_pipeline(?FUNCTION_NAME, [pipe_b, pipe_a])),
+    meck:expect(pipe_a, deps, fun() -> #{dependents => [{optional, pipe_b}]} end),
+    ?assertError(
+        {badpipe, {unsatisfied_dependency, #{pipe := pipe_a, requires := pipe_b}}},
+        erldns_pipeline:store_pipeline(?FUNCTION_NAME, [pipe_b, pipe_a])
+    ),
+    ?assertEqual(ok, erldns_pipeline:store_pipeline(?FUNCTION_NAME, [pipe_a, pipe_b])),
     meck:unload([pipe_a, pipe_b]).
 
 multiple_dependencies_satisfied(_) ->
