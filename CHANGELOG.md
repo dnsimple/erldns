@@ -33,8 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   REFUSED answers no longer send back its answer and authority sections.
 - A query with an EDNS version above 0 gets BADVERS and nothing else, as RFC 6891 §6.1.3 requires,
   instead of an answer with BADVERS.
-- A TCP or TLS client that disconnects right after connecting no longer causes a
-  `connection_init_failed` error log and `[erldns, request, error]` event.
+- A TCP or TLS client that disconnects right after connecting, or during the TLS handshake, no
+  longer causes a `connection_init_failed` error log and `[erldns, request, error]` event.
 
 ### Changed
 

@@ -57,7 +57,7 @@ groups() ->
             udp_not_a_question_raises_error_returns_nothing
         ]},
         {tcp, [parallel], [reset_before_init | tcp_tls_tests()]},
-        {tls, [parallel], tcp_tls_tests()}
+        {tls, [parallel], [handshake_aborted | tcp_tls_tests()]}
     ].
 
 tcp_tls_tests() ->
@@ -845,6 +845,12 @@ reset_before_init(_Config) ->
     assert_no_telemetry_event(),
     telemetry:detach(?FUNCTION_NAME),
     gen_tcp:close(Listen).
+
+handshake_aborted(Config) ->
+    #{port := Port} = prepare_test(Config, ?FUNCTION_NAME, tls, error, []),
+    Socket = connect_socket(tcp, {127, 0, 0, 1}, Port),
+    close_socket(tcp, Socket),
+    assert_no_telemetry_event().
 
 %% Test that TCP/TLS listener handles ingress timeouts correctly.
 %% When ingress timeout occurs (packet not received in time), a 'dropped' event

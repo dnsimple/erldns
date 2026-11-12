@@ -91,6 +91,9 @@ init({Ref, Transport, Opts, StartTime}) ->
                     connection_lost(SocketError)
             end
         catch
+            %% How ranch exits when the TLS handshake fails
+            exit:{shutdown, {Reason, _Peer}} ->
+                connection_lost(Reason);
             Class:Reason:Stacktrace ->
                 ExceptionMetadata = #{
                     what => connection_init_failed,
