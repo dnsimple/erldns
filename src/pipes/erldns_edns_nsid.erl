@@ -56,7 +56,7 @@ deps() ->
 prepare(Opts) ->
     case application:get_env(erldns, edns_nsid, #{}) of
         #{id := Id} when is_binary(Id), 0 < byte_size(Id), byte_size(Id) =< ?MAX_ID_SIZE ->
-            Opts#{nsid => Id};
+            Opts#{edns_nsid => Id};
         #{id := Id} ->
             error({invalid_edns_nsid, id, Id});
         #{} ->
@@ -67,30 +67,21 @@ prepare(Opts) ->
 
 -doc "`c:erldns_pipeline:call/2` callback.".
 -spec call(dns:message(), erldns_pipeline:opts()) -> erldns_pipeline:return().
+call(
+    #dns_message{questions = [#dns_query{class = ?DNS_CLASS_CH, type = ?DNS_TYPE_TXT}]} = Msg,
+    #{query_labels := Labels} = Opts
+) when Labels =:= ?ID_SERVER; Labels =:= ?HOSTNAME_BIND ->
+    Msg1 = server_id_answer(Msg, Opts),
+    Opts1 = Opts#{resolved => true},
+    Msg2 = maybe_add_nsid(Msg1, Opts1),
+    {Msg2, Opts1};
 call(Msg, Opts) ->
-    case is_server_id_query(Msg, Opts) of
-        true ->
-            Msg1 = server_id_answer(Msg, Opts),
-            Opts1 = Opts#{resolved => true},
-            Msg2 = add_nsid(Msg1, Opts1),
-            {Msg2, Opts1};
-        false ->
-            add_nsid(Msg, Opts)
-    end.
-
--spec is_server_id_query(dns:message(), erldns_pipeline:opts()) -> boolean().
-is_server_id_query(
-    #dns_message{questions = [#dns_query{class = ?DNS_CLASS_CH, type = ?DNS_TYPE_TXT}]},
-    #{query_labels := Labels}
-) ->
-    Labels =:= ?ID_SERVER orelse Labels =:= ?HOSTNAME_BIND;
-is_server_id_query(_, _) ->
-    false.
+    maybe_add_nsid(Msg, Opts).
 
 %% The header is set as erldns_resolver sets it, as the resolver will skip this query. The owner is
 %% the lowercased name, as the packet cache answers names in any case with the same entry.
 -spec server_id_answer(dns:message(), erldns_pipeline:opts()) -> dns:message().
-server_id_answer(Msg, #{query_name := Name, nsid := Id}) ->
+server_id_answer(Msg, #{query_name := Name, edns_nsid := Id}) ->
     Answer = #dns_rr{
         name = Name,
         type = ?DNS_TYPE_TXT,
@@ -108,8 +99,8 @@ server_id_answer(Msg, #{query_name := Name, nsid := Id}) ->
         authority = []
     }.
 
--spec add_nsid(dns:message(), erldns_pipeline:opts()) -> dns:message().
-add_nsid(Msg, #{query_edns_options := #{?DNS_EOPTCODE_NSID := _}, nsid := Id}) ->
+-spec maybe_add_nsid(dns:message(), erldns_pipeline:opts()) -> dns:message().
+maybe_add_nsid(Msg, #{query_edns_options := #{?DNS_EOPTCODE_NSID := _}, edns_nsid := Id}) ->
     erldns_edns:add_option(Msg, #dns_opt_nsid{data = Id});
-add_nsid(Msg, _) ->
+maybe_add_nsid(Msg, _) ->
     Msg.

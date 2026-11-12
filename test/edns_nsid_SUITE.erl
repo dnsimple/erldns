@@ -67,7 +67,7 @@ disabled_without_id(_) ->
 
 id_is_kept_in_opts(_) ->
     application:set_env(erldns, edns_nsid, #{id => ?ID}),
-    ?assertEqual(#{nsid => ?ID}, erldns_edns_nsid:prepare(#{})).
+    ?assertEqual(#{edns_nsid => ?ID}, erldns_edns_nsid:prepare(#{})).
 
 %% The identifier must fit in one TXT string, and a mistake in the configuration must not go
 %% unnoticed.
