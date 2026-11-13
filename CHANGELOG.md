@@ -73,19 +73,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The packet cache keeps answers to ANY apart by transport.
 - `erldns_query_throttle` no longer throttles ANY, now answered minimally over UDP, only RRSIG
   queries.
-- Zone records are decoded through `erldns_zone_pipeline`. A codec is only given JSON objects, and
-  a codec that returns anything but a record or `not_implemented` fails the decode of its zone.
 - `context_options` is read when the zone codec server starts, and no longer on each zone decode.
   An `allow` that isn't a list now fails that start, where it only failed the decode of the zones
   with a record that has a context.
 - The records of zone files go through the zone pipeline, so its pipes see them, and duplicate
-  records are dropped. Codecs, which decode JSON records, still don't see them.
+  records are dropped.
 
 ### Removed
 
 - `decode_record/1` of `erldns_zone_codec`, replaced by `erldns_zone_codec:decode_records/2`.
-- The `codecs` key of the `zones` configuration, replaced by its `pipeline` key: list the codecs
-  there, after `erldns_zone_standard`. A configuration that still sets `codecs` fails to start.
+- Zone codecs: the `codecs` key of the `zones` configuration, the `erldns_zone_codec` behaviour and
+  its `encoder()` and `decoder()` types, and `register_codec/1`, `register_codecs/1` and
+  `list_codecs/0` of `erldns_zone_codec`. A pipe in the `pipeline` key, after
+  `erldns_zone_standard`, decodes the records of a custom type, and its `encode/1` encodes them
+  back. A configuration that still sets `codecs`, or that lists a codec in `pipeline`, fails to
+  start.
 
 ## v12.0.3
 

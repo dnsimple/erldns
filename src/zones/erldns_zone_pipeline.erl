@@ -12,8 +12,9 @@ are sorted and deduplicated.
 ## Configuration
 
 The `pipeline` key of the `zones` configuration lists the pipes, see `m:erldns_zones`. A pipe that
-needs the records of standard types as JSON goes before `m:erldns_zone_standard`, and
-`m:erldns_zone_context` goes first for records to be filtered by context:
+needs the records of standard types as JSON goes before `m:erldns_zone_standard`, a pipe that
+decodes a custom record type goes after it, and `m:erldns_zone_context` goes first for records to
+be filtered by context:
 
 ```erlang
 {erldns, [
@@ -22,14 +23,13 @@ needs the records of standard types as JSON goes before `m:erldns_zone_standard`
             erldns_zone_context,
             sample_rewrite_pipe,
             erldns_zone_standard,
-            sample_custom_zone_codec
+            sample_custom_zone_pipe
         ]
     }}
 ]}
 ```
 
-Without `pipeline`, the pipes are `m:erldns_zone_context` and `m:erldns_zone_standard`. Codecs
-registered with `erldns_zone_codec:register_codecs/1` are added at the end.
+Without `pipeline`, the pipes are `m:erldns_zone_context` and `m:erldns_zone_standard`.
 
 ## Types of pipes
 
@@ -37,9 +37,6 @@ registered with `erldns_zone_codec:register_codecs/1` are added at the end.
   `c:deps/0`, which work as in `m:erldns_pipeline`, and `c:encode/1`, see
   [Custom record types](#module-custom-record-types).
 - A function of arity 2, called as `c:call/2`.
-- A module that implements `m:erldns_zone_codec`: its `c:erldns_zone_codec:decode/1` is applied
-  to each JSON record, and a record is left as it is when it returns `not_implemented`. Codecs next
-  to each other share one pass over the records, and the first that decodes a record wins.
 
 ## Custom record types
 
@@ -115,7 +112,6 @@ cap(Entry) ->
 ```
 """.
 
--include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -define(LOG_METADATA, #{domain => [erldns, zones, pipeline]}).
@@ -157,7 +153,7 @@ The return of a pipe.
 -doc "A pipe in the pipeline, see [Types of pipes](#module-types-of-pipes).".
 -type pipe() :: module() | pipefun().
 
--type step() :: {pipe, pipe(), pipefun()} | {codecs, [erldns_zone_codec:decoder()]}.
+-type step() :: {pipe(), pipefun()}.
 
 -doc "A pipeline ready to run.".
 -opaque prepared() :: {[step()], opts()}.
@@ -187,7 +183,7 @@ Encode a record that this pipe decoded back to JSON, or return `not_implemented`
 
 -optional_callbacks([prepare/1, deps/0, encode/1]).
 
--export([configured/0, validate_codecs/1, store/1, delete/0, run/2]).
+-export([configured/0, store/1, delete/0, run/2, encoders/0]).
 -export([prepare/1, run/3]).
 
 -doc false.
@@ -197,43 +193,36 @@ configured() ->
     configured(ZonesConfig).
 
 -doc false.
--spec validate_codecs([module()]) -> ok.
-validate_codecs(Modules) ->
-    lists:foreach(fun validate_codec/1, Modules).
-
--doc false.
 -spec store([pipe()]) -> ok.
 store(Pipes) ->
     Prepared = prepare(Pipes),
-    persistent_term:put(?MODULE, Prepared).
+    Encoders = encoders(Pipes),
+    persistent_term:put(?MODULE, {Prepared, Encoders}).
 
 -doc false.
 -spec delete() -> boolean().
 delete() ->
     persistent_term:erase(?MODULE).
 
-%% Without a stored pipeline, as when the zone codec server isn't running, the configured one is
-%% prepared for each call: running fewer pipes could load records that a pipe would have changed
 -doc false.
 -spec run([entry()], #{atom() => dynamic()}) -> {[entry()], opts()}.
 run(Entries, CallOpts) ->
-    case persistent_term:get(?MODULE, undefined) of
-        undefined ->
-            Pipes = configured(),
-            Prepared = prepare(Pipes),
-            run(Entries, CallOpts, Prepared);
-        Prepared ->
-            run(Entries, CallOpts, Prepared)
-    end.
+    {Prepared, _} = stored(),
+    run(Entries, CallOpts, Prepared).
+
+%% The encode/1 of the pipes, in the order of the pipeline
+-doc false.
+-spec encoders() -> [erldns_zone_encoder:encoder()].
+encoders() ->
+    {_, Encoders} = stored(),
+    Encoders.
 
 -doc false.
 -spec prepare([pipe()]) -> prepared().
 prepare(Pipes) ->
-    Init = {[], [], def_opts()},
     Prepare = fun(Pipe, Acc) -> prepare_pipe(Pipe, Acc, Pipes) end,
-    {Steps, Decoders, Opts} = lists:foldl(Prepare, Init, Pipes),
-    Flushed = flush(Decoders, Steps),
-    Pipeline = lists:reverse(Flushed),
+    {Steps, Opts} = lists:foldl(Prepare, {[], def_opts()}, Pipes),
+    Pipeline = lists:reverse(Steps),
     {Pipeline, Opts}.
 
 -doc false.
@@ -241,6 +230,19 @@ prepare(Pipes) ->
 run(Entries, CallOpts, {Pipeline, PreparedOpts}) ->
     Opts = maps:merge(PreparedOpts, CallOpts),
     lists:foldl(fun run_step/2, {Entries, Opts}, Pipeline).
+
+%% Without a stored pipeline, as when the zone codec server isn't running, the configured one is
+%% prepared for each call: running fewer pipes could load records that a pipe would have changed
+stored() ->
+    case persistent_term:get(?MODULE, undefined) of
+        undefined ->
+            Pipes = configured(),
+            Prepared = prepare(Pipes),
+            Encoders = encoders(Pipes),
+            {Prepared, Encoders};
+        Stored ->
+            Stored
+    end.
 
 %% The removed codecs key fails, so its codecs aren't left out of the pipeline unnoticed
 configured(#{codecs := _}) ->
@@ -252,44 +254,30 @@ configured(#{pipeline := Pipes}) ->
 configured(_) ->
     ?DEFAULT_PIPES.
 
-validate_codec(Module) ->
-    maybe
-        {module, Module} ?= code:ensure_loaded(Module),
-        true ?= erlang:function_exported(Module, encode, 1),
-        true ?= erlang:function_exported(Module, decode, 1)
-    else
-        {error, Reason} -> erlang:error({badcodec, {module, Reason}});
-        false -> erlang:error({badcodec, {module_does_not_export_call, Module}})
-    end.
+%% prepare/1 has loaded the modules
+encoders(Pipes) ->
+    Modules = [Pipe || Pipe <- Pipes, is_atom(Pipe)],
+    [fun Module:encode/1 || Module <- Modules, erlang:function_exported(Module, encode, 1)].
 
-prepare_pipe(Fun, {Steps, Decoders, Opts}, _) when is_function(Fun, 2) ->
-    Flushed = flush(Decoders, Steps),
-    {[{pipe, Fun, Fun} | Flushed], [], Opts};
+prepare_pipe(Fun, {Steps, Opts}, _) when is_function(Fun, 2) ->
+    {[{Fun, Fun} | Steps], Opts};
 prepare_pipe(Fun, _, _) when is_function(Fun) ->
     erlang:error({badpipe, {function_pipe_has_wrong_arity, Fun}});
 prepare_pipe(Module, Acc, Pipes) when is_atom(Module) ->
     ok = ensure_loaded(Module),
-    prepare_module(Module, Acc, Pipes).
-
-prepare_module(Module, {Steps, Decoders, Opts} = Acc, Pipes) ->
-    IsPipe = erlang:function_exported(Module, call, 2),
-    IsCodec = erlang:function_exported(Module, decode, 1),
-    case {IsPipe, IsCodec} of
-        {true, _} -> prepare_call(Module, Acc, Pipes);
-        {false, true} -> {Steps, [fun Module:decode/1 | Decoders], Opts};
-        {false, false} -> erlang:error({badpipe, {module_does_not_export_call, Module}})
+    case erlang:function_exported(Module, call, 2) of
+        true -> prepare_module(Module, Acc, Pipes);
+        false -> erlang:error({badpipe, {module_does_not_export_call, Module}})
     end.
 
-%% A disabled pipe leaves the codecs around it in one step
-prepare_call(Module, {Steps, Decoders, Opts}, Pipes) ->
+prepare_module(Module, {Steps, Opts} = Acc, Pipes) ->
     ok = ensure_dependencies(Module, Pipes),
     case maybe_prepare(Module, Opts) of
         disabled ->
             ?LOG_DEBUG(#{what => zone_pipe_disabled, module => Module}, ?LOG_METADATA),
-            {Steps, Decoders, Opts};
+            Acc;
         Opts1 ->
-            Flushed = flush(Decoders, Steps),
-            {[{pipe, Module, fun Module:call/2} | Flushed], [], Opts1}
+            {[{Module, fun Module:call/2} | Steps], Opts1}
     end.
 
 ensure_loaded(Module) ->
@@ -317,37 +305,12 @@ maybe_prepare(Module, Opts) ->
         _ -> erlang:error({badpipe, {module_init_returned_non_map, Module}})
     end.
 
-flush([], Steps) ->
-    Steps;
-flush(Decoders, Steps) ->
-    Ordered = lists:reverse(Decoders),
-    [{codecs, Ordered} | Steps].
-
-run_step({codecs, Decoders}, {Entries, Opts}) ->
-    Decoded = decode_all(Entries, Decoders),
-    {Decoded, Opts};
-run_step({pipe, Pipe, Fun}, {Entries, Opts}) ->
+run_step({Pipe, Fun}, {Entries, Opts}) ->
     case Fun(Entries, Opts) of
         Next when is_list(Next) -> {Next, Opts};
         {Next, NextOpts} when is_list(Next), is_map(NextOpts) -> {Next, NextOpts};
         {error, Reason} -> erlang:error({zone_rejected, Pipe, Reason});
         Other -> erlang:error({bad_zone_pipe_return, Pipe, Other})
-    end.
-
-decode_all(Entries, Decoders) ->
-    [decode_entry(Entry, Decoders) || Entry <- Entries].
-
-decode_entry(#{} = JsonRecord, Decoders) ->
-    try_decoders(JsonRecord, Decoders);
-decode_entry(Entry, _) ->
-    Entry.
-
-try_decoders(JsonRecord, []) ->
-    JsonRecord;
-try_decoders(JsonRecord, [Decoder | Rest]) ->
-    case Decoder(JsonRecord) of
-        not_implemented -> try_decoders(JsonRecord, Rest);
-        #dns_rr{} = Record -> Record
     end.
 
 def_opts() ->

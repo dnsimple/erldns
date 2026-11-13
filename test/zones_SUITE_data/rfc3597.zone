@@ -24,7 +24,7 @@ $TTL 3600
 ; }
 ; binary:encode_hex(iolist_to_binary(json:encode(Record))).
 ; ```
-; and therefore decoding with `sample_custom_zone_codec` should return:
+; and therefore decoding with `sample_custom_zone_pipe` should return:
 ; ```erl
 ; #dns_rr{
 ;     name = ~"example.com",

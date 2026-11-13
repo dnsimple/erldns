@@ -18,7 +18,7 @@ A JSON zone file contains an array of 1 or more zones. Each zone has a name and 
 
 ### Zonefile Format
 
-Zonefiles follow the standard DNS zonefile format as defined in RFC 1035 and RFC 3597. Unknown record types are represented using the RFC3597 `TYPE<number>` format with hex-encoded data. Their records go through the zone pipeline like those of JSON zones, but custom codecs only decode JSON records.
+Zonefiles follow the standard DNS zonefile format as defined in RFC 1035 and RFC 3597. Unknown record types are represented using the RFC3597 `TYPE<number>` format with hex-encoded data. Their records go through the zone pipeline like those of JSON zones, already decoded.
 
 The format can be configured in `erldns.config`:
 

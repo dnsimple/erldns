@@ -8,7 +8,7 @@
 -include_lib("erldns/include/erldns.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
--define(SAMPLE_PIPELINE, [erldns_zone_context, erldns_zone_standard, sample_custom_zone_codec]).
+-define(SAMPLE_PIPELINE, [erldns_zone_context, erldns_zone_standard, sample_custom_zone_pipe]).
 
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
@@ -92,12 +92,9 @@ groups() ->
             json_record_numeric_type,
             json_record_unknown_type_reaches_custom_decoders,
             json_record_without_type_name_reaches_custom_decoders,
-            zone_pipeline_codecs_share_a_pass,
-            zone_pipeline_codecs_see_json_records_only,
             zone_pipeline_rejects_bad_pipes,
             zone_pipeline_checks_deps,
             zone_pipeline_pipe_returns,
-            zone_pipeline_codec_must_return_a_record,
             decode_returns_pipeline_opts,
             decode_records_of_a_partial_zone,
             encode_meta_to_json,
@@ -123,15 +120,11 @@ groups() ->
             zone_context_filters_json_records,
             zone_pipeline_kept_by_codec_server,
             zone_pipeline_without_codec_server,
-            register_codecs_appends_to_zone_pipeline,
             context_options_read_when_codec_server_starts,
             zone_pipeline_from_config,
             zone_pipeline_bad_config,
-            register_codecs_after_configured_pipeline,
             zone_pipes_see_zone_file_records,
-            zone_pipe_encodes_its_records,
-            bad_custom_codecs_module_does_not_exist,
-            bad_custom_codecs_module_does_not_export_callbacks
+            zone_pipe_encodes_its_records
         ]},
         {cache, [], [
             cache_coverage,
@@ -232,22 +225,6 @@ end_per_testcase(_, _) ->
     application:unset_env(erldns, zones).
 
 %% Tests
-bad_custom_codecs_module_does_not_exist(_) ->
-    erlang:process_flag(trap_exit, true),
-    start_codec_server(#{}),
-    ?assertExit(
-        {{{badcodec, {module, _}}, _}, _},
-        erldns_zone_codec:register_codec(this_module_does_not_exist)
-    ).
-
-bad_custom_codecs_module_does_not_export_callbacks(_) ->
-    erlang:process_flag(trap_exit, true),
-    start_codec_server(#{}),
-    ?assertExit(
-        {{{badcodec, {module_does_not_export_call, ?MODULE}}, _}, _},
-        erldns_zone_codec:register_codec(?MODULE)
-    ).
-
 custom_decode(_) ->
     application:set_env(erldns, zones, #{pipeline => ?SAMPLE_PIPELINE}),
     {ok, _} = erldns_zone_codec:start_link(),
@@ -269,8 +246,7 @@ custom_decode(_) ->
     ?assertEqual(~"example.com", Record#dns_rr.name),
     ?assertEqual(40000, Record#dns_rr.type),
     ?assertEqual(60, Record#dns_rr.ttl),
-    ?assertEqual(~"example.net", Record#dns_rr.data),
-    ?assertEqual(not_implemented, sample_custom_zone_codec:decode(#{})).
+    ?assertEqual(~"example.net", Record#dns_rr.data).
 
 encode_meta_to_json(_) ->
     ZoneName = unique_name(?FUNCTION_NAME),
@@ -1170,16 +1146,16 @@ json_record_numeric_type(_) ->
 
 json_record_unknown_type_reaches_custom_decoders(_) ->
     %% A type name dns_erlang does not know belongs to a custom decoder. erldns_zone_standard
-    %% leaves it as JSON for the codecs after it, without dns_json raising on the way, which
+    %% leaves it as JSON for the pipes after it, without dns_json raising on the way, which
     %% is what makes a zone of such records decode in the same time as a zone of standard ones.
-    %% A codec that doesn't decode it leaves it as JSON too.
+    %% A pipe that doesn't decode it leaves it as JSON too.
     %% `TYPE65535' is here because it looks decodable and is not: `dns_names:name_type/1'
     %% has no clause for RFC 3597's generic spelling and `string:to_integer/1' does not
     %% strip the prefix, so dns_json rejects it too and it belongs to the custom decoders.
     lists:foreach(
         fun(Type) ->
             Json = #{~"name" => ~"example.com", ~"type" => Type, ~"ttl" => 3600, ~"data" => #{}},
-            Pipes = [erldns_zone_standard, sample_custom_zone_codec],
+            Pipes = [erldns_zone_standard, sample_custom_zone_pipe],
             ?assertMatch({[Json], _}, run_pipes(Pipes, [Json]))
         end,
         [~"CUSTOM", ~"TYPE65535"]
@@ -1235,49 +1211,6 @@ json_record_context_filtered(_) ->
         application:unset_env(erldns, zones)
     end.
 
-zone_pipeline_codecs_share_a_pass(_) ->
-    Codec = sample_custom_zone_codec,
-    Fun = fun(Entries, _) -> Entries end,
-    ?assertMatch(
-        {[{pipe, erldns_zone_standard, _}, {codecs, [_, _]}], _},
-        erldns_zone_pipeline:prepare([erldns_zone_standard, Codec, Codec])
-    ),
-    ?assertMatch(
-        {[{codecs, [_]}, {pipe, Fun, Fun}, {codecs, [_]}], _},
-        erldns_zone_pipeline:prepare([Codec, Fun, Codec])
-    ),
-    %% erldns_zone_context is disabled without context_options
-    ?assertMatch(
-        {[{codecs, [_, _]}], _},
-        erldns_zone_pipeline:prepare([Codec, erldns_zone_context, Codec])
-    ).
-
-zone_pipeline_codecs_see_json_records_only(_) ->
-    Codec = ?FUNCTION_NAME,
-    meck:new(Codec, [non_strict]),
-    try
-        meck:expect(Codec, decode, fun
-            (#{~"type" := ~"A", ~"name" := Name}) ->
-                #dns_rr{name = Name, type = ?DNS_TYPE_A, ttl = 60, data = from_codec};
-            (_) ->
-                not_implemented
-        end),
-        Json = json_a(~"a.example.com"),
-        Sample = #{
-            ~"name" => ~"s.example.com",
-            ~"type" => ~"SAMPLE",
-            ~"ttl" => 60,
-            ~"data" => #{~"dname" => ~"example.net"}
-        },
-        Decoded = a_rr(~"d.example.com", {192, 0, 2, 2}),
-        Pipes = [Codec, sample_custom_zone_codec, erldns_zone_standard],
-        {Entries, _} = run_pipes(Pipes, [Json, Sample, Decoded]),
-        ?assertMatch([#dns_rr{data = from_codec}, #dns_rr{type = 40000}, Decoded], Entries),
-        ?assertEqual(2, meck:num_calls(Codec, decode, '_'))
-    after
-        meck:unload(Codec)
-    end.
-
 zone_pipeline_rejects_bad_pipes(_) ->
     NonMap = ?FUNCTION_NAME,
     meck:new(NonMap, [non_strict]),
@@ -1301,7 +1234,7 @@ zone_pipeline_checks_deps(_) ->
         run_pipes([erldns_zone_standard, erldns_zone_context])
     ),
     ?assertMatch(
-        {[{pipe, erldns_zone_standard, _}], _},
+        {[{erldns_zone_standard, _}], _},
         erldns_zone_pipeline:prepare([erldns_zone_context, erldns_zone_standard])
     ).
 
@@ -1319,17 +1252,6 @@ zone_pipeline_pipe_returns(_) ->
     ?assertError({bad_zone_pipe_return, Bad, foo}, run_pipes([Bad])),
     Raise = fun(_, _) -> erlang:error(boom) end,
     ?assertError(boom, run_pipes([Raise])).
-
-zone_pipeline_codec_must_return_a_record(_) ->
-    Codec = ?FUNCTION_NAME,
-    meck:new(Codec, [non_strict]),
-    try
-        meck:expect(Codec, decode, fun(_) -> foo end),
-        Custom = #{~"name" => ~"example.com", ~"type" => ~"CUSTOM", ~"ttl" => 3600, ~"data" => #{}},
-        ?assertError({case_clause, foo}, run_pipes([Codec], [Custom]))
-    after
-        meck:unload(Codec)
-    end.
 
 decode_returns_pipeline_opts(_) ->
     Zone = #{~"name" => ~"example.com", ~"sha" => ~"abc", ~"records" => [json_a(~"a.example.com")]},
@@ -1370,9 +1292,11 @@ zone_context_filters_json_records(_) ->
 zone_pipeline_kept_by_codec_server(_) ->
     start_codec_server(#{pipeline => ?SAMPLE_PIPELINE}),
     ?assertMatch(
-        {[{pipe, erldns_zone_standard, _}, {codecs, [_]}], _},
+        {{[{erldns_zone_standard, _}, {sample_custom_zone_pipe, _}], _}, [_]},
         persistent_term:get(erldns_zone_pipeline)
     ),
+    ?assertEqual(not_implemented, gen_server:call(erldns_zone_codec, unexpected)),
+    ok = gen_server:cast(erldns_zone_codec, unexpected),
     stop_codec_server(),
     ?assertEqual(undefined, persistent_term:get(erldns_zone_pipeline, undefined)).
 
@@ -1388,15 +1312,6 @@ zone_pipeline_without_codec_server(_) ->
         #zone{records = [#dns_rr{}, #dns_rr{type = 40000}]}, erldns_zone_codec:decode(Zone)
     ),
     ?assertMatch(#zone{records = [_]}, erldns_zone_codec:decode(Hidden)).
-
-register_codecs_appends_to_zone_pipeline(_) ->
-    start_codec_server(#{}),
-    Zone = sample_zone([]),
-    ?assertMatch(#zone{records = [#dns_rr{type = ?DNS_TYPE_A}]}, erldns_zone_codec:decode(Zone)),
-    ok = erldns_zone_codec:register_codec(sample_custom_zone_codec),
-    ?assertMatch(#zone{records = [_, #dns_rr{type = 40000}]}, erldns_zone_codec:decode(Zone)),
-    ?assertMatch({[_], [_]}, erldns_zone_codec:list_codecs()),
-    stop_codec_server().
 
 context_options_read_when_codec_server_starts(_) ->
     Pipeline = ?SAMPLE_PIPELINE,
@@ -1449,7 +1364,7 @@ zone_pipe_encodes_its_records(_) ->
 
 zone_pipeline_from_config(_) ->
     Copy = fun(Entries, _) -> lists:flatmap(fun copy_to_extra_names/1, Entries) end,
-    Pipeline = [erldns_zone_context, Copy, erldns_zone_standard, sample_custom_zone_codec],
+    Pipeline = [erldns_zone_context, Copy, erldns_zone_standard, sample_custom_zone_pipe],
     start_codec_server(#{pipeline => Pipeline}),
     Copied = (json_a(~"p.example.com"))#{~"extra_names" => [~"q.example.com"]},
     #{~"records" := Records} = Zone = sample_zone([]),
@@ -1463,44 +1378,37 @@ zone_pipeline_from_config(_) ->
         ],
         Decoded
     ),
-    ?assertMatch({[_], [_]}, erldns_zone_codec:list_codecs()),
+    ?assertMatch([_], erldns_zone_pipeline:encoders()),
     ?assertMatch([_, _], decode_records([Copied])),
     stop_codec_server().
 
 zone_pipeline_bad_config(_) ->
     erlang:process_flag(trap_exit, true),
     eventually(fun() -> undefined =:= whereis(erldns_zone_codec) end),
+    Codec = ?FUNCTION_NAME,
+    meck:new(Codec, [non_strict]),
+    meck:expect(Codec, decode, fun(_) -> not_implemented end),
+    meck:expect(Codec, encode, fun(_) -> not_implemented end),
     BadConfigs = [
-        {#{codecs => [sample_custom_zone_codec]}, {badconfig, codecs_moved_to_pipeline}},
+        {#{codecs => []}, {badconfig, codecs_moved_to_pipeline}},
         {
             #{pipeline => erldns_zone_standard},
             {badconfig, {invalid_pipeline, erldns_zone_standard}}
         },
-        {#{pipeline => [this_module_does_not_exist]}, {badpipe, {module, nofile}}}
+        {#{pipeline => [this_module_does_not_exist]}, {badpipe, {module, nofile}}},
+        {#{pipeline => [Codec]}, {badpipe, {module_does_not_export_call, Codec}}}
     ],
-    lists:foreach(
-        fun({ZonesConfig, Reason}) ->
-            application:set_env(erldns, zones, ZonesConfig),
-            ?assertMatch({error, {Reason, _}}, erldns_zone_codec:start_link())
-        end,
-        BadConfigs
-    ).
-
-register_codecs_after_configured_pipeline(_) ->
-    Self = self(),
-    Spy = fun(Entries, _) ->
-        Self ! {spied, Entries},
-        Entries
-    end,
-    start_codec_server(#{pipeline => [erldns_zone_standard, Spy]}),
-    ok = erldns_zone_codec:register_codec(sample_custom_zone_codec),
-    Zone = sample_zone([]),
-    ?assertMatch(#zone{records = [_, #dns_rr{type = 40000}]}, erldns_zone_codec:decode(Zone)),
-    receive
-        {spied, Entries} -> ?assertMatch([#dns_rr{}, #{~"type" := ~"SAMPLE"}], Entries)
-    after 1000 -> ct:fail(spy_not_called)
-    end,
-    stop_codec_server().
+    try
+        lists:foreach(
+            fun({ZonesConfig, Reason}) ->
+                application:set_env(erldns, zones, ZonesConfig),
+                ?assertMatch({error, {Reason, _}}, erldns_zone_codec:start_link())
+            end,
+            BadConfigs
+        )
+    after
+        meck:unload(Codec)
+    end.
 
 json_record_openpgpkey_to_erlang(_) ->
     Name = ~"_openpgpkey.example.com",
@@ -2236,8 +2144,8 @@ load_zonefile_with_custom_decoder(Config) ->
     Result = erldns_zone_loader:load_zones(LoadConfig),
     ?assertMatch(1, Result),
     Records = erldns_zone_cache:get_zone_records(~"example-rfc3597.com"),
-    %% RFC 3597 hex RDATA is stored as binary;
-    %% it is not passed through custom JSON codecs (those apply to JSON zone files).
+    %% RFC 3597 hex RDATA is stored as binary: sample_custom_zone_pipe gets the record already
+    %% decoded, and leaves it as it is.
     ?assert(
         lists:any(
             fun

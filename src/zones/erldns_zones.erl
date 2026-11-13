@@ -24,7 +24,7 @@ For more details about its subsections, see:
         format => auto,
         timeout => timer:minutes(5),
         grace_period => timer:seconds(30),
-        pipeline => [erldns_zone_context, erldns_zone_standard, sample_custom_zone_codec],
+        pipeline => [erldns_zone_context, erldns_zone_standard, sample_custom_zone_pipe],
         context_options => #{match_empty => true, allow => [<<"anycast">>, <<"AMS">>, <<"TKO">>]}
     }},
 ]}
@@ -48,7 +48,7 @@ Zone configuration.
   [`JSON`](priv/zones/ZONES.md#json-format) zone format documentation.
 
 - `format`: specifies the zone file format to look for.
-  The records of both formats go through the zone pipeline, but codecs only decode JSON records.
+  The records of both formats go through the zone pipeline, those of zone files already decoded.
   Valid values are:
   - `json`: zones are parsed using `erldns`'s [`JSON`](priv/zones/ZONES.md#json-format) zone format.
   - `zonefile`: zones are parsed using the [`zone`](priv/zones/ZONES.md#zonefile-format) format.
@@ -59,10 +59,10 @@ Zone configuration.
 - `grace_period`: how long, in milliseconds, the records of a replaced or deleted zone stay
   readable for queries that started on them, before they are deleted. Defaults to 30 seconds.
 
-- `pipeline`: the pipes and codecs that the records of a zone go through when it is decoded, see
+- `pipeline`: the pipes that the records of a zone go through when it is decoded, see
   `m:erldns_zone_pipeline`. Defaults to `m:erldns_zone_context` and `m:erldns_zone_standard`, and
-  custom codecs go after them. Not to be confused with the top-level `pipeline` and
-  `packet_pipeline` keys, which are about queries.
+  the pipes that decode custom record types go after them. Not to be confused with the top-level
+  `pipeline` and `packet_pipeline` keys, which are about queries.
 
 - `context_options`: allow you to filter loading certain records in a zone
   depending on configuration details. See [`ZONES`](priv/zones/ZONES.md) for more details.
