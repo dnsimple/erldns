@@ -7,30 +7,13 @@
 -include_lib("public_key/include/public_key.hrl").
 -define(LOG_METADATA, #{domain => [erldns, zones, decoder]}).
 
--export([decode_record/2, parse_keysets/1, finalize/1]).
-
--spec decode_record(#{binary() => json:decode_value()}, [erldns_zone_codec:decoder()]) ->
-    not_implemented | dns:rr().
-decode_record(JsonRecord, Decoders) ->
-    Name = maps:get(~"name", JsonRecord, ~""),
-    Opts = #{zone_name => Name, version => ~"", scope => partial},
-    case decode_entries([JsonRecord], Opts, Decoders) of
-        [] -> not_implemented;
-        [Record] -> Record
-    end.
+-export([parse_keysets/1, finalize/1]).
 
 -doc "Keep the decoded records, sorted and deduplicated, and log the others as unsupported.".
 -spec finalize([erldns_zone_pipeline:entry()]) -> [dns:rr()].
 finalize(Entries) ->
     Records = lists:flatmap(fun keep_record/1, Entries),
     lists:usort(Records).
-
-decode_entries(JsonRecords, Opts, Decoders) ->
-    CodecsPipe = erldns_zone_pipeline:decoders_pipe(Decoders),
-    Pipes = [erldns_zone_context, erldns_zone_standard, CodecsPipe],
-    Prepared = erldns_zone_pipeline:prepare(Pipes),
-    {Entries, _} = erldns_zone_pipeline:run(JsonRecords, Opts, Prepared),
-    finalize(Entries).
 
 keep_record(#dns_rr{} = Record) ->
     [Record];

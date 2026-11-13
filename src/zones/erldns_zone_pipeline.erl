@@ -129,7 +129,7 @@ It can be called more than once, and isn't called again for each zone.
 -optional_callbacks([prepare/1, deps/0]).
 
 -export([configured/0, validate_codecs/1, store/1, delete/0, run/2]).
--export([prepare/1, run/3, decoders_pipe/1]).
+-export([prepare/1, run/3]).
 
 -doc false.
 -spec configured() -> [pipe()].
@@ -184,11 +184,6 @@ prepare(Pipes) ->
 run(Entries, CallOpts, {Pipeline, PreparedOpts}) ->
     Opts = maps:merge(PreparedOpts, CallOpts),
     lists:foldl(fun run_step/2, {Entries, Opts}, Pipeline).
-
--doc false.
--spec decoders_pipe([erldns_zone_codec:decoder()]) -> pipefun().
-decoders_pipe(Decoders) ->
-    fun(Entries, _Opts) -> decode_all(Entries, Decoders) end.
 
 validate_codec(Module) ->
     maybe

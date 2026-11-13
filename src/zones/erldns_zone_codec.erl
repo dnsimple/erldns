@@ -63,7 +63,8 @@ encode(_) ->
     encode/1,
     encode/2,
     decode/1,
-    decode_record/1,
+    decode/2,
+    decode_records/2,
     register_codecs/1,
     register_codec/1,
     list_codecs/0
@@ -110,22 +111,45 @@ encode(Zone, Opts) ->
     {Encoders, _} = list_codecs(),
     erldns_zone_encoder:encode(Zone, Opts, Encoders).
 
--doc "Takes a JSON map and turns it into a zone.".
+-doc "Takes a JSON map and turns it into a zone, as `decode/2` does with no options.".
 -spec decode(json:decode_value()) -> erldns:zone().
-decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone) ->
+decode(Zone) ->
+    {Decoded, _} = decode(Zone, #{}),
+    Decoded.
+
+-doc """
+Takes a JSON map and turns it into a zone, through `m:erldns_zone_pipeline`.
+
+The pipes get `Opts` with the zone's name and version, and `scope` set to `zone` unless `Opts` sets
+it. Returns the zone, and the options as the pipes left them.
+""".
+-spec decode(json:decode_value(), #{atom() => dynamic()}) ->
+    {erldns:zone(), erldns_zone_pipeline:opts()}.
+decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Opts) ->
     Sha = maps:get(~"sha", Zone, ~""),
     JsonKeys = maps:get(~"keys", Zone, []),
     Keys = erldns_zone_decoder:parse_keysets(JsonKeys),
-    Opts = #{zone_name => Name, version => Sha, scope => zone},
-    {Entries, _} = erldns_zone_pipeline:run(JsonRecords, Opts),
-    Records = erldns_zone_decoder:finalize(Entries),
-    build_zone(Name, Sha, Records, Keys).
+    Scoped = maps:merge(#{scope => zone}, Opts),
+    RecordsOpts = Scoped#{zone_name => Name, version => Sha},
+    {Records, Opts1} = decode_records(JsonRecords, RecordsOpts),
+    Decoded = build_zone(Name, Sha, Records, Keys),
+    {Decoded, Opts1}.
 
--doc "Takes a JSON record and turns it into a `t:dns:rr/0`.".
--spec decode_record(#{binary() => json:decode_value()}) -> not_implemented | dns:rr().
-decode_record(Record) ->
-    {_, Decoders} = list_codecs(),
-    erldns_zone_decoder:decode_record(Record, Decoders).
+-doc """
+Takes records of a zone, such as those of an RRSet, through `m:erldns_zone_pipeline`.
+
+The records can be JSON or already decoded. The pipes get `Opts`, with `scope` set to `partial`
+and `version` to `<<>>` unless `Opts` sets them. Returns the records, sorted and deduplicated, and
+the options as the pipes left them.
+""".
+-spec decode_records(Entries, Opts) -> {[dns:rr()], erldns_zone_pipeline:opts()} when
+    Entries :: [erldns_zone_pipeline:entry()],
+    Opts :: #{zone_name := dns:dname(), atom() => dynamic()}.
+decode_records(Entries, #{zone_name := _} = Opts) ->
+    CallOpts = maps:merge(#{scope => partial, version => ~""}, Opts),
+    {Decoded, Opts1} = erldns_zone_pipeline:run(Entries, CallOpts),
+    Records = erldns_zone_decoder:finalize(Decoded),
+    {Records, Opts1}.
 
 -doc "Register a custom parser module.".
 -spec register_codec(module()) -> ok.

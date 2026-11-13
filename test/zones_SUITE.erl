@@ -95,6 +95,8 @@ groups() ->
             zone_pipeline_checks_deps,
             zone_pipeline_pipe_returns,
             zone_pipeline_codec_must_return_a_record,
+            decode_returns_pipeline_opts,
+            decode_records_of_a_partial_zone,
             encode_meta_to_json,
             encode_decode_svcb,
             encode_decode_https,
@@ -1125,70 +1127,49 @@ json_record_null_data(_) ->
     ).
 
 json_record_unsupported_type(_) ->
-    %% Test that unsupported record types return not_implemented
-    ?assertEqual(
-        not_implemented,
-        erldns_zone_decoder:decode_record(
-            #{
-                ~"name" => ~"example.com",
-                ~"type" => ~"UNKNOWN_TYPE",
-                ~"ttl" => 3600,
-                ~"data" => #{}
-            },
-            []
-        )
-    ).
+    %% Test that unsupported record types are dropped
+    Unsupported = #{
+        ~"name" => ~"example.com",
+        ~"type" => ~"UNKNOWN_TYPE",
+        ~"ttl" => 3600,
+        ~"data" => #{}
+    },
+    ?assertEqual([], decode_records([Unsupported])).
 
 json_record_numeric_type(_) ->
     %% A bare numeric type name is a standard record, not a custom one, and must still be
     %% decoded rather than handed to the custom decoders.
+    Numeric = #{
+        ~"name" => ~"example.com",
+        ~"type" => integer_to_binary(?DNS_TYPE_A),
+        ~"ttl" => 3600,
+        ~"data" => #{~"ip" => ~"192.0.2.1"}
+    },
     ?assertEqual(
-        #dns_rr{
-            name = ~"example.com",
-            type = ?DNS_TYPE_A,
-            data = #dns_rrdata_a{ip = {192, 0, 2, 1}},
-            ttl = 3600
-        },
-        erldns_zone_decoder:decode_record(
-            #{
-                ~"name" => ~"example.com",
-                ~"type" => integer_to_binary(?DNS_TYPE_A),
-                ~"ttl" => 3600,
-                ~"data" => #{~"ip" => ~"192.0.2.1"}
-            },
-            []
-        )
+        [
+            #dns_rr{
+                name = ~"example.com",
+                type = ?DNS_TYPE_A,
+                data = #dns_rrdata_a{ip = {192, 0, 2, 1}},
+                ttl = 3600
+            }
+        ],
+        decode_records([Numeric])
     ).
 
 json_record_unknown_type_reaches_custom_decoders(_) ->
-    %% A type name dns_erlang does not know belongs to a custom decoder. It is reached
-    %% without dns_json raising on the way, which is what makes a zone of such records
-    %% decode in the same time as a zone of standard ones.
+    %% A type name dns_erlang does not know belongs to a custom decoder. erldns_zone_standard
+    %% leaves it as JSON for the codecs after it, without dns_json raising on the way, which
+    %% is what makes a zone of such records decode in the same time as a zone of standard ones.
+    %% A codec that doesn't decode it leaves it as JSON too.
     %% `TYPE65535' is here because it looks decodable and is not: `dns_names:name_type/1'
     %% has no clause for RFC 3597's generic spelling and `string:to_integer/1' does not
     %% strip the prefix, so dns_json rejects it too and it belongs to the custom decoders.
-    Decoder = fun
-        (#{~"type" := Type, ~"name" := Name, ~"ttl" := Ttl}) when
-            Type =:= ~"CUSTOM"; Type =:= ~"TYPE65535"
-        ->
-            #dns_rr{name = Name, type = 30001, ttl = Ttl, data = ~"custom"};
-        (_) ->
-            not_implemented
-    end,
     lists:foreach(
         fun(Type) ->
-            ?assertEqual(
-                #dns_rr{name = ~"example.com", type = 30001, ttl = 3600, data = ~"custom"},
-                erldns_zone_decoder:decode_record(
-                    #{
-                        ~"name" => ~"example.com",
-                        ~"type" => Type,
-                        ~"ttl" => 3600,
-                        ~"data" => #{}
-                    },
-                    [Decoder]
-                )
-            )
+            Json = #{~"name" => ~"example.com", ~"type" => Type, ~"ttl" => 3600, ~"data" => #{}},
+            Pipes = [erldns_zone_standard, sample_custom_zone_codec],
+            ?assertMatch({[Json], _}, run_pipes(Pipes, [Json]))
         end,
         [~"CUSTOM", ~"TYPE65535"]
     ).
@@ -1196,18 +1177,12 @@ json_record_unknown_type_reaches_custom_decoders(_) ->
 json_record_without_type_name_reaches_custom_decoders(_) ->
     %% `dns_json:from_map/1' guards its record clause on a binary type, so a record without
     %% one is not a standard record by construction: missing, empty and non-binary alike
-    %% belong to the custom decoders, and are left unread when there are none.
-    Decoder = fun(#{~"name" := Name, ~"ttl" := Ttl}) ->
-        #dns_rr{name = Name, type = 30001, ttl = Ttl, data = ~"custom"}
-    end,
+    %% belong to the custom decoders, and are dropped when there are none.
     Untyped = #{~"name" => ~"example.com", ~"ttl" => 3600, ~"data" => #{}},
     lists:foreach(
         fun(JsonRecord) ->
-            ?assertEqual(
-                #dns_rr{name = ~"example.com", type = 30001, ttl = 3600, data = ~"custom"},
-                erldns_zone_decoder:decode_record(JsonRecord, [Decoder])
-            ),
-            ?assertEqual(not_implemented, erldns_zone_decoder:decode_record(JsonRecord, []))
+            ?assertMatch({[JsonRecord], _}, run_pipes([erldns_zone_standard], [JsonRecord])),
+            ?assertEqual([], decode_records([JsonRecord]))
         end,
         [Untyped, Untyped#{~"type" => ~""}, Untyped#{~"type" => ?DNS_TYPE_A}]
     ).
@@ -1220,39 +1195,30 @@ json_record_context_filtered(_) ->
             allow => [~"production"]
         }
     }),
+    Pipes = [erldns_zone_context, erldns_zone_standard],
+    Json = #{
+        ~"name" => ~"example.com",
+        ~"type" => ~"A",
+        ~"ttl" => 3600,
+        ~"data" => #{~"ip" => ~"192.0.2.1"}
+    },
     try
         %% Record with empty context should be filtered out
-        ?assertEqual(
-            not_implemented,
-            erldns_zone_decoder:decode_record(
-                #{
-                    ~"name" => ~"example.com",
-                    ~"type" => ~"A",
-                    ~"ttl" => 3600,
-                    ~"data" => #{~"ip" => ~"192.0.2.1"},
-                    ~"context" => []
-                },
-                []
-            )
-        ),
+        ?assertMatch({[], _}, run_pipes(Pipes, [Json#{~"context" => []}])),
         %% Record with matching context should pass
-        ?assertEqual(
-            #dns_rr{
-                name = ~"example.com",
-                type = ?DNS_TYPE_A,
-                data = #dns_rrdata_a{ip = {192, 0, 2, 1}},
-                ttl = 3600
+        ?assertMatch(
+            {
+                [
+                    #dns_rr{
+                        name = ~"example.com",
+                        type = ?DNS_TYPE_A,
+                        data = #dns_rrdata_a{ip = {192, 0, 2, 1}},
+                        ttl = 3600
+                    }
+                ],
+                _
             },
-            erldns_zone_decoder:decode_record(
-                #{
-                    ~"name" => ~"example.com",
-                    ~"type" => ~"A",
-                    ~"ttl" => 3600,
-                    ~"data" => #{~"ip" => ~"192.0.2.1"},
-                    ~"context" => [~"production"]
-                },
-                []
-            )
+            run_pipes(Pipes, [Json#{~"context" => [~"production"]}])
         )
     after
         application:unset_env(erldns, zones)
@@ -1344,10 +1310,32 @@ zone_pipeline_pipe_returns(_) ->
     ?assertError(boom, run_pipes([Raise])).
 
 zone_pipeline_codec_must_return_a_record(_) ->
-    Custom = #{~"name" => ~"example.com", ~"type" => ~"CUSTOM", ~"ttl" => 3600, ~"data" => #{}},
-    ?assertError(
-        {case_clause, foo}, erldns_zone_decoder:decode_record(Custom, [fun(_) -> foo end])
-    ).
+    Codec = ?FUNCTION_NAME,
+    meck:new(Codec, [non_strict]),
+    try
+        meck:expect(Codec, decode, fun(_) -> foo end),
+        Custom = #{~"name" => ~"example.com", ~"type" => ~"CUSTOM", ~"ttl" => 3600, ~"data" => #{}},
+        ?assertError({case_clause, foo}, run_pipes([Codec], [Custom]))
+    after
+        meck:unload(Codec)
+    end.
+
+decode_returns_pipeline_opts(_) ->
+    Zone = #{~"name" => ~"example.com", ~"sha" => ~"abc", ~"records" => [json_a(~"a.example.com")]},
+    ?assertMatch(
+        {#zone{records = [_]}, #{
+            extra := 1, scope := zone, zone_name := ~"example.com", version := ~"abc"
+        }},
+        erldns_zone_codec:decode(Zone, #{extra => 1})
+    ),
+    ?assertMatch({_, #{scope := partial}}, erldns_zone_codec:decode(Zone, #{scope => partial})).
+
+decode_records_of_a_partial_zone(_) ->
+    Record = a_rr(~"d.example.com", {192, 0, 2, 2}),
+    Entries = [Record, json_a(~"a.example.com"), Record],
+    {Records, Opts} = erldns_zone_codec:decode_records(Entries, #{zone_name => ~"example.com"}),
+    ?assertMatch([#dns_rr{name = ~"a.example.com"}, Record], Records),
+    ?assertMatch(#{scope := partial, version := ~"", zone_name := ~"example.com"}, Opts).
 
 zone_context_filters_json_records(_) ->
     Options = #{match_empty => true, allow => [~"AMS"]},
@@ -3899,6 +3887,10 @@ run_pipes(Pipes) ->
 run_pipes(Pipes, Entries) ->
     Prepared = erldns_zone_pipeline:prepare(Pipes),
     erldns_zone_pipeline:run(Entries, #{}, Prepared).
+
+decode_records(Entries) ->
+    {Records, _} = erldns_zone_codec:decode_records(Entries, #{zone_name => ~"example.com"}),
+    Records.
 
 json_a(Name) ->
     #{~"name" => Name, ~"type" => ~"A", ~"ttl" => 60, ~"data" => #{~"ip" => ~"192.0.2.1"}}.
