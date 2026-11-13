@@ -7,16 +7,7 @@
 -include_lib("public_key/include/public_key.hrl").
 -define(LOG_METADATA, #{domain => [erldns, zones, decoder]}).
 
--export([decode/2, decode_record/2, parse_keysets/1, finalize/1]).
-
--spec decode(json:decode_value(), [erldns_zone_codec:decoder()]) -> erldns:zone().
-decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Decoders) ->
-    Sha = maps:get(~"sha", Zone, ~""),
-    JsonKeys = maps:get(~"keys", Zone, []),
-    Opts = #{zone_name => Name, version => Sha, scope => zone},
-    Records = decode_entries(JsonRecords, Opts, Decoders),
-    Keys = parse_keysets(JsonKeys),
-    erldns_zone_codec:build_zone(Name, Sha, Records, Keys).
+-export([decode_record/2, parse_keysets/1, finalize/1]).
 
 -spec decode_record(#{binary() => json:decode_value()}, [erldns_zone_codec:decoder()]) ->
     not_implemented | dns:rr().

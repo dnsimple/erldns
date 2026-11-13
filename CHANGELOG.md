@@ -66,6 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   queries.
 - Zone records are decoded through `erldns_zone_pipeline`. A codec is only given JSON objects, and
   a codec that returns anything but a record or `not_implemented` fails the decode of its zone.
+- `context_options` is read when the zone codec server starts, and no longer on each zone decode.
+  An `allow` that isn't a list now fails that start, where it only failed the decode of the zones
+  with a record that has a context.
 
 ## v12.0.3
 

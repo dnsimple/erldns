@@ -116,6 +116,10 @@ groups() ->
             encode_meta_to_json_dnssec,
             json_record_context_filtered,
             zone_context_filters_json_records,
+            zone_pipeline_kept_by_codec_server,
+            zone_pipeline_without_codec_server,
+            register_codecs_appends_to_zone_pipeline,
+            context_options_read_when_codec_server_starts,
             bad_custom_codecs_module_does_not_exist,
             bad_custom_codecs_module_does_not_export_callbacks
         ]},
@@ -293,7 +297,7 @@ encode_meta_to_json_dnssec(Config) ->
     ?assertMatch(L when 8 =:= length(L), json:decode(JSON)).
 
 json_to_erlang(_) ->
-    R = erldns_zone_decoder:decode(json:decode(input()), []),
+    R = erldns_zone_codec:decode(json:decode(input())),
     ?assertMatch(#zone{}, R).
 
 json_to_erlang_txt_spf_records(_) ->
@@ -316,7 +320,7 @@ json_to_erlang_txt_spf_records(_) ->
     }
     """,
     Json = json:decode(I),
-    R = erldns_zone_decoder:decode(Json, []),
+    R = erldns_zone_codec:decode(Json),
     Expected = [
         #dns_rr{
             name = ~"example.com",
@@ -339,7 +343,7 @@ json_to_erlang_txt_spf_records(_) ->
 json_to_erlang_ensure_sorting_and_defaults(_) ->
     ?assertMatch(
         #zone{name = ~"foo.org", version = <<>>, records = [], keysets = []},
-        erldns_zone_decoder:decode(#{~"name" => ~"foo.org", ~"records" => []}, [])
+        erldns_zone_codec:decode(#{~"name" => ~"foo.org", ~"records" => []})
     ).
 
 json_record_to_erlang(_) ->
@@ -1363,6 +1367,45 @@ zone_context_filters_json_records(_) ->
     ?assertMatch({[_, _, _, _], _}, run_pipes([erldns_zone_context], Entries)),
     application:unset_env(erldns, zones),
     ?assertMatch({[], _}, erldns_zone_pipeline:prepare([erldns_zone_context])).
+
+zone_pipeline_kept_by_codec_server(_) ->
+    start_codec_server(#{codecs => [sample_custom_zone_codec]}),
+    ?assertMatch(
+        {[{pipe, erldns_zone_standard, _}, {codecs, [_]}], _},
+        persistent_term:get(erldns_zone_pipeline)
+    ),
+    stop_codec_server(),
+    ?assertEqual(undefined, persistent_term:get(erldns_zone_pipeline, undefined)).
+
+zone_pipeline_without_codec_server(_) ->
+    eventually(fun() -> undefined =:= whereis(erldns_zone_codec) end),
+    ?assertEqual(undefined, persistent_term:get(erldns_zone_pipeline, undefined)),
+    Options = #{allow => [~"AMS"]},
+    Config = #{codecs => [sample_custom_zone_codec], context_options => Options},
+    application:set_env(erldns, zones, Config),
+    Zone = sample_zone([~"AMS"]),
+    Hidden = sample_zone([~"TKO"]),
+    ?assertMatch(
+        #zone{records = [#dns_rr{}, #dns_rr{type = 40000}]}, erldns_zone_codec:decode(Zone)
+    ),
+    ?assertMatch(#zone{records = [_]}, erldns_zone_codec:decode(Hidden)).
+
+register_codecs_appends_to_zone_pipeline(_) ->
+    start_codec_server(#{}),
+    Zone = sample_zone([]),
+    ?assertMatch(#zone{records = [#dns_rr{type = ?DNS_TYPE_A}]}, erldns_zone_codec:decode(Zone)),
+    ok = erldns_zone_codec:register_codec(sample_custom_zone_codec),
+    ?assertMatch(#zone{records = [_, #dns_rr{type = 40000}]}, erldns_zone_codec:decode(Zone)),
+    ?assertMatch({[_], [_]}, erldns_zone_codec:list_codecs()),
+    stop_codec_server().
+
+context_options_read_when_codec_server_starts(_) ->
+    Codecs = [sample_custom_zone_codec],
+    start_codec_server(#{codecs => Codecs, context_options => #{allow => [~"AMS"]}}),
+    application:set_env(erldns, zones, #{codecs => Codecs, context_options => #{allow => [~"TKO"]}}),
+    Zone = sample_zone([~"AMS"]),
+    ?assertMatch(#zone{records = [_, _]}, erldns_zone_codec:decode(Zone)),
+    stop_codec_server().
 
 json_record_openpgpkey_to_erlang(_) ->
     Name = ~"_openpgpkey.example.com",
@@ -3859,3 +3902,22 @@ run_pipes(Pipes, Entries) ->
 
 json_a(Name) ->
     #{~"name" => Name, ~"type" => ~"A", ~"ttl" => 60, ~"data" => #{~"ip" => ~"192.0.2.1"}}.
+
+start_codec_server(ZonesConfig) ->
+    eventually(fun() -> undefined =:= whereis(erldns_zone_codec) end),
+    application:set_env(erldns, zones, ZonesConfig),
+    {ok, _} = erldns_zone_codec:start_link().
+
+stop_codec_server() ->
+    gen_server:stop(erldns_zone_codec).
+
+%% An A record served everywhere, and a SAMPLE record in the given contexts
+sample_zone(Contexts) ->
+    Sample = #{
+        ~"name" => ~"s.example.com",
+        ~"type" => ~"SAMPLE",
+        ~"ttl" => 60,
+        ~"data" => #{~"dname" => ~"example.net"},
+        ~"context" => Contexts
+    },
+    #{~"name" => ~"example.com", ~"records" => [json_a(~"a.example.com"), Sample]}.

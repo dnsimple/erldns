@@ -78,8 +78,7 @@ encode(_) ->
 -export_type([encoder/0, decoder/0]).
 
 -record(state, {
-    encoders :: [encoder()],
-    decoders :: [decoder()]
+    pipes :: [erldns_zone_pipeline:pipe()]
 }).
 -type state() :: #state{}.
 -export_type([state/0]).
@@ -113,9 +112,14 @@ encode(Zone, Opts) ->
 
 -doc "Takes a JSON map and turns it into a zone.".
 -spec decode(json:decode_value()) -> erldns:zone().
-decode(Zone) ->
-    {_, Decoders} = list_codecs(),
-    erldns_zone_decoder:decode(Zone, Decoders).
+decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone) ->
+    Sha = maps:get(~"sha", Zone, ~""),
+    JsonKeys = maps:get(~"keys", Zone, []),
+    Keys = erldns_zone_decoder:parse_keysets(JsonKeys),
+    Opts = #{zone_name => Name, version => Sha, scope => zone},
+    {Entries, _} = erldns_zone_pipeline:run(JsonRecords, Opts),
+    Records = erldns_zone_decoder:finalize(Entries),
+    build_zone(Name, Sha, Records, Keys).
 
 -doc "Takes a JSON record and turns it into a `t:dns:rr/0`.".
 -spec decode_record(#{binary() => json:decode_value()}) -> not_implemented | dns:rr().
@@ -152,19 +156,22 @@ start_link() ->
 -spec init(noargs) -> {ok, state()}.
 init(noargs) ->
     process_flag(trap_exit, true),
-    {Encoders, Decoders} = prepare_codecs(),
-    persistent_term:put(?MODULE, {Encoders, Decoders}),
-    {ok, #state{encoders = Encoders, decoders = Decoders}}.
+    Pipes = erldns_zone_pipeline:configured(),
+    ok = erldns_zone_pipeline:store(Pipes),
+    Codecs = codecs_of(Pipes),
+    persistent_term:put(?MODULE, Codecs),
+    {ok, #state{pipes = Pipes}}.
 
 -doc false.
 -spec handle_call(dynamic(), gen_server:from(), state()) ->
     {reply, dynamic(), state()}.
-handle_call({register_codecs, Modules}, _From, State) ->
-    {NewEncoders, NewDecoders} = prepare_codecs(#{codecs => Modules}),
-    Encoders = State#state.encoders ++ NewEncoders,
-    Decoders = State#state.decoders ++ NewDecoders,
-    persistent_term:put(?MODULE, {Encoders, Decoders}),
-    {reply, ok, #state{encoders = Encoders, decoders = Decoders}};
+handle_call({register_codecs, Modules}, _From, #state{pipes = Pipes}) ->
+    ok = erldns_zone_pipeline:validate_codecs(Modules),
+    Pipes1 = Pipes ++ Modules,
+    ok = erldns_zone_pipeline:store(Pipes1),
+    Codecs = codecs_of(Pipes1),
+    persistent_term:put(?MODULE, Codecs),
+    {reply, ok, #state{pipes = Pipes1}};
 handle_call(Call, From, State) ->
     ?LOG_INFO(#{what => unexpected_call, from => From, call => Call}, #{domain => [erldns, zones]}),
     {reply, not_implemented, State}.
@@ -178,33 +185,17 @@ handle_cast(Cast, State) ->
 -doc false.
 -spec terminate(term(), state()) -> term().
 terminate(_, _) ->
+    erldns_zone_pipeline:delete(),
     persistent_term:erase(?MODULE).
 
--spec prepare_codecs() -> {[encoder()], [decoder()]}.
-prepare_codecs() ->
-    ZonesConfig = application:get_env(erldns, zones, #{}),
-    prepare_codecs(ZonesConfig).
+%% The encoders of every module in the pipeline, and the decoders of its codecs
+-spec codecs_of([erldns_zone_pipeline:pipe()]) -> {[encoder()], [decoder()]}.
+codecs_of(Pipes) ->
+    Modules = [Pipe || Pipe <- Pipes, is_atom(Pipe)],
+    Encoders = [fun M:encode/1 || M <- Modules, erlang:function_exported(M, encode, 1)],
+    Decoders = [fun M:decode/1 || M <- Modules, is_codec(M)],
+    {Encoders, Decoders}.
 
--spec prepare_codecs(erldns_zones:config()) -> {[encoder()], [decoder()]}.
-prepare_codecs(#{codecs := Modules}) ->
-    lists:foldr(
-        fun(Module, {AccEncoders, AccDecoders}) ->
-            maybe
-                {module, Module} ?= code:ensure_loaded(Module),
-                true ?= erlang:function_exported(Module, encode, 1),
-                true ?= erlang:function_exported(Module, decode, 1),
-                Encoders = [fun Module:encode/1 | AccEncoders],
-                Decoders = [fun Module:decode/1 | AccDecoders],
-                {Encoders, Decoders}
-            else
-                {error, Reason} ->
-                    erlang:error({badcodec, {module, Reason}});
-                false ->
-                    erlang:error({badcodec, {module_does_not_export_call, Module}})
-            end
-        end,
-        {[], []},
-        Modules
-    );
-prepare_codecs(#{}) ->
-    {[], []}.
+is_codec(Module) ->
+    not erlang:function_exported(Module, call, 2) andalso
+        erlang:function_exported(Module, decode, 1).

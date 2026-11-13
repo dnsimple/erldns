@@ -66,6 +66,7 @@ cap(Entry) ->
 -include_lib("kernel/include/logger.hrl").
 
 -define(LOG_METADATA, #{domain => [erldns, zones, pipeline]}).
+-define(DEFAULT_PIPES, [erldns_zone_context, erldns_zone_standard]).
 
 -doc "A record as it was in the JSON zone.".
 -type json_record() :: #{binary() => json:decode_value()}.
@@ -127,7 +128,46 @@ It can be called more than once, and isn't called again for each zone.
 
 -optional_callbacks([prepare/1, deps/0]).
 
+-export([configured/0, validate_codecs/1, store/1, delete/0, run/2]).
 -export([prepare/1, run/3, decoders_pipe/1]).
+
+-doc false.
+-spec configured() -> [pipe()].
+configured() ->
+    ZonesConfig = application:get_env(erldns, zones, #{}),
+    Codecs = maps:get(codecs, ZonesConfig, []),
+    ok = validate_codecs(Codecs),
+    ?DEFAULT_PIPES ++ Codecs.
+
+-doc false.
+-spec validate_codecs([module()]) -> ok.
+validate_codecs(Modules) ->
+    lists:foreach(fun validate_codec/1, Modules).
+
+-doc false.
+-spec store([pipe()]) -> ok.
+store(Pipes) ->
+    Prepared = prepare(Pipes),
+    persistent_term:put(?MODULE, Prepared).
+
+-doc false.
+-spec delete() -> boolean().
+delete() ->
+    persistent_term:erase(?MODULE).
+
+%% Without a stored pipeline, as when the zone codec server isn't running, the configured one is
+%% prepared for each call: running fewer pipes could load records that a pipe would have changed
+-doc false.
+-spec run([entry()], #{atom() => dynamic()}) -> {[entry()], opts()}.
+run(Entries, CallOpts) ->
+    case persistent_term:get(?MODULE, undefined) of
+        undefined ->
+            Pipes = configured(),
+            Prepared = prepare(Pipes),
+            run(Entries, CallOpts, Prepared);
+        Prepared ->
+            run(Entries, CallOpts, Prepared)
+    end.
 
 -doc false.
 -spec prepare([pipe()]) -> prepared().
@@ -149,6 +189,16 @@ run(Entries, CallOpts, {Pipeline, PreparedOpts}) ->
 -spec decoders_pipe([erldns_zone_codec:decoder()]) -> pipefun().
 decoders_pipe(Decoders) ->
     fun(Entries, _Opts) -> decode_all(Entries, Decoders) end.
+
+validate_codec(Module) ->
+    maybe
+        {module, Module} ?= code:ensure_loaded(Module),
+        true ?= erlang:function_exported(Module, encode, 1),
+        true ?= erlang:function_exported(Module, decode, 1)
+    else
+        {error, Reason} -> erlang:error({badcodec, {module, Reason}});
+        false -> erlang:error({badcodec, {module_does_not_export_call, Module}})
+    end.
 
 prepare_pipe(Fun, {Steps, Decoders, Opts}, _) when is_function(Fun, 2) ->
     Flushed = flush(Decoders, Steps),
