@@ -18,7 +18,7 @@ A JSON zone file contains an array of 1 or more zones. Each zone has a name and 
 
 ### Zonefile Format
 
-Zonefiles follow the standard DNS zonefile format as defined in RFC 1035 and RFC 3597. Unknown record types are represented using the RFC3597 `TYPE<number>` format with hex-encoded data. Custom codecs can be used to handle these unknown types, similar to JSON format.
+Zonefiles follow the standard DNS zonefile format as defined in RFC 1035 and RFC 3597. Unknown record types are represented using the RFC3597 `TYPE<number>` format with hex-encoded data. Their records go through the zone pipeline like those of JSON zones, already decoded.
 
 The format can be configured in `erldns.config`:
 
@@ -26,8 +26,7 @@ The format can be configured in `erldns.config`:
 {erldns, [
     {zones, #{
         path => "priv/zones",
-        format => zonefile,  % or json (default), or auto
-        codecs => [sample_custom_zone_codec]
+        format => zonefile  % or json (default), or auto
     }},
 ]}
 ```
@@ -53,6 +52,8 @@ You can then declare a JSON entry with `"context": ["AMS"]`, and this specific r
 Note that these strings are opaque to `erldns`, and you can use any string you want, as long as there's a sensible matching between the configuration and the values in the JSON entry.
 
 `match_empty` means if a record with an empty context should match by default.
+
+The `erldns_zone_context` pipe applies them. When the `pipeline` key of the `zones` configuration is set, it goes first in it.
 
 ### DNSSEC keys
 

@@ -683,7 +683,7 @@ ensure_dependencies(Module, OriginalPipes) ->
     case erlang:function_exported(Module, deps, 0) of
         true ->
             Deps = Module:deps(),
-            validate_deps_satisfied(Module, OriginalPipes, Deps);
+            erldns_pipe_deps:check(Module, Deps, OriginalPipes);
         false ->
             ok
     end.
@@ -696,54 +696,6 @@ maybe_prepare(Module, Opts) ->
         Opts1 when is_map(Opts1) -> {enabled, Opts1};
         _Other -> {error, {module_init_returned_non_map, Module}}
     end.
-
--doc "Validate that all declared dependencies are in their place in the pipeline.".
--spec validate_deps_satisfied(atom(), [pipe()], deps()) -> ok | {error, dynamic()}.
-validate_deps_satisfied(Module, OriginalPipes, Deps) ->
-    % The module is placed by its first appearance, which "After" always starts with
-    {Before, [Module | After]} = lists:splitwith(fun(P) -> P =/= Module end, OriginalPipes),
-    IsEarlier = fun(Dep) -> lists:member(Dep, Before) end,
-    IsLater = fun(Dep) -> lists:member(Dep, After) andalso not lists:member(Dep, Before) end,
-    IsPresent = fun(Dep) -> lists:member(Dep, OriginalPipes) end,
-    Prerequisites = maps:get(prerequisites, Deps, []),
-    Dependents = maps:get(dependents, Deps, []),
-    PreHint = ~"Prerequisite must appear earlier in pipeline",
-    DepHint = ~"Dependent must appear later in pipeline",
-    maybe
-        ok ?= ensure_satisfied(Module, Prerequisites, IsEarlier, IsPresent, PreHint),
-        ensure_satisfied(Module, Dependents, IsLater, IsPresent, DepHint)
-    end.
-
--spec ensure_satisfied(Module, Dependencies, IsPlaced, IsPresent, Hint) ->
-    ok | {error, dynamic()}
-when
-    Module :: module(),
-    Dependencies :: [dependency()],
-    IsPlaced :: fun((module()) -> boolean()),
-    IsPresent :: fun((module()) -> boolean()),
-    Hint :: binary().
-ensure_satisfied(Module, Dependencies, IsPlaced, IsPresent, Hint) ->
-    Unsatisfied = [D || D <- Dependencies, not is_satisfied(D, IsPlaced, IsPresent)],
-    case Unsatisfied of
-        [] ->
-            ok;
-        [Dependency | _] ->
-            Requires = dependency_module(Dependency),
-            {error, {unsatisfied_dependency, #{pipe => Module, requires => Requires, hint => Hint}}}
-    end.
-
-%% An optional dependency is also satisfied by its absence.
--spec is_satisfied(dependency(), IsPlaced, IsPresent) -> boolean() when
-    IsPlaced :: fun((module()) -> boolean()),
-    IsPresent :: fun((module()) -> boolean()).
-is_satisfied({optional, Dep}, IsPlaced, IsPresent) ->
-    IsPlaced(Dep) orelse not IsPresent(Dep);
-is_satisfied(Dep, IsPlaced, _) ->
-    IsPlaced(Dep).
-
--spec dependency_module(dependency()) -> module().
-dependency_module({optional, Module}) -> Module;
-dependency_module(Module) -> Module.
 
 def_opts() ->
     #{

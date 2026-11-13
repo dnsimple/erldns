@@ -8,7 +8,10 @@
 
 -export([encode/3]).
 
--spec encode(erldns:zone(), #{atom() => dynamic()}, [erldns_zone_codec:encoder()]) ->
+-type encoder() :: fun((dns:rr()) -> not_implemented | json:encode_value()).
+-export_type([encoder/0]).
+
+-spec encode(erldns:zone(), #{atom() => dynamic()}, [encoder()]) ->
     not_implemented | json:encode_value().
 encode(Zone, #{mode := zone_records_to_json}, Encoders) ->
     encode_zone_records_to_json(Zone, Encoders);

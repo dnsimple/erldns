@@ -89,9 +89,11 @@ ensure_zones([], _) ->
 -spec load_zone_file(file:filename(), file:name(), boolean()) -> [erldns:zone()].
 load_zone_file(File, KeysPath, Strict) ->
     maybe
-        {ok, Records} ?= dns_zone:parse_file(File),
-        Soa = #dns_rr{name = ZoneName} ?= lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, Records),
+        {ok, Parsed} ?= dns_zone:parse_file(File),
+        Soa = #dns_rr{name = ZoneName} ?= lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, Parsed),
         Sha = crypto:hash(sha256, term_to_binary(Soa)),
+        Opts = #{zone_name => ZoneName, version => Sha, scope => zone},
+        {Records, _} = erldns_zone_codec:decode_records(Parsed, Opts),
         Keys = load_private_keys(ZoneName, KeysPath),
         [erldns_zone_codec:build_zone(ZoneName, Sha, Records, Keys)]
     else
