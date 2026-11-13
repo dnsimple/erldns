@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer causes a `connection_init_failed` error log and `[erldns, request, error]` event.
 - ANY at a name matched by a wildcard CNAME is answered with the CNAME, as at a name that owns
   one, instead of following it and answering with every record at its target.
+- A zone record that isn't a JSON object no longer fails the decode of its zone when
+  `context_options` is set: it is dropped with an `unsupported_record` warning, as it already was
+  without them.
 
 ### Changed
 
@@ -61,6 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The packet cache keeps answers to ANY apart by transport.
 - `erldns_query_throttle` no longer throttles ANY, now answered minimally over UDP, only RRSIG
   queries.
+- Zone records are decoded through `erldns_zone_pipeline`. A codec is only given JSON objects, and
+  a codec that returns anything but a record or `not_implemented` fails the decode of its zone.
 
 ## v12.0.3
 

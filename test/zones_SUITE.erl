@@ -89,6 +89,12 @@ groups() ->
             json_record_numeric_type,
             json_record_unknown_type_reaches_custom_decoders,
             json_record_without_type_name_reaches_custom_decoders,
+            zone_pipeline_codecs_share_a_pass,
+            zone_pipeline_codecs_see_json_records_only,
+            zone_pipeline_rejects_bad_pipes,
+            zone_pipeline_checks_deps,
+            zone_pipeline_pipe_returns,
+            zone_pipeline_codec_must_return_a_record,
             encode_meta_to_json,
             encode_decode_svcb,
             encode_decode_https,
@@ -109,6 +115,7 @@ groups() ->
             custom_decode,
             encode_meta_to_json_dnssec,
             json_record_context_filtered,
+            zone_context_filters_json_records,
             bad_custom_codecs_module_does_not_exist,
             bad_custom_codecs_module_does_not_export_callbacks
         ]},
@@ -336,12 +343,12 @@ json_to_erlang_ensure_sorting_and_defaults(_) ->
     ).
 
 json_record_to_erlang(_) ->
-    ?assertEqual(not_implemented, erldns_zone_decoder:json_record_to_erlang(#{})),
+    ?assertEqual(not_implemented, erldns_zone_standard:json_record_to_erlang(#{})),
     Name = ~"example.com",
     Data = #{
         ~"name" => Name, ~"type" => ~"SOA", ~"ttl" => 3600, ~"data" => null, ~"context" => null
     },
-    ?assertEqual(not_implemented, erldns_zone_decoder:json_record_to_erlang(Data)).
+    ?assertEqual(not_implemented, erldns_zone_standard:json_record_to_erlang(Data)).
 
 json_record_soa_to_erlang(_) ->
     Name = ~"example.com",
@@ -361,7 +368,7 @@ json_record_soa_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SOA",
             ~"ttl" => 3600,
@@ -387,7 +394,7 @@ json_record_ns_to_erlang(_) ->
             data = #dns_rrdata_ns{dname = ~"ns1.example.com"},
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"NS",
             ~"ttl" => 3600,
@@ -405,7 +412,7 @@ json_record_a_to_erlang(_) ->
             data = #dns_rrdata_a{ip = {1, 2, 3, 4}},
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"A",
             ~"ttl" => 3600,
@@ -423,7 +430,7 @@ json_record_aaaa_to_erlang(_) ->
             data = #dns_rrdata_aaaa{ip = {0, 0, 0, 0, 0, 0, 0, 1}},
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"AAAA",
             ~"ttl" => 3600,
@@ -449,7 +456,7 @@ json_record_cds_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"CDS",
             ~"ttl" => 3600,
@@ -481,7 +488,7 @@ json_record_tlsa_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"TLSA",
             ~"ttl" => 3600,
@@ -649,7 +656,7 @@ json_record_svcb_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -679,7 +686,7 @@ json_record_https_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"HTTPS",
             ~"ttl" => 3600,
@@ -713,7 +720,7 @@ json_record_svcb_mandatory_valid(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -734,7 +741,7 @@ json_record_svcb_mandatory_self_reference(_) ->
     ?assertException(
         error,
         {svcb_mandatory_validation_error, {mandatory_self_reference, ?DNS_SVCB_PARAM_MANDATORY}},
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -753,7 +760,7 @@ json_record_svcb_mandatory_missing_keys(_) ->
     ?assertException(
         error,
         {svcb_mandatory_validation_error, {missing_mandatory_keys, [?DNS_SVCB_PARAM_PORT]}},
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -786,7 +793,7 @@ json_record_https_mandatory_valid(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"HTTPS",
             ~"ttl" => 3600,
@@ -818,7 +825,7 @@ json_record_svcb_no_mandatory(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -849,7 +856,7 @@ json_record_svcb_unknown_param(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -883,7 +890,7 @@ json_record_svcb_ech_param(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -914,7 +921,7 @@ json_record_svcb_ipv4hint_binary(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -945,7 +952,7 @@ json_record_svcb_ipv6hint_binary(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -976,7 +983,7 @@ json_record_svcb_no_default_alpn_atom(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -996,7 +1003,7 @@ json_record_svcb_ipv4hint_invalid(_) ->
     ?assertException(
         error,
         {invalid_ipv4_in_json, _, _},
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -1016,7 +1023,7 @@ json_record_svcb_ipv6hint_invalid(_) ->
     ?assertException(
         error,
         {invalid_ipv6_in_json, _, _},
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -1053,7 +1060,7 @@ json_record_svcb_keynnnn_format(_) ->
                 },
             ttl = 120
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 120,
@@ -1085,7 +1092,7 @@ json_record_svcb_keynnnn_format(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",
             ~"ttl" => 3600,
@@ -1105,7 +1112,7 @@ json_record_null_data(_) ->
     %% Test that records with null data return not_implemented
     ?assertEqual(
         not_implemented,
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => ~"example.com",
             ~"type" => ~"A",
             ~"ttl" => 3600,
@@ -1247,6 +1254,116 @@ json_record_context_filtered(_) ->
         application:unset_env(erldns, zones)
     end.
 
+zone_pipeline_codecs_share_a_pass(_) ->
+    Codec = sample_custom_zone_codec,
+    Fun = fun(Entries, _) -> Entries end,
+    ?assertMatch(
+        {[{pipe, erldns_zone_standard, _}, {codecs, [_, _]}], _},
+        erldns_zone_pipeline:prepare([erldns_zone_standard, Codec, Codec])
+    ),
+    ?assertMatch(
+        {[{codecs, [_]}, {pipe, Fun, Fun}, {codecs, [_]}], _},
+        erldns_zone_pipeline:prepare([Codec, Fun, Codec])
+    ),
+    %% erldns_zone_context is disabled without context_options
+    ?assertMatch(
+        {[{codecs, [_, _]}], _},
+        erldns_zone_pipeline:prepare([Codec, erldns_zone_context, Codec])
+    ).
+
+zone_pipeline_codecs_see_json_records_only(_) ->
+    Codec = ?FUNCTION_NAME,
+    meck:new(Codec, [non_strict]),
+    try
+        meck:expect(Codec, decode, fun
+            (#{~"type" := ~"A", ~"name" := Name}) ->
+                #dns_rr{name = Name, type = ?DNS_TYPE_A, ttl = 60, data = from_codec};
+            (_) ->
+                not_implemented
+        end),
+        Json = json_a(~"a.example.com"),
+        Sample = #{
+            ~"name" => ~"s.example.com",
+            ~"type" => ~"SAMPLE",
+            ~"ttl" => 60,
+            ~"data" => #{~"dname" => ~"example.net"}
+        },
+        Decoded = a_rr(~"d.example.com", {192, 0, 2, 2}),
+        Pipes = [Codec, sample_custom_zone_codec, erldns_zone_standard],
+        {Entries, _} = run_pipes(Pipes, [Json, Sample, Decoded]),
+        ?assertMatch([#dns_rr{data = from_codec}, #dns_rr{type = 40000}, Decoded], Entries),
+        ?assertEqual(2, meck:num_calls(Codec, decode, '_'))
+    after
+        meck:unload(Codec)
+    end.
+
+zone_pipeline_rejects_bad_pipes(_) ->
+    NonMap = ?FUNCTION_NAME,
+    meck:new(NonMap, [non_strict]),
+    try
+        meck:expect(NonMap, call, fun(Entries, _) -> Entries end),
+        meck:expect(NonMap, prepare, fun(_) -> not_a_map end),
+        ?assertError({badpipe, {module, nofile}}, run_pipes([this_module_does_not_exist])),
+        ?assertError({badpipe, {module_does_not_export_call, ?MODULE}}, run_pipes([?MODULE])),
+        ?assertError({badpipe, {function_pipe_has_wrong_arity, _}}, run_pipes([fun(E) -> E end])),
+        ?assertError({badpipe, {module_init_returned_non_map, NonMap}}, run_pipes([NonMap]))
+    after
+        meck:unload(NonMap)
+    end.
+
+zone_pipeline_checks_deps(_) ->
+    ?assertError(
+        {badpipe,
+            {unsatisfied_dependency, #{
+                pipe := erldns_zone_context, requires := erldns_zone_standard
+            }}},
+        run_pipes([erldns_zone_standard, erldns_zone_context])
+    ),
+    ?assertMatch(
+        {[{pipe, erldns_zone_standard, _}], _},
+        erldns_zone_pipeline:prepare([erldns_zone_context, erldns_zone_standard])
+    ).
+
+zone_pipeline_pipe_returns(_) ->
+    AddKey = fun(Entries, Opts) -> {[a | Entries], Opts#{key => value}} end,
+    SeeKey = fun(Entries, #{key := value, scope := partial}) -> [b | Entries] end,
+    Prepared = erldns_zone_pipeline:prepare([AddKey, SeeKey]),
+    ?assertMatch(
+        {[b, a], #{key := value, scope := partial}},
+        erldns_zone_pipeline:run([], #{scope => partial}, Prepared)
+    ),
+    Reject = fun(_, _) -> {error, nope} end,
+    ?assertError({zone_rejected, Reject, nope}, run_pipes([Reject])),
+    Bad = fun(_, _) -> foo end,
+    ?assertError({bad_zone_pipe_return, Bad, foo}, run_pipes([Bad])),
+    Raise = fun(_, _) -> erlang:error(boom) end,
+    ?assertError(boom, run_pipes([Raise])).
+
+zone_pipeline_codec_must_return_a_record(_) ->
+    Custom = #{~"name" => ~"example.com", ~"type" => ~"CUSTOM", ~"ttl" => 3600, ~"data" => #{}},
+    ?assertError(
+        {case_clause, foo}, erldns_zone_decoder:decode_record(Custom, [fun(_) -> foo end])
+    ).
+
+zone_context_filters_json_records(_) ->
+    Options = #{match_empty => true, allow => [~"AMS"]},
+    application:set_env(erldns, zones, #{context_options => Options}),
+    Json = json_a(~"example.com"),
+    Served = [
+        a_rr(~"example.com", {192, 0, 2, 1}),
+        Json,
+        %% Not a JSON object, left for erldns_zone_decoder:finalize/1 to drop
+        ~"not an object",
+        Json#{~"context" => []},
+        Json#{~"context" => [~"TKO", ~"AMS"]}
+    ],
+    Entries = Served ++ [Json#{~"context" => [~"TKO"]}],
+    ?assertMatch({Served, _}, run_pipes([erldns_zone_context], Entries)),
+    application:set_env(erldns, zones, #{context_options => #{allow => [~"AMS"]}}),
+    ?assertMatch({[_, _, _, _], _}, run_pipes([erldns_zone_context], Entries)),
+    application:unset_env(erldns, zones),
+    ?assertMatch({[], _}, erldns_zone_pipeline:prepare([erldns_zone_context])).
+
 json_record_openpgpkey_to_erlang(_) ->
     Name = ~"_openpgpkey.example.com",
     PgpData = base64:encode(<<1, 2, 3, 4, 5>>),
@@ -1257,7 +1374,7 @@ json_record_openpgpkey_to_erlang(_) ->
             data = #dns_rrdata_openpgpkey{data = <<1, 2, 3, 4, 5>>},
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"OPENPGPKEY",
             ~"ttl" => 3600,
@@ -1268,7 +1385,7 @@ json_record_openpgpkey_to_erlang(_) ->
     %% Negative case: invalid base64 data
     ?assertEqual(
         not_implemented,
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"OPENPGPKEY",
             ~"ttl" => 3600,
@@ -1294,7 +1411,7 @@ json_record_smimea_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SMIMEA",
             ~"ttl" => 3600,
@@ -1311,7 +1428,7 @@ json_record_smimea_to_erlang(_) ->
     %% Negative case: invalid base64 data
     ?assertEqual(
         not_implemented,
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"OPENPGPKEY",
             ~"ttl" => 3600,
@@ -1322,7 +1439,7 @@ json_record_smimea_to_erlang(_) ->
     %% Negative case: invalid hex data (odd number of characters)
     ?assertEqual(
         not_implemented,
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SMIMEA",
             ~"ttl" => 3600,
@@ -1338,7 +1455,7 @@ json_record_smimea_to_erlang(_) ->
     %% Negative case: invalid hex characters
     ?assertEqual(
         not_implemented,
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SMIMEA",
             ~"ttl" => 3600,
@@ -1366,7 +1483,7 @@ json_record_uri_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"URI",
             ~"ttl" => 3600,
@@ -1389,7 +1506,7 @@ json_record_wallet_to_erlang(_) ->
             data = #dns_rrdata_wallet{data = WalletData},
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"WALLET",
             ~"ttl" => 3600,
@@ -1408,7 +1525,7 @@ json_record_eui48_to_erlang(_) ->
             data = #dns_rrdata_eui48{address = <<0, 17, 34, 51, 68, 85>>},
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"EUI48",
             ~"ttl" => 3600,
@@ -1419,7 +1536,7 @@ json_record_eui48_to_erlang(_) ->
     %% Negative case: invalid hex (wrong length - not 12 hex chars = 6 bytes)
     ?assertEqual(
         not_implemented,
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"EUI48",
             ~"ttl" => 3600,
@@ -1431,7 +1548,7 @@ json_record_eui48_to_erlang(_) ->
     %% Negative case: invalid hex characters
     ?assertEqual(
         not_implemented,
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"EUI48",
             ~"ttl" => 3600,
@@ -1450,7 +1567,7 @@ json_record_eui64_to_erlang(_) ->
             data = #dns_rrdata_eui64{address = <<0, 17, 34, 51, 68, 85, 102, 119>>},
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"EUI64",
             ~"ttl" => 3600,
@@ -1461,7 +1578,7 @@ json_record_eui64_to_erlang(_) ->
     %% Negative case: invalid hex (wrong length - not 16 hex chars = 8 bytes)
     ?assertEqual(
         not_implemented,
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"EUI64",
             ~"ttl" => 3600,
@@ -1473,7 +1590,7 @@ json_record_eui64_to_erlang(_) ->
     %% Negative case: invalid hex characters
     ?assertEqual(
         not_implemented,
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"EUI64",
             ~"ttl" => 3600,
@@ -1496,7 +1613,7 @@ json_record_csync_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"CSYNC",
             ~"ttl" => 3600,
@@ -1524,7 +1641,7 @@ json_record_dsync_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"DSYNC",
             ~"ttl" => 3600,
@@ -1556,7 +1673,7 @@ json_record_zonemd_to_erlang(_) ->
                 },
             ttl = 3600
         },
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"ZONEMD",
             ~"ttl" => 3600,
@@ -1572,7 +1689,7 @@ json_record_zonemd_to_erlang(_) ->
     %% Negative case: invalid hex (odd number of characters)
     ?assertEqual(
         not_implemented,
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"ZONEMD",
             ~"ttl" => 3600,
@@ -1589,7 +1706,7 @@ json_record_zonemd_to_erlang(_) ->
     %% Negative case: invalid hex characters
     ?assertEqual(
         not_implemented,
-        erldns_zone_decoder:json_record_to_erlang(#{
+        erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"ZONEMD",
             ~"ttl" => 3600,
@@ -3732,3 +3849,13 @@ input() ->
       "sha": "10ea56ad7be9d3e6e75be3a15ef0dfabe9facafba486d74914e7baf8fb36638e"
     }
     """.
+
+run_pipes(Pipes) ->
+    run_pipes(Pipes, []).
+
+run_pipes(Pipes, Entries) ->
+    Prepared = erldns_zone_pipeline:prepare(Pipes),
+    erldns_zone_pipeline:run(Entries, #{}, Prepared).
+
+json_a(Name) ->
+    #{~"name" => Name, ~"type" => ~"A", ~"ttl" => 60, ~"data" => #{~"ip" => ~"192.0.2.1"}}.
