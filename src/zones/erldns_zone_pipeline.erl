@@ -34,11 +34,49 @@ registered with `erldns_zone_codec:register_codecs/1` are added at the end.
 ## Types of pipes
 
 - A module that implements this behaviour: `c:call/2`, and optionally `c:prepare/1` and
-  `c:deps/0`, which work as in `m:erldns_pipeline`.
+  `c:deps/0`, which work as in `m:erldns_pipeline`, and `c:encode/1`, see
+  [Custom record types](#module-custom-record-types).
 - A function of arity 2, called as `c:call/2`.
 - A module that implements `m:erldns_zone_codec`: its `c:erldns_zone_codec:decode/1` is applied
   to each JSON record, and a record is left as it is when it returns `not_implemented`. Codecs next
   to each other share one pass over the records, and the first that decodes a record wins.
+
+## Custom record types
+
+A pipe placed after `m:erldns_zone_standard` gets the JSON records of the types erldns doesn't
+know, and can decode them into `t:dns:rr/0`. To encode them back to JSON, as
+`erldns_zone_codec:encode/1,2` and the admin API do, it implements `c:encode/1`. The pipes of the
+pipeline are tried in order, the first that doesn't return `not_implemented` encodes the record,
+and a record that none encodes is left out.
+
+```erlang
+-module(sample_custom_zone_pipe).
+-behaviour(erldns_zone_pipeline).
+
+-include_lib("dns_erlang/include/dns.hrl").
+
+-export([call/2, encode/1]).
+
+-define(DNS_TYPE_SAMPLE, 40000).
+
+call(Entries, _Opts) ->
+    [decode(Entry) || Entry <- Entries].
+
+decode(#{~"name" := Name, ~"type" := ~"SAMPLE", ~"ttl" := Ttl, ~"data" := Data}) ->
+    #dns_rr{name = Name, type = ?DNS_TYPE_SAMPLE, data = maps:get(~"dname", Data), ttl = Ttl};
+decode(Entry) ->
+    Entry.
+
+encode(#dns_rr{name = Name, type = ?DNS_TYPE_SAMPLE, ttl = Ttl, data = Data}) ->
+    #{
+        ~"name" => erlang:iolist_to_binary(io_lib:format("~s.", [Name])),
+        ~"type" => ~"SAMPLE",
+        ~"ttl" => Ttl,
+        ~"content" => Data
+    };
+encode(_) ->
+    not_implemented.
+```
 
 ## Scope
 
@@ -141,7 +179,13 @@ It can be called more than once, and isn't called again for each zone.
 -doc "Declare the pipes this one needs before or after it. See `t:erldns_pipeline:deps/0`.".
 -callback deps() -> erldns_pipeline:deps().
 
--optional_callbacks([prepare/1, deps/0]).
+-doc """
+Encode a record that this pipe decoded back to JSON, or return `not_implemented`. See
+[Custom record types](#module-custom-record-types).
+""".
+-callback encode(dns:rr()) -> not_implemented | json:encode_value().
+
+-optional_callbacks([prepare/1, deps/0, encode/1]).
 
 -export([configured/0, validate_codecs/1, store/1, delete/0, run/2]).
 -export([prepare/1, run/3]).

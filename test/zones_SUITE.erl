@@ -129,6 +129,7 @@ groups() ->
             zone_pipeline_bad_config,
             register_codecs_after_configured_pipeline,
             zone_pipes_see_zone_file_records,
+            zone_pipe_encodes_its_records,
             bad_custom_codecs_module_does_not_exist,
             bad_custom_codecs_module_does_not_export_callbacks
         ]},
@@ -1425,6 +1426,26 @@ zone_pipes_see_zone_file_records(Config) ->
     after 1000 -> ct:fail(spy_not_called)
     end,
     stop_codec_server().
+
+zone_pipe_encodes_its_records(_) ->
+    eventually(fun() -> undefined =:= whereis(erldns_zone_cache) end),
+    {ok, _} = erldns_zone_cache:start_link(),
+    start_codec_server(#{pipeline => [erldns_zone_standard, sample_custom_zone_pipe]}),
+    #zone{records = Records} = erldns_zone_codec:decode(sample_zone([])),
+    %% No pipe encodes this type, so it is left out
+    Unknown = #dns_rr{name = ~"u.example.com", type = 40001, ttl = 60, data = ~"data"},
+    Zone = erldns_zone_codec:build_zone(~"example.com", ~"", [Unknown | Records], []),
+    ok = erldns_zone_cache:put_zone(Zone),
+    #{~"erldns" := #{~"zone" := #{~"records" := Json}}} = erldns_zone_codec:encode(cached(Zone)),
+    ?assertMatch(
+        [
+            #{~"name" := ~"a.example.com.", ~"type" := ~"A"},
+            #{~"name" := ~"s.example.com.", ~"type" := ~"SAMPLE", ~"content" := ~"example.net"}
+        ],
+        lists:sort(fun(A, B) -> maps:get(~"name", A) =< maps:get(~"name", B) end, Json)
+    ),
+    stop_codec_server(),
+    gen_server:stop(erldns_zone_cache).
 
 zone_pipeline_from_config(_) ->
     Copy = fun(Entries, _) -> lists:flatmap(fun copy_to_extra_names/1, Entries) end,

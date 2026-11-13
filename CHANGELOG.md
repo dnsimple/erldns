@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when it is decoded, see `erldns_zone_pipeline`. A pipe placed before `erldns_zone_standard` sees
   the records of standard types as JSON, keys erldns doesn't use included. `erldns_zone_context`
   and `erldns_zone_standard` are the built-in pipes.
+- A zone pipe can implement `encode/1` to encode the records of a custom type back to JSON, as
+  `erldns_zone_codec:encode/1,2` and the admin API do.
 - `erldns_zone_codec:decode/2` also returns the options the zone pipeline ended with, and
   `erldns_zone_codec:decode_records/2` decodes part of a zone, such as an RRSet, with `scope`
   `partial`.
