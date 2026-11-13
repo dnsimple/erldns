@@ -9,12 +9,27 @@ the rest, so a pipe placed before it sees every record as JSON, with the keys er
 After the last pipe, the JSON records left are logged as unsupported and dropped, and the records
 are sorted and deduplicated.
 
-## Default pipes
+## Configuration
 
-- `m:erldns_zone_context`
-- `m:erldns_zone_standard`
+The `pipeline` key of the `zones` configuration lists the pipes, see `m:erldns_zones`. A pipe that
+needs the records of standard types as JSON goes before `m:erldns_zone_standard`, and
+`m:erldns_zone_context` goes first for records to be filtered by context:
 
-followed by the codecs of the `codecs` key of the `zones` configuration, see `m:erldns_zones`.
+```erlang
+{erldns, [
+    {zones, #{
+        pipeline => [
+            erldns_zone_context,
+            sample_rewrite_pipe,
+            erldns_zone_standard,
+            sample_custom_zone_codec
+        ]
+    }}
+]}
+```
+
+Without `pipeline`, the pipes are `m:erldns_zone_context` and `m:erldns_zone_standard`. Codecs
+registered with `erldns_zone_codec:register_codecs/1` are added at the end.
 
 ## Types of pipes
 
@@ -135,9 +150,7 @@ It can be called more than once, and isn't called again for each zone.
 -spec configured() -> [pipe()].
 configured() ->
     ZonesConfig = application:get_env(erldns, zones, #{}),
-    Codecs = maps:get(codecs, ZonesConfig, []),
-    ok = validate_codecs(Codecs),
-    ?DEFAULT_PIPES ++ Codecs.
+    configured(ZonesConfig).
 
 -doc false.
 -spec validate_codecs([module()]) -> ok.
@@ -184,6 +197,16 @@ prepare(Pipes) ->
 run(Entries, CallOpts, {Pipeline, PreparedOpts}) ->
     Opts = maps:merge(PreparedOpts, CallOpts),
     lists:foldl(fun run_step/2, {Entries, Opts}, Pipeline).
+
+%% The removed codecs key fails, so its codecs aren't left out of the pipeline unnoticed
+configured(#{codecs := _}) ->
+    erlang:error({badconfig, codecs_moved_to_pipeline});
+configured(#{pipeline := Pipes}) when is_list(Pipes) ->
+    Pipes;
+configured(#{pipeline := Pipes}) ->
+    erlang:error({badconfig, {invalid_pipeline, Pipes}});
+configured(_) ->
+    ?DEFAULT_PIPES.
 
 validate_codec(Module) ->
     maybe

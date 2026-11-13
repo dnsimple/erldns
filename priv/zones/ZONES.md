@@ -26,8 +26,7 @@ The format can be configured in `erldns.config`:
 {erldns, [
     {zones, #{
         path => "priv/zones",
-        format => zonefile,  % or json (default), or auto
-        codecs => [sample_custom_zone_codec]
+        format => zonefile  % or json (default), or auto
     }},
 ]}
 ```
@@ -53,6 +52,8 @@ You can then declare a JSON entry with `"context": ["AMS"]`, and this specific r
 Note that these strings are opaque to `erldns`, and you can use any string you want, as long as there's a sensible matching between the configuration and the values in the JSON entry.
 
 `match_empty` means if a record with an empty context should match by default.
+
+The `erldns_zone_context` pipe applies them. When the `pipeline` key of the `zones` configuration is set, it goes first in it.
 
 ### DNSSEC keys
 

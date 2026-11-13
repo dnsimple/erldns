@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   set (#390).
 - `erldns_zone_cache:put_rrset_sync_counter/4` sets an RRSet's sync counter to any value, even a
   lower one, without touching its records.
+- The `pipeline` key of the `zones` configuration lists the pipes the records of a zone go through
+  when it is decoded, see `erldns_zone_pipeline`. A pipe placed before `erldns_zone_standard` sees
+  the records of standard types as JSON, keys erldns doesn't use included. `erldns_zone_context`
+  and `erldns_zone_standard` are the built-in pipes.
 - `erldns_zone_codec:decode/2` also returns the options the zone pipeline ended with, and
   `erldns_zone_codec:decode_records/2` decodes part of a zone, such as an RRSet, with `scope`
   `partial`.
@@ -76,6 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - `decode_record/1` of `erldns_zone_codec`, replaced by `erldns_zone_codec:decode_records/2`.
+- The `codecs` key of the `zones` configuration, replaced by its `pipeline` key: list the codecs
+  there, after `erldns_zone_standard`. A configuration that still sets `codecs` fails to start.
 
 ## v12.0.3
 

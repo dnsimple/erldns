@@ -2,16 +2,17 @@
 -moduledoc """
 Encoding and decoding of zone data in JSON format.
 
-To write custom codecs, you need to implement the callbacks exposed by this module,
-and register the codec in the configuration.
+Zones are decoded through `m:erldns_zone_pipeline`. A custom codec decodes the JSON records of the
+types erldns doesn't know, one at a time, and encodes them back: it implements the callbacks of
+this module, and goes in the zone pipeline after `m:erldns_zone_standard`.
 
 ## Configuration
 
 ```erlang
 {erldns, [
     {zones, #{
-        codecs => [sample_custom_zone_codec]
-    }},
+        pipeline => [erldns_zone_context, erldns_zone_standard, sample_custom_zone_codec]
+    }}
 ]}
 ```
 

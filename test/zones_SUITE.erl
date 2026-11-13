@@ -8,6 +8,8 @@
 -include_lib("erldns/include/erldns.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
+-define(SAMPLE_PIPELINE, [erldns_zone_context, erldns_zone_standard, sample_custom_zone_codec]).
+
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
     [
@@ -122,6 +124,9 @@ groups() ->
             zone_pipeline_without_codec_server,
             register_codecs_appends_to_zone_pipeline,
             context_options_read_when_codec_server_starts,
+            zone_pipeline_from_config,
+            zone_pipeline_bad_config,
+            register_codecs_after_configured_pipeline,
             bad_custom_codecs_module_does_not_exist,
             bad_custom_codecs_module_does_not_export_callbacks
         ]},
@@ -226,19 +231,22 @@ end_per_testcase(_, _) ->
 %% Tests
 bad_custom_codecs_module_does_not_exist(_) ->
     erlang:process_flag(trap_exit, true),
-    application:set_env(erldns, zones, #{codecs => [this_module_does_not_exist]}),
-    ?assertMatch({error, {{badcodec, {module, _}}, _}}, erldns_zone_codec:start_link()).
+    start_codec_server(#{}),
+    ?assertExit(
+        {{{badcodec, {module, _}}, _}, _},
+        erldns_zone_codec:register_codec(this_module_does_not_exist)
+    ).
 
 bad_custom_codecs_module_does_not_export_callbacks(_) ->
     erlang:process_flag(trap_exit, true),
-    application:set_env(erldns, zones, #{codecs => [?MODULE]}),
-    ?assertMatch(
-        {error, {{badcodec, {module_does_not_export_call, ?MODULE}}, _}},
-        erldns_zone_codec:start_link()
+    start_codec_server(#{}),
+    ?assertExit(
+        {{{badcodec, {module_does_not_export_call, ?MODULE}}, _}, _},
+        erldns_zone_codec:register_codec(?MODULE)
     ).
 
 custom_decode(_) ->
-    application:set_env(erldns, zones, #{codecs => [sample_custom_zone_codec]}),
+    application:set_env(erldns, zones, #{pipeline => ?SAMPLE_PIPELINE}),
     {ok, _} = erldns_zone_codec:start_link(),
     Input = #{
         ~"name" => ~"example.com",
@@ -285,7 +293,7 @@ encode_meta_to_json(_) ->
 encode_meta_to_json_dnssec(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "dnssec-zone.json"),
-    application:set_env(erldns, zones, #{path => Path, codecs => [sample_custom_zone_codec]}),
+    application:set_env(erldns, zones, #{path => Path, pipeline => ?SAMPLE_PIPELINE}),
     {ok, _} = erldns_zones:start_link(),
     LoadConfig = #{path => Path},
     ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig)),
@@ -1357,7 +1365,7 @@ zone_context_filters_json_records(_) ->
     ?assertMatch({[], _}, erldns_zone_pipeline:prepare([erldns_zone_context])).
 
 zone_pipeline_kept_by_codec_server(_) ->
-    start_codec_server(#{codecs => [sample_custom_zone_codec]}),
+    start_codec_server(#{pipeline => ?SAMPLE_PIPELINE}),
     ?assertMatch(
         {[{pipe, erldns_zone_standard, _}, {codecs, [_]}], _},
         persistent_term:get(erldns_zone_pipeline)
@@ -1369,7 +1377,7 @@ zone_pipeline_without_codec_server(_) ->
     eventually(fun() -> undefined =:= whereis(erldns_zone_codec) end),
     ?assertEqual(undefined, persistent_term:get(erldns_zone_pipeline, undefined)),
     Options = #{allow => [~"AMS"]},
-    Config = #{codecs => [sample_custom_zone_codec], context_options => Options},
+    Config = #{pipeline => ?SAMPLE_PIPELINE, context_options => Options},
     application:set_env(erldns, zones, Config),
     Zone = sample_zone([~"AMS"]),
     Hidden = sample_zone([~"TKO"]),
@@ -1388,11 +1396,68 @@ register_codecs_appends_to_zone_pipeline(_) ->
     stop_codec_server().
 
 context_options_read_when_codec_server_starts(_) ->
-    Codecs = [sample_custom_zone_codec],
-    start_codec_server(#{codecs => Codecs, context_options => #{allow => [~"AMS"]}}),
-    application:set_env(erldns, zones, #{codecs => Codecs, context_options => #{allow => [~"TKO"]}}),
+    Pipeline = ?SAMPLE_PIPELINE,
+    start_codec_server(#{pipeline => Pipeline, context_options => #{allow => [~"AMS"]}}),
+    application:set_env(erldns, zones, #{
+        pipeline => Pipeline, context_options => #{allow => [~"TKO"]}
+    }),
     Zone = sample_zone([~"AMS"]),
     ?assertMatch(#zone{records = [_, _]}, erldns_zone_codec:decode(Zone)),
+    stop_codec_server().
+
+zone_pipeline_from_config(_) ->
+    Copy = fun(Entries, _) -> lists:flatmap(fun copy_to_extra_names/1, Entries) end,
+    Pipeline = [erldns_zone_context, Copy, erldns_zone_standard, sample_custom_zone_codec],
+    start_codec_server(#{pipeline => Pipeline}),
+    Copied = (json_a(~"p.example.com"))#{~"extra_names" => [~"q.example.com"]},
+    #{~"records" := Records} = Zone = sample_zone([]),
+    #zone{records = Decoded} = erldns_zone_codec:decode(Zone#{~"records" := [Copied | Records]}),
+    ?assertMatch(
+        [
+            #dns_rr{name = ~"a.example.com"},
+            #dns_rr{name = ~"p.example.com", type = ?DNS_TYPE_A},
+            #dns_rr{name = ~"q.example.com", type = ?DNS_TYPE_A},
+            #dns_rr{type = 40000}
+        ],
+        Decoded
+    ),
+    ?assertMatch({[_], [_]}, erldns_zone_codec:list_codecs()),
+    ?assertMatch([_, _], decode_records([Copied])),
+    stop_codec_server().
+
+zone_pipeline_bad_config(_) ->
+    erlang:process_flag(trap_exit, true),
+    eventually(fun() -> undefined =:= whereis(erldns_zone_codec) end),
+    BadConfigs = [
+        {#{codecs => [sample_custom_zone_codec]}, {badconfig, codecs_moved_to_pipeline}},
+        {
+            #{pipeline => erldns_zone_standard},
+            {badconfig, {invalid_pipeline, erldns_zone_standard}}
+        },
+        {#{pipeline => [this_module_does_not_exist]}, {badpipe, {module, nofile}}}
+    ],
+    lists:foreach(
+        fun({ZonesConfig, Reason}) ->
+            application:set_env(erldns, zones, ZonesConfig),
+            ?assertMatch({error, {Reason, _}}, erldns_zone_codec:start_link())
+        end,
+        BadConfigs
+    ).
+
+register_codecs_after_configured_pipeline(_) ->
+    Self = self(),
+    Spy = fun(Entries, _) ->
+        Self ! {spied, Entries},
+        Entries
+    end,
+    start_codec_server(#{pipeline => [erldns_zone_standard, Spy]}),
+    ok = erldns_zone_codec:register_codec(sample_custom_zone_codec),
+    Zone = sample_zone([]),
+    ?assertMatch(#zone{records = [_, #dns_rr{type = 40000}]}, erldns_zone_codec:decode(Zone)),
+    receive
+        {spied, Entries} -> ?assertMatch([#dns_rr{}, #{~"type" := ~"SAMPLE"}], Entries)
+    after 1000 -> ct:fail(spy_not_called)
+    end,
     stop_codec_server().
 
 json_record_openpgpkey_to_erlang(_) ->
@@ -3541,7 +3606,7 @@ init_supervision_tree(Config, Role) ->
     {Role, Pid}.
 
 setup_test(_Config, loader) ->
-    application:set_env(erldns, zones, #{codecs => [sample_custom_zone_codec]}),
+    application:set_env(erldns, zones, #{pipeline => ?SAMPLE_PIPELINE}),
     {ok, _} = erldns_zones:start_link();
 setup_test(Config, cache) ->
     {ok, _} = erldns_zones:start_link(),
@@ -3913,3 +3978,10 @@ sample_zone(Contexts) ->
         ~"context" => Contexts
     },
     #{~"name" => ~"example.com", ~"records" => [json_a(~"a.example.com"), Sample]}.
+
+%% A record with extra_names is copied to each of those names
+copy_to_extra_names(#{~"extra_names" := Names} = Json) ->
+    Copies = [Json#{~"name" := Name} || Name <- Names],
+    [Json | Copies];
+copy_to_extra_names(Entry) ->
+    [Entry].
