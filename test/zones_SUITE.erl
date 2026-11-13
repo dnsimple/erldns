@@ -41,6 +41,7 @@ groups() ->
             load_zonefile_format_auto,
             load_zonefile_rfc3597,
             load_zonefile_with_custom_decoder,
+            load_zonefile_drops_duplicate_records,
             load_zonefile_with_dnssec,
             empty_directory,
             zonefile_format_directory,
@@ -127,6 +128,7 @@ groups() ->
             zone_pipeline_from_config,
             zone_pipeline_bad_config,
             register_codecs_after_configured_pipeline,
+            zone_pipes_see_zone_file_records,
             bad_custom_codecs_module_does_not_exist,
             bad_custom_codecs_module_does_not_export_callbacks
         ]},
@@ -1405,6 +1407,25 @@ context_options_read_when_codec_server_starts(_) ->
     ?assertMatch(#zone{records = [_, _]}, erldns_zone_codec:decode(Zone)),
     stop_codec_server().
 
+zone_pipes_see_zone_file_records(Config) ->
+    Self = self(),
+    Spy = fun(Entries, Opts) ->
+        Self ! {spied, Entries, Opts},
+        Entries
+    end,
+    start_codec_server(#{pipeline => [Spy, erldns_zone_standard]}),
+    DataDir = proplists:get_value(data_dir, Config),
+    Path = filename:join(DataDir, "example.zone"),
+    [#zone{records = Records}] = erldns_zone_loader_worker:do_load_file(Path, DataDir, true),
+    receive
+        {spied, Entries, Opts} ->
+            ?assert(lists:all(fun(Entry) -> is_record(Entry, dns_rr) end, Entries)),
+            ?assertEqual(lists:usort(Entries), Records),
+            ?assertMatch(#{scope := zone, zone_name := ~"example.com."}, Opts)
+    after 1000 -> ct:fail(spy_not_called)
+    end,
+    stop_codec_server().
+
 zone_pipeline_from_config(_) ->
     Copy = fun(Entries, _) -> lists:flatmap(fun copy_to_extra_names/1, Entries) end,
     Pipeline = [erldns_zone_context, Copy, erldns_zone_standard, sample_custom_zone_codec],
@@ -2126,6 +2147,15 @@ load_zonefile(Config) ->
     ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig)).
 
 %% Exercises `do_load_file/3` (extension dispatch + zonefile parsing) without the getter/supervisor.
+load_zonefile_drops_duplicate_records(Config) ->
+    PrivDir = proplists:get_value(priv_dir, Config),
+    Path = filename:join(PrivDir, "duplicates.zone"),
+    Soa = ~"@ IN SOA ns1.example.com. admin.example.com. 1 3600 1800 604800 86400\n",
+    A = ~"@ IN A 192.0.2.1\n",
+    ok = file:write_file(Path, [~"$ORIGIN example.com.\n$TTL 3600\n", Soa, A, A]),
+    [Zone] = erldns_zone_loader_worker:do_load_file(Path, PrivDir, true),
+    ?assertMatch(#zone{record_count = 2, records = [_, _]}, Zone).
+
 worker_do_load_file_zonefile(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "example.zone"),

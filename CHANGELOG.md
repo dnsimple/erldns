@@ -76,6 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `context_options` is read when the zone codec server starts, and no longer on each zone decode.
   An `allow` that isn't a list now fails that start, where it only failed the decode of the zones
   with a record that has a context.
+- The records of zone files go through the zone pipeline, so its pipes see them, and duplicate
+  records are dropped. Codecs, which decode JSON records, still don't see them.
 
 ### Removed
 

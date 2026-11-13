@@ -48,7 +48,7 @@ Zone configuration.
   [`JSON`](priv/zones/ZONES.md#json-format) zone format documentation.
 
 - `format`: specifies the zone file format to look for.
-  Both formats support custom codecs for handling unknown record types.
+  The records of both formats go through the zone pipeline, but codecs only decode JSON records.
   Valid values are:
   - `json`: zones are parsed using `erldns`'s [`JSON`](priv/zones/ZONES.md#json-format) zone format.
   - `zonefile`: zones are parsed using the [`zone`](priv/zones/ZONES.md#zonefile-format) format.
