@@ -6,6 +6,7 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
 -include_lib("erldns/include/erldns.hrl").
+-include_lib("public_key/include/public_key.hrl").
 
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
@@ -101,7 +102,8 @@ groups() ->
             encode_decode_dsync,
             encode_decode_zonemd,
             parse_json_keys_unsorted_proplists_time_unit,
-            parse_json_keys_unsorted_proplists
+            parse_json_keys_unsorted_proplists,
+            rsa_keys_sign_as_before
         ]},
         {codec_sequential, [], [
             custom_decode,
@@ -545,21 +547,30 @@ parse_json_keys_unsorted_proplists_time_unit(_) ->
     ).
 
 parse_json_keys_unsorted_proplists(_) ->
-    ?assertEqual(
+    Bytes = fun binary:encode_unsigned/1,
+    KskE = Bytes(1025),
+    KskN = Bytes(
+        117942195211355436516708579275854541924575773884167758398377054474457061084450782563901956510831117716183526402173215071572529228555976594387632086643427143744605045813923857147839015187463121492324352653506190767692034127161982651669657643423469824721891177589201529187860925827553628207715191151413138514807
+    ),
+    KskD = Bytes(
+        105745246243156727959858716443424706369448913365414799968886354206854672328400262610952095642393948469436742208387497220268443279066285356333886719634448317208189715942402022382731037836531762881862458283240610274107136766709456566004076449761688996028612988763775001691587086168632010166111722279727494037097
+    ),
+    ZskE = Bytes(513),
+    ZskN = Bytes(
+        9170529505818457214552347052832728824507861128011245996056627438339703762731346681703094163316286362641501571794424157931806097889892946273849538579240359
+    ),
+    ZskD = Bytes(
+        5130491166023191463112131781994138738077497356216817935415696052248528225933414267440640871636073852185344964288812312263453467652493907737029964715172561
+    ),
+    %% An RSA key is its exponent, modulus and private exponent, then the CRT's
+    %% numbers, all as bytes
+    ?assertMatch(
         [
             #keyset{
-                key_signing_key = [
-                    1025,
-                    117942195211355436516708579275854541924575773884167758398377054474457061084450782563901956510831117716183526402173215071572529228555976594387632086643427143744605045813923857147839015187463121492324352653506190767692034127161982651669657643423469824721891177589201529187860925827553628207715191151413138514807,
-                    105745246243156727959858716443424706369448913365414799968886354206854672328400262610952095642393948469436742208387497220268443279066285356333886719634448317208189715942402022382731037836531762881862458283240610274107136766709456566004076449761688996028612988763775001691587086168632010166111722279727494037097
-                ],
+                key_signing_key = [KskE, KskN, KskD, _, _, _, _, _],
                 key_signing_key_tag = 37440,
                 key_signing_alg = 8,
-                zone_signing_key = [
-                    513,
-                    9170529505818457214552347052832728824507861128011245996056627438339703762731346681703094163316286362641501571794424157931806097889892946273849538579240359,
-                    5130491166023191463112131781994138738077497356216817935415696052248528225933414267440640871636073852185344964288812312263453467652493907737029964715172561
-                ],
+                zone_signing_key = [ZskE, ZskN, ZskD, _, _, _, _, _],
                 zone_signing_key_tag = 49016,
                 zone_signing_alg = 8,
                 inception = 1479123418,
@@ -579,6 +590,50 @@ parse_json_keys_unsorted_proplists(_) ->
             }
         ])
     ).
+
+%% RSA PKCS #1 v1.5 signatures are deterministic, so a key with the CRT's numbers,
+%% as bytes, signs to the same bytes as its exponent, modulus and private exponent
+%% as integers, as parse_keysets/1 gave them before
+rsa_keys_sign_as_before(_) ->
+    [#keyset{key_signing_key = Ksk, zone_signing_key = Zsk}] =
+        erldns_zone_decoder:parse_keysets([
+            #{
+                ~"ksk" => ksk_private_key(),
+                ~"ksk_alg" => 8,
+                ~"ksk_keytag" => 37440,
+                ~"zsk" => zsk_private_key(),
+                ~"zsk_alg" => 8,
+                ~"zsk_keytag" => 49016,
+                ~"inception" => ~"2016-11-14T11:36:58Z",
+                ~"until" => ~"2017-02-12T11:36:58Z"
+            }
+        ]),
+    RR = #dns_rr{
+        name = ~"www.example.com",
+        type = ?DNS_TYPE_A,
+        ttl = 3600,
+        data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
+    },
+    Opts = #{inception => 1479123418, expiration => 1486899418},
+    [
+        begin
+            ?assert(lists:all(fun is_binary/1, Key)),
+            %% In the order crypto takes them: E1 = D mod (P1 - 1),
+            %% E2 = D mod (P2 - 1) and C = 1 / P2 mod P1. In another order, OpenSSL
+            %% still signs the same, without the CRT and so more slowly
+            [_, _, KeyD, P1, P2, E1, E2, C] = [binary:decode_unsigned(B) || B <- Key],
+            ?assertEqual(E1, KeyD rem (P1 - 1)),
+            ?assertEqual(E2, KeyD rem (P2 - 1)),
+            ?assertEqual(1, C * P2 rem P1),
+            #'RSAPrivateKey'{publicExponent = E, modulus = N, privateExponent = D} =
+                public_key:pem_entry_decode(hd(public_key:pem_decode(Pem))),
+            ?assertEqual(
+                dnssec:sign_rr([RR], ~"example.com", 1, 8, [E, N, D], Opts),
+                dnssec:sign_rr([RR], ~"example.com", 1, 8, Key, Opts)
+            )
+        end
+     || {Key, Pem} <- [{Ksk, ksk_private_key()}, {Zsk, zsk_private_key()}]
+    ].
 
 json_record_svcb_to_erlang(_) ->
     Name = ~"example.com",
