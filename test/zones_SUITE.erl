@@ -1215,10 +1215,10 @@ zone_pipeline_rejects_bad_pipes(_) ->
     NonMap = ?FUNCTION_NAME,
     meck:new(NonMap, [non_strict]),
     try
-        meck:expect(NonMap, call, fun(Entries, _) -> Entries end),
+        meck:expect(NonMap, decode, fun(Entries, _) -> Entries end),
         meck:expect(NonMap, prepare, fun(_) -> not_a_map end),
         ?assertError({badpipe, {module, nofile}}, run_pipes([this_module_does_not_exist])),
-        ?assertError({badpipe, {module_does_not_export_call, ?MODULE}}, run_pipes([?MODULE])),
+        ?assertError({badpipe, {module_does_not_export_decode, ?MODULE}}, run_pipes([?MODULE])),
         ?assertError({badpipe, {function_pipe_has_wrong_arity, _}}, run_pipes([fun(E) -> E end])),
         ?assertError({badpipe, {module_init_returned_non_map, NonMap}}, run_pipes([NonMap]))
     after
@@ -1396,7 +1396,7 @@ zone_pipeline_bad_config(_) ->
             {badconfig, {invalid_pipeline, erldns_zone_standard}}
         },
         {#{pipeline => [this_module_does_not_exist]}, {badpipe, {module, nofile}}},
-        {#{pipeline => [Codec]}, {badpipe, {module_does_not_export_call, Codec}}}
+        {#{pipeline => [Codec]}, {badpipe, {module_does_not_export_decode, Codec}}}
     ],
     try
         lists:foreach(

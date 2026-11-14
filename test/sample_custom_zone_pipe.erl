@@ -4,16 +4,16 @@
 
 -include_lib("dns_erlang/include/dns.hrl").
 
--export([call/2, encode/1]).
+-export([decode/2, encode/1]).
 
 -define(DNS_TYPE_SAMPLE, 40000).
 
-call(Entries, _Opts) ->
-    [decode(Entry) || Entry <- Entries].
+decode(Entries, _Opts) ->
+    [decode_entry(Entry) || Entry <- Entries].
 
-decode(#{~"name" := Name, ~"type" := ~"SAMPLE", ~"ttl" := Ttl, ~"data" := Data}) ->
+decode_entry(#{~"name" := Name, ~"type" := ~"SAMPLE", ~"ttl" := Ttl, ~"data" := Data}) ->
     #dns_rr{name = Name, type = ?DNS_TYPE_SAMPLE, data = maps:get(~"dname", Data), ttl = Ttl};
-decode(Entry) ->
+decode_entry(Entry) ->
     Entry.
 
 encode(#dns_rr{name = Name, type = ?DNS_TYPE_SAMPLE, ttl = Ttl, data = Data}) ->

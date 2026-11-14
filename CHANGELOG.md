@@ -85,9 +85,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zone codecs: the `codecs` key of the `zones` configuration, the `erldns_zone_codec` behaviour and
   its `encoder()` and `decoder()` types, and `register_codec/1`, `register_codecs/1` and
   `list_codecs/0` of `erldns_zone_codec`. A pipe in the `pipeline` key, after
-  `erldns_zone_standard`, decodes the records of a custom type, and its `encode/1` encodes them
-  back. A configuration that still sets `codecs`, or that lists a codec in `pipeline`, fails to
-  start.
+  `erldns_zone_standard`, decodes the records of a custom type with its `decode/2`, and encodes
+  them back with its `encode/1`. A configuration that still sets `codecs`, or that lists a codec in
+  `pipeline`, fails to start.
 
 ## v12.0.3
 

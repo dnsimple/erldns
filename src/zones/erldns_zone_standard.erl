@@ -15,24 +15,24 @@ before it.
 
 -define(LOG_METADATA, #{domain => [erldns, zones, decoder]}).
 
--export([call/2]).
+-export([decode/2]).
 
 -ifdef(TEST).
 -export([json_record_to_erlang/1]).
 -endif.
 
--doc "`c:erldns_zone_pipeline:call/2` callback.".
--spec call([erldns_zone_pipeline:entry()], erldns_zone_pipeline:opts()) ->
+-doc "`c:erldns_zone_pipeline:decode/2` callback.".
+-spec decode([erldns_zone_pipeline:entry()], erldns_zone_pipeline:opts()) ->
     [erldns_zone_pipeline:entry()].
-call(Entries, _Opts) ->
-    [decode(Entry) || Entry <- Entries].
+decode(Entries, _Opts) ->
+    [decode_entry(Entry) || Entry <- Entries].
 
-decode(#{} = JsonRecord) ->
+decode_entry(#{} = JsonRecord) ->
     case standard_record_to_erlang(JsonRecord) of
         not_implemented -> JsonRecord;
         Record -> Record
     end;
-decode(Entry) ->
+decode_entry(Entry) ->
     Entry.
 
 -spec standard_record_to_erlang(dynamic()) -> not_implemented | dns:rr().

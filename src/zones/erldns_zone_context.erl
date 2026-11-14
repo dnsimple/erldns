@@ -9,7 +9,7 @@ disabled without them. See [Contexts](priv/zones/ZONES.md#contexts). It goes bef
 
 -behaviour(erldns_zone_pipeline).
 
--export([deps/0, prepare/1, call/2]).
+-export([deps/0, prepare/1, decode/2]).
 
 -doc "`c:erldns_zone_pipeline:deps/0` callback.".
 -spec deps() -> erldns_pipeline:deps().
@@ -29,10 +29,10 @@ prepare(Opts) ->
             disabled
     end.
 
--doc "`c:erldns_zone_pipeline:call/2` callback.".
--spec call([erldns_zone_pipeline:entry()], erldns_zone_pipeline:opts()) ->
+-doc "`c:erldns_zone_pipeline:decode/2` callback.".
+-spec decode([erldns_zone_pipeline:entry()], erldns_zone_pipeline:opts()) ->
     [erldns_zone_pipeline:entry()].
-call(Entries, #{?MODULE := Context}) ->
+decode(Entries, #{?MODULE := Context}) ->
     [Entry || Entry <- Entries, is_served(Entry, Context)].
 
 is_served(#{~"context" := Contexts}, {MatchEmpty, AllowSet}) ->

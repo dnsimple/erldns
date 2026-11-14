@@ -33,10 +33,10 @@ Without `pipeline`, the pipes are `m:erldns_zone_context` and `m:erldns_zone_sta
 
 ## Types of pipes
 
-- A module that implements this behaviour: `c:call/2`, and optionally `c:prepare/1` and
+- A module that implements this behaviour: `c:decode/2`, and optionally `c:prepare/1` and
   `c:deps/0`, which work as in `m:erldns_pipeline`, and `c:encode/1`, see
   [Custom record types](#module-custom-record-types).
-- A function of arity 2, called as `c:call/2`.
+- A function of arity 2, called as `c:decode/2`.
 
 ## Custom record types
 
@@ -52,16 +52,16 @@ and a record that none encodes is left out.
 
 -include_lib("dns_erlang/include/dns.hrl").
 
--export([call/2, encode/1]).
+-export([decode/2, encode/1]).
 
 -define(DNS_TYPE_SAMPLE, 40000).
 
-call(Entries, _Opts) ->
-    [decode(Entry) || Entry <- Entries].
+decode(Entries, _Opts) ->
+    [decode_entry(Entry) || Entry <- Entries].
 
-decode(#{~"name" := Name, ~"type" := ~"SAMPLE", ~"ttl" := Ttl, ~"data" := Data}) ->
+decode_entry(#{~"name" := Name, ~"type" := ~"SAMPLE", ~"ttl" := Ttl, ~"data" := Data}) ->
     #dns_rr{name = Name, type = ?DNS_TYPE_SAMPLE, data = maps:get(~"dname", Data), ttl = Ttl};
-decode(Entry) ->
+decode_entry(Entry) ->
     Entry.
 
 encode(#dns_rr{name = Name, type = ?DNS_TYPE_SAMPLE, ttl = Ttl, data = Data}) ->
@@ -97,12 +97,12 @@ A pipe that caps the TTL of the records, once they are decoded:
 
 -include_lib("dns_erlang/include/dns.hrl").
 
--export([deps/0, call/2]).
+-export([deps/0, decode/2]).
 
 deps() ->
     #{prerequisites => [erldns_zone_standard]}.
 
-call(Entries, _Opts) ->
+decode(Entries, _Opts) ->
     [cap(Entry) || Entry <- Entries].
 
 cap(#dns_rr{ttl = Ttl} = Record) when Ttl > 86400 ->
@@ -162,7 +162,7 @@ The return of a pipe.
 -export_type([prepared/0]).
 
 -doc "Take the records and return them, changed or not. See `t:return/0`.".
--callback call([entry()], opts()) -> return().
+-callback decode([entry()], opts()) -> return().
 
 -doc """
 Prepare the pipe when the pipeline is prepared, adding to the options what it needs, or return
@@ -265,9 +265,9 @@ prepare_pipe(Fun, _, _) when is_function(Fun) ->
     erlang:error({badpipe, {function_pipe_has_wrong_arity, Fun}});
 prepare_pipe(Module, Acc, Pipes) when is_atom(Module) ->
     ok = ensure_loaded(Module),
-    case erlang:function_exported(Module, call, 2) of
+    case erlang:function_exported(Module, decode, 2) of
         true -> prepare_module(Module, Acc, Pipes);
-        false -> erlang:error({badpipe, {module_does_not_export_call, Module}})
+        false -> erlang:error({badpipe, {module_does_not_export_decode, Module}})
     end.
 
 prepare_module(Module, {Steps, Opts} = Acc, Pipes) ->
@@ -277,7 +277,7 @@ prepare_module(Module, {Steps, Opts} = Acc, Pipes) ->
             ?LOG_DEBUG(#{what => zone_pipe_disabled, module => Module}, ?LOG_METADATA),
             Acc;
         Opts1 ->
-            {[{Module, fun Module:call/2} | Steps], Opts1}
+            {[{Module, fun Module:decode/2} | Steps], Opts1}
     end.
 
 ensure_loaded(Module) ->
