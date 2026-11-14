@@ -12,14 +12,14 @@
 -doc "Keep the decoded records, sorted and deduplicated, and log the others as unsupported.".
 -spec finalize([erldns_zone_pipeline:entry()]) -> [dns:rr()].
 finalize(Entries) ->
-    Records = lists:flatmap(fun keep_record/1, Entries),
+    Records = lists:filter(fun is_decoded/1, Entries),
     lists:usort(Records).
 
-keep_record(#dns_rr{} = Record) ->
-    [Record];
-keep_record(Entry) ->
+is_decoded(#dns_rr{}) ->
+    true;
+is_decoded(Entry) ->
     ?LOG_WARNING(#{what => unsupported_record, record => Entry}, ?LOG_METADATA),
-    [].
+    false.
 
 -spec parse_keysets([json:decode_value()]) -> [erldns:keyset()].
 parse_keysets([]) ->
