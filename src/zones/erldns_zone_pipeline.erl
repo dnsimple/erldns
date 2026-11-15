@@ -153,10 +153,8 @@ The return of a pipe.
 -doc "A pipe in the pipeline, see [Types of pipes](#module-types-of-pipes).".
 -type pipe() :: module() | pipefun().
 
--type step() :: {pipe(), pipefun()}.
-
--doc "A pipeline ready to run.".
--opaque prepared() :: {[step()], opts()}.
+-doc "A pipeline ready to run: the decode and encode functions of its pipes, and its options.".
+-opaque prepared() :: {[pipefun()], [erldns_zone_encoder:encoder()], opts()}.
 
 -export_type([json_record/0, entry/0, scope/0, opts/0, return/0, pipefun/0, pipe/0]).
 -export_type([prepared/0]).
@@ -196,8 +194,7 @@ configured() ->
 -spec store([pipe()]) -> ok.
 store(Pipes) ->
     Prepared = prepare(Pipes),
-    Encoders = encoders(Pipes),
-    persistent_term:put(?MODULE, {Prepared, Encoders}).
+    persistent_term:put(?MODULE, Prepared).
 
 -doc false.
 -spec delete() -> boolean().
@@ -207,29 +204,28 @@ delete() ->
 -doc false.
 -spec run([entry()], #{atom() => dynamic()}) -> {[entry()], opts()}.
 run(Entries, CallOpts) ->
-    {Prepared, _} = stored(),
+    Prepared = stored(),
     run(Entries, CallOpts, Prepared).
 
 %% The encode/1 of the pipes, in the order of the pipeline
 -doc false.
 -spec encoders() -> [erldns_zone_encoder:encoder()].
 encoders() ->
-    {_, Encoders} = stored(),
+    {_, Encoders, _} = stored(),
     Encoders.
 
 -doc false.
 -spec prepare([pipe()]) -> prepared().
 prepare(Pipes) ->
     Prepare = fun(Pipe, Acc) -> prepare_pipe(Pipe, Acc, Pipes) end,
-    {Steps, Opts} = lists:foldl(Prepare, {[], def_opts()}, Pipes),
-    Pipeline = lists:reverse(Steps),
-    {Pipeline, Opts}.
+    {Decoders, Encoders, Opts} = lists:foldl(Prepare, {[], [], def_opts()}, Pipes),
+    {lists:reverse(Decoders), lists:reverse(Encoders), Opts}.
 
 -doc false.
 -spec run([entry()], #{atom() => dynamic()}, prepared()) -> {[entry()], opts()}.
-run(Entries, CallOpts, {Pipeline, PreparedOpts}) ->
+run(Entries, CallOpts, {Decoders, _, PreparedOpts}) ->
     Opts = maps:merge(PreparedOpts, CallOpts),
-    lists:foldl(fun run_step/2, {Entries, Opts}, Pipeline).
+    lists:foldl(fun run_step/2, {Entries, Opts}, Decoders).
 
 %% Without a stored pipeline, as when the zone codec server isn't running, the configured one is
 %% prepared for each call: running fewer pipes could load records that a pipe would have changed
@@ -237,11 +233,9 @@ stored() ->
     case persistent_term:get(?MODULE, undefined) of
         undefined ->
             Pipes = configured(),
-            Prepared = prepare(Pipes),
-            Encoders = encoders(Pipes),
-            {Prepared, Encoders};
-        Stored ->
-            Stored
+            prepare(Pipes);
+        Prepared ->
+            Prepared
     end.
 
 %% The removed codecs key fails, so its codecs aren't left out of the pipeline unnoticed
@@ -254,13 +248,8 @@ configured(#{pipeline := Pipes}) ->
 configured(_) ->
     ?DEFAULT_PIPES.
 
-%% prepare/1 has loaded the modules
-encoders(Pipes) ->
-    Modules = [Pipe || Pipe <- Pipes, is_atom(Pipe)],
-    [fun Module:encode/1 || Module <- Modules, erlang:function_exported(Module, encode, 1)].
-
-prepare_pipe(Fun, {Steps, Opts}, _) when is_function(Fun, 2) ->
-    {[{Fun, Fun} | Steps], Opts};
+prepare_pipe(Fun, {Decoders, Encoders, Opts}, _) when is_function(Fun, 2) ->
+    {[Fun | Decoders], Encoders, Opts};
 prepare_pipe(Fun, _, _) when is_function(Fun) ->
     erlang:error({badpipe, {function_pipe_has_wrong_arity, Fun}});
 prepare_pipe(Module, Acc, Pipes) when is_atom(Module) ->
@@ -270,14 +259,21 @@ prepare_pipe(Module, Acc, Pipes) when is_atom(Module) ->
         false -> erlang:error({badpipe, {module_does_not_export_decode, Module}})
     end.
 
-prepare_module(Module, {Steps, Opts} = Acc, Pipes) ->
+prepare_module(Module, {Decoders, Encoders, Opts} = Acc, Pipes) ->
     ok = ensure_dependencies(Module, Pipes),
     case maybe_prepare(Module, Opts) of
         disabled ->
             ?LOG_DEBUG(#{what => zone_pipe_disabled, module => Module}, ?LOG_METADATA),
             Acc;
         Opts1 ->
-            {[{Module, fun Module:decode/2} | Steps], Opts1}
+            Encoders1 = maybe_add_encoder(Module, Encoders),
+            {[fun Module:decode/2 | Decoders], Encoders1, Opts1}
+    end.
+
+maybe_add_encoder(Module, Encoders) ->
+    case erlang:function_exported(Module, encode, 1) of
+        true -> [fun Module:encode/1 | Encoders];
+        false -> Encoders
     end.
 
 ensure_loaded(Module) ->
@@ -305,12 +301,12 @@ maybe_prepare(Module, Opts) ->
         _ -> erlang:error({badpipe, {module_init_returned_non_map, Module}})
     end.
 
-run_step({Pipe, Fun}, {Entries, Opts}) ->
-    case Fun(Entries, Opts) of
+run_step(Decoder, {Entries, Opts}) ->
+    case Decoder(Entries, Opts) of
         Next when is_list(Next) -> {Next, Opts};
         {Next, NextOpts} when is_list(Next), is_map(NextOpts) -> {Next, NextOpts};
-        {error, Reason} -> erlang:error({zone_rejected, Pipe, Reason});
-        Other -> erlang:error({bad_zone_pipe_return, Pipe, Other})
+        {error, Reason} -> erlang:error({zone_rejected, Decoder, Reason});
+        Other -> erlang:error({bad_zone_pipe_return, Decoder, Other})
     end.
 
 def_opts() ->

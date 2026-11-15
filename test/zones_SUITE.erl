@@ -93,6 +93,7 @@ groups() ->
             json_record_unknown_type_reaches_custom_decoders,
             json_record_without_type_name_reaches_custom_decoders,
             zone_pipeline_rejects_bad_pipes,
+            zone_pipeline_leaves_out_disabled_pipes,
             zone_pipeline_checks_deps,
             zone_pipeline_pipe_returns,
             decode_returns_pipeline_opts,
@@ -1225,6 +1226,18 @@ zone_pipeline_rejects_bad_pipes(_) ->
         meck:unload(NonMap)
     end.
 
+zone_pipeline_leaves_out_disabled_pipes(_) ->
+    Disabled = ?FUNCTION_NAME,
+    meck:new(Disabled, [non_strict]),
+    try
+        meck:expect(Disabled, decode, fun(Entries, _) -> Entries end),
+        meck:expect(Disabled, encode, fun(_) -> not_implemented end),
+        meck:expect(Disabled, prepare, fun(_) -> disabled end),
+        ?assertMatch({[], [], _}, erldns_zone_pipeline:prepare([Disabled]))
+    after
+        meck:unload(Disabled)
+    end.
+
 zone_pipeline_checks_deps(_) ->
     ?assertError(
         {badpipe,
@@ -1233,8 +1246,9 @@ zone_pipeline_checks_deps(_) ->
             }}},
         run_pipes([erldns_zone_standard, erldns_zone_context])
     ),
+    Standard = fun erldns_zone_standard:decode/2,
     ?assertMatch(
-        {[{erldns_zone_standard, _}], _},
+        {[Standard], [], _},
         erldns_zone_pipeline:prepare([erldns_zone_context, erldns_zone_standard])
     ).
 
@@ -1287,12 +1301,15 @@ zone_context_filters_json_records(_) ->
     application:set_env(erldns, zones, #{context_options => #{allow => [~"AMS"]}}),
     ?assertMatch({[_, _, _, _], _}, run_pipes([erldns_zone_context], Entries)),
     application:unset_env(erldns, zones),
-    ?assertMatch({[], _}, erldns_zone_pipeline:prepare([erldns_zone_context])).
+    ?assertMatch({[], [], _}, erldns_zone_pipeline:prepare([erldns_zone_context])).
 
 zone_pipeline_kept_by_codec_server(_) ->
     start_codec_server(#{pipeline => ?SAMPLE_PIPELINE}),
+    Standard = fun erldns_zone_standard:decode/2,
+    Sample = fun sample_custom_zone_pipe:decode/2,
+    SampleEncode = fun sample_custom_zone_pipe:encode/1,
     ?assertMatch(
-        {{[{erldns_zone_standard, _}, {sample_custom_zone_pipe, _}], _}, [_]},
+        {[Standard, Sample], [SampleEncode], _},
         persistent_term:get(erldns_zone_pipeline)
     ),
     ?assertEqual(not_implemented, gen_server:call(erldns_zone_codec, unexpected)),
