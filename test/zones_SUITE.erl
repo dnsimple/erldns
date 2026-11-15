@@ -1258,8 +1258,11 @@ zone_pipeline_pipe_returns(_) ->
     Prepared = erldns_zone_pipeline:prepare([AddKey, SeeKey]),
     ?assertMatch(
         {[b, a], #{key := value, scope := partial}},
-        erldns_zone_pipeline:run([], #{scope => partial}, Prepared)
+        erldns_zone_pipeline:run(
+            [], #{zone_name => ~"", version => ~"", scope => partial}, Prepared
+        )
     ),
+    ?assertError(function_clause, erldns_zone_pipeline:run([], #{scope => zone}, Prepared)),
     Reject = fun(_, _) -> {error, nope} end,
     ?assertError({zone_rejected, Reject, nope}, run_pipes([Reject])),
     Bad = fun(_, _) -> foo end,
@@ -1275,7 +1278,11 @@ decode_returns_pipeline_opts(_) ->
         }},
         erldns_zone_codec:decode(Zone, #{extra => 1})
     ),
-    ?assertMatch({_, #{scope := partial}}, erldns_zone_codec:decode(Zone, #{scope => partial})).
+    ?assertMatch({_, #{scope := partial}}, erldns_zone_codec:decode(Zone, #{scope => partial})),
+    ?assertMatch(
+        {_, #{zone_name := ~"example.com", version := ~"abc"}},
+        erldns_zone_codec:decode(Zone, #{zone_name => ~"example.net", version => ~"other"})
+    ).
 
 decode_records_of_a_partial_zone(_) ->
     Record = a_rr(~"d.example.com", {192, 0, 2, 2}),
@@ -3927,7 +3934,7 @@ run_pipes(Pipes) ->
 
 run_pipes(Pipes, Entries) ->
     Prepared = erldns_zone_pipeline:prepare(Pipes),
-    erldns_zone_pipeline:run(Entries, #{}, Prepared).
+    erldns_zone_pipeline:run(Entries, #{zone_name => ~"", version => ~"", scope => zone}, Prepared).
 
 decode_records(Entries) ->
     {Records, _} = erldns_zone_codec:decode_records(Entries, #{zone_name => ~"example.com"}),

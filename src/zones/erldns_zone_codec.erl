@@ -68,9 +68,9 @@ decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Opts) ->
     Sha = maps:get(~"sha", Zone, ~""),
     JsonKeys = maps:get(~"keys", Zone, []),
     Keys = erldns_zone_decoder:parse_keysets(JsonKeys),
-    Scoped = maps:merge(#{scope => zone}, Opts),
-    RecordsOpts = Scoped#{zone_name => Name, version => Sha},
-    {Records, Opts1} = decode_records(JsonRecords, RecordsOpts),
+    Scope = maps:get(scope, Opts, zone),
+    CallOpts = Opts#{zone_name => Name, version => Sha, scope => Scope},
+    {Records, Opts1} = run_pipeline(JsonRecords, CallOpts),
     Decoded = build_zone(Name, Sha, Records, Keys),
     {Decoded, Opts1}.
 
@@ -86,9 +86,12 @@ the options as the pipes left them.
     Opts :: #{zone_name := dns:dname(), atom() => dynamic()}.
 decode_records(Entries, #{zone_name := _} = Opts) ->
     CallOpts = maps:merge(#{scope => partial, version => ~""}, Opts),
-    {Decoded, Opts1} = erldns_zone_pipeline:run(Entries, CallOpts),
+    run_pipeline(Entries, CallOpts).
+
+run_pipeline(Entries, CallOpts) ->
+    {Decoded, Opts} = erldns_zone_pipeline:run(Entries, CallOpts),
     Records = erldns_zone_decoder:finalize(Decoded),
-    {Records, Opts1}.
+    {Records, Opts}.
 
 % Internal API
 -doc false.

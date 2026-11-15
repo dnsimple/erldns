@@ -129,7 +129,7 @@ cap(Entry) ->
 -doc """
 Options passed to every pipe.
 
-The zone's name and version are as the zone was given. Pipes can add their own keys.
+The zone's name and version are as the zone was given. Pipes add their own keys in `c:prepare/1`.
 """.
 -type opts() :: #{
     zone_name := dns:dname(),
@@ -163,10 +163,11 @@ The return of a pipe.
 -callback decode([entry()], opts()) -> return().
 
 -doc """
-Prepare the pipe when the pipeline is prepared, adding to the options what it needs, or return
-`disabled` to leave the pipe out.
+Prepare the pipe when the pipeline is prepared, or return `disabled` to leave the pipe out.
 
-It can be called more than once, and isn't called again for each zone.
+A pipe adds the keys it uses to the options here, so that every decode starts with them and its
+`c:decode/2` can update them with `:=`. It can be called more than once, and isn't called again for
+each zone.
 """.
 -callback prepare(opts()) -> disabled | opts().
 
@@ -202,7 +203,7 @@ delete() ->
     persistent_term:erase(?MODULE).
 
 -doc false.
--spec run([entry()], #{atom() => dynamic()}) -> {[entry()], opts()}.
+-spec run([entry()], opts()) -> {[entry()], opts()}.
 run(Entries, CallOpts) ->
     Prepared = stored(),
     run(Entries, CallOpts, Prepared).
@@ -222,8 +223,9 @@ prepare(Pipes) ->
     {lists:reverse(Decoders), lists:reverse(Encoders), Opts}.
 
 -doc false.
--spec run([entry()], #{atom() => dynamic()}, prepared()) -> {[entry()], opts()}.
-run(Entries, CallOpts, {Decoders, _, PreparedOpts}) ->
+-spec run([entry()], opts(), prepared()) -> {[entry()], opts()}.
+run(Entries, #{zone_name := _, version := _, scope := _} = CallOpts, Prepared) ->
+    {Decoders, _, PreparedOpts} = Prepared,
     Opts = maps:merge(PreparedOpts, CallOpts),
     lists:foldl(fun run_step/2, {Entries, Opts}, Decoders).
 
