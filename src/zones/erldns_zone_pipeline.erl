@@ -166,8 +166,7 @@ The return of a pipe.
 Prepare the pipe when the pipeline is prepared, or return `disabled` to leave the pipe out.
 
 A pipe adds the keys it uses to the options here, so that every decode starts with them and its
-`c:decode/2` can update them with `:=`. It can be called more than once, and isn't called again for
-each zone.
+`c:decode/2` can update them with `:=`.
 """.
 -callback prepare(opts()) -> disabled | opts().
 
