@@ -168,6 +168,7 @@ groups() ->
             rrset_sync_counter_dname_and_trailing_dot_same_key,
             delete_zone_cleans_sync_counters,
             put_zone_keeps_sync_counters,
+            rrset_changes_keep_zone_opts,
             put_rrset_sync_counter_lowers_it,
             put_rrset_sync_counter_same_key_however_spelled,
             put_zone_never_hides_names_it_keeps,
@@ -3153,6 +3154,23 @@ put_zone_keeps_sync_counters(_) ->
         99,
         erldns_zone_cache:get_rrset_sync_counter(ZoneLabels, dns_domain:split(RRFqdn), ?DNS_TYPE_A)
     ).
+
+%% RRSet changes keep a zone's opts, replacing the zone replaces them.
+rrset_changes_keep_zone_opts(_) ->
+    ZoneName = unique_name(zone_opts),
+    RRFqdn = <<"www.", ZoneName/binary>>,
+    Record = a_rr(RRFqdn, {1, 2, 3, 4}),
+    Zone = erldns_zones:build_zone(ZoneName, ~"v1", [soa_rr(ZoneName)], []),
+    ok = erldns_zone_cache:put_zone(Zone#zone{opts = #{setting => on}}),
+    ok = erldns_zone_cache:put_zone_rrset({ZoneName, ~"v2", [Record]}, RRFqdn, ?DNS_TYPE_A, 1),
+    Put = erldns_zone_cache:lookup_zone(ZoneName),
+    ?assertEqual({~"v2", #{setting => on}}, {Put#zone.version, Put#zone.opts}),
+    ok = erldns_zone_cache:delete_zone_rrset(ZoneName, ~"v3", RRFqdn, ?DNS_TYPE_A, 2),
+    Deleted = erldns_zone_cache:lookup_zone(ZoneName),
+    ?assertEqual({~"v3", #{setting => on}}, {Deleted#zone.version, Deleted#zone.opts}),
+    ok = erldns_zone_cache:put_zone({ZoneName, ~"v4", [soa_rr(ZoneName)]}),
+    Replaced = erldns_zone_cache:lookup_zone(ZoneName),
+    ?assertEqual(#{}, Replaced#zone.opts).
 
 %% Lowered, the counter no longer declines a deletion it would have before, and the records are
 %% left as they were until one comes.

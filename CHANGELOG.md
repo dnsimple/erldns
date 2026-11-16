@@ -93,6 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it was ignored.
 - The records of zone files go through the zone pipeline, so its pipes see them, and duplicate
   records are dropped.
+- `#zone{}` has a new `opts` field, a map of per-zone settings (`erldns:zone_opts()`), empty by
+  default, so code matching on it needs recompiling. RRSet changes keep a zone's opts.
 
 ### Removed
 

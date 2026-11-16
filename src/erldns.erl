@@ -21,10 +21,12 @@ Convenience API to start erldns directly.
 
 -export([start/0, start_listeners/0, stop_listeners/0]).
 
--export_type([keyset/0, zone/0]).
+-export_type([keyset/0, zone/0, zone_opts/0]).
 
 -type keyset() :: #keyset{}.
 -type zone() :: #zone{}.
+-doc "Settings of a zone, for the pipes that serve it. RRSet changes keep them.".
+-type zone_opts() :: #{atom() => dynamic()}.
 
 -spec start() -> term().
 start() ->
