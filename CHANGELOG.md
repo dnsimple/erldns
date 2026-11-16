@@ -61,6 +61,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a JSON zone without `name` or `records` fail with `{unsupported_key, Type}`, `invalid_key`,
   `invalid_keysets` and `{invalid_zone, Fields}`, without the private keys in the error or its
   logged stacktrace.
+- The additional section only holds the addresses of NS and MX targets at or below the apex of the
+  zone that answers. It held those of any target another zone in the cache had records for, so a
+  zone's answers carried the records of whichever zone held the names of its nameservers and mail
+  exchangers, a zone in other hands included.
 
 ### Changed
 

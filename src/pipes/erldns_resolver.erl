@@ -13,6 +13,13 @@ or `none` for an authoritative answer, so that later pipes such as `m:erldns_dns
 response refers to without inferring it from the message. A DS query for the delegation name itself
 is answered by this zone, whose data the DS RRset is (RFC 4035 §3.1.4.1).
 
+## Additional section
+
+The A and AAAA records of the NS and MX targets in the answer and authority sections go in the
+additional section (RFC 1034 §4.3.2 step 6), for targets at or below the apex of the zone that
+answers only: its own records and glue, or those of a zone hosted below it. A target outside the
+apex gets none, even from another zone in the cache, as a resolver would drop them (RFC 5452 §6).
+
 ## Minimal answers to ANY
 
 ANY at a name that owns records is answered as RFC 8482 §4.2 describes, with a single
@@ -585,7 +592,7 @@ additional_processing(Message, _Zone, []) ->
     Message;
 %% There are records with names that require additional processing.
 additional_processing(Message, Zone, Names) ->
-    RRs = lists:flatmap(fun erldns_zone_cache:get_records_by_name/1, Names),
+    RRs = lists:flatmap(fun(Name) -> records_under_apex(Zone, Name) end, Names),
     Records = lists:filter(erldns_records:match_types([?DNS_TYPE_A, ?DNS_TYPE_AAAA]), RRs),
     additional_processing(Message, Zone, Names, Records).
 
@@ -595,6 +602,18 @@ additional_processing(Message, _Zone, _Names, []) ->
 %% Additional A records were found, so we add them to the additional section.
 additional_processing(Message, _Zone, _Names, Records) ->
     Message#dns_message{additional = Message#dns_message.additional ++ Records}.
+
+%% The records at a name at or below the zone's apex, from whichever zone in the cache holds it, as
+%% for a query: this one, or one hosted below it. Nothing for a name outside the apex: a resolver
+%% drops it as out of bailiwick (RFC 5452 §6), and the zone that holds it need not be in the same
+%% hands as this one.
+-spec records_under_apex(erldns:zone(), dns:dname()) -> [dns:rr()].
+records_under_apex(#zone{labels = ZoneLabels}, Name) ->
+    Labels = dns_domain:split(Name),
+    case lists:suffix(ZoneLabels, Labels) of
+        true -> erldns_zone_cache:get_records_by_name(Labels);
+        false -> []
+    end.
 
 %% Given a list of answers find the names that require additional processing.
 -spec requires_additional_processing([dns:rr()], [dns:rr()], [dns:dname()]) -> [dns:dname()].

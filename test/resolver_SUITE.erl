@@ -27,6 +27,7 @@ all() ->
         resolve_drops_the_sections_of_the_request,
         refused_drops_the_sections_of_the_request,
         negative_answers_carry_the_soa_minimum_ttl,
+        additional_holds_only_names_under_the_apex,
         any_over_udp_is_answered_with_an_hinfo,
         any_keeps_the_cname_or_the_hinfo_of_the_name,
         minimal_any_is_configured_per_transport,
@@ -596,6 +597,63 @@ negative_answers_carry_the_soa_minimum_ttl(_) ->
         SoaAnswer
     ),
     erldns_zone_cache:delete_zone(ZoneName).
+
+%% RFC 1034 §4.3.2 step 6: the additional section holds the addresses of the NS and MX targets at or
+%% below the apex, glue and those of a zone hosted below it included. Those of a target outside the
+%% apex are left out even when another zone in the cache holds them: a resolver drops them as out of
+%% bailiwick (RFC 5452 §6), and whoever holds that zone need not be whoever holds this one.
+additional_holds_only_names_under_the_apex(_) ->
+    erldns_zone_cache:start_link(),
+    ZoneName = ~"additional.example",
+    Child = ~"child.additional.example",
+    Other = ~"other-zone.example",
+    RR = fun(Name, Type, Data) -> #dns_rr{name = Name, type = Type, ttl = 3600, data = Data} end,
+    NS = fun(Name, Target) -> RR(Name, ?DNS_TYPE_NS, #dns_rrdata_ns{dname = Target}) end,
+    MX = fun(Exchange) ->
+        RR(ZoneName, ?DNS_TYPE_MX, #dns_rrdata_mx{preference = 10, exchange = Exchange})
+    end,
+    A = fun(Name, Last) -> RR(Name, ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, Last}}) end,
+    InZone = A(~"ns1.additional.example", 1),
+    Glue = A(~"ns.delegated.additional.example", 2),
+    InChild = A(~"mail.child.additional.example", 3),
+    Records = [
+        soa(ZoneName),
+        NS(ZoneName, ~"ns1.additional.example"),
+        NS(ZoneName, ~"ns.other-zone.example"),
+        MX(~"mail.child.additional.example"),
+        MX(~"mail.other-zone.example"),
+        InZone,
+        NS(~"delegated.additional.example", ~"ns.delegated.additional.example"),
+        NS(~"delegated.additional.example", ~"ns.other-zone.example"),
+        Glue
+    ],
+    Zones = [
+        erldns_zones:build_zone(ZoneName, ~"digest", Records, []),
+        erldns_zones:build_zone(Child, ~"digest", [soa(Child), InChild], []),
+        erldns_zones:build_zone(
+            Other,
+            ~"digest",
+            [soa(Other), A(~"ns.other-zone.example", 4), A(~"mail.other-zone.example", 5)],
+            []
+        )
+    ],
+    [ok = erldns_zone_cache:put_zone(Z) || Z <- Zones],
+    try
+        ?assertMatch(
+            #dns_message{aa = true, additional = [#dns_optrr{}, InZone]},
+            resolve(ZoneName, ?DNS_TYPE_NS)
+        ),
+        ?assertMatch(
+            #dns_message{aa = true, additional = [#dns_optrr{}, InChild]},
+            resolve(ZoneName, ?DNS_TYPE_MX)
+        ),
+        ?assertMatch(
+            #dns_message{aa = false, additional = [#dns_optrr{}, Glue]},
+            resolve(~"www.delegated.additional.example", ?DNS_TYPE_A)
+        )
+    after
+        [erldns_zone_cache:delete_zone(Name) || Name <- [ZoneName, Child, Other]]
+    end.
 
 %% RFC 8482 §4.2: ANY at a name with records gets one HINFO, without glue for the records it
 %% replaces; a name without records is answered as for any other type.
