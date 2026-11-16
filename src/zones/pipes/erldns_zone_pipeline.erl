@@ -42,7 +42,7 @@ Without `pipeline`, the pipes are `m:erldns_zone_context` and `m:erldns_zone_sta
 
 A pipe placed after `m:erldns_zone_standard` gets the JSON records of the types erldns doesn't
 know, and can decode them into `t:dns:rr/0`. To encode them back to JSON, as
-`erldns_zone_codec:encode/1,2` and the admin API do, it implements `c:encode/1`. The pipes of the
+`erldns_zones:encode/1,2` and the admin API do, it implements `c:encode/1`. The pipes of the
 pipeline are tried in order, the first that doesn't return `not_implemented` encodes the record,
 and a record that none encodes is left out.
 
@@ -228,7 +228,7 @@ run(Entries, #{zone_name := _, version := _, scope := _} = CallOpts, Prepared) -
     Opts = maps:merge(PreparedOpts, CallOpts),
     lists:foldl(fun run_step/2, {Entries, Opts}, Decoders).
 
-%% Without a stored pipeline, as when the zone codec server isn't running, the configured one is
+%% Without a stored pipeline, as when its worker isn't running, the configured one is
 %% prepared for each call: running fewer pipes could load records that a pipe would have changed
 stored() ->
     case persistent_term:get(?MODULE, undefined) of

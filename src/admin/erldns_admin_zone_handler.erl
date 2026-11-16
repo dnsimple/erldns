@@ -121,7 +121,7 @@ to_json(Req, State) ->
         Zone ->
             MaybeMetaOnly = lists:keymember(~"metaonly", 1, Params),
             Mode = choose_mode(MaybeMetaOnly),
-            Json = erldns_zone_codec:encode(Zone, #{mode => Mode}),
+            Json = erldns_zones:encode(Zone, #{mode => Mode}),
             Body = json:encode(Json),
             {Body, Req, State}
     end.

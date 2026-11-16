@@ -65,7 +65,7 @@ load_json_file(File, Strict) ->
         {ok, Content} ?= file:read_file(File, [raw]),
         {ok, List} ?= safe_json_decode_list(Content),
         Zones = ensure_zones(List, Strict),
-        [erldns_zone_codec:decode(Zone) || Zone <- Zones]
+        [erldns_zones:decode(Zone) || Zone <- Zones]
     else
         [] ->
             [];
@@ -93,9 +93,9 @@ load_zone_file(File, KeysPath, Strict) ->
         Soa = #dns_rr{name = ZoneName} ?= lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, Parsed),
         Sha = crypto:hash(sha256, term_to_binary(Soa)),
         Opts = #{zone_name => ZoneName, version => Sha, scope => zone},
-        {Records, _} = erldns_zone_codec:decode_records(Parsed, Opts),
+        {Records, _} = erldns_zones:decode_records(Parsed, Opts),
         Keys = load_private_keys(ZoneName, KeysPath),
-        [erldns_zone_codec:build_zone(ZoneName, Sha, Records, Keys)]
+        [erldns_zones:build_zone(ZoneName, Sha, Records, Keys)]
     else
         false ->
             Strict andalso erlang:throw({invalid_zone_file, File}),

@@ -21,10 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the records of standard types as JSON, keys erldns doesn't use included. `erldns_zone_context`
   and `erldns_zone_standard` are the built-in pipes.
 - A zone pipe can implement `encode/1` to encode the records of a custom type back to JSON, as
-  `erldns_zone_codec:encode/1,2` and the admin API do.
-- `erldns_zone_codec:decode/2` also returns the options the zone pipeline ended with, and
-  `erldns_zone_codec:decode_records/2` decodes part of a zone, such as an RRSet, with `scope`
-  `partial`.
+  `erldns_zones:encode/1,2` and the admin API do.
+- `erldns_zones:decode/2` decodes a zone as `decode/1` does, and also returns the options the zone
+  pipeline ended with, and `erldns_zones:decode_records/2` decodes part of a zone, such as an
+  RRSet, with `scope` `partial`.
 
 ### Fixed
 
@@ -73,18 +73,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The packet cache keeps answers to ANY apart by transport.
 - `erldns_query_throttle` no longer throttles ANY, now answered minimally over UDP, only RRSIG
   queries.
-- `context_options` is read when the zone codec server starts, and no longer on each zone decode.
-  An `allow` that isn't a list now fails that start, where it only failed the decode of the zones
-  with a record that has a context.
+- `context_options` is read when the `erldns_zones` supervisor starts, and no longer on each zone
+  decode. An `allow` that isn't a list now fails that start, where it only failed the decode of the
+  zones with a record that has a context.
 - The records of zone files go through the zone pipeline, so its pipes see them, and duplicate
   records are dropped.
 
 ### Removed
 
-- `decode_record/1` of `erldns_zone_codec`, replaced by `erldns_zone_codec:decode_records/2`.
+- `erldns_zone_codec`: its `build_zone/4`, `decode/1` and `encode/1,2` move to `erldns_zones`, and
+  its `decode_record/1` is replaced by `erldns_zones:decode_records/2`.
 - Zone codecs: the `codecs` key of the `zones` configuration, the `erldns_zone_codec` behaviour and
   its `encoder()` and `decoder()` types, and `register_codec/1`, `register_codecs/1` and
-  `list_codecs/0` of `erldns_zone_codec`. A pipe in the `pipeline` key, after
+  `list_codecs/0`. A pipe in the `pipeline` key, after
   `erldns_zone_standard`, decodes the records of a custom type with its `decode/2`, and encodes
   them back with its `encode/1`. A configuration that still sets `codecs`, or that lists a codec in
   `pipeline`, fails to start.
@@ -512,7 +513,7 @@ and `[erldns, pipeline]` for pipeline processing. Similarly, logger events are t
 #### Custom parsers and encoders
 
 If you had any custom parser or encoder, you will need to update them to the new API, which unifies
-both into a single module. See `m:erldns_zone_codec` for more information on its callbacks. Note
+both into a single module. See [`erldns_zone_codec`](https://hexdocs.pm/erldns/12.0.3/erldns_zone_codec.html) for more information on its callbacks. Note
 that the `zone_to_erlang/1,2` callbacks are now `decode/1` and `zone_*/x` callbacks are now
 `encode/2`, and they all take only maps as input and output respectively.
 

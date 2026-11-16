@@ -112,7 +112,7 @@ return_answer(ZoneName, Opts, Req, State) ->
             Resp = "Error getting zone: zone not found",
             {stop, cowboy_req:reply(400, #{}, Resp, Req), State};
         Zone ->
-            Json = erldns_zone_codec:encode(Zone, Opts),
+            Json = erldns_zones:encode(Zone, Opts),
             Response = json:encode(Json),
             {Response, Req, State}
     end.

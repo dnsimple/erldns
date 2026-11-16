@@ -119,9 +119,9 @@ groups() ->
             encode_meta_to_json_dnssec,
             json_record_context_filtered,
             zone_context_filters_json_records,
-            zone_pipeline_kept_by_codec_server,
-            zone_pipeline_without_codec_server,
-            context_options_read_when_codec_server_starts,
+            zone_pipeline_kept_by_worker,
+            zone_pipeline_without_worker,
+            context_options_read_when_worker_starts,
             zone_pipeline_from_config,
             zone_pipeline_bad_config,
             zone_pipes_see_zone_file_records,
@@ -228,7 +228,7 @@ end_per_testcase(_, _) ->
 %% Tests
 custom_decode(_) ->
     application:set_env(erldns, zones, #{pipeline => ?SAMPLE_PIPELINE}),
-    {ok, _} = erldns_zone_codec:start_link(),
+    {ok, _} = erldns_zone_pipeline_worker:start_link(),
     Input = #{
         ~"name" => ~"example.com",
         ~"records" => [
@@ -241,7 +241,7 @@ custom_decode(_) ->
             }
         ]
     },
-    Zone = erldns_zone_codec:decode(Input),
+    Zone = erldns_zones:decode(Input),
     ?assertMatch(#zone{records = [_]}, Zone),
     #zone{records = [Record]} = Zone,
     ?assertEqual(~"example.com", Record#dns_rr.name),
@@ -251,9 +251,9 @@ custom_decode(_) ->
 
 encode_meta_to_json(_) ->
     ZoneName = unique_name(?FUNCTION_NAME),
-    Z = erldns_zone_codec:build_zone(ZoneName, ~"", [], []),
+    Z = erldns_zones:build_zone(ZoneName, ~"", [], []),
     erldns_zone_cache:put_zone(Z),
-    Data = erldns_zone_codec:encode(Z, #{mode => zone_meta_to_json}),
+    Data = erldns_zones:encode(Z, #{mode => zone_meta_to_json}),
     JSON = iolist_to_binary(json:encode(Data)),
     ?assert(is_binary(JSON)),
     Decoded = json:decode(JSON),
@@ -280,14 +280,14 @@ encode_meta_to_json_dnssec(Config) ->
     ZoneName = ~"example-dnssec.com",
     RecordName = ~"example-dnssec.com",
     Records = erldns_zone_cache:get_zone_records(ZoneName),
-    Z = erldns_zone_codec:build_zone(ZoneName, ~"", Records, []),
-    Data = erldns_zone_codec:encode(cached(Z), #{mode => {zone_records_to_json, RecordName}}),
+    Z = erldns_zones:build_zone(ZoneName, ~"", Records, []),
+    Data = erldns_zones:encode(cached(Z), #{mode => {zone_records_to_json, RecordName}}),
     JSON = iolist_to_binary(json:encode(Data)),
     ?assert(is_binary(JSON)),
     ?assertMatch(L when 8 =:= length(L), json:decode(JSON)).
 
 json_to_erlang(_) ->
-    R = erldns_zone_codec:decode(json:decode(input())),
+    R = erldns_zones:decode(json:decode(input())),
     ?assertMatch(#zone{}, R).
 
 json_to_erlang_txt_spf_records(_) ->
@@ -310,7 +310,7 @@ json_to_erlang_txt_spf_records(_) ->
     }
     """,
     Json = json:decode(I),
-    R = erldns_zone_codec:decode(Json),
+    R = erldns_zones:decode(Json),
     Expected = [
         #dns_rr{
             name = ~"example.com",
@@ -333,7 +333,7 @@ json_to_erlang_txt_spf_records(_) ->
 json_to_erlang_ensure_sorting_and_defaults(_) ->
     ?assertMatch(
         #zone{name = ~"foo.org", version = <<>>, records = [], keysets = []},
-        erldns_zone_codec:decode(#{~"name" => ~"foo.org", ~"records" => []})
+        erldns_zones:decode(#{~"name" => ~"foo.org", ~"records" => []})
     ).
 
 json_record_to_erlang(_) ->
@@ -1276,18 +1276,18 @@ decode_returns_pipeline_opts(_) ->
         {#zone{records = [_]}, #{
             extra := 1, scope := zone, zone_name := ~"example.com", version := ~"abc"
         }},
-        erldns_zone_codec:decode(Zone, #{extra => 1})
+        erldns_zones:decode(Zone, #{extra => 1})
     ),
-    ?assertMatch({_, #{scope := partial}}, erldns_zone_codec:decode(Zone, #{scope => partial})),
+    ?assertMatch({_, #{scope := partial}}, erldns_zones:decode(Zone, #{scope => partial})),
     ?assertMatch(
         {_, #{zone_name := ~"example.com", version := ~"abc"}},
-        erldns_zone_codec:decode(Zone, #{zone_name => ~"example.net", version => ~"other"})
+        erldns_zones:decode(Zone, #{zone_name => ~"example.net", version => ~"other"})
     ).
 
 decode_records_of_a_partial_zone(_) ->
     Record = a_rr(~"d.example.com", {192, 0, 2, 2}),
     Entries = [Record, json_a(~"a.example.com"), Record],
-    {Records, Opts} = erldns_zone_codec:decode_records(Entries, #{zone_name => ~"example.com"}),
+    {Records, Opts} = erldns_zones:decode_records(Entries, #{zone_name => ~"example.com"}),
     ?assertMatch([#dns_rr{name = ~"a.example.com"}, Record], Records),
     ?assertMatch(#{scope := partial, version := ~"", zone_name := ~"example.com"}, Opts).
 
@@ -1310,8 +1310,8 @@ zone_context_filters_json_records(_) ->
     application:unset_env(erldns, zones),
     ?assertMatch({[], [], _}, erldns_zone_pipeline:prepare([erldns_zone_context])).
 
-zone_pipeline_kept_by_codec_server(_) ->
-    start_codec_server(#{pipeline => ?SAMPLE_PIPELINE}),
+zone_pipeline_kept_by_worker(_) ->
+    start_pipeline_worker(#{pipeline => ?SAMPLE_PIPELINE}),
     Standard = fun erldns_zone_standard:decode/2,
     Sample = fun sample_custom_zone_pipe:decode/2,
     SampleEncode = fun sample_custom_zone_pipe:encode/1,
@@ -1319,13 +1319,13 @@ zone_pipeline_kept_by_codec_server(_) ->
         {[Standard, Sample], [SampleEncode], _},
         persistent_term:get(erldns_zone_pipeline)
     ),
-    ?assertEqual(not_implemented, gen_server:call(erldns_zone_codec, unexpected)),
-    ok = gen_server:cast(erldns_zone_codec, unexpected),
-    stop_codec_server(),
+    ?assertEqual(not_implemented, gen_server:call(erldns_zone_pipeline_worker, unexpected)),
+    ok = gen_server:cast(erldns_zone_pipeline_worker, unexpected),
+    stop_pipeline_worker(),
     ?assertEqual(undefined, persistent_term:get(erldns_zone_pipeline, undefined)).
 
-zone_pipeline_without_codec_server(_) ->
-    eventually(fun() -> undefined =:= whereis(erldns_zone_codec) end),
+zone_pipeline_without_worker(_) ->
+    eventually(fun() -> undefined =:= whereis(erldns_zone_pipeline_worker) end),
     ?assertEqual(undefined, persistent_term:get(erldns_zone_pipeline, undefined)),
     Options = #{allow => [~"AMS"]},
     Config = #{pipeline => ?SAMPLE_PIPELINE, context_options => Options},
@@ -1333,19 +1333,19 @@ zone_pipeline_without_codec_server(_) ->
     Zone = sample_zone([~"AMS"]),
     Hidden = sample_zone([~"TKO"]),
     ?assertMatch(
-        #zone{records = [#dns_rr{}, #dns_rr{type = 40000}]}, erldns_zone_codec:decode(Zone)
+        #zone{records = [#dns_rr{}, #dns_rr{type = 40000}]}, erldns_zones:decode(Zone)
     ),
-    ?assertMatch(#zone{records = [_]}, erldns_zone_codec:decode(Hidden)).
+    ?assertMatch(#zone{records = [_]}, erldns_zones:decode(Hidden)).
 
-context_options_read_when_codec_server_starts(_) ->
+context_options_read_when_worker_starts(_) ->
     Pipeline = ?SAMPLE_PIPELINE,
-    start_codec_server(#{pipeline => Pipeline, context_options => #{allow => [~"AMS"]}}),
+    start_pipeline_worker(#{pipeline => Pipeline, context_options => #{allow => [~"AMS"]}}),
     application:set_env(erldns, zones, #{
         pipeline => Pipeline, context_options => #{allow => [~"TKO"]}
     }),
     Zone = sample_zone([~"AMS"]),
-    ?assertMatch(#zone{records = [_, _]}, erldns_zone_codec:decode(Zone)),
-    stop_codec_server().
+    ?assertMatch(#zone{records = [_, _]}, erldns_zones:decode(Zone)),
+    stop_pipeline_worker().
 
 zone_pipes_see_zone_file_records(Config) ->
     Self = self(),
@@ -1353,7 +1353,7 @@ zone_pipes_see_zone_file_records(Config) ->
         Self ! {spied, Entries, Opts},
         Entries
     end,
-    start_codec_server(#{pipeline => [Spy, erldns_zone_standard]}),
+    start_pipeline_worker(#{pipeline => [Spy, erldns_zone_standard]}),
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "example.zone"),
     [#zone{records = Records}] = erldns_zone_loader_worker:do_load_file(Path, DataDir, true),
@@ -1364,18 +1364,18 @@ zone_pipes_see_zone_file_records(Config) ->
             ?assertMatch(#{scope := zone, zone_name := ~"example.com."}, Opts)
     after 1000 -> ct:fail(spy_not_called)
     end,
-    stop_codec_server().
+    stop_pipeline_worker().
 
 zone_pipe_encodes_its_records(_) ->
     eventually(fun() -> undefined =:= whereis(erldns_zone_cache) end),
     {ok, _} = erldns_zone_cache:start_link(),
-    start_codec_server(#{pipeline => [erldns_zone_standard, sample_custom_zone_pipe]}),
-    #zone{records = Records} = erldns_zone_codec:decode(sample_zone([])),
+    start_pipeline_worker(#{pipeline => [erldns_zone_standard, sample_custom_zone_pipe]}),
+    #zone{records = Records} = erldns_zones:decode(sample_zone([])),
     %% No pipe encodes this type, so it is left out
     Unknown = #dns_rr{name = ~"u.example.com", type = 40001, ttl = 60, data = ~"data"},
-    Zone = erldns_zone_codec:build_zone(~"example.com", ~"", [Unknown | Records], []),
+    Zone = erldns_zones:build_zone(~"example.com", ~"", [Unknown | Records], []),
     ok = erldns_zone_cache:put_zone(Zone),
-    #{~"erldns" := #{~"zone" := #{~"records" := Json}}} = erldns_zone_codec:encode(cached(Zone)),
+    #{~"erldns" := #{~"zone" := #{~"records" := Json}}} = erldns_zones:encode(cached(Zone)),
     ?assertMatch(
         [
             #{~"name" := ~"a.example.com.", ~"type" := ~"A"},
@@ -1383,16 +1383,16 @@ zone_pipe_encodes_its_records(_) ->
         ],
         lists:sort(fun(A, B) -> maps:get(~"name", A) =< maps:get(~"name", B) end, Json)
     ),
-    stop_codec_server(),
+    stop_pipeline_worker(),
     gen_server:stop(erldns_zone_cache).
 
 zone_pipeline_from_config(_) ->
     Copy = fun(Entries, _) -> lists:flatmap(fun copy_to_extra_names/1, Entries) end,
     Pipeline = [erldns_zone_context, Copy, erldns_zone_standard, sample_custom_zone_pipe],
-    start_codec_server(#{pipeline => Pipeline}),
+    start_pipeline_worker(#{pipeline => Pipeline}),
     Copied = (json_a(~"p.example.com"))#{~"extra_names" => [~"q.example.com"]},
     #{~"records" := Records} = Zone = sample_zone([]),
-    #zone{records = Decoded} = erldns_zone_codec:decode(Zone#{~"records" := [Copied | Records]}),
+    #zone{records = Decoded} = erldns_zones:decode(Zone#{~"records" := [Copied | Records]}),
     ?assertMatch(
         [
             #dns_rr{name = ~"a.example.com"},
@@ -1404,11 +1404,11 @@ zone_pipeline_from_config(_) ->
     ),
     ?assertMatch([_], erldns_zone_pipeline:encoders()),
     ?assertMatch([_, _], decode_records([Copied])),
-    stop_codec_server().
+    stop_pipeline_worker().
 
 zone_pipeline_bad_config(_) ->
     erlang:process_flag(trap_exit, true),
-    eventually(fun() -> undefined =:= whereis(erldns_zone_codec) end),
+    eventually(fun() -> undefined =:= whereis(erldns_zone_pipeline_worker) end),
     Codec = ?FUNCTION_NAME,
     meck:new(Codec, [non_strict]),
     meck:expect(Codec, decode, fun(_) -> not_implemented end),
@@ -1426,7 +1426,7 @@ zone_pipeline_bad_config(_) ->
         lists:foreach(
             fun({ZonesConfig, Reason}) ->
                 application:set_env(erldns, zones, ZonesConfig),
-                ?assertMatch({error, {Reason, _}}, erldns_zone_codec:start_link())
+                ?assertMatch({error, {Reason, _}}, erldns_zone_pipeline_worker:start_link())
             end,
             BadConfigs
         )
@@ -1817,9 +1817,9 @@ encode_decode_svcb(_) ->
             },
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"ver", [Record, RecordWithParams], []),
+    Zone = erldns_zones:build_zone(Name, ~"ver", [Record, RecordWithParams], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
+    Encoded = erldns_zones:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_, _], Encoded),
     [EncodedRecord, EncodedRecordWithParams] = lists:sort(Encoded),
     ?assertMatch(#{~"type" := ~"SVCB", ~"name" := _, ~"ttl" := 120}, EncodedRecord),
@@ -1853,9 +1853,9 @@ encode_decode_https(_) ->
             },
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"ver", [Record, RecordWithParams], []),
+    Zone = erldns_zones:build_zone(Name, ~"ver", [Record, RecordWithParams], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
+    Encoded = erldns_zones:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_, _], Encoded),
     [EncodedRecord, EncodedRecordWithParams] = lists:sort(Encoded),
     ?assertMatch(#{~"type" := ~"HTTPS", ~"name" := _, ~"ttl" := 3600}, EncodedRecord),
@@ -1873,9 +1873,9 @@ encode_decode_openpgpkey(_) ->
         data = #dns_rrdata_openpgpkey{data = <<1, 2, 3, 4, 5>>},
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    Zone = erldns_zones:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
+    Encoded = erldns_zones:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"OPENPGPKEY", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1900,9 +1900,9 @@ encode_decode_smimea(_) ->
             },
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    Zone = erldns_zones:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
+    Encoded = erldns_zones:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"SMIMEA", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1920,9 +1920,9 @@ encode_decode_uri(_) ->
             },
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    Zone = erldns_zones:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
+    Encoded = erldns_zones:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"URI", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1935,9 +1935,9 @@ encode_decode_wallet(_) ->
         data = #dns_rrdata_wallet{data = [~"BTC", ~"abcdefghijklmnopqrstuvwxyz"]},
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    Zone = erldns_zones:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
+    Encoded = erldns_zones:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"WALLET", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1950,9 +1950,9 @@ encode_decode_eui48(_) ->
         data = #dns_rrdata_eui48{address = <<0, 17, 34, 51, 68, 85>>},
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    Zone = erldns_zones:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
+    Encoded = erldns_zones:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"EUI48", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1965,9 +1965,9 @@ encode_decode_eui64(_) ->
         data = #dns_rrdata_eui64{address = <<0, 17, 34, 51, 68, 85, 102, 119>>},
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    Zone = erldns_zones:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
+    Encoded = erldns_zones:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"EUI64", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -1985,9 +1985,9 @@ encode_decode_csync(_) ->
             },
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    Zone = erldns_zones:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
+    Encoded = erldns_zones:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"CSYNC", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -2006,9 +2006,9 @@ encode_decode_dsync(_) ->
             },
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    Zone = erldns_zones:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
+    Encoded = erldns_zones:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"DSYNC", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -2031,9 +2031,9 @@ encode_decode_zonemd(_) ->
             },
         ttl = 3600
     },
-    Zone = erldns_zone_codec:build_zone(Name, ~"", [Record], []),
+    Zone = erldns_zones:build_zone(Name, ~"", [Record], []),
     erldns_zone_cache:put_zone(Zone),
-    Encoded = erldns_zone_codec:encode(cached(Zone), #{mode => zone_records_to_json}),
+    Encoded = erldns_zones:encode(cached(Zone), #{mode => zone_records_to_json}),
     ?assertMatch([_], Encoded),
     [EncodedRecord] = Encoded,
     ?assertMatch(#{~"type" := ~"ZONEMD", ~"name" := _, ~"ttl" := 3600}, EncodedRecord).
@@ -2475,7 +2475,7 @@ wildcard_deep_path_parent_record_labels(_) ->
         ttl = 120,
         data = #dns_rrdata_a{ip = {1, 1, 1, 1}}
     },
-    Zone = erldns_zone_codec:build_zone(ZoneName, <<>>, [SOA, WildcardFoo], []),
+    Zone = erldns_zones:build_zone(ZoneName, <<>>, [SOA, WildcardFoo], []),
     ok = erldns_zone_cache:put_zone(Zone),
     #zone{} = ZoneLookup = erldns_zone_cache:lookup_zone(ZoneName),
     %% No bar.foo record; wildcard is only at *.foo. baz.bar.foo must match via *.foo.
@@ -2515,7 +2515,7 @@ ent_blocks_wildcard_deep_path(_) ->
         ttl = 120,
         data = #dns_rrdata_a{ip = {1, 1, 1, 1}}
     },
-    Zone = erldns_zone_codec:build_zone(ZoneName, <<>>, [SOA, BarFoo, WildcardFoo], []),
+    Zone = erldns_zones:build_zone(ZoneName, <<>>, [SOA, BarFoo, WildcardFoo], []),
     ok = erldns_zone_cache:put_zone(Zone),
     #zone{} = ZoneLookup = erldns_zone_cache:lookup_zone(ZoneName),
     %% gore.foo is not in baz.bar.foo (ENT), so *.foo can used per RFC 4592 to match.
@@ -2564,7 +2564,7 @@ exact_parent_blocks_wildcard_rfc4592(_) ->
         ttl = 2,
         data = #dns_rrdata_a{ip = {2, 2, 2, 2}}
     },
-    Zone = erldns_zone_codec:build_zone(ZoneName, <<>>, [SOA, BarFoo, WildcardFoo], []),
+    Zone = erldns_zones:build_zone(ZoneName, <<>>, [SOA, BarFoo, WildcardFoo], []),
     ok = erldns_zone_cache:put_zone(Zone),
     #zone{} = ZoneLookup = erldns_zone_cache:lookup_zone(ZoneName),
     Exact = dns_domain:join([~"bar", ~"foo" | ZoneLabels]),
@@ -2674,7 +2674,7 @@ put_zone(_) ->
             },
         ttl = 3600
     },
-    Z = erldns_zone_codec:build_zone(ZoneName, ~"", [SOA, RR], []),
+    Z = erldns_zones:build_zone(ZoneName, ~"", [SOA, RR], []),
     ?assertMatch(ok, erldns_zone_cache:put_zone(Z)),
     ?assertMatch(#zone{}, erldns_zone_cache:get_authoritative_zone(~"a1.put_zone.com")),
     ?assertMatch(ok, erldns_zone_cache:put_zone({~"a2.put_zone.com", ~"", []})),
@@ -2684,7 +2684,7 @@ put_zone(_) ->
 
 put_zone_rrset(_) ->
     ZoneNameNet = dns_domain:to_lower(~"example.net"),
-    ZoneNet = erldns_zone_codec:build_zone(ZoneNameNet, ~"irrelevantDigest", [], []),
+    ZoneNet = erldns_zones:build_zone(ZoneNameNet, ~"irrelevantDigest", [], []),
     ?assertMatch(zone_not_found, erldns_zone_cache:put_zone_rrset(ZoneNet, ~"a.example.net", 5, 1)),
     ZoneName = dns_domain:to_lower(~"example.com"),
     ZoneLabels = dns_domain:split(ZoneName),
@@ -2695,7 +2695,7 @@ put_zone_rrset(_) ->
         ttl = 5,
         type = ?DNS_TYPE_CNAME
     },
-    Zone = erldns_zone_codec:build_zone(ZoneName, ~"irrelevantDigest", [Record], []),
+    Zone = erldns_zones:build_zone(ZoneName, ~"irrelevantDigest", [Record], []),
     ?assertMatch(
         ok,
         erldns_zone_cache:put_zone_rrset(
@@ -2730,7 +2730,7 @@ put_zone_rrset_fetch_soa_match(_) ->
         data = SoaData,
         ttl = 3600
     },
-    Z = erldns_zone_codec:build_zone(ZoneName, ~"Digest-01", [SOA], []),
+    Z = erldns_zones:build_zone(ZoneName, ~"Digest-01", [SOA], []),
     ?assertMatch(ok, erldns_zone_cache:put_zone(Z)),
     ZoneBase = erldns_zone_cache:get_authoritative_zone(ZoneName),
     SoaRecordsInCache = erldns_zone_cache:get_records_by_name_and_type(ZoneName, ?DNS_TYPE_SOA),
@@ -2857,7 +2857,7 @@ put_zone_rrset_after_soa_delete(_) ->
         data = TxtData,
         ttl = 3600
     },
-    Z = erldns_zone_codec:build_zone(ZoneName, ~"Digest-01", [TXT], []),
+    Z = erldns_zones:build_zone(ZoneName, ~"Digest-01", [TXT], []),
     ?assertMatch(ok, erldns_zone_cache:put_zone(Z)),
     ZoneBase = erldns_zone_cache:lookup_zone(ZoneName),
     % No SOA
@@ -3600,7 +3600,7 @@ setup_test(Config, cache) ->
     ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig2));
 setup_test(_Config, codec) ->
     {ok, _CachePid} = erldns_zone_cache:start_link(),
-    {ok, _CodecPid} = erldns_zone_codec:start_link(),
+    {ok, _WorkerPid} = erldns_zone_pipeline_worker:start_link(),
     case ets:info(erldns_zones_table) of
         undefined -> erlang:error(ets_table_not_found);
         _ -> ok
@@ -3937,19 +3937,19 @@ run_pipes(Pipes, Entries) ->
     erldns_zone_pipeline:run(Entries, #{zone_name => ~"", version => ~"", scope => zone}, Prepared).
 
 decode_records(Entries) ->
-    {Records, _} = erldns_zone_codec:decode_records(Entries, #{zone_name => ~"example.com"}),
+    {Records, _} = erldns_zones:decode_records(Entries, #{zone_name => ~"example.com"}),
     Records.
 
 json_a(Name) ->
     #{~"name" => Name, ~"type" => ~"A", ~"ttl" => 60, ~"data" => #{~"ip" => ~"192.0.2.1"}}.
 
-start_codec_server(ZonesConfig) ->
-    eventually(fun() -> undefined =:= whereis(erldns_zone_codec) end),
+start_pipeline_worker(ZonesConfig) ->
+    eventually(fun() -> undefined =:= whereis(erldns_zone_pipeline_worker) end),
     application:set_env(erldns, zones, ZonesConfig),
-    {ok, _} = erldns_zone_codec:start_link().
+    {ok, _} = erldns_zone_pipeline_worker:start_link().
 
-stop_codec_server() ->
-    gen_server:stop(erldns_zone_codec).
+stop_pipeline_worker() ->
+    gen_server:stop(erldns_zone_pipeline_worker).
 
 %% An A record served everywhere, and a SAMPLE record in the given contexts
 sample_zone(Contexts) ->
