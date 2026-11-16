@@ -39,6 +39,9 @@ decode_record(Source, Entry, #{?MODULE := Context}) ->
         false -> drop
     end.
 
+%% A null context is served as a missing one
+is_served(#{~"context" := null}, _) ->
+    true;
 is_served(#{~"context" := Contexts}, {MatchEmpty, AllowSet}) ->
     matches_empty(MatchEmpty, Contexts) orelse is_allowed(Contexts, AllowSet);
 is_served(_, _) ->

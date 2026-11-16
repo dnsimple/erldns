@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A zone record that isn't a JSON object no longer fails the decode of its zone when
   `context_options` is set: it is dropped with an `unsupported_record` warning, as it already was
   without them.
+- A record whose `context` is `null` is served as one without a context, where it failed the decode
+  of its zone when `context_options` was set.
 - A DNSSEC keyset that misses a key fails its zone with `{invalid_keyset, MissingKeys}`, instead
   of a `badkey` error whose logged stacktrace held the keyset and its private keys.
 

@@ -1323,6 +1323,7 @@ zone_context_filters_json_records(_) ->
     Served = [
         a_rr(~"example.com", {192, 0, 2, 1}),
         Json,
+        Json#{~"context" => null},
         Json#{~"context" => []},
         Json#{~"context" => [~"TKO", ~"AMS"]}
     ],
@@ -1331,7 +1332,7 @@ zone_context_filters_json_records(_) ->
     Entries = Served ++ [NotAnObject, Json#{~"context" => [~"TKO"]}],
     ?assertMatch(Served, run_pipes([erldns_zone_context], Entries)),
     application:set_env(erldns, zones, #{context_options => #{allow => [~"AMS"]}}),
-    ?assertMatch([_, _, _], run_pipes([erldns_zone_context], Entries)),
+    ?assertMatch([_, _, _, _], run_pipes([erldns_zone_context], Entries)),
     application:unset_env(erldns, zones),
     ?assertMatch({[], [], [], _}, erldns_zone_pipeline:prepare([erldns_zone_context])).
 
