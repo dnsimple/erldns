@@ -1276,21 +1276,28 @@ zone_pipeline_pipe_returns(_) ->
 zone_record_pipes_run_first(_) ->
     Spy = spy(),
     Double = fun(_, #{~"n" := N} = Entry, _) -> Entry#{~"n" := 2 * N} end,
-    %% Counts the records it gets, and drops one of them
+    %% Counts the records it gets, and drops those marked drop
     Count = fun
         (#{~"drop" := true}, _, Opts) -> {drop, Opts#{seen => maps:get(seen, Opts, 0) + 1}};
         (_, Entry, Opts) -> {Entry, Opts#{seen => maps:get(seen, Opts, 0) + 1}}
     end,
+    %% Drops those marked skip, once Count has counted them
+    Skip = fun
+        (#{~"skip" := true}, _, _) -> drop;
+        (_, Entry, _) -> Entry
+    end,
     Given = fun(#{~"n" := N}, Entry, #{scope := zone, seen := SoFar}) ->
         Entry#{~"given" => N, ~"seen" => SoFar}
     end,
-    Entries = [#{~"n" => 1}, #{~"n" => 2, ~"drop" => true}, #{~"n" => 3}],
-    Decoded = [
-        #{~"n" => 2, ~"given" => 1, ~"seen" => 1}, #{~"n" => 6, ~"given" => 3, ~"seen" => 3}
+    Entries = [
+        #{~"n" => 1}, #{~"n" => 2, ~"drop" => true}, #{~"n" => 3, ~"skip" => true}, #{~"n" => 4}
     ],
-    ?assertMatch(Decoded, run_pipes([Spy, Double, Count, Given], Entries)),
+    Decoded = [
+        #{~"n" => 2, ~"given" => 1, ~"seen" => 1}, #{~"n" => 8, ~"given" => 4, ~"seen" => 4}
+    ],
+    ?assertMatch(Decoded, run_pipes([Spy, Double, Count, Skip, Given], Entries)),
     {Spied, #{seen := Seen}} = spied(),
-    ?assertEqual({Decoded, 3}, {Spied, Seen}),
+    ?assertEqual({Decoded, 4}, {Spied, Seen}),
     Reject = fun(_, _, _) -> {error, nope} end,
     ?assertError({zone_rejected, Reject, nope}, run_pipes([Reject], Entries)),
     ?assertMatch({[Double], [Spy], [], _}, erldns_zone_pipeline:prepare([Spy, Double])).
