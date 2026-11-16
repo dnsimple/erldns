@@ -1,15 +1,15 @@
 -module(erldns_zone_context).
 -moduledoc """
-A zone pipe that drops the JSON records this node doesn't serve, by their `context`.
+A zone pipe that drops the records this node doesn't serve, by the `context` of their JSON.
 
 It reads `context_options` from the `zones` configuration when the pipeline is prepared, and is
 disabled without them. See [Contexts](priv/zones/ZONES.md#contexts). It goes before
-`m:erldns_zone_standard`, as decoded records have no context.
+`m:erldns_zone_standard`, so that the records it drops aren't decoded.
 """.
 
 -behaviour(erldns_zone_pipeline).
 
--export([deps/0, prepare/1, decode/2]).
+-export([deps/0, prepare/1, decode_record/3]).
 
 -doc "`c:erldns_zone_pipeline:deps/0` callback.".
 -spec deps() -> erldns_pipeline:deps().
@@ -29,11 +29,15 @@ prepare(Opts) ->
             disabled
     end.
 
--doc "`c:erldns_zone_pipeline:decode/2` callback.".
--spec decode([erldns_zone_pipeline:entry()], erldns_zone_pipeline:opts()) ->
-    [erldns_zone_pipeline:entry()].
-decode(Entries, #{?MODULE := Context}) ->
-    [Entry || Entry <- Entries, is_served(Entry, Context)].
+-doc "`c:erldns_zone_pipeline:decode_record/3` callback.".
+-spec decode_record(Source, Entry, erldns_zone_pipeline:opts()) -> Entry | drop when
+    Source :: erldns_zone_pipeline:entry(),
+    Entry :: erldns_zone_pipeline:entry().
+decode_record(Source, Entry, #{?MODULE := Context}) ->
+    case is_served(Source, Context) of
+        true -> Entry;
+        false -> drop
+    end.
 
 is_served(#{~"context" := Contexts}, {MatchEmpty, AllowSet}) ->
     matches_empty(MatchEmpty, Contexts) orelse is_allowed(Contexts, AllowSet);

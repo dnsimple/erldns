@@ -17,9 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `erldns_zone_cache:put_rrset_sync_counter/4` sets an RRSet's sync counter to any value, even a
   lower one, without touching its records.
 - The `pipeline` key of the `zones` configuration lists the pipes the records of a zone go through
-  when it is decoded, see `erldns_zone_pipeline`. A pipe placed before `erldns_zone_standard` sees
-  the records of standard types as JSON, keys erldns doesn't use included. `erldns_zone_context`
-  and `erldns_zone_standard` are the built-in pipes.
+  when it is decoded, see `erldns_zone_pipeline`. A pipe's `decode_record/3` gets each record both
+  as it was given in JSON, keys erldns doesn't use included, and as the pipes before it left it, in
+  a single pass over the records; its `decode/2` gets all the records at once, after every
+  `decode_record/3`. `erldns_zone_context` and `erldns_zone_standard` are the built-in pipes.
 - A zone pipe can implement `encode/1` to encode the records of a custom type back to JSON, as
   `erldns_zones:encode/1,2` and the admin API do.
 - `erldns_zones:decode/2` decodes a zone as `decode/1` does, and also returns the options the zone
@@ -87,10 +88,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its `decode_record/1` is replaced by `erldns_zones:decode_records/2`.
 - Zone codecs: the `codecs` key of the `zones` configuration, the `erldns_zone_codec` behaviour and
   its `encoder()` and `decoder()` types, and `register_codec/1`, `register_codecs/1` and
-  `list_codecs/0`. A pipe in the `pipeline` key, after
-  `erldns_zone_standard`, decodes the records of a custom type with its `decode/2`, and encodes
-  them back with its `encode/1`. A configuration that still sets `codecs`, or that lists a codec in
-  `pipeline`, fails to start.
+  `list_codecs/0`. A pipe in the `pipeline` key, after `erldns_zone_standard`, decodes the records
+  of a custom type with its `decode_record/3`, and encodes them back with its `encode/1`. A
+  configuration that still sets `codecs`, or that lists a codec in `pipeline`, fails to start.
 
 ## v12.0.3
 

@@ -96,6 +96,7 @@ groups() ->
             zone_pipeline_leaves_out_disabled_pipes,
             zone_pipeline_checks_deps,
             zone_pipeline_pipe_returns,
+            zone_record_pipes_run_first,
             decode_returns_pipeline_opts,
             decode_records_of_a_partial_zone,
             encode_meta_to_json,
@@ -1249,7 +1250,7 @@ zone_pipeline_leaves_out_disabled_pipes(_) ->
         meck:expect(Disabled, decode, fun(Entries, _) -> Entries end),
         meck:expect(Disabled, encode, fun(_) -> not_implemented end),
         meck:expect(Disabled, prepare, fun(_) -> disabled end),
-        ?assertMatch({[], [], _}, erldns_zone_pipeline:prepare([Disabled]))
+        ?assertMatch({[], [], [], _}, erldns_zone_pipeline:prepare([Disabled]))
     after
         meck:unload(Disabled)
     end.
@@ -1262,9 +1263,9 @@ zone_pipeline_checks_deps(_) ->
             }}},
         run_pipes([erldns_zone_standard, erldns_zone_context])
     ),
-    Standard = fun erldns_zone_standard:decode/2,
+    Standard = fun erldns_zone_standard:decode_record/3,
     ?assertMatch(
-        {[Standard], [], _},
+        {[Standard], [], [], _},
         erldns_zone_pipeline:prepare([erldns_zone_context, erldns_zone_standard])
     ).
 
@@ -1285,6 +1286,31 @@ zone_pipeline_pipe_returns(_) ->
     ?assertError({bad_zone_pipe_return, Bad, foo}, run_pipes([Bad])),
     Raise = fun(_, _) -> erlang:error(boom) end,
     ?assertError(boom, run_pipes([Raise])).
+
+%% Every decode_record/3 runs before any decode/2, wherever they are in the pipeline, and gets the
+%% record as it was given along with the record as the pipes before it left it
+zone_record_pipes_run_first(_) ->
+    Self = self(),
+    Spy = fun(Entries, _) ->
+        Self ! {spied, Entries},
+        Entries
+    end,
+    Double = fun(_, #{~"n" := N} = Entry, _) -> Entry#{~"n" := 2 * N} end,
+    Drop = fun
+        (#{~"drop" := true}, _, _) -> drop;
+        (_, Entry, _) -> Entry
+    end,
+    Given = fun(#{~"n" := N}, Entry, #{scope := zone}) -> Entry#{~"given" => N} end,
+    Entries = [#{~"n" => 1}, #{~"n" => 2, ~"drop" => true}],
+    Decoded = [#{~"n" => 2, ~"given" => 1}],
+    ?assertMatch({Decoded, _}, run_pipes([Spy, Double, Drop, Given], Entries)),
+    receive
+        {spied, Spied} -> ?assertEqual(Decoded, Spied)
+    after 1000 -> ct:fail(spy_not_called)
+    end,
+    Reject = fun(_, _, _) -> {error, nope} end,
+    ?assertError({zone_rejected, Reject, nope}, run_pipes([Reject], Entries)),
+    ?assertMatch({[Double], [Spy], [], _}, erldns_zone_pipeline:prepare([Spy, Double])).
 
 decode_returns_pipeline_opts(_) ->
     Zone = #{~"name" => ~"example.com", ~"sha" => ~"abc", ~"records" => [json_a(~"a.example.com")]},
@@ -1324,15 +1350,15 @@ zone_context_filters_json_records(_) ->
     application:set_env(erldns, zones, #{context_options => #{allow => [~"AMS"]}}),
     ?assertMatch({[_, _, _, _], _}, run_pipes([erldns_zone_context], Entries)),
     application:unset_env(erldns, zones),
-    ?assertMatch({[], [], _}, erldns_zone_pipeline:prepare([erldns_zone_context])).
+    ?assertMatch({[], [], [], _}, erldns_zone_pipeline:prepare([erldns_zone_context])).
 
 zone_pipeline_kept_by_worker(_) ->
     start_pipeline_worker(#{pipeline => ?SAMPLE_PIPELINE}),
-    Standard = fun erldns_zone_standard:decode/2,
-    Sample = fun sample_custom_zone_pipe:decode/2,
+    Standard = fun erldns_zone_standard:decode_record/3,
+    Sample = fun sample_custom_zone_pipe:decode_record/3,
     SampleEncode = fun sample_custom_zone_pipe:encode/1,
     ?assertMatch(
-        {[Standard, Sample], [SampleEncode], _},
+        {[Standard, Sample], [], [SampleEncode], _},
         persistent_term:get(erldns_zone_pipeline)
     ),
     ?assertEqual(not_implemented, gen_server:call(erldns_zone_pipeline_worker, unexpected)),
@@ -1402,9 +1428,15 @@ zone_pipe_encodes_its_records(_) ->
     stop_pipeline_worker(),
     gen_server:stop(erldns_zone_cache).
 
+%% A decode_record/3 after decoding reads a key of the record's JSON and tags the decoded record,
+%% and a decode/2, though listed before it, runs after it and copies the record to other names
 zone_pipeline_from_config(_) ->
+    Tag = fun
+        (#{~"extra_names" := Names}, #dns_rr{} = Record, _) -> {?MODULE, {Record, Names}};
+        (_, Entry, _) -> Entry
+    end,
     Copy = fun(Entries, _) -> lists:flatmap(fun copy_to_extra_names/1, Entries) end,
-    Pipeline = [erldns_zone_context, Copy, erldns_zone_standard, sample_custom_zone_pipe],
+    Pipeline = [erldns_zone_context, Copy, erldns_zone_standard, sample_custom_zone_pipe, Tag],
     start_pipeline_worker(#{pipeline => Pipeline}),
     Copied = (json_a(~"p.example.com"))#{~"extra_names" => [~"q.example.com"]},
     #{~"records" := Records} = Zone = sample_zone([]),
@@ -3979,8 +4011,8 @@ sample_zone(Contexts) ->
     #{~"name" => ~"example.com", ~"records" => [json_a(~"a.example.com"), Sample]}.
 
 %% A record with extra_names is copied to each of those names
-copy_to_extra_names(#{~"extra_names" := Names} = Json) ->
-    Copies = [Json#{~"name" := Name} || Name <- Names],
-    [Json | Copies];
+copy_to_extra_names({?MODULE, {Record, Names}}) ->
+    Copies = [Record#dns_rr{name = Name} || Name <- Names],
+    [Record | Copies];
 copy_to_extra_names(Entry) ->
     [Entry].

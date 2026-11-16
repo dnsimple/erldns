@@ -2,28 +2,37 @@
 -moduledoc """
 A pipeline of pipes that the records of a zone go through when the zone is decoded.
 
-Each pipe takes the records and returns them, changed or not, to the next pipe. A record is an
-`t:entry/0`: a JSON record not yet decoded, or a `t:dns:rr/0`. Decoding is itself a pipe:
-`m:erldns_zone_standard` turns the JSON records of the types it knows into `t:dns:rr/0` and leaves
-the rest, so a pipe placed before it sees every record as JSON, with the keys erldns doesn't use.
-After the last pipe, the JSON records left are logged as unsupported and dropped, and the records
-are sorted and deduplicated.
+A record is an `t:entry/0`: a JSON record not yet decoded, a `t:dns:rr/0`, or a pipe's own
+`{Module, Term}`. A pipe implements either or both of two callbacks:
+
+- `c:decode_record/3` takes one record: the record as the pipeline was given it, and the record as
+  the pipes before it left it. It returns the record, changed or not, or drops it.
+- `c:decode/2` takes all the records at once, to relate them to each other, and returns them,
+  changed or not.
+
+The `c:decode_record/3` of every pipe runs first, in the order of the pipeline, all in a single pass
+over the records. Then the `c:decode/2` of every pipe runs, in the same order. After the last pipe,
+the records that aren't a `t:dns:rr/0` are logged as unsupported and dropped, and the records are
+sorted and deduplicated.
+
+Decoding is itself a pipe: `m:erldns_zone_standard` turns the JSON records of the types it knows
+into `t:dns:rr/0` and leaves the rest. The pipes after it still get each record as it was given, in
+JSON, with the keys erldns doesn't use, as the first argument of `c:decode_record/3`.
 
 ## Configuration
 
-The `pipeline` key of the `zones` configuration lists the pipes, see `m:erldns_zones`. A pipe that
-needs the records of standard types as JSON goes before `m:erldns_zone_standard`, a pipe that
-decodes a custom record type goes after it, and `m:erldns_zone_context` goes first for records to
-be filtered by context:
+The `pipeline` key of the `zones` configuration lists the pipes, see `m:erldns_zones`.
+`m:erldns_zone_context` goes first, so that the records it drops aren't decoded, and a pipe that
+decodes a custom record type goes after `m:erldns_zone_standard`:
 
 ```erlang
 {erldns, [
     {zones, #{
         pipeline => [
             erldns_zone_context,
-            sample_rewrite_pipe,
             erldns_zone_standard,
-            sample_custom_zone_pipe
+            sample_custom_zone_pipe,
+            example_ttl_cap
         ]
     }}
 ]}
@@ -33,10 +42,11 @@ Without `pipeline`, the pipes are `m:erldns_zone_context` and `m:erldns_zone_sta
 
 ## Types of pipes
 
-- A module that implements this behaviour: `c:decode/2`, and optionally `c:prepare/1` and
-  `c:deps/0`, which work as in `m:erldns_pipeline`, and `c:encode/1`, see
-  [Custom record types](#module-custom-record-types).
-- A function of arity 2, called as `c:decode/2`.
+- A module that implements this behaviour: `c:decode_record/3`, `c:decode/2` or both, and
+  optionally `c:prepare/1` and `c:deps/0`, which work as in `m:erldns_pipeline`, and `c:encode/1`,
+  see [Custom record types](#module-custom-record-types). The order that `c:deps/0` asks for holds
+  among the `c:decode_record/3` callbacks, and among the `c:decode/2` callbacks.
+- A function of arity 3, called as `c:decode_record/3`, or of arity 2, called as `c:decode/2`.
 
 ## Custom record types
 
@@ -52,16 +62,14 @@ and a record that none encodes is left out.
 
 -include_lib("dns_erlang/include/dns.hrl").
 
--export([decode/2, encode/1]).
+-export([decode_record/3, encode/1]).
 
 -define(DNS_TYPE_SAMPLE, 40000).
 
-decode(Entries, _Opts) ->
-    [decode_entry(Entry) || Entry <- Entries].
-
-decode_entry(#{~"name" := Name, ~"type" := ~"SAMPLE", ~"ttl" := Ttl, ~"data" := Data}) ->
-    #dns_rr{name = Name, type = ?DNS_TYPE_SAMPLE, data = maps:get(~"dname", Data), ttl = Ttl};
-decode_entry(Entry) ->
+decode_record(_, #{~"type" := ~"SAMPLE"} = Json, _Opts) ->
+    #{~"name" := Name, ~"ttl" := Ttl, ~"data" := #{~"dname" := Dname}} = Json,
+    #dns_rr{name = Name, type = ?DNS_TYPE_SAMPLE, data = Dname, ttl = Ttl};
+decode_record(_, Entry, _Opts) ->
     Entry.
 
 encode(#dns_rr{name = Name, type = ?DNS_TYPE_SAMPLE, ttl = Ttl, data = Data}) ->
@@ -75,6 +83,12 @@ encode(_) ->
     not_implemented.
 ```
 
+## From one record to all of them
+
+A pipe whose `c:decode/2` needs what only a record's JSON says returns `{Module, Term}` from its
+`c:decode_record/3`, with its own module, and replaces those entries in its `c:decode/2`. Other
+pipes pass them on as they are, and one left at the end is logged as unsupported and dropped.
+
 ## Scope
 
 The `scope` option says whether a pipe sees a whole zone, `zone`, or a part of one, `partial`, such
@@ -83,9 +97,9 @@ records of a zone under `partial`.
 
 ## Failures
 
-The pipeline doesn't catch exceptions. A pipe that raises, or that returns `{error, Reason}`, fails
-the decode of the zone, so that a zone is never loaded with a pipe skipped. In this it differs from
-`m:erldns_pipeline`.
+The pipeline doesn't catch exceptions. A pipe that raises, or that returns `{error, Reason}` from
+either callback, fails the decode of the zone, so that a zone is never loaded with a pipe skipped.
+In this it differs from `m:erldns_pipeline`.
 
 ## Example
 
@@ -97,17 +111,14 @@ A pipe that caps the TTL of the records, once they are decoded:
 
 -include_lib("dns_erlang/include/dns.hrl").
 
--export([deps/0, decode/2]).
+-export([deps/0, decode_record/3]).
 
 deps() ->
     #{prerequisites => [erldns_zone_standard]}.
 
-decode(Entries, _Opts) ->
-    [cap(Entry) || Entry <- Entries].
-
-cap(#dns_rr{ttl = Ttl} = Record) when Ttl > 86400 ->
+decode_record(_, #dns_rr{ttl = Ttl} = Record, _Opts) when Ttl > 86400 ->
     Record#dns_rr{ttl = 86400};
-cap(Entry) ->
+decode_record(_, Entry, _Opts) ->
     Entry.
 ```
 """.
@@ -120,8 +131,8 @@ cap(Entry) ->
 -doc "A record as it was in the JSON zone.".
 -type json_record() :: #{binary() => json:decode_value()}.
 
--doc "A record going through the pipeline, decoded or not.".
--type entry() :: dns:rr() | json_record().
+-doc "A record going through the pipeline: in JSON, decoded, or a pipe's own term.".
+-type entry() :: dns:rr() | json_record() | {module(), term()}.
 
 -doc "Whether the records are a whole zone, or a part of one.".
 -type scope() :: zone | partial.
@@ -129,7 +140,8 @@ cap(Entry) ->
 -doc """
 Options passed to every pipe.
 
-The zone's name and version are as the zone was given. Pipes add their own keys in `c:prepare/1`.
+The zone's name and version are as the zone was given. Pipes add their own keys in `c:prepare/1`,
+and `c:decode/2` can change them for the pipes after it.
 """.
 -type opts() :: #{
     zone_name := dns:dname(),
@@ -139,7 +151,16 @@ The zone's name and version are as the zone was given. Pipes add their own keys 
 }.
 
 -doc """
-The return of a pipe.
+The return of `c:decode_record/3`.
+
+- The record, changed or not, for the next pipe.
+- `drop`, to leave the record out.
+- `{error, Reason}`, to fail the decode of the zone.
+""".
+-type record_return() :: entry() | drop | {error, term()}.
+
+-doc """
+The return of `c:decode/2`.
 
 - The records, for the next pipe.
 - The records and new options, for the next pipes.
@@ -147,19 +168,31 @@ The return of a pipe.
 """.
 -type return() :: [entry()] | {[entry()], opts()} | {error, term()}.
 
--doc "A function pipe.".
+-doc "A function pipe called as `c:decode_record/3`.".
+-type recordfun() :: fun((entry(), entry(), opts()) -> record_return()).
+
+-doc "A function pipe called as `c:decode/2`.".
 -type pipefun() :: fun(([entry()], opts()) -> return()).
 
 -doc "A pipe in the pipeline, see [Types of pipes](#module-types-of-pipes).".
--type pipe() :: module() | pipefun().
+-type pipe() :: module() | recordfun() | pipefun().
 
--doc "A pipeline ready to run: the decode and encode functions of its pipes, and its options.".
--opaque prepared() :: {[pipefun()], [erldns_zone_encoder:encoder()], opts()}.
+-doc "A pipeline ready to run: the functions of its pipes, and its options.".
+-opaque prepared() ::
+    {[recordfun()], [pipefun()], [erldns_zone_encoder:encoder()], opts()}.
 
--export_type([json_record/0, entry/0, scope/0, opts/0, return/0, pipefun/0, pipe/0]).
--export_type([prepared/0]).
+-export_type([json_record/0, entry/0, scope/0, opts/0, record_return/0, return/0]).
+-export_type([recordfun/0, pipefun/0, pipe/0, prepared/0]).
 
--doc "Take the records and return them, changed or not. See `t:return/0`.".
+-doc """
+Take a record and return it, changed or not, or `drop` it. See `t:record_return/0`.
+
+`Source` is the record as the pipeline was given it, and `Entry` the record as the pipes before this
+one left it.
+""".
+-callback decode_record(Source :: entry(), Entry :: entry(), opts()) -> record_return().
+
+-doc "Take all the records, after every `c:decode_record/3`, and return them. See `t:return/0`.".
 -callback decode([entry()], opts()) -> return().
 
 -doc """
@@ -179,7 +212,7 @@ Encode a record that this pipe decoded back to JSON, or return `not_implemented`
 """.
 -callback encode(dns:rr()) -> not_implemented | json:encode_value().
 
--optional_callbacks([prepare/1, deps/0, encode/1]).
+-optional_callbacks([decode_record/3, decode/2, prepare/1, deps/0, encode/1]).
 
 -export([configured/0, store/1, delete/0, run/2, encoders/0]).
 -export([prepare/1, run/3]).
@@ -211,22 +244,24 @@ run(Entries, CallOpts) ->
 -doc false.
 -spec encoders() -> [erldns_zone_encoder:encoder()].
 encoders() ->
-    {_, Encoders, _} = stored(),
+    {_, _, Encoders, _} = stored(),
     Encoders.
 
 -doc false.
 -spec prepare([pipe()]) -> prepared().
 prepare(Pipes) ->
     Prepare = fun(Pipe, Acc) -> prepare_pipe(Pipe, Acc, Pipes) end,
-    {Decoders, Encoders, Opts} = lists:foldl(Prepare, {[], [], def_opts()}, Pipes),
-    {lists:reverse(Decoders), lists:reverse(Encoders), Opts}.
+    Init = {[], [], [], def_opts()},
+    {RecordDecoders, Decoders, Encoders, Opts} = lists:foldl(Prepare, Init, Pipes),
+    {lists:reverse(RecordDecoders), lists:reverse(Decoders), lists:reverse(Encoders), Opts}.
 
 -doc false.
 -spec run([entry()], opts(), prepared()) -> {[entry()], opts()}.
 run(Entries, #{zone_name := _, version := _, scope := _} = CallOpts, Prepared) ->
-    {Decoders, _, PreparedOpts} = Prepared,
+    {RecordDecoders, Decoders, _, PreparedOpts} = Prepared,
     Opts = maps:merge(PreparedOpts, CallOpts),
-    lists:foldl(fun run_step/2, {Entries, Opts}, Decoders).
+    Records = run_records(Entries, RecordDecoders, Opts),
+    lists:foldl(fun run_step/2, {Records, Opts}, Decoders).
 
 %% Without a stored pipeline, as when its worker isn't running, the configured one is
 %% prepared for each call: running fewer pipes could load records that a pipe would have changed
@@ -249,32 +284,38 @@ configured(#{pipeline := Pipes}) ->
 configured(_) ->
     ?DEFAULT_PIPES.
 
-prepare_pipe(Fun, {Decoders, Encoders, Opts}, _) when is_function(Fun, 2) ->
-    {[Fun | Decoders], Encoders, Opts};
+prepare_pipe(Fun, {RecordDecoders, Decoders, Encoders, Opts}, _) when is_function(Fun, 3) ->
+    {[Fun | RecordDecoders], Decoders, Encoders, Opts};
+prepare_pipe(Fun, {RecordDecoders, Decoders, Encoders, Opts}, _) when is_function(Fun, 2) ->
+    {RecordDecoders, [Fun | Decoders], Encoders, Opts};
 prepare_pipe(Fun, _, _) when is_function(Fun) ->
     erlang:error({badpipe, {function_pipe_has_wrong_arity, Fun}});
 prepare_pipe(Module, Acc, Pipes) when is_atom(Module) ->
     ok = ensure_loaded(Module),
-    case erlang:function_exported(Module, decode, 2) of
+    IsRecordPipe = erlang:function_exported(Module, decode_record, 3),
+    IsPipe = erlang:function_exported(Module, decode, 2),
+    case IsRecordPipe orelse IsPipe of
         true -> prepare_module(Module, Acc, Pipes);
         false -> erlang:error({badpipe, {module_does_not_export_decode, Module}})
     end.
 
-prepare_module(Module, {Decoders, Encoders, Opts} = Acc, Pipes) ->
+prepare_module(Module, {RecordDecoders, Decoders, Encoders, Opts} = Acc, Pipes) ->
     ok = ensure_dependencies(Module, Pipes),
     case maybe_prepare(Module, Opts) of
         disabled ->
             ?LOG_DEBUG(#{what => zone_pipe_disabled, module => Module}, ?LOG_METADATA),
             Acc;
         Opts1 ->
-            Encoders1 = maybe_add_encoder(Module, Encoders),
-            {[fun Module:decode/2 | Decoders], Encoders1, Opts1}
+            RecordDecoders1 = maybe_add_fun(Module, decode_record, 3, RecordDecoders),
+            Decoders1 = maybe_add_fun(Module, decode, 2, Decoders),
+            Encoders1 = maybe_add_fun(Module, encode, 1, Encoders),
+            {RecordDecoders1, Decoders1, Encoders1, Opts1}
     end.
 
-maybe_add_encoder(Module, Encoders) ->
-    case erlang:function_exported(Module, encode, 1) of
-        true -> [fun Module:encode/1 | Encoders];
-        false -> Encoders
+maybe_add_fun(Module, Function, Arity, Funs) ->
+    case erlang:function_exported(Module, Function, Arity) of
+        true -> [fun Module:Function/Arity | Funs];
+        false -> Funs
     end.
 
 ensure_loaded(Module) ->
@@ -300,6 +341,29 @@ maybe_prepare(Module, Opts) ->
         disabled -> disabled;
         Opts1 when is_map(Opts1) -> Opts1;
         _ -> erlang:error({badpipe, {module_init_returned_non_map, Module}})
+    end.
+
+%% Every record goes through all the decode_record/3 callbacks before the next record does
+run_records(Entries, [], _) ->
+    Entries;
+run_records([], _, _) ->
+    [];
+run_records([Source | Sources], RecordDecoders, Opts) ->
+    case run_record(RecordDecoders, Source, Source, Opts) of
+        drop ->
+            run_records(Sources, RecordDecoders, Opts);
+        Entry ->
+            Entries = run_records(Sources, RecordDecoders, Opts),
+            [Entry | Entries]
+    end.
+
+run_record([], _, Entry, _) ->
+    Entry;
+run_record([RecordDecoder | RecordDecoders], Source, Entry, Opts) ->
+    case RecordDecoder(Source, Entry, Opts) of
+        drop -> drop;
+        {error, Reason} -> erlang:error({zone_rejected, RecordDecoder, Reason});
+        Next -> run_record(RecordDecoders, Source, Next, Opts)
     end.
 
 run_step(Decoder, {Entries, Opts}) ->

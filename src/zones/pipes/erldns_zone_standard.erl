@@ -4,8 +4,8 @@ A zone pipe that decodes the JSON records of the standard DNS types, those `dns_
 into `t:dns:rr/0`.
 
 It leaves the other records as they are, for the pipes after it, and so it does with a record of a
-standard type that it can't decode. Pipes that need to see the records of standard types as JSON go
-before it.
+standard type that it can't decode. The pipes after it still get each record as it was given, in
+JSON, as the first argument of `c:erldns_zone_pipeline:decode_record/3`.
 """.
 
 -behaviour(erldns_zone_pipeline).
@@ -15,24 +15,23 @@ before it.
 
 -define(LOG_METADATA, #{domain => [erldns, zones, decoder]}).
 
--export([decode/2]).
+-export([decode_record/3]).
 
 -ifdef(TEST).
 -export([json_record_to_erlang/1]).
 -endif.
 
--doc "`c:erldns_zone_pipeline:decode/2` callback.".
--spec decode([erldns_zone_pipeline:entry()], erldns_zone_pipeline:opts()) ->
-    [erldns_zone_pipeline:entry()].
-decode(Entries, _Opts) ->
-    [decode_entry(Entry) || Entry <- Entries].
-
-decode_entry(#{} = JsonRecord) ->
+-doc "`c:erldns_zone_pipeline:decode_record/3` callback.".
+-spec decode_record(erldns_zone_pipeline:entry(), Entry, erldns_zone_pipeline:opts()) ->
+    Entry | dns:rr()
+when
+    Entry :: erldns_zone_pipeline:entry().
+decode_record(_, #{} = JsonRecord, _Opts) ->
     case standard_record_to_erlang(JsonRecord) of
         not_implemented -> JsonRecord;
         Record -> Record
     end;
-decode_entry(Entry) ->
+decode_record(_, Entry, _Opts) ->
     Entry.
 
 -spec standard_record_to_erlang(dynamic()) -> not_implemented | dns:rr().
