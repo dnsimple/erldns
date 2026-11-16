@@ -12,9 +12,10 @@ either or both of two callbacks:
 
 The records go one by one through the `c:decode_record/3` of every pipe, in the order of the
 pipeline. Then all of them go through the `c:decode/2` of every pipe, in the same order. Both
-callbacks can change the options for what comes after them. After the last pipe, the records that
-aren't a `t:dns:rr/0` are logged as unsupported and dropped, and the records are sorted and
-deduplicated.
+callbacks can change the options for what comes after them. A record that is neither a JSON object
+nor a `t:dns:rr/0` is logged as unsupported and dropped before the pipes. After the last pipe, the
+records that aren't a `t:dns:rr/0` are logged as unsupported and dropped too, and the records are
+sorted and deduplicated.
 
 Decoding is itself a pipe: `m:erldns_zone_standard` turns the JSON records of the types it knows
 into `t:dns:rr/0` and leaves the rest. The pipes after it still get each record as it was given, in
@@ -124,9 +125,9 @@ records of a zone under `partial`.
 
 ## Failures
 
-The pipeline doesn't catch exceptions. A pipe that raises, or that returns `{error, Reason}` from
-either callback, fails the decode of the zone, so that a zone is never loaded with a pipe skipped.
-In this it differs from `m:erldns_pipeline`.
+The pipeline doesn't catch exceptions. A pipe that raises, or that returns `{error, Reason}` or
+anything that `t:record_return/0` and `t:return/0` don't list, fails the decode of the zone, so that
+a zone is never loaded with a pipe skipped. In this it differs from `m:erldns_pipeline`.
 
 ## Example
 
@@ -150,10 +151,12 @@ decode_record(_, Entry, _Opts) ->
 ```
 """.
 
+-include_lib("dns_erlang/include/dns.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -define(LOG_METADATA, #{domain => [erldns, zones, pipeline]}).
 -define(DEFAULT_PIPES, [erldns_zone_context, erldns_zone_standard]).
+-define(IS_ENTRY(Entry), (is_map(Entry) orelse is_record(Entry, dns_rr))).
 
 -doc "A record as it was in the JSON zone.".
 -type json_record() :: #{binary() => json:decode_value()}.
@@ -378,22 +381,31 @@ maybe_prepare(Module, Opts) ->
 decode_each([], _, Opts, Acc) ->
     Records = lists:reverse(Acc),
     {Records, Opts};
-decode_each([Source | Sources], RecordDecoders, Opts, Acc) ->
+decode_each([Source | Sources], RecordDecoders, Opts, Acc) when ?IS_ENTRY(Source) ->
     case decode_one(RecordDecoders, Source, Source, Opts) of
         {drop, Opts1} -> decode_each(Sources, RecordDecoders, Opts1, Acc);
         {Entry, Opts1} -> decode_each(Sources, RecordDecoders, Opts1, [Entry | Acc])
-    end.
+    end;
+decode_each([Source | Sources], RecordDecoders, Opts, Acc) ->
+    ?LOG_WARNING(#{what => unsupported_record, record => Source}, ?LOG_METADATA),
+    decode_each(Sources, RecordDecoders, Opts, Acc).
 
 %% One record through the record pipes, as do_call/3 takes a message through the packet pipes
 decode_one([], _, Entry, Opts) ->
     {Entry, Opts};
 decode_one([RecordDecoder | RecordDecoders], Source, Entry, Opts) ->
     case RecordDecoder(Source, Entry, Opts) of
-        drop -> {drop, Opts};
+        drop ->
+            {drop, Opts};
         {drop, Opts1} when is_map(Opts1) -> {drop, Opts1};
-        {error, Reason} -> erlang:error({zone_rejected, RecordDecoder, Reason});
-        {Next, Opts1} when is_map(Opts1) -> decode_one(RecordDecoders, Source, Next, Opts1);
-        Next -> decode_one(RecordDecoders, Source, Next, Opts)
+        {error, Reason} ->
+            erlang:error({zone_rejected, RecordDecoder, Reason});
+        {Next, Opts1} when ?IS_ENTRY(Next), is_map(Opts1) ->
+            decode_one(RecordDecoders, Source, Next, Opts1);
+        Next when ?IS_ENTRY(Next) ->
+            decode_one(RecordDecoders, Source, Next, Opts);
+        Other ->
+            erlang:error({bad_zone_pipe_return, RecordDecoder, Other})
     end.
 
 decode_all(Decoder, {Entries, Opts}) ->

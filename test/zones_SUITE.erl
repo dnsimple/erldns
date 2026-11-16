@@ -1301,6 +1301,13 @@ zone_record_pipes_run_first(_) ->
     ?assertEqual({Decoded, 4}, {Spied, Seen}),
     Reject = fun(_, _, _) -> {error, nope} end,
     ?assertError({zone_rejected, Reject, nope}, run_pipes([Reject], Entries)),
+    %% A record pipe that returns no record fails the decode, as a codec's not_implemented would
+    Bad = fun(_, _, _) -> not_implemented end,
+    ?assertError({bad_zone_pipe_return, Bad, not_implemented}, run_pipes([Bad], Entries)),
+    BadWithOpts = fun(_, _, Opts) -> {not_implemented, Opts} end,
+    ?assertError(
+        {bad_zone_pipe_return, BadWithOpts, {not_implemented, _}}, run_pipes([BadWithOpts], Entries)
+    ),
     ?assertMatch({[Double], [Spy], [], _}, erldns_zone_pipeline:prepare([Spy, Double])).
 
 decode_records_of_a_partial_zone(_) ->
@@ -1316,15 +1323,15 @@ zone_context_filters_json_records(_) ->
     Served = [
         a_rr(~"example.com", {192, 0, 2, 1}),
         Json,
-        %% Not a JSON object, left for erldns_zones to drop after the pipeline
-        ~"not an object",
         Json#{~"context" => []},
         Json#{~"context" => [~"TKO", ~"AMS"]}
     ],
-    Entries = Served ++ [Json#{~"context" => [~"TKO"]}],
+    %% Not a JSON object, so logged as unsupported and dropped before the pipes
+    NotAnObject = ~"not an object",
+    Entries = Served ++ [NotAnObject, Json#{~"context" => [~"TKO"]}],
     ?assertMatch(Served, run_pipes([erldns_zone_context], Entries)),
     application:set_env(erldns, zones, #{context_options => #{allow => [~"AMS"]}}),
-    ?assertMatch([_, _, _, _], run_pipes([erldns_zone_context], Entries)),
+    ?assertMatch([_, _, _], run_pipes([erldns_zone_context], Entries)),
     application:unset_env(erldns, zones),
     ?assertMatch({[], [], [], _}, erldns_zone_pipeline:prepare([erldns_zone_context])).
 
