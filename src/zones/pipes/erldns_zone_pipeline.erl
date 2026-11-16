@@ -372,27 +372,26 @@ maybe_prepare(Module, Opts) ->
         _ -> erlang:error({badpipe, {module_init_returned_non_map, Module}})
     end.
 
-%% A fold over the records, each through all the decode_record/3 callbacks before the next one
+%% Each record through all the record pipes, then the next record
 run_records([], _, Opts, Acc) ->
     Records = lists:reverse(Acc),
     {Records, Opts};
 run_records([Source | Sources], RecordDecoders, Opts, Acc) ->
-    run_record(RecordDecoders, Source, Source, Sources, RecordDecoders, Opts, Acc).
+    case run_record(RecordDecoders, Source, Source, Opts) of
+        {drop, Opts1} -> run_records(Sources, RecordDecoders, Opts1, Acc);
+        {Entry, Opts1} -> run_records(Sources, RecordDecoders, Opts1, [Entry | Acc])
+    end.
 
-run_record([], _, Entry, Sources, RecordDecoders, Opts, Acc) ->
-    run_records(Sources, RecordDecoders, Opts, [Entry | Acc]);
-run_record([RecordDecoder | Rest], Source, Entry, Sources, RecordDecoders, Opts, Acc) ->
+%% One record through the record pipes, as do_call/3 takes a message through the packet pipes
+run_record([], _, Entry, Opts) ->
+    {Entry, Opts};
+run_record([RecordDecoder | RecordDecoders], Source, Entry, Opts) ->
     case RecordDecoder(Source, Entry, Opts) of
-        drop ->
-            run_records(Sources, RecordDecoders, Opts, Acc);
-        {drop, Opts1} when is_map(Opts1) ->
-            run_records(Sources, RecordDecoders, Opts1, Acc);
-        {error, Reason} ->
-            erlang:error({zone_rejected, RecordDecoder, Reason});
-        {Next, Opts1} when is_map(Opts1) ->
-            run_record(Rest, Source, Next, Sources, RecordDecoders, Opts1, Acc);
-        Next ->
-            run_record(Rest, Source, Next, Sources, RecordDecoders, Opts, Acc)
+        drop -> {drop, Opts};
+        {drop, Opts1} when is_map(Opts1) -> {drop, Opts1};
+        {error, Reason} -> erlang:error({zone_rejected, RecordDecoder, Reason});
+        {Next, Opts1} when is_map(Opts1) -> run_record(RecordDecoders, Source, Next, Opts1);
+        Next -> run_record(RecordDecoders, Source, Next, Opts)
     end.
 
 run_step(Decoder, {Entries, Opts}) ->
