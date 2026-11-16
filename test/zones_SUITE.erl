@@ -83,7 +83,7 @@ groups() ->
             json_record_svcb_ech_param,
             json_record_svcb_ipv4hint_binary,
             json_record_svcb_ipv6hint_binary,
-            json_record_svcb_no_default_alpn_atom,
+            json_record_svcb_no_default_alpn_without_alpn,
             json_record_svcb_ipv4hint_invalid,
             json_record_svcb_ipv6hint_invalid,
             json_record_svcb_keynnnn_format,
@@ -627,9 +627,10 @@ rsa_keys_sign_as_before(_) ->
             ?assertEqual(1, C * P2 rem P1),
             #'RSAPrivateKey'{publicExponent = E, modulus = N, privateExponent = D} =
                 public_key:pem_entry_decode(hd(public_key:pem_decode(Pem))),
+            WithoutCrt = [binary:encode_unsigned(Number) || Number <- [E, N, D]],
             ?assertEqual(
-                dnssec:sign_rr([RR], ~"example.com", 1, 8, [E, N, D], Opts),
-                dnssec:sign_rr([RR], ~"example.com", 1, 8, Key, Opts)
+                dns_sec:sign_rr([RR], ~"example.com", 1, 8, WithoutCrt, Opts),
+                dns_sec:sign_rr([RR], ~"example.com", 1, 8, Key, Opts)
             )
         end
      || {Key, Pem} <- [{Ksk, ksk_private_key()}, {Zsk, zsk_private_key()}]
@@ -1004,23 +1005,12 @@ json_record_svcb_ipv6hint_binary(_) ->
         })
     ).
 
-json_record_svcb_no_default_alpn_atom(_) ->
+json_record_svcb_no_default_alpn_without_alpn(_) ->
     Name = ~"example.com",
-    %% Test NO_DEFAULT_ALPN with atom 'none' (not just <<"none">>)
-    ?assertEqual(
-        #dns_rr{
-            name = Name,
-            type = ?DNS_TYPE_SVCB,
-            data =
-                #dns_rrdata_svcb{
-                    svc_priority = 1,
-                    target_name = ~"target.example.com",
-                    svc_params = #{
-                        ?DNS_SVCB_PARAM_NO_DEFAULT_ALPN => none
-                    }
-                },
-            ttl = 3600
-        },
+    %% RFC 9460 §7.1.1
+    ?assertException(
+        error,
+        {svcb_mandatory_validation_error, {no_default_alpn_without_alpn, _}},
         erldns_zone_standard:json_record_to_erlang(#{
             ~"name" => Name,
             ~"type" => ~"SVCB",

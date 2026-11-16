@@ -277,7 +277,7 @@ key_rrset_signer(ZoneName, RRs) ->
         PrivateKey = Keyset#keyset.key_signing_key,
         Inception = Keyset#keyset.inception,
         Expiration = Keyset#keyset.valid_until,
-        dnssec:sign_rr(RRs, dns_domain:to_lower(ZoneName), Keytag, Alg, PrivateKey, #{
+        dns_sec:sign_rr(RRs, dns_domain:to_lower(ZoneName), Keytag, Alg, PrivateKey, #{
             inception => Inception, expiration => Expiration
         })
     end.
@@ -296,7 +296,7 @@ zone_rrset_signer(ZoneName, RRs) ->
         PrivateKey = Keyset#keyset.zone_signing_key,
         Inception = Keyset#keyset.inception,
         Expiration = Keyset#keyset.valid_until,
-        dnssec:sign_rr(RRs, dns_domain:to_lower(ZoneName), Keytag, Alg, PrivateKey, #{
+        dns_sec:sign_rr(RRs, dns_domain:to_lower(ZoneName), Keytag, Alg, PrivateKey, #{
             inception => Inception, expiration => Expiration
         })
     end.

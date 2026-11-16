@@ -95,6 +95,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   records are dropped.
 - `#zone{}` has a new `opts` field, a map of per-zone settings (`erldns:zone_opts()`), empty by
   default, so code matching on it needs recompiling. RRSet changes keep a zone's opts.
+- erldns requires dns_erlang 6, which renames `dnssec` to `dns_sec` and keeps the `public_key` of
+  a DNSKEY or CDNSKEY as its RDATA's key field, a binary, where the RSA keys of loaded zones were
+  `[E, M]`.
+- With dns_erlang 6, an SVCB or HTTPS record with `no-default-alpn` and no `alpn` fails its zone
+  (RFC 9460 §7.1.1), a DNSKEY or CDNSKEY whose RSA or DSA key the RFCs rule out is dropped, and
+  `$INCLUDE` in a zone file reads only files at or under the zone file's directory.
 
 ### Removed
 

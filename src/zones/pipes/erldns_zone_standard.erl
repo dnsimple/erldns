@@ -66,8 +66,8 @@ json_record_to_erlang(#{~"name" := _, ~"type" := _, ~"ttl" := _, ~"data" := Data
     try
         RR = #dns_rr{} = dns_json:from_map(JsonRecord),
         case RR#dns_rr.type of
-            ?DNS_TYPE_DNSKEY -> dnssec:add_keytag_to_dnskey(RR);
-            ?DNS_TYPE_CDNSKEY -> dnssec:add_keytag_to_cdnskey(RR);
+            ?DNS_TYPE_DNSKEY -> dns_sec:add_keytag_to_dnskey(RR);
+            ?DNS_TYPE_CDNSKEY -> dns_sec:add_keytag_to_cdnskey(RR);
             _ -> RR
         end
     catch
