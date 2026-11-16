@@ -229,8 +229,7 @@ end_per_testcase(_, _) ->
 
 %% Tests
 custom_decode(_) ->
-    application:set_env(erldns, zones, #{pipeline => ?SAMPLE_PIPELINE}),
-    {ok, _} = erldns_zone_pipeline_worker:start_link(),
+    start_pipeline_worker(#{pipeline => ?SAMPLE_PIPELINE}),
     Input = #{
         ~"name" => ~"example.com",
         ~"records" => [
@@ -243,13 +242,9 @@ custom_decode(_) ->
             }
         ]
     },
-    Zone = erldns_zones:decode(Input),
-    ?assertMatch(#zone{records = [_]}, Zone),
-    #zone{records = [Record]} = Zone,
-    ?assertEqual(~"example.com", Record#dns_rr.name),
-    ?assertEqual(40000, Record#dns_rr.type),
-    ?assertEqual(60, Record#dns_rr.ttl),
-    ?assertEqual(~"example.net", Record#dns_rr.data).
+    Sample = #dns_rr{name = ~"example.com", type = 40000, ttl = 60, data = ~"example.net"},
+    ?assertMatch(#zone{records = [Sample]}, erldns_zones:decode(Input)),
+    stop_pipeline_worker().
 
 encode_meta_to_json(_) ->
     ZoneName = unique_name(?FUNCTION_NAME),
@@ -1201,30 +1196,21 @@ json_record_context_filtered(_) ->
         }
     }),
     Pipes = [erldns_zone_context, erldns_zone_standard],
-    Json = #{
-        ~"name" => ~"example.com",
-        ~"type" => ~"A",
-        ~"ttl" => 3600,
-        ~"data" => #{~"ip" => ~"192.0.2.1"}
-    },
-    try
-        %% Record with empty context should be filtered out
-        ?assertMatch([], run_pipes(Pipes, [Json#{~"context" => []}])),
-        %% Record with matching context should pass
-        ?assertMatch(
-            [
-                #dns_rr{
-                    name = ~"example.com",
-                    type = ?DNS_TYPE_A,
-                    data = #dns_rrdata_a{ip = {192, 0, 2, 1}},
-                    ttl = 3600
-                }
-            ],
-            run_pipes(Pipes, [Json#{~"context" => [~"production"]}])
-        )
-    after
-        application:unset_env(erldns, zones)
-    end.
+    Json = json_a(~"example.com"),
+    %% Record with empty context should be filtered out
+    ?assertMatch([], run_pipes(Pipes, [Json#{~"context" => []}])),
+    %% Record with matching context should pass
+    ?assertMatch(
+        [
+            #dns_rr{
+                name = ~"example.com",
+                type = ?DNS_TYPE_A,
+                data = #dns_rrdata_a{ip = {192, 0, 2, 1}},
+                ttl = 60
+            }
+        ],
+        run_pipes(Pipes, [Json#{~"context" => [~"production"]}])
+    ).
 
 zone_pipeline_rejects_bad_pipes(_) ->
     NonMap = ?FUNCTION_NAME,
@@ -1288,11 +1274,7 @@ zone_pipeline_pipe_returns(_) ->
 %% record as it was given along with the record as the pipes before it left it. The options it
 %% returns reach the pipes after it, the records after it, and every decode/2.
 zone_record_pipes_run_first(_) ->
-    Self = self(),
-    Spy = fun(Entries, #{seen := Seen}) ->
-        Self ! {spied, Entries, Seen},
-        Entries
-    end,
+    Spy = spy(),
     Double = fun(_, #{~"n" := N} = Entry, _) -> Entry#{~"n" := 2 * N} end,
     %% Counts the records it gets, and drops one of them
     Count = fun
@@ -1307,10 +1289,8 @@ zone_record_pipes_run_first(_) ->
         #{~"n" => 2, ~"given" => 1, ~"seen" => 1}, #{~"n" => 6, ~"given" => 3, ~"seen" => 3}
     ],
     ?assertMatch(Decoded, run_pipes([Spy, Double, Count, Given], Entries)),
-    receive
-        {spied, Spied, Seen} -> ?assertEqual({Decoded, 3}, {Spied, Seen})
-    after 1000 -> ct:fail(spy_not_called)
-    end,
+    {Spied, #{seen := Seen}} = spied(),
+    ?assertEqual({Decoded, 3}, {Spied, Seen}),
     Reject = fun(_, _, _) -> {error, nope} end,
     ?assertError({zone_rejected, Reject, nope}, run_pipes([Reject], Entries)),
     ?assertMatch({[Double], [Spy], [], _}, erldns_zone_pipeline:prepare([Spy, Double])).
@@ -1318,7 +1298,7 @@ zone_record_pipes_run_first(_) ->
 decode_records_of_a_partial_zone(_) ->
     Record = a_rr(~"d.example.com", {192, 0, 2, 2}),
     Entries = [Record, json_a(~"a.example.com"), Record],
-    Records = erldns_zones:decode_records(Entries, #{zone_name => ~"example.com"}),
+    Records = decode_records(Entries),
     ?assertMatch([#dns_rr{name = ~"a.example.com"}, Record], Records).
 
 zone_context_filters_json_records(_) ->
@@ -1378,22 +1358,14 @@ context_options_read_when_worker_starts(_) ->
     stop_pipeline_worker().
 
 zone_pipes_see_zone_file_records(Config) ->
-    Self = self(),
-    Spy = fun(Entries, Opts) ->
-        Self ! {spied, Entries, Opts},
-        Entries
-    end,
-    start_pipeline_worker(#{pipeline => [Spy, erldns_zone_standard]}),
+    start_pipeline_worker(#{pipeline => [spy(), erldns_zone_standard]}),
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "example.zone"),
     [#zone{records = Records}] = erldns_zone_loader_worker:do_load_file(Path, DataDir, true),
-    receive
-        {spied, Entries, Opts} ->
-            ?assert(lists:all(fun(Entry) -> is_record(Entry, dns_rr) end, Entries)),
-            ?assertEqual(lists:usort(Entries), Records),
-            ?assertMatch(#{scope := zone, zone_name := ~"example.com."}, Opts)
-    after 1000 -> ct:fail(spy_not_called)
-    end,
+    {Entries, Opts} = spied(),
+    ?assert(lists:all(fun(Entry) -> is_record(Entry, dns_rr) end, Entries)),
+    ?assertEqual(lists:usort(Entries), Records),
+    ?assertMatch(#{scope := zone, zone_name := ~"example.com."}, Opts),
     stop_pipeline_worker().
 
 zone_pipe_encodes_its_records(_) ->
@@ -1418,12 +1390,7 @@ zone_pipe_encodes_its_records(_) ->
 
 %% The pipes get the caller's options, with the zone's own name and version over the caller's
 zone_pipes_see_the_callers_opts(_) ->
-    Self = self(),
-    Spy = fun(Entries, Opts) ->
-        Self ! {opts, Opts},
-        Entries
-    end,
-    start_pipeline_worker(#{pipeline => [Spy, erldns_zone_standard]}),
+    start_pipeline_worker(#{pipeline => [spy(), erldns_zone_standard]}),
     Json = json_a(~"a.example.com"),
     Zone = #{~"name" => ~"example.com", ~"sha" => ~"abc", ~"records" => [Json]},
     ?assertMatch(#zone{records = [_]}, erldns_zones:decode(Zone, #{extra => 1})),
@@ -1435,7 +1402,7 @@ zone_pipes_see_the_callers_opts(_) ->
     ?assertMatch(#{scope := partial}, spied_opts()),
     _ = erldns_zones:decode(Zone, #{zone_name => ~"example.net", version => ~"other"}),
     ?assertMatch(#{zone_name := ~"example.com", version := ~"abc"}, spied_opts()),
-    ?assertMatch([_], erldns_zones:decode_records([Json], #{zone_name => ~"example.com"})),
+    ?assertMatch([_], decode_records([Json])),
     ?assertMatch(#{scope := partial, version := ~"", zone_name := ~"example.com"}, spied_opts()),
     stop_pipeline_worker().
 
@@ -2164,7 +2131,6 @@ load_zonefile(Config) ->
     LoadConfig = #{path => Path, format => zonefile},
     ?assertMatch(1, erldns_zone_loader:load_zones(LoadConfig)).
 
-%% Exercises `do_load_file/3` (extension dispatch + zonefile parsing) without the getter/supervisor.
 load_zonefile_drops_duplicate_records(Config) ->
     PrivDir = proplists:get_value(priv_dir, Config),
     Path = filename:join(PrivDir, "duplicates.zone"),
@@ -2174,6 +2140,7 @@ load_zonefile_drops_duplicate_records(Config) ->
     [Zone] = erldns_zone_loader_worker:do_load_file(Path, PrivDir, true),
     ?assertMatch(#zone{record_count = 2, records = [_, _]}, Zone).
 
+%% Exercises `do_load_file/3` (extension dispatch + zonefile parsing) without the getter/supervisor.
 worker_do_load_file_zonefile(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     Path = filename:join(DataDir, "example.zone"),
@@ -4004,11 +3971,23 @@ run_pipes(Pipes, Entries) ->
 decode_records(Entries) ->
     erldns_zones:decode_records(Entries, #{zone_name => ~"example.com"}).
 
-spied_opts() ->
+%% A decode/2 pipe that sends what it gets to the test
+spy() ->
+    Self = self(),
+    fun(Entries, Opts) ->
+        Self ! {spied, Entries, Opts},
+        Entries
+    end.
+
+spied() ->
     receive
-        {opts, Opts} -> Opts
+        {spied, Entries, Opts} -> {Entries, Opts}
     after 1000 -> ct:fail(spy_not_called)
     end.
+
+spied_opts() ->
+    {_, Opts} = spied(),
+    Opts.
 
 json_a(Name) ->
     #{~"name" => Name, ~"type" => ~"A", ~"ttl" => 60, ~"data" => #{~"ip" => ~"192.0.2.1"}}.

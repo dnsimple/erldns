@@ -66,7 +66,6 @@ encode_record(
     case Encoded of
         <<"\\#", _/binary>> ->
             %% dns_zone:encode_rdata/2 falls back to RFC 3597 \# length hex for unknown type
-            ?LOG_WARNING(#{what => unable_to_encode_record, record => Record}, ?LOG_METADATA),
             try_custom_encoders(Record, Encoders);
         _ ->
             [
@@ -79,7 +78,8 @@ encode_record(
             ]
     end.
 
-try_custom_encoders(_, []) ->
+try_custom_encoders(Record, []) ->
+    ?LOG_WARNING(#{what => unable_to_encode_record, record => Record}, ?LOG_METADATA),
     [];
 try_custom_encoders(Record, [Encoder | Rest]) ->
     case Encoder(Record) of

@@ -14,8 +14,7 @@ start_link() ->
 -spec init(noargs) -> {ok, nostate}.
 init(noargs) ->
     process_flag(trap_exit, true),
-    Pipes = erldns_zone_pipeline:configured(),
-    ok = erldns_zone_pipeline:store(Pipes),
+    ok = erldns_zone_pipeline:store(),
     {ok, nostate}.
 
 -spec handle_call(dynamic(), gen_server:from(), nostate) -> {reply, not_implemented, nostate}.

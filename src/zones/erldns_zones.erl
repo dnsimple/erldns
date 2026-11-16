@@ -99,7 +99,7 @@ See `m:erldns_zone_loader` for more details.
 
 -export([build_zone/4, encode/1, encode/2, decode/1, decode/2, decode_records/2]).
 
--export([start_link/0, init/1]).
+-export([decode_zone/5, start_link/0, init/1]).
 
 -doc "Builds a zone from its records and keysets.".
 -spec build_zone(dns:dname(), version(), [dns:rr()], [erldns:keyset()]) -> erldns:zone().
@@ -150,10 +150,19 @@ decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Opts) ->
     Sha = maps:get(~"sha", Zone, ~""),
     JsonKeys = maps:get(~"keys", Zone, []),
     Keys = erldns_zone_decoder:parse_keysets(JsonKeys),
+    decode_zone(Name, Sha, JsonRecords, Keys, Opts).
+
+%% A whole zone, from JSON or from a zone file
+-doc false.
+-spec decode_zone(Name, version(), Entries, [erldns:keyset()], Opts) -> erldns:zone() when
+    Name :: dns:dname(),
+    Entries :: [erldns_zone_pipeline:entry()],
+    Opts :: #{atom() => dynamic()}.
+decode_zone(Name, Version, Entries, Keys, Opts) ->
     Scope = maps:get(scope, Opts, zone),
-    CallOpts = Opts#{zone_name => Name, version => Sha, scope => Scope},
-    Records = run_pipeline(JsonRecords, CallOpts),
-    build_zone(Name, Sha, Records, Keys).
+    CallOpts = Opts#{zone_name => Name, version => Version, scope => Scope},
+    Records = decode_records(Entries, CallOpts),
+    build_zone(Name, Version, Records, Keys).
 
 -doc """
 Takes records of a zone, such as those of an RRSet, through `m:erldns_zone_pipeline`.
@@ -166,7 +175,8 @@ and `version` to `<<>>` unless `Opts` sets them. Returns the records, sorted and
     Opts :: #{zone_name := dns:dname(), atom() => dynamic()}.
 decode_records(Entries, #{zone_name := _} = Opts) ->
     CallOpts = maps:merge(#{scope => partial, version => ~""}, Opts),
-    run_pipeline(Entries, CallOpts).
+    Decoded = erldns_zone_pipeline:run(Entries, CallOpts),
+    finalize(Decoded).
 
 -doc false.
 -spec start_link() -> supervisor:startlink_ret().
@@ -184,10 +194,6 @@ init(noargs) ->
             supervisor(erldns_zone_loader_sup)
         ],
     {ok, {SupFlags, Children}}.
-
-run_pipeline(Entries, CallOpts) ->
-    Decoded = erldns_zone_pipeline:run(Entries, CallOpts),
-    finalize(Decoded).
 
 -spec finalize([erldns_zone_pipeline:entry()]) -> [dns:rr()].
 finalize(Entries) ->

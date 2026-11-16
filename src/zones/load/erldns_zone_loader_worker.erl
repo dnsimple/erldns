@@ -92,10 +92,8 @@ load_zone_file(File, KeysPath, Strict) ->
         {ok, Parsed} ?= dns_zone:parse_file(File),
         Soa = #dns_rr{name = ZoneName} ?= lists:keyfind(?DNS_TYPE_SOA, #dns_rr.type, Parsed),
         Sha = crypto:hash(sha256, term_to_binary(Soa)),
-        Opts = #{zone_name => ZoneName, version => Sha, scope => zone},
-        Records = erldns_zones:decode_records(Parsed, Opts),
         Keys = load_private_keys(ZoneName, KeysPath),
-        [erldns_zones:build_zone(ZoneName, Sha, Records, Keys)]
+        [erldns_zones:decode_zone(ZoneName, Sha, Parsed, Keys, #{})]
     else
         false ->
             Strict andalso erlang:throw({invalid_zone_file, File}),

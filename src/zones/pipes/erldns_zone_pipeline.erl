@@ -243,19 +243,13 @@ Encode a record that this pipe decoded back to JSON, or return `not_implemented`
 
 -optional_callbacks([decode_record/3, decode/2, prepare/1, deps/0, encode/1]).
 
--export([configured/0, store/1, delete/0, run/2, encoders/0]).
+-export([store/0, delete/0, run/2, encoders/0]).
 -export([prepare/1, run/3]).
 
 -doc false.
--spec configured() -> [pipe()].
-configured() ->
-    ZonesConfig = application:get_env(erldns, zones, #{}),
-    configured(ZonesConfig).
-
--doc false.
--spec store([pipe()]) -> ok.
-store(Pipes) ->
-    Prepared = prepare(Pipes),
+-spec store() -> ok.
+store() ->
+    Prepared = prepare_configured(),
     persistent_term:put(?MODULE, Prepared).
 
 -doc false.
@@ -300,12 +294,14 @@ run(
 %% prepared for each call: running fewer pipes could load records that a pipe would have changed
 stored() ->
     case persistent_term:get(?MODULE, undefined) of
-        undefined ->
-            Pipes = configured(),
-            prepare(Pipes);
-        Prepared ->
-            Prepared
+        undefined -> prepare_configured();
+        Prepared -> Prepared
     end.
+
+prepare_configured() ->
+    ZonesConfig = application:get_env(erldns, zones, #{}),
+    Pipes = configured(ZonesConfig),
+    prepare(Pipes).
 
 %% The removed codecs key fails, so its codecs aren't left out of the pipeline unnoticed
 configured(#{codecs := _}) ->
