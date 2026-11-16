@@ -22,9 +22,7 @@ is_decoded(Entry) ->
     false.
 
 -spec parse_keysets([json:decode_value()]) -> [erldns:keyset()].
-parse_keysets([]) ->
-    [];
-parse_keysets(JsonKeys) ->
+parse_keysets(JsonKeys) when is_list(JsonKeys) ->
     parse_keysets(JsonKeys, []).
 
 % RFC4034: §3.1.5.  Signature Expiration and Inception Fields
