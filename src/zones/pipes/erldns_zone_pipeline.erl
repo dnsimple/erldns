@@ -286,8 +286,8 @@ run(
     {RecordDecoders, Decoders, _, PreparedOpts}
 ) ->
     Opts = maps:merge(PreparedOpts, CallOpts),
-    Acc = run_records(Entries, RecordDecoders, Opts, []),
-    {Decoded, _} = lists:foldl(fun run_step/2, Acc, Decoders),
+    {Records, Opts1} = decode_each(Entries, RecordDecoders, Opts, []),
+    {Decoded, _} = lists:foldl(fun decode_all/2, {Records, Opts1}, Decoders),
     Decoded.
 
 %% Without a stored pipeline, as when its worker isn't running, the configured one is
@@ -373,28 +373,28 @@ maybe_prepare(Module, Opts) ->
     end.
 
 %% Each record through all the record pipes, then the next record
-run_records([], _, Opts, Acc) ->
+decode_each([], _, Opts, Acc) ->
     Records = lists:reverse(Acc),
     {Records, Opts};
-run_records([Source | Sources], RecordDecoders, Opts, Acc) ->
-    case run_record(RecordDecoders, Source, Source, Opts) of
-        {drop, Opts1} -> run_records(Sources, RecordDecoders, Opts1, Acc);
-        {Entry, Opts1} -> run_records(Sources, RecordDecoders, Opts1, [Entry | Acc])
+decode_each([Source | Sources], RecordDecoders, Opts, Acc) ->
+    case decode_one(RecordDecoders, Source, Source, Opts) of
+        {drop, Opts1} -> decode_each(Sources, RecordDecoders, Opts1, Acc);
+        {Entry, Opts1} -> decode_each(Sources, RecordDecoders, Opts1, [Entry | Acc])
     end.
 
 %% One record through the record pipes, as do_call/3 takes a message through the packet pipes
-run_record([], _, Entry, Opts) ->
+decode_one([], _, Entry, Opts) ->
     {Entry, Opts};
-run_record([RecordDecoder | RecordDecoders], Source, Entry, Opts) ->
+decode_one([RecordDecoder | RecordDecoders], Source, Entry, Opts) ->
     case RecordDecoder(Source, Entry, Opts) of
         drop -> {drop, Opts};
         {drop, Opts1} when is_map(Opts1) -> {drop, Opts1};
         {error, Reason} -> erlang:error({zone_rejected, RecordDecoder, Reason});
-        {Next, Opts1} when is_map(Opts1) -> run_record(RecordDecoders, Source, Next, Opts1);
-        Next -> run_record(RecordDecoders, Source, Next, Opts)
+        {Next, Opts1} when is_map(Opts1) -> decode_one(RecordDecoders, Source, Next, Opts1);
+        Next -> decode_one(RecordDecoders, Source, Next, Opts)
     end.
 
-run_step(Decoder, {Entries, Opts}) ->
+decode_all(Decoder, {Entries, Opts}) ->
     case Decoder(Entries, Opts) of
         Next when is_list(Next) -> {Next, Opts};
         {Next, NextOpts} when is_list(Next), is_map(NextOpts) -> {Next, NextOpts};
