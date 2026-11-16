@@ -292,7 +292,7 @@ run(
     {RecordDecoders, Decoders, _, PreparedOpts}
 ) ->
     Opts = maps:merge(PreparedOpts, CallOpts),
-    Acc = run_records(Entries, RecordDecoders, Opts),
+    Acc = run_records(Entries, RecordDecoders, Opts, []),
     {Decoded, _} = lists:foldl(fun run_step/2, Acc, Decoders),
     Decoded.
 
@@ -377,11 +377,6 @@ maybe_prepare(Module, Opts) ->
     end.
 
 %% A fold over the records, each through all the decode_record/3 callbacks before the next one
-run_records(Entries, [], Opts) ->
-    {Entries, Opts};
-run_records(Entries, RecordDecoders, Opts) ->
-    run_records(Entries, RecordDecoders, Opts, []).
-
 run_records([], _, Opts, Acc) ->
     Records = lists:reverse(Acc),
     {Records, Opts};
