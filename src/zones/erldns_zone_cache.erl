@@ -645,7 +645,7 @@ stage_zone(#zone{name = Name} = Zone) ->
 stage_zone({Name, Sha, Records}) ->
     stage_zone({Name, Sha, Records, []});
 stage_zone({Name, Sha, Records, Keys}) ->
-    Zone = erldns_zone_codec:build_zone(Name, Sha, Records, Keys),
+    Zone = erldns_zones:build_zone(Name, Sha, Records, Keys),
     stage_zone(Zone).
 
 -doc #{group => ~"API: Mutations"}.

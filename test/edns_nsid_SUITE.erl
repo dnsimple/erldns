@@ -240,7 +240,7 @@ zone() ->
     A = #dns_rr{
         name = ?NAME, type = ?DNS_TYPE_A, ttl = 60, data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
     },
-    erldns_zone_codec:build_zone(?ZONE, ~"digest", [soa(?ZONE), A], []).
+    erldns_zones:build_zone(?ZONE, ~"digest", [soa(?ZONE), A], []).
 
 resolve(Msg) ->
     erldns_pipeline:call_custom(Msg, #{transport => udp, host => {127, 0, 0, 1}}, ?MODULE).

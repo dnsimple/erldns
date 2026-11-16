@@ -16,6 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   set (#390).
 - `erldns_zone_cache:put_rrset_sync_counter/4` sets an RRSet's sync counter to any value, even a
   lower one, without touching its records.
+- The `pipeline` key of the `zones` configuration lists the pipes the records of a zone go through
+  when it is decoded, see `erldns_zone_pipeline`. A pipe's `decode_record/3` gets each record, one
+  after the other, both as it was given in JSON, keys erldns doesn't use included, and as the pipes
+  before it left it, and can keep in the options what its `decode/2` needs; `decode/2` gets all the
+  records at once, after every `decode_record/3`. `erldns_zone_context` and `erldns_zone_standard`
+  are the built-in pipes.
+- A zone pipe can implement `encode/1` to encode the records of a custom type back to JSON, as
+  `erldns_zones:encode/1,2` and the admin API do.
+- `erldns_zones:decode/2` decodes a zone as `decode/1` does, with options for the pipes of the zone
+  pipeline, and `erldns_zones:decode_records/2` decodes part of a zone, such as an RRSet, with
+  `scope` `partial`.
 
 ### Fixed
 
@@ -39,6 +50,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer causes a `connection_init_failed` error log and `[erldns, request, error]` event.
 - ANY at a name matched by a wildcard CNAME is answered with the CNAME, as at a name that owns
   one, instead of following it and answering with every record at its target.
+- A zone record that isn't a JSON object no longer fails the decode of its zone when
+  `context_options` is set: it is dropped with an `unsupported_record` warning, as it already was
+  without them.
+- A record whose `context` is `null` is served as one without a context, where it failed the decode
+  of its zone when `context_options` was set.
+- A DNSSEC keyset that misses a key fails its zone with `{invalid_keyset, MissingKeys}`, instead
+  of a `badkey` error whose logged stacktrace held the keyset and its private keys.
+- A DNSSEC key of a type erldns doesn't sign with, or that doesn't parse, `keys` that aren't a list,
+  and a JSON zone without `name` or `records` fail with `{unsupported_key, Type}`, `invalid_key`,
+  `invalid_keysets` and `{invalid_zone, Fields}`, without the private keys in the error or its
+  logged stacktrace.
 
 ### Changed
 
@@ -61,6 +83,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The packet cache keeps answers to ANY apart by transport.
 - `erldns_query_throttle` no longer throttles ANY, now answered minimally over UDP, only RRSIG
   queries.
+- `context_options` is read when the `erldns_zones` supervisor starts, and no longer on each zone
+  decode. An `allow` that isn't a list now fails that start, where it only failed the decode of the
+  zones with a record that has a context, and so does a `context_options` that isn't a map, where
+  it was ignored.
+- The records of zone files go through the zone pipeline, so its pipes see them, and duplicate
+  records are dropped.
+
+### Removed
+
+- `erldns_zone_codec`: its `build_zone/4`, `decode/1` and `encode/1,2` move to `erldns_zones`, and
+  its `decode_record/1` is replaced by `erldns_zones:decode_records/2`.
+- Zone codecs: the `codecs` key of the `zones` configuration, the `erldns_zone_codec` behaviour and
+  its `encoder()` and `decoder()` types, and `register_codec/1`, `register_codecs/1` and
+  `list_codecs/0`. A pipe in the `pipeline` key, after `erldns_zone_standard`, decodes the records
+  of a custom type with its `decode_record/3`, and encodes them back with its `encode/1`. A
+  configuration that still sets `codecs`, or that lists a codec in `pipeline`, fails to start.
 
 ## v12.0.3
 
@@ -485,7 +523,7 @@ and `[erldns, pipeline]` for pipeline processing. Similarly, logger events are t
 #### Custom parsers and encoders
 
 If you had any custom parser or encoder, you will need to update them to the new API, which unifies
-both into a single module. See `m:erldns_zone_codec` for more information on its callbacks. Note
+both into a single module. See [`erldns_zone_codec`](https://hexdocs.pm/erldns/12.0.3/erldns_zone_codec.html) for more information on its callbacks. Note
 that the `zone_to_erlang/1,2` callbacks are now `decode/1` and `zone_*/x` callbacks are now
 `encode/2`, and they all take only maps as input and output respectively.
 

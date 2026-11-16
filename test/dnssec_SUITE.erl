@@ -1200,7 +1200,7 @@ delegation_zone() ->
         RR(in_zone(~"ns1.insecure"), ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 100}}),
         RR(in_zone(~"Mixed"), ?DNS_TYPE_NS, #dns_rrdata_ns{dname = ~"ns1.other.example"})
     ],
-    erldns_zone_codec:build_zone(?DELEGATION_ZONE, ~"1", Records, Keysets).
+    erldns_zones:build_zone(?DELEGATION_ZONE, ~"1", Records, Keysets).
 
 in_zone(Prefix) ->
     <<Prefix/binary, ".", ?DELEGATION_ZONE/binary>>.

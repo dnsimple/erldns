@@ -593,7 +593,7 @@ wire_zone() ->
     A = #dns_rr{
         name = ?WIRE_NAME, type = ?DNS_TYPE_A, ttl = 60, data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
     },
-    erldns_zone_codec:build_zone(?WIRE_ZONE, ~"digest", [Soa, A], []).
+    erldns_zones:build_zone(?WIRE_ZONE, ~"digest", [Soa, A], []).
 
 def_opts() ->
     erldns_pipeline:def_opts().

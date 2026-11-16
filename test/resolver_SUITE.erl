@@ -165,7 +165,7 @@ resolve_authoritative_zone_cut_with_cname_chain_through_wildcard(_) ->
         ttl = 3600,
         data = #dns_rrdata_ns{dname = ~"ns-ext.example."}
     },
-    Z = erldns_zone_codec:build_zone(
+    Z = erldns_zones:build_zone(
         ZoneName, ~"digest", [SOA, Cname1, WildcardCname, DelegationNS], []
     ),
     ok = erldns_zone_cache:put_zone(Z),
@@ -196,7 +196,7 @@ any_at_a_wildcard_cname_is_answered_with_the_cname(_) ->
     A = #dns_rr{
         name = ZoneName, type = ?DNS_TYPE_A, ttl = 3600, data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
     },
-    Z = erldns_zone_codec:build_zone(ZoneName, ~"digest", [soa(ZoneName), Cname, A], []),
+    Z = erldns_zones:build_zone(ZoneName, ~"digest", [soa(ZoneName), Cname, A], []),
     ok = erldns_zone_cache:put_zone(Z),
     Expanded = Cname#dns_rr{name = QName},
     {Answer, none} = resolve_authoritative(Z, QName, ?DNS_TYPE_ANY),
@@ -240,7 +240,7 @@ resolve_authoritative_zone_cut_with_plain_cname_chain(_) ->
         ttl = 3600,
         data = #dns_rrdata_ns{dname = ~"ns-ext.example."}
     },
-    Z = erldns_zone_codec:build_zone(
+    Z = erldns_zones:build_zone(
         ZoneName, ~"digest", [SOA, Cname1, Cname2, DelegationNS], []
     ),
     ok = erldns_zone_cache:put_zone(Z),
@@ -290,7 +290,7 @@ resolve_authoritative_zone_cut_drops_occluded_cname(_) ->
         ttl = 3600,
         data = #dns_rrdata_ns{dname = ~"ns-ext.example."}
     },
-    Z = erldns_zone_codec:build_zone(
+    Z = erldns_zones:build_zone(
         ZoneName, ~"digest", [SOA, OccludedCname, DelegationNS], []
     ),
     ok = erldns_zone_cache:put_zone(Z),
@@ -345,7 +345,7 @@ resolve_authoritative_self_delegation_trailing_dot_name_mismatch(_) ->
         ttl = 3600,
         data = #dns_rrdata_ns{dname = SelfNsTarget}
     },
-    Z = erldns_zone_codec:build_zone(ZoneName, ~"digest", [SOA, ARR, NS], []),
+    Z = erldns_zones:build_zone(ZoneName, ~"digest", [SOA, ARR, NS], []),
     ok = erldns_zone_cache:put_zone(Z),
     Msg = #dns_message{questions = [#dns_query{name = Qname, type = ?DNS_TYPE_A}]},
     Parent = self(),
@@ -409,7 +409,7 @@ resolve_authoritative_max_depth_returns_servfail(_) ->
         end,
         lists:seq(0, ChainLen - 1)
     ),
-    Z = erldns_zone_codec:build_zone(ZoneName, ~"digest", [SOA | CnameRecords], []),
+    Z = erldns_zones:build_zone(ZoneName, ~"digest", [SOA | CnameRecords], []),
     ok = erldns_zone_cache:put_zone(Z),
     Qname = ~"link0.deep-cname.example",
     QLabels = dns_domain:split(Qname),
@@ -440,7 +440,7 @@ resolve_authoritative_ds_at_and_below_a_zone_cut(_) ->
         name = Cut, type = ?DNS_TYPE_A, ttl = 3600, data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
     },
     BelowGlue = Glue#dns_rr{name = Below, data = #dns_rrdata_a{ip = {192, 0, 2, 2}}},
-    Z = erldns_zone_codec:build_zone(
+    Z = erldns_zones:build_zone(
         ZoneName, ~"digest", [soa(ZoneName), NS, DS, Glue, BelowGlue], []
     ),
     ok = erldns_zone_cache:put_zone(Z),
@@ -468,7 +468,7 @@ resolve_authoritative_nested_zone_cut_refers_to_the_topmost(_) ->
         data = #dns_rrdata_ns{dname = ~"ns-ext.example."}
     },
     Inner = Outer#dns_rr{name = ~"sub.delegated.nested-zone-cut.example"},
-    Z = erldns_zone_codec:build_zone(ZoneName, ~"digest", [soa(ZoneName), Outer, Inner], []),
+    Z = erldns_zones:build_zone(ZoneName, ~"digest", [soa(ZoneName), Outer, Inner], []),
     ok = erldns_zone_cache:put_zone(Z),
     {A, Cut} = resolve_authoritative(Z, ~"www.sub.delegated.nested-zone-cut.example", ?DNS_TYPE_A),
     ?assertEqual(dns_domain:split(~"delegated.nested-zone-cut.example"), Cut),
@@ -490,7 +490,7 @@ resolve_drops_the_sections_of_the_request(_) ->
         ttl = 1,
         data = #dns_rrdata_ns{dname = ~"ns.attacker.example."}
     },
-    Z = erldns_zone_codec:build_zone(ZoneName, ~"digest", [soa(ZoneName), A], []),
+    Z = erldns_zones:build_zone(ZoneName, ~"digest", [soa(ZoneName), A], []),
     ok = erldns_zone_cache:put_zone(Z),
     Msg = #dns_message{
         questions = [#dns_query{name = QName, type = ?DNS_TYPE_A}],
@@ -729,7 +729,7 @@ any_zone() ->
         RR(~"host.minimal-any.example", ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 3}}),
         RR(~"*.wild.minimal-any.example", ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 4}})
     ],
-    erldns_zone_codec:build_zone(?ANY_ZONE, ~"digest", Records, []).
+    erldns_zones:build_zone(?ANY_ZONE, ~"digest", Records, []).
 
 hinfo(Name, TTL) ->
     Data = #dns_rrdata_hinfo{cpu = ~"RFC8482", os = ~""},
