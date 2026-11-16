@@ -326,7 +326,9 @@ prepare_pipe(Module, Acc, Pipes) when is_atom(Module) ->
     case IsRecordPipe orelse IsPipe of
         true -> prepare_module(Module, Acc, Pipes);
         false -> erlang:error({badpipe, {module_does_not_export_decode, Module}})
-    end.
+    end;
+prepare_pipe(Pipe, _, _) ->
+    erlang:error({badpipe, {invalid_pipe, Pipe}}).
 
 prepare_module(Module, {RecordDecoders, Decoders, Encoders, Opts} = Acc, Pipes) ->
     ok = ensure_dependencies(Module, Pipes),

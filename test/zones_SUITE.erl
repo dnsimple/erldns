@@ -1221,6 +1221,7 @@ zone_pipeline_rejects_bad_pipes(_) ->
         ?assertError({badpipe, {module, nofile}}, run_pipes([this_module_does_not_exist])),
         ?assertError({badpipe, {module_does_not_export_decode, ?MODULE}}, run_pipes([?MODULE])),
         ?assertError({badpipe, {function_pipe_has_wrong_arity, _}}, run_pipes([fun(E) -> E end])),
+        ?assertError({badpipe, {invalid_pipe, "a_pipe"}}, run_pipes(["a_pipe"])),
         ?assertError({badpipe, {module_init_returned_non_map, NonMap}}, run_pipes([NonMap]))
     after
         meck:unload(NonMap)
