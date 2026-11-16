@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `erldns_zones:decode/2` decodes a zone as `decode/1` does, with options for the pipes of the zone
   pipeline, and `erldns_zones:decode_records/2` decodes part of a zone, such as an RRSet, with
   `scope` `partial`.
+- DNSSEC: zones can be signed with ML-DSA-44 keys, algorithm 18 (draft-westerbaan-dnssec-mldsa-04),
+  where `crypto` has it (OTP 28.1+ built against OpenSSL 3.5+).
 
 ### Fixed
 

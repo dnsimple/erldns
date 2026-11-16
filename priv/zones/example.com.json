@@ -425,5 +425,80 @@
         "until": "2026-11-27T14:06:38Z"
       }
     ]
+  },
+  {
+    "name": "example-dnssec-18.com",
+    "records": [
+      {
+        "name": "example-dnssec-18.com",
+        "type": "SOA",
+        "data": {
+          "mname": "ns1.example-dnssec-18.com",
+          "rname": "ahu.example-dnssec-18.com",
+          "serial": 2000081501,
+          "refresh": 28800,
+          "retry": 7200,
+          "expire": 604800,
+          "minimum": 86400
+        },
+        "ttl": 100000
+      },
+      {
+        "name": "example-dnssec-18.com",
+        "type": "CDS",
+        "ttl": 120,
+        "data": {
+          "keytag": 42929,
+          "alg": 18,
+          "digest_type": 2,
+          "digest": "628548AFF394D821710FDF50A6C5BCFED34F6D21F40E5C9A24C6284CB421D6BA"
+        }
+      },
+      {
+        "name": "example-dnssec-18.com",
+        "type": "CDNSKEY",
+        "ttl": 120,
+        "data": {
+          "flags": 257,
+          "protocol": 3,
+          "alg": 18,
+          "public_key": "CIzo6USMIl0FQSrVfgTuf7YGRr5Z3MsdpUpxaHzvAX0Eat5OqkzXqsy2+XJ6I+AL8HsxrZXqHLWJooruhdAToUCULun/qKuoGfsIZbknfkyJ6syFAN7XXZ9tj3/39KHhBK000sgHiRYPHFVPfFSrC4qHfmdeB9IB67NqikjsVxMH2ZxLt4TN494Pf71lIEPhU8zDxQGI8qTMkHiZv15b+EUOcx388pk3RnybPy8F/U8GW6Rlnf83Sw3/KpR7c7X3Uq6IDFnjiq1wXPCxPxSPDFDlrhMgjCrKYoFOWYvieTINL8lJYYvu8a1006byRjWkIKWiWwXtC1K5sfVcD1HKWGVkEnOMhjy11kNfj/r0U2EfBFnIQpp92Bbu2DgAGuOT0cWplA6kPC6HqR3zvoJc7F++F0L7FulyFIrPN4rkh2XKX/X3gNHAf/vcwLSCUvtZAgiqZVVPGnfsErEH9y+SC1uIgXCU03sEiKgUZPiwWDjhIS4gxebBt15EYxHamJDF0lJPEHxanAgNxvCaSB06JI89GSdyCPiKOh/S7khAZKjEX81jJ+kdfM9pe4c5DlEXcLoAoYv2KCMPaO5WhniWn+zfHQS6vwjxlMN1rNrnb1pAiGJPfdZq5Ebqqx8gUmeXGXyXpZdnlN6IxyR5RNfeflE/S/wfPxkY/bifnEoztMWw9hL0MKPdaapQwCAqwOk3pZ3WpzIuzN+omi+89Z+Datb+Xt8rI31Tg4v23tJQz6hyulgejiPAbwlS37EuVN3oyf2r92U/kQ5FcHcwCyHh8g0MsZIPT7uEU/nHO67ZfnrKk1U5PonrYrfYAdZIM418BF3S4YzHcaRWyHGGQAT4FstC2X4j4OcJh1XFZXPXcHCVLK0ijvFy9uSLiocNivmO8E5sGWLNo4UhWsP4nx/MkZpSTOEno1ilu4hcjmhnrqa93xQ4+1gtoTlh7vEzg/IfKBaohMlwZ3/74wuNlMp6YgrHn5HbRiw4ojkubxeTatITKbkzO3qlOpSfQLRYSjpBB3cdgehrrqyPOAle+PBjJcPYn9F+mhAMsRkjM3KH6AjV+EysFRsnGtgWILUbTVL6IaYuabuMsg/cdLhoMaAZph9xzgikYG9EoCZ5SvS+3NbaA290+asAhsXvkMLPb0439YB25Gs6Ld8B1AnCaxrjW2YwDu72J8j4DvWqmX43EO0wKoS/Jp6ipHerdn80DAvn148jftrWbWJY4Y8oT3XEgxBTCl3CT/YL0HfknxrfQ/y87kn5TCJ6EFZoTWkV6uraNhHGrv+e0ovcPdpo4m1oZnuyZKKn1ny5eZZe8OXfbh64zVCSbm8Xma/JX3qZa+4Bvz5dlmVBY8+paCIqGXOd4y4T5mR8Hi7oNHEIt32cHqCcsxo5KSrfZJEQGhT8P3rFiUZB+iC7v9fJdjrYRG2aOF4OpM95bEfZPsD9RZ+3/FfDTVjSnm86yts8Ph6Nw6/sCS7T6VpbEsPHhGYMQTkS+w5P+rPjXo4ZYT9o7FjX86u3b0d7DNvLhmscNhDl7lMyReUYq3vMyAIGzYAMjWH08A5dry9+b8Vs2vd1Aab1yJjXdd21RS1BMaTCBf1ahOZid2igwHgnRmSjLR9SlXg2XXEun8pA8B6cCRN+Txer0/a0+U7F3gHoTEfSXeSCqdKs94YbBPeivSpgn+a69q1jxJMne7MltCjPhjG2V9L4G5fT3b0F8GDN2bgHGk677meVW0UqwU+N4I6DmqHeWeUFdg=="
+        }
+      },
+      {
+        "name": "example-dnssec-18.com",
+        "type": "DNSKEY",
+        "ttl": 120,
+        "data": {
+          "flags": 257,
+          "protocol": 3,
+          "alg": 18,
+          "public_key": "CIzo6USMIl0FQSrVfgTuf7YGRr5Z3MsdpUpxaHzvAX0Eat5OqkzXqsy2+XJ6I+AL8HsxrZXqHLWJooruhdAToUCULun/qKuoGfsIZbknfkyJ6syFAN7XXZ9tj3/39KHhBK000sgHiRYPHFVPfFSrC4qHfmdeB9IB67NqikjsVxMH2ZxLt4TN494Pf71lIEPhU8zDxQGI8qTMkHiZv15b+EUOcx388pk3RnybPy8F/U8GW6Rlnf83Sw3/KpR7c7X3Uq6IDFnjiq1wXPCxPxSPDFDlrhMgjCrKYoFOWYvieTINL8lJYYvu8a1006byRjWkIKWiWwXtC1K5sfVcD1HKWGVkEnOMhjy11kNfj/r0U2EfBFnIQpp92Bbu2DgAGuOT0cWplA6kPC6HqR3zvoJc7F++F0L7FulyFIrPN4rkh2XKX/X3gNHAf/vcwLSCUvtZAgiqZVVPGnfsErEH9y+SC1uIgXCU03sEiKgUZPiwWDjhIS4gxebBt15EYxHamJDF0lJPEHxanAgNxvCaSB06JI89GSdyCPiKOh/S7khAZKjEX81jJ+kdfM9pe4c5DlEXcLoAoYv2KCMPaO5WhniWn+zfHQS6vwjxlMN1rNrnb1pAiGJPfdZq5Ebqqx8gUmeXGXyXpZdnlN6IxyR5RNfeflE/S/wfPxkY/bifnEoztMWw9hL0MKPdaapQwCAqwOk3pZ3WpzIuzN+omi+89Z+Datb+Xt8rI31Tg4v23tJQz6hyulgejiPAbwlS37EuVN3oyf2r92U/kQ5FcHcwCyHh8g0MsZIPT7uEU/nHO67ZfnrKk1U5PonrYrfYAdZIM418BF3S4YzHcaRWyHGGQAT4FstC2X4j4OcJh1XFZXPXcHCVLK0ijvFy9uSLiocNivmO8E5sGWLNo4UhWsP4nx/MkZpSTOEno1ilu4hcjmhnrqa93xQ4+1gtoTlh7vEzg/IfKBaohMlwZ3/74wuNlMp6YgrHn5HbRiw4ojkubxeTatITKbkzO3qlOpSfQLRYSjpBB3cdgehrrqyPOAle+PBjJcPYn9F+mhAMsRkjM3KH6AjV+EysFRsnGtgWILUbTVL6IaYuabuMsg/cdLhoMaAZph9xzgikYG9EoCZ5SvS+3NbaA290+asAhsXvkMLPb0439YB25Gs6Ld8B1AnCaxrjW2YwDu72J8j4DvWqmX43EO0wKoS/Jp6ipHerdn80DAvn148jftrWbWJY4Y8oT3XEgxBTCl3CT/YL0HfknxrfQ/y87kn5TCJ6EFZoTWkV6uraNhHGrv+e0ovcPdpo4m1oZnuyZKKn1ny5eZZe8OXfbh64zVCSbm8Xma/JX3qZa+4Bvz5dlmVBY8+paCIqGXOd4y4T5mR8Hi7oNHEIt32cHqCcsxo5KSrfZJEQGhT8P3rFiUZB+iC7v9fJdjrYRG2aOF4OpM95bEfZPsD9RZ+3/FfDTVjSnm86yts8Ph6Nw6/sCS7T6VpbEsPHhGYMQTkS+w5P+rPjXo4ZYT9o7FjX86u3b0d7DNvLhmscNhDl7lMyReUYq3vMyAIGzYAMjWH08A5dry9+b8Vs2vd1Aab1yJjXdd21RS1BMaTCBf1ahOZid2igwHgnRmSjLR9SlXg2XXEun8pA8B6cCRN+Txer0/a0+U7F3gHoTEfSXeSCqdKs94YbBPeivSpgn+a69q1jxJMne7MltCjPhjG2V9L4G5fT3b0F8GDN2bgHGk677meVW0UqwU+N4I6DmqHeWeUFdg=="
+        }
+      },
+      {
+        "name": "example-dnssec-18.com",
+        "type": "DNSKEY",
+        "ttl": 120,
+        "data": {
+          "flags": 256,
+          "protocol": 3,
+          "alg": 18,
+          "public_key": "0EsIZ1yRXDPgw2ppYKxnoJdRanetMqctAoWUz0d/aYd3C+mh4os8reRs/T+72AUyciC3KHCrgQSa9uvlDJ8bOKvm+LKSgtHyHZcovc2lKjf9lz6CSlCOW0S+Ct0ikR+4sxfUplkwqF6PI85+RQi53D0KQrxv7aCGGhxVUX178l1A1vUbwT1Pxw7YelY/YLKH0O6eMTFs/HLnqYYI7lptLUKT/sp3u2bkvHtplZn71+LG+CjxJyJH6bPJB2fFmNSPRGVuIE92wvxkW7FBCPivtywZudN5/F0KhFvsA8wwgj28PWip0WHtfCH2p20mqWx9MYqVYMlzP4DHyV1/00fJb+ICCrg0cvmX+/1ElJPkzfkue7Rwy0rjPL5/pTzJOiZQL2F/BH6NkMLNpnNxc13ByBKsvsGA9w8TwVy8KRX23kes8OWOrMliqyYbu6MSOk4yF5DKf0t3FcGSG67mXqqy9xVjF2H6eqirx8RVUVzBwA/vBJp2n3uGwTIey4t+jyYppTEnOfM1vrwvov9rjYyn1xAdgVGBVbPM1U9UBGsjLkeN3ub+KiAc92ME6Gr8XWl125H0mkT1A7kV+25Frc6UfrZFSho3FTVJ4DVxIS+AZrLG8wVyRMjxrLjcLgp9Nnp9Y06yHw5c3DEeXMjR/Xtifp5fC4S7K7PqyOzkiXXzStvfoXjbvbJ3OWDhbcFE6niPBNsj9sj1a+MWhV/ury42A471A+e/Ex/f3oHPd1XgH+arhHsGlW86khg1TP15dx+Nqo6OHq5LUC/dEexSNuvxIJB/GZqKacky7xYkLnwlhODmfTJlXAsw3vPTeA7+IvRca0ciYbdFA7VTeHVDJygPidgU2YpPnFyoDX6mEF3tp0yom15GcXTQuIhdbP8LD75Qvs4V/rQ0yWXaDd5xcjVtLfsNfkBh53fj1JWK0/sOf6jusIMMuqDd57xEAHifvKfbyUMA00w301O/8E0geggyAM9EUqPCEs/xM34w+3LQioee3sV3xPosIBPlcte3sJx+tItKkMk5p8srdcb3bMxvGQDtsO/WqDuz81e5OzQO9ZsOoDNNtlrJHmOKdgZxsKxRqJTwSyZZhNZHZGkDuRqTQIYuFP9Kxh86AySlUTCZ1OFfVOGP4+7jRobhbbJ+QQLQQMKNzwtGhA6oEzAyChSke4Hr+r4O6oXXk29bA+6Z8fOlu8mmCpKeC/B7Sc2+yVrTlGLvEs9BZW2PNkY985lr3ZTTFTJWXVCSOONEXr+z1+wvwR0j+c4al6kJ32ImWys6hh/Y1rrcYb6q5vhQ/m3Tw/Xm6gNloLQTs70QISX4Bl5JAaTJCnSmjJHi//ppBitDJXnuhK03H8BsAyHNJ6jopHHe+iB49W+p0MiwvAKmfwJlnA2kjgmIukxekkfmnA3ntPpHPPyc+fTHdlNlUsW0+DgXC7xlY2Y/HGfC2oBapPoM6TWW9V6K3jTVdpY9GiuQ+AIXlsDW3RwA/aawjB91Tc4cSy6rEMfH4auUZk9UjI1U3kSm3SzJ2EpzCGNO8UhGILG2zv1Fp36G74sjpXuu+v6ENMbND0VhnSSJoeDdTLsDGl3fGoqDHUhVYvdwYCIVRSHnaehivsXnMYBUcMnGpkvQdfsDzP7ujmD8326Mg1/NxK4WEP/JKnxvOufv7VrTCKlK/8nAXwVCeqi/Jtl+ThB9SFN+80LehC6ohq+vfkKFpjhl0qSSddOtC2YFM+c4Q8aBxUTDqedI59d+J0RTRQ=="
+        }
+      }
+    ],
+    "keys": [
+      {
+        "ksk": "-----BEGIN PRIVATE KEY-----\nMDQCAQAwCwYJYIZIAWUDBAMRBCKAIB+OKoOy1ltMh+a2SPGqkpOQxNMsuR2SMNiA\nMOf5wtYD\n-----END PRIVATE KEY-----\n",
+        "ksk_keytag": 42929,
+        "ksk_alg": 18,
+        "zsk": "-----BEGIN PRIVATE KEY-----\nMDQCAQAwCwYJYIZIAWUDBAMRBCKAIGBeBLKH0PC2vJaLAKyejXEcFcrU6SREWWGF\ncCOyjzz2\n-----END PRIVATE KEY-----\n",
+        "zsk_keytag": 46639,
+        "zsk_alg": 18,
+        "inception": "2026-11-16T00:00:00Z",
+        "until": "2046-11-16T00:00:00Z"
+      }
+    ]
   }
 ]

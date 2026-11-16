@@ -114,7 +114,8 @@ groups() ->
             parse_json_keys_unsorted_proplists,
             rsa_keys_sign_as_before,
             parse_keysets_names_missing_keys,
-            keys_stay_out_of_parse_errors
+            keys_stay_out_of_parse_errors,
+            mldsa44_keys
         ]},
         {codec_sequential, [], [
             custom_decode,
@@ -679,6 +680,38 @@ keys_stay_out_of_parse_errors(_) ->
         {invalid_zone, [_, _]}, raised_without(Secrets, fun() -> erldns_zones:decode(Zone) end)
     ),
     ?assertError(invalid_zone, erldns_zones:decode(not_a_zone)).
+
+%% An ML-DSA-44 key loads as its expanded key, or as its seed where the PEM holds only that;
+%% another ML-DSA parameter set fails without the key in the error or its stacktrace
+mldsa44_keys(_) ->
+    Seed = binary:copy(<<16#5A>>, 32),
+    ExpandedKey = binary:copy(<<16#A5>>, 2560),
+    Pem = fun(Key) ->
+        Entry = public_key:pem_entry_encode('PrivateKeyInfo', Key),
+        public_key:pem_encode([Entry])
+    end,
+    SeedOnly = Pem(#'ML-DSAPrivateKey'{algorithm = mldsa44, seed = Seed}),
+    Both = Pem(#'ML-DSAPrivateKey'{algorithm = mldsa44, seed = Seed, expandedkey = ExpandedKey}),
+    Keyset = #{
+        ~"ksk" => SeedOnly,
+        ~"ksk_alg" => 18,
+        ~"ksk_keytag" => 1,
+        ~"zsk" => Both,
+        ~"zsk_alg" => 18,
+        ~"zsk_keytag" => 2,
+        ~"inception" => ~"2026-11-16T00:00:00Z",
+        ~"until" => ~"2046-11-16T00:00:00Z"
+    },
+    ?assertMatch(
+        [#keyset{key_signing_key = Seed, zone_signing_key = ExpandedKey}],
+        erldns_zone_decoder:parse_keysets([Keyset])
+    ),
+    MlDsa65 = Pem(#'ML-DSAPrivateKey'{algorithm = mldsa65, seed = Seed}),
+    Unsupported = fun() -> erldns_zone_decoder:parse_keysets([Keyset#{~"ksk" := MlDsa65}]) end,
+    ?assertEqual(
+        {unsupported_key, {'ML-DSAPrivateKey', mldsa65}},
+        raised_without([MlDsa65, Seed, Both, ExpandedKey], Unsupported)
+    ).
 
 json_record_svcb_to_erlang(_) ->
     Name = ~"example.com",
