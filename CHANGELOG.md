@@ -57,6 +57,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of its zone when `context_options` was set.
 - A DNSSEC keyset that misses a key fails its zone with `{invalid_keyset, MissingKeys}`, instead
   of a `badkey` error whose logged stacktrace held the keyset and its private keys.
+- A DNSSEC key of a type erldns doesn't sign with, or that doesn't parse, `keys` that aren't a list,
+  and a JSON zone without `name` or `records` fail with `{unsupported_key, Type}`, `invalid_key`,
+  `invalid_keysets` and `{invalid_zone, Fields}`, without the private keys in the error or its
+  logged stacktrace.
 
 ### Changed
 

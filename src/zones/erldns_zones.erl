@@ -150,7 +150,13 @@ decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Opts) ->
     Sha = maps:get(~"sha", Zone, ~""),
     JsonKeys = maps:get(~"keys", Zone, []),
     Keys = erldns_zone_decoder:parse_keysets(JsonKeys),
-    decode_zone(Name, Sha, JsonRecords, Keys, Opts).
+    decode_zone(Name, Sha, JsonRecords, Keys, Opts);
+%% Raised without the zone, so that its private keys stay out of the logs
+decode(Zone, _) when is_map(Zone) ->
+    Fields = maps:keys(Zone),
+    erlang:error({invalid_zone, Fields});
+decode(_, _) ->
+    erlang:error(invalid_zone).
 
 %% A whole zone, from JSON or from a zone file
 -doc false.

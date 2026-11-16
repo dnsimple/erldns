@@ -113,7 +113,8 @@ groups() ->
             parse_json_keys_unsorted_proplists_time_unit,
             parse_json_keys_unsorted_proplists,
             rsa_keys_sign_as_before,
-            parse_keysets_names_missing_keys
+            parse_keysets_names_missing_keys,
+            keys_stay_out_of_parse_errors
         ]},
         {codec_sequential, [], [
             custom_decode,
@@ -637,16 +638,46 @@ rsa_keys_sign_as_before(_) ->
 parse_keysets_names_missing_keys(_) ->
     Incomplete = #{~"ksk" => ksk_private_key(), ~"ksk_alg" => 8, ~"zsk" => zsk_private_key()},
     Missing = [~"ksk_keytag", ~"zsk_keytag", ~"zsk_alg", ~"inception", ~"until"],
-    try erldns_zone_decoder:parse_keysets([Incomplete]) of
-        Parsed -> ct:fail({parsed, Parsed})
-    catch
-        error:Reason:StackTrace ->
-            ?assertEqual({invalid_keyset, Missing}, Reason),
-            Logged = term_to_binary({Reason, StackTrace}),
-            ?assertEqual(nomatch, binary:match(Logged, ksk_private_key())),
-            ?assertEqual(nomatch, binary:match(Logged, zsk_private_key()))
-    end,
+    Secrets = [ksk_private_key(), zsk_private_key()],
+    Parse = fun() -> erldns_zone_decoder:parse_keysets([Incomplete]) end,
+    ?assertEqual({invalid_keyset, Missing}, raised_without(Secrets, Parse)),
     ?assertError(invalid_keyset, erldns_zone_decoder:parse_keysets([ksk_private_key()])).
+
+%% A key or zone that can't be used fails without the private keys in the error or its stacktrace
+keys_stay_out_of_parse_errors(_) ->
+    P521 = public_key:generate_key({namedCurve, secp521r1}),
+    #'ECPrivateKey'{privateKey = P521Bytes} = P521,
+    P521Entry = public_key:pem_entry_encode('ECPrivateKey', P521),
+    P521Pem = public_key:pem_encode([P521Entry]),
+    Keyset = #{
+        ~"ksk" => P521Pem,
+        ~"ksk_alg" => 8,
+        ~"ksk_keytag" => 1,
+        ~"zsk" => zsk_private_key(),
+        ~"zsk_alg" => 8,
+        ~"zsk_keytag" => 2,
+        ~"inception" => ~"2016-11-14T11:36:58Z",
+        ~"until" => ~"2017-02-12T11:36:58Z"
+    },
+    Secrets = [P521Pem, P521Bytes, zsk_private_key()],
+    %% A key type erldns doesn't sign with
+    Unsupported = fun() -> erldns_zone_decoder:parse_keysets([Keyset]) end,
+    ?assertMatch(
+        {unsupported_key, {'ECPrivateKey', {namedCurve, _}}}, raised_without(Secrets, Unsupported)
+    ),
+    %% A key that doesn't parse
+    Garbage = ~"-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----\n",
+    Invalid = fun() -> erldns_zone_decoder:parse_keysets([Keyset#{~"ksk" := Garbage}]) end,
+    ?assertEqual(invalid_key, raised_without(Secrets, Invalid)),
+    %% Keys given as one keyset instead of a list of them
+    NotAList = fun() -> erldns_zone_decoder:parse_keysets(Keyset) end,
+    ?assertEqual(invalid_keysets, raised_without(Secrets, NotAList)),
+    %% A zone without records
+    Zone = #{~"name" => ~"example.com", ~"keys" => [Keyset]},
+    ?assertMatch(
+        {invalid_zone, [_, _]}, raised_without(Secrets, fun() -> erldns_zones:decode(Zone) end)
+    ),
+    ?assertError(invalid_zone, erldns_zones:decode(not_a_zone)).
 
 json_record_svcb_to_erlang(_) ->
     Name = ~"example.com",
@@ -4003,6 +4034,17 @@ spied() ->
     receive
         {spied, Entries, Opts} -> {Entries, Opts}
     after 1000 -> ct:fail(spy_not_called)
+    end.
+
+%% The reason Fun raises, after checking that none of Secrets is in it or in its stacktrace
+raised_without(Secrets, Fun) ->
+    try Fun() of
+        Result -> ct:fail({returned, Result})
+    catch
+        error:Reason:StackTrace ->
+            Raised = term_to_binary({Reason, StackTrace}),
+            [?assertEqual(nomatch, binary:match(Raised, Secret)) || Secret <- Secrets],
+            Reason
     end.
 
 spied_opts() ->

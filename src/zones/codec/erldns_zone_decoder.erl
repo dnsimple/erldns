@@ -9,9 +9,12 @@
 
 -export([parse_keysets/1]).
 
--spec parse_keysets([json:decode_value()]) -> [erldns:keyset()].
+%% Errors are raised without the keys, so that they stay out of the logs
+-spec parse_keysets(json:decode_value()) -> [erldns:keyset()].
 parse_keysets(JsonKeys) when is_list(JsonKeys) ->
-    parse_keysets(JsonKeys, []).
+    parse_keysets(JsonKeys, []);
+parse_keysets(_) ->
+    erlang:error(invalid_keysets).
 
 parse_keysets([], Keys) ->
     Keys;
@@ -52,8 +55,15 @@ parse_keyset(_) ->
     erlang:error(invalid_keyset).
 
 to_crypto_key(KeyBin) ->
-    DecodedKey = public_key:pem_entry_decode(lists:last(public_key:pem_decode(KeyBin))),
-    extract_key(DecodedKey).
+    try
+        PemEntries = public_key:pem_decode(KeyBin),
+        PemEntry = lists:last(PemEntries),
+        DecodedKey = public_key:pem_entry_decode(PemEntry),
+        extract_key(DecodedKey)
+    catch
+        error:{unsupported_key, _} = Reason -> erlang:error(Reason);
+        error:_ -> erlang:error(invalid_key)
+    end.
 
 %% An RSA key with the numbers crypto signs by the CRT with, about twice as fast
 %% as without them, each as its big-endian bytes, which crypto takes as they are
@@ -76,4 +86,6 @@ extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'secp38
 extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'id-Ed25519'}}) ->
     Key;
 extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'id-Ed448'}}) ->
-    Key.
+    Key;
+extract_key(#'ECPrivateKey'{parameters = Parameters}) ->
+    erlang:error({unsupported_key, {'ECPrivateKey', Parameters}}).
