@@ -22,9 +22,8 @@ JSON, as the first argument of `c:erldns_zone_pipeline:decode_record/3`.
 -endif.
 
 -doc "`c:erldns_zone_pipeline:decode_record/3` callback.".
--spec decode_record(erldns_zone_pipeline:entry(), Entry, erldns_zone_pipeline:opts()) ->
-    Entry | dns:rr()
-when
+-spec decode_record(Source, Entry, erldns_zone_pipeline:opts()) -> Entry when
+    Source :: erldns_zone_pipeline:entry(),
     Entry :: erldns_zone_pipeline:entry().
 decode_record(_, #{} = JsonRecord, _Opts) ->
     case standard_record_to_erlang(JsonRecord) of
