@@ -2,9 +2,9 @@
 -moduledoc """
 A zone pipe that drops the records this node doesn't serve, by the `context` of their JSON.
 
-It reads `context_options` from the `zones` configuration when the pipeline is prepared, and is
-disabled without them. See [Contexts](priv/zones/ZONES.md#contexts). It goes before
-`m:erldns_zone_standard`, so that the records it drops aren't decoded.
+It reads `context_options` from the `zones` configuration when the pipeline is prepared. It is
+disabled without them, and fails if they aren't a map. See [Contexts](priv/zones/ZONES.md#contexts).
+It goes before `m:erldns_zone_standard`, so that the records it drops aren't decoded.
 """.
 
 -behaviour(erldns_zone_pipeline).
@@ -25,6 +25,8 @@ prepare(Opts) ->
             Allow = maps:get(allow, ContextOptions, []),
             AllowSet = sets:from_list(Allow, [{version, 2}]),
             Opts#{?MODULE => {MatchEmpty, AllowSet}};
+        #{context_options := ContextOptions} ->
+            erlang:error({badconfig, {invalid_context_options, ContextOptions}});
         _ ->
             disabled
     end.

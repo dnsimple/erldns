@@ -81,7 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   queries.
 - `context_options` is read when the `erldns_zones` supervisor starts, and no longer on each zone
   decode. An `allow` that isn't a list now fails that start, where it only failed the decode of the
-  zones with a record that has a context.
+  zones with a record that has a context, and so does a `context_options` that isn't a map, where
+  it was ignored.
 - The records of zone files go through the zone pipeline, so its pipes see them, and duplicate
   records are dropped.
 

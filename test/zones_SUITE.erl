@@ -1464,6 +1464,10 @@ zone_pipeline_bad_config(_) ->
     BadConfigs = [
         {#{codecs => []}, {badconfig, codecs_moved_to_pipeline}},
         {
+            #{context_options => [{allow, [~"AMS"]}]},
+            {badconfig, {invalid_context_options, [{allow, [~"AMS"]}]}}
+        },
+        {
             #{pipeline => erldns_zone_standard},
             {badconfig, {invalid_pipeline, erldns_zone_standard}}
         },
