@@ -2,18 +2,19 @@
 -moduledoc """
 A pipeline of pipes that the records of a zone go through when the zone is decoded.
 
-A record is an `t:entry/0`: a JSON record not yet decoded, a `t:dns:rr/0`, or a pipe's own
-`{Module, Term}`. A pipe implements either or both of two callbacks:
+A record is an `t:entry/0`: a JSON record not yet decoded, or a `t:dns:rr/0`. A pipe implements
+either or both of two callbacks:
 
 - `c:decode_record/3` takes one record: the record as the pipeline was given it, and the record as
   the pipes before it left it. It returns the record, changed or not, or drops it.
 - `c:decode/2` takes all the records at once, to relate them to each other, and returns them,
   changed or not.
 
-The `c:decode_record/3` of every pipe runs first, in the order of the pipeline, all in a single pass
-over the records. Then the `c:decode/2` of every pipe runs, in the same order. After the last pipe,
-the records that aren't a `t:dns:rr/0` are logged as unsupported and dropped, and the records are
-sorted and deduplicated.
+The records go one by one through the `c:decode_record/3` of every pipe, in the order of the
+pipeline. Then all of them go through the `c:decode/2` of every pipe, in the same order. Both
+callbacks can change the options for what comes after them. After the last pipe, the records that
+aren't a `t:dns:rr/0` are logged as unsupported and dropped, and the records are sorted and
+deduplicated.
 
 Decoding is itself a pipe: `m:erldns_zone_standard` turns the JSON records of the types it knows
 into `t:dns:rr/0` and leaves the rest. The pipes after it still get each record as it was given, in
@@ -83,11 +84,37 @@ encode(_) ->
     not_implemented.
 ```
 
-## From one record to all of them
+## Passing on what a record's JSON says
 
-A pipe whose `c:decode/2` needs what only a record's JSON says returns `{Module, Term}` from its
-`c:decode_record/3`, with its own module, and replaces those entries in its `c:decode/2`. Other
-pipes pass them on as they are, and one left at the end is logged as unsupported and dropped.
+`c:decode/2` gets the records as the pipes left them, mostly decoded into `t:dns:rr/0`, which have
+no place for the JSON keys erldns doesn't use. A pipe that needs such a key in its `c:decode/2`
+reads it in its `c:decode_record/3`, where the record's JSON is the first argument, and adds what it
+needs to its own key of the options, returning `{Entry, Opts}`. The records after it, and every
+`c:decode/2`, get the options as it left them. So that the result doesn't depend on the order of
+the records, `c:decode_record/3` only adds to its key, and `c:decode/2` acts on it:
+
+```erlang
+-module(example_extra_names).
+-behaviour(erldns_zone_pipeline).
+
+-include_lib("dns_erlang/include/dns.hrl").
+
+-export([deps/0, prepare/1, decode_record/3, decode/2]).
+
+deps() ->
+    #{prerequisites => [erldns_zone_standard]}.
+
+prepare(Opts) ->
+    Opts#{?MODULE => []}.
+
+decode_record(#{~"extra_names" := Names}, #dns_rr{} = Record, #{?MODULE := Copies} = Opts) ->
+    {Record, Opts#{?MODULE := [{Record, Names} | Copies]}};
+decode_record(_, Entry, _Opts) ->
+    Entry.
+
+decode(Entries, #{?MODULE := Copies}) ->
+    Entries ++ [Record#dns_rr{name = Name} || {Record, Names} <- Copies, Name <- Names].
+```
 
 ## Scope
 
@@ -131,8 +158,8 @@ decode_record(_, Entry, _Opts) ->
 -doc "A record as it was in the JSON zone.".
 -type json_record() :: #{binary() => json:decode_value()}.
 
--doc "A record going through the pipeline: in JSON, decoded, or a pipe's own term.".
--type entry() :: dns:rr() | json_record() | {module(), term()}.
+-doc "A record going through the pipeline, in JSON or decoded.".
+-type entry() :: dns:rr() | json_record().
 
 -doc "Whether the records are a whole zone, or a part of one.".
 -type scope() :: zone | partial.
@@ -141,7 +168,7 @@ decode_record(_, Entry, _Opts) ->
 Options passed to every pipe.
 
 The zone's name and version are as the zone was given. Pipes add their own keys in `c:prepare/1`,
-and `c:decode/2` can change them for the pipes after it.
+and both callbacks can change them for what comes after them.
 """.
 -type opts() :: #{
     zone_name := dns:dname(),
@@ -155,9 +182,10 @@ The return of `c:decode_record/3`.
 
 - The record, changed or not, for the next pipe.
 - `drop`, to leave the record out.
+- `{Entry, Opts}` or `{drop, Opts}`, the same with new options for what comes after.
 - `{error, Reason}`, to fail the decode of the zone.
 """.
--type record_return() :: entry() | drop | {error, term()}.
+-type record_return() :: entry() | drop | {entry() | drop, opts()} | {error, term()}.
 
 -doc """
 The return of `c:decode/2`.
@@ -185,7 +213,8 @@ The return of `c:decode/2`.
 -export_type([recordfun/0, pipefun/0, pipe/0, prepared/0]).
 
 -doc """
-Take a record and return it, changed or not, or `drop` it. See `t:record_return/0`.
+Take a record and return it, changed or not, or `drop` it, with new options or not. See
+`t:record_return/0`.
 
 `Source` is the record as the pipeline was given it, and `Entry` the record as the pipes before this
 one left it.
@@ -199,7 +228,7 @@ one left it.
 Prepare the pipe when the pipeline is prepared, or return `disabled` to leave the pipe out.
 
 A pipe adds the keys it uses to the options here, so that every decode starts with them and its
-`c:decode/2` can update them with `:=`.
+callbacks can update them with `:=`.
 """.
 -callback prepare(opts()) -> disabled | opts().
 
@@ -257,11 +286,14 @@ prepare(Pipes) ->
 
 -doc false.
 -spec run([entry()], opts(), prepared()) -> [entry()].
-run(Entries, #{zone_name := _, version := _, scope := _} = CallOpts, Prepared) ->
-    {RecordDecoders, Decoders, _, PreparedOpts} = Prepared,
+run(
+    Entries,
+    #{zone_name := _, version := _, scope := _} = CallOpts,
+    {RecordDecoders, Decoders, _, PreparedOpts}
+) ->
     Opts = maps:merge(PreparedOpts, CallOpts),
-    Records = run_records(Entries, RecordDecoders, Opts),
-    {Decoded, _} = lists:foldl(fun run_step/2, {Records, Opts}, Decoders),
+    Acc = run_records(Entries, RecordDecoders, Opts),
+    {Decoded, _} = lists:foldl(fun run_step/2, Acc, Decoders),
     Decoded.
 
 %% Without a stored pipeline, as when its worker isn't running, the configured one is
@@ -344,27 +376,32 @@ maybe_prepare(Module, Opts) ->
         _ -> erlang:error({badpipe, {module_init_returned_non_map, Module}})
     end.
 
-%% Every record goes through all the decode_record/3 callbacks before the next record does
-run_records(Entries, [], _) ->
-    Entries;
-run_records([], _, _) ->
-    [];
-run_records([Source | Sources], RecordDecoders, Opts) ->
-    case run_record(RecordDecoders, Source, Source, Opts) of
-        drop ->
-            run_records(Sources, RecordDecoders, Opts);
-        Entry ->
-            Entries = run_records(Sources, RecordDecoders, Opts),
-            [Entry | Entries]
-    end.
+%% A fold over the records, each through all the decode_record/3 callbacks before the next one
+run_records(Entries, [], Opts) ->
+    {Entries, Opts};
+run_records(Entries, RecordDecoders, Opts) ->
+    run_records(Entries, RecordDecoders, Opts, []).
 
-run_record([], _, Entry, _) ->
-    Entry;
-run_record([RecordDecoder | RecordDecoders], Source, Entry, Opts) ->
+run_records([], _, Opts, Acc) ->
+    Records = lists:reverse(Acc),
+    {Records, Opts};
+run_records([Source | Sources], RecordDecoders, Opts, Acc) ->
+    run_record(RecordDecoders, Source, Source, Sources, RecordDecoders, Opts, Acc).
+
+run_record([], _, Entry, Sources, RecordDecoders, Opts, Acc) ->
+    run_records(Sources, RecordDecoders, Opts, [Entry | Acc]);
+run_record([RecordDecoder | Rest], Source, Entry, Sources, RecordDecoders, Opts, Acc) ->
     case RecordDecoder(Source, Entry, Opts) of
-        drop -> drop;
-        {error, Reason} -> erlang:error({zone_rejected, RecordDecoder, Reason});
-        Next -> run_record(RecordDecoders, Source, Next, Opts)
+        drop ->
+            run_records(Sources, RecordDecoders, Opts, Acc);
+        {drop, Opts1} when is_map(Opts1) ->
+            run_records(Sources, RecordDecoders, Opts1, Acc);
+        {error, Reason} ->
+            erlang:error({zone_rejected, RecordDecoder, Reason});
+        {Next, Opts1} when is_map(Opts1) ->
+            run_record(Rest, Source, Next, Sources, RecordDecoders, Opts1, Acc);
+        Next ->
+            run_record(Rest, Source, Next, Sources, RecordDecoders, Opts, Acc)
     end.
 
 run_step(Decoder, {Entries, Opts}) ->
