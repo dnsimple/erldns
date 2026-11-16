@@ -88,4 +88,12 @@ extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'id-Ed2
 extract_key(#'ECPrivateKey'{privateKey = Key, parameters = {namedCurve, ?'id-Ed448'}}) ->
     Key;
 extract_key(#'ECPrivateKey'{parameters = Parameters}) ->
-    erlang:error({unsupported_key, {'ECPrivateKey', Parameters}}).
+    erlang:error({unsupported_key, {'ECPrivateKey', Parameters}});
+%% An ML-DSA-44 key's expanded key, which signs without deriving it from the seed,
+%% or its seed where the PEM holds only that. A tuple, as OTP 28.0 has no record for it
+extract_key({'ML-DSAPrivateKey', mldsa44, Seed, ~""}) ->
+    Seed;
+extract_key({'ML-DSAPrivateKey', mldsa44, _Seed, ExpandedKey}) ->
+    ExpandedKey;
+extract_key({'ML-DSAPrivateKey', Algorithm, _Seed, _ExpandedKey}) ->
+    erlang:error({unsupported_key, {'ML-DSAPrivateKey', Algorithm}}).
