@@ -112,7 +112,8 @@ groups() ->
             encode_decode_zonemd,
             parse_json_keys_unsorted_proplists_time_unit,
             parse_json_keys_unsorted_proplists,
-            rsa_keys_sign_as_before
+            rsa_keys_sign_as_before,
+            parse_keysets_names_missing_keys
         ]},
         {codec_sequential, [], [
             custom_decode,
@@ -635,6 +636,21 @@ rsa_keys_sign_as_before(_) ->
         end
      || {Key, Pem} <- [{Ksk, ksk_private_key()}, {Zsk, zsk_private_key()}]
     ].
+
+%% The error names the missing keys, and neither it nor its stacktrace holds the private keys
+parse_keysets_names_missing_keys(_) ->
+    Incomplete = #{~"ksk" => ksk_private_key(), ~"ksk_alg" => 8, ~"zsk" => zsk_private_key()},
+    Missing = [~"ksk_keytag", ~"zsk_keytag", ~"zsk_alg", ~"inception", ~"until"],
+    try erldns_zone_decoder:parse_keysets([Incomplete]) of
+        Parsed -> ct:fail({parsed, Parsed})
+    catch
+        error:Reason:StackTrace ->
+            ?assertEqual({invalid_keyset, Missing}, Reason),
+            Logged = term_to_binary({Reason, StackTrace}),
+            ?assertEqual(nomatch, binary:match(Logged, ksk_private_key())),
+            ?assertEqual(nomatch, binary:match(Logged, zsk_private_key()))
+    end,
+    ?assertError(invalid_keyset, erldns_zone_decoder:parse_keysets([ksk_private_key()])).
 
 json_record_svcb_to_erlang(_) ->
     Name = ~"example.com",

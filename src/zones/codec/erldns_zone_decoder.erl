@@ -6,6 +6,9 @@
 -include_lib("erldns/include/erldns.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -define(LOG_METADATA, #{domain => [erldns, zones, decoder]}).
+-define(KEYSET_KEYS, [
+    ~"ksk", ~"ksk_keytag", ~"ksk_alg", ~"zsk", ~"zsk_keytag", ~"zsk_alg", ~"inception", ~"until"
+]).
 
 -export([parse_keysets/1, finalize/1]).
 
@@ -25,30 +28,43 @@ is_decoded(Entry) ->
 parse_keysets(JsonKeys) when is_list(JsonKeys) ->
     parse_keysets(JsonKeys, []).
 
+parse_keysets([], Keys) ->
+    Keys;
+parse_keysets([Key | Rest], Keys) ->
+    KeySet = parse_keyset(Key),
+    parse_keysets(Rest, [KeySet | Keys]).
+
 % RFC4034: §3.1.5.  Signature Expiration and Inception Fields
 %    The Signature Expiration and Inception field values specify a date
 %    and time in the form of a 32-bit unsigned number of seconds elapsed
 %    since 1 January 1970 00:00:00 UTC, ignoring leap seconds, in network
 %    byte order.
-parse_keysets([], Keys) ->
-    Keys;
-parse_keysets([Key | Rest], Keys) ->
-    KeySet =
-        #keyset{
-            key_signing_key = to_crypto_key(maps:get(~"ksk", Key)),
-            key_signing_key_tag = maps:get(~"ksk_keytag", Key),
-            key_signing_alg = maps:get(~"ksk_alg", Key),
-            zone_signing_key = to_crypto_key(maps:get(~"zsk", Key)),
-            zone_signing_key_tag = maps:get(~"zsk_keytag", Key),
-            zone_signing_alg = maps:get(~"zsk_alg", Key),
-            inception = calendar:rfc3339_to_system_time(
-                binary_to_list(maps:get(~"inception", Key)), [{unit, second}]
-            ),
-            valid_until = calendar:rfc3339_to_system_time(
-                binary_to_list(maps:get(~"until", Key)), [{unit, second}]
-            )
-        },
-    parse_keysets(Rest, [KeySet | Keys]).
+parse_keyset(#{
+    ~"ksk" := Ksk,
+    ~"ksk_keytag" := KskTag,
+    ~"ksk_alg" := KskAlg,
+    ~"zsk" := Zsk,
+    ~"zsk_keytag" := ZskTag,
+    ~"zsk_alg" := ZskAlg,
+    ~"inception" := Inception,
+    ~"until" := Until
+}) ->
+    #keyset{
+        key_signing_key = to_crypto_key(Ksk),
+        key_signing_key_tag = KskTag,
+        key_signing_alg = KskAlg,
+        zone_signing_key = to_crypto_key(Zsk),
+        zone_signing_key_tag = ZskTag,
+        zone_signing_alg = ZskAlg,
+        inception = calendar:rfc3339_to_system_time(binary_to_list(Inception), [{unit, second}]),
+        valid_until = calendar:rfc3339_to_system_time(binary_to_list(Until), [{unit, second}])
+    };
+%% Raised without the keyset, so that its private keys stay out of the logs
+parse_keyset(Key) when is_map(Key) ->
+    Missing = ?KEYSET_KEYS -- maps:keys(Key),
+    erlang:error({invalid_keyset, Missing});
+parse_keyset(_) ->
+    erlang:error(invalid_keyset).
 
 to_crypto_key(KeyBin) ->
     DecodedKey = public_key:pem_entry_decode(lists:last(public_key:pem_decode(KeyBin))),
