@@ -1322,7 +1322,7 @@ zone_context_filters_json_records(_) ->
     Served = [
         a_rr(~"example.com", {192, 0, 2, 1}),
         Json,
-        %% Not a JSON object, left for erldns_zone_decoder:finalize/1 to drop
+        %% Not a JSON object, left for erldns_zones to drop after the pipeline
         ~"not an object",
         Json#{~"context" => []},
         Json#{~"context" => [~"TKO", ~"AMS"]}

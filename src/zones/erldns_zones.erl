@@ -36,7 +36,11 @@ For more details about its subsections, see:
 See the type `t:config/0` for details.
 """.
 
+-include_lib("dns_erlang/include/dns.hrl").
+-include_lib("kernel/include/logger.hrl").
 -include_lib("erldns/include/erldns.hrl").
+
+-define(LOG_METADATA, #{domain => [erldns, zones, decoder]}).
 
 -doc """
 Zone configuration.
@@ -183,7 +187,18 @@ init(noargs) ->
 
 run_pipeline(Entries, CallOpts) ->
     Decoded = erldns_zone_pipeline:run(Entries, CallOpts),
-    erldns_zone_decoder:finalize(Decoded).
+    finalize(Decoded).
+
+-spec finalize([erldns_zone_pipeline:entry()]) -> [dns:rr()].
+finalize(Entries) ->
+    Records = lists:filter(fun is_decoded/1, Entries),
+    lists:usort(Records).
+
+is_decoded(#dns_rr{}) ->
+    true;
+is_decoded(Entry) ->
+    ?LOG_WARNING(#{what => unsupported_record, record => Entry}, ?LOG_METADATA),
+    false.
 
 -spec worker(module()) -> supervisor:child_spec().
 worker(Module) ->

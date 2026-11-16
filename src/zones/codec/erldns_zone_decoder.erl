@@ -1,28 +1,13 @@
 -module(erldns_zone_decoder).
 -moduledoc false.
 
--include_lib("dns_erlang/include/dns.hrl").
--include_lib("kernel/include/logger.hrl").
 -include_lib("erldns/include/erldns.hrl").
 -include_lib("public_key/include/public_key.hrl").
--define(LOG_METADATA, #{domain => [erldns, zones, decoder]}).
 -define(KEYSET_KEYS, [
     ~"ksk", ~"ksk_keytag", ~"ksk_alg", ~"zsk", ~"zsk_keytag", ~"zsk_alg", ~"inception", ~"until"
 ]).
 
--export([parse_keysets/1, finalize/1]).
-
--doc "Keep the decoded records, sorted and deduplicated, and log the others as unsupported.".
--spec finalize([erldns_zone_pipeline:entry()]) -> [dns:rr()].
-finalize(Entries) ->
-    Records = lists:filter(fun is_decoded/1, Entries),
-    lists:usort(Records).
-
-is_decoded(#dns_rr{}) ->
-    true;
-is_decoded(Entry) ->
-    ?LOG_WARNING(#{what => unsupported_record, record => Entry}, ?LOG_METADATA),
-    false.
+-export([parse_keysets/1]).
 
 -spec parse_keysets([json:decode_value()]) -> [erldns:keyset()].
 parse_keysets(JsonKeys) when is_list(JsonKeys) ->
