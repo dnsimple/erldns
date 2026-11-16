@@ -24,7 +24,8 @@
     record_count = 0 :: non_neg_integer(),
     records = [] :: [dns:rr()],
     keysets = [] :: [erldns:keyset()],
-    gen = 0 :: non_neg_integer()
+    gen = 0 :: non_neg_integer(),
+    opts = #{} :: erldns:zone_opts()
 }).
 
 -define(DNSKEY_ZSK_TYPE, 256).
