@@ -24,12 +24,5 @@ $TTL 3600
 ; }
 ; binary:encode_hex(iolist_to_binary(json:encode(Record))).
 ; ```
-; and therefore decoding with `sample_custom_zone_pipe` should return:
-; ```erl
-; #dns_rr{
-;     name = ~"example.com",
-;     type = ?DNS_TYPE_SAMPLE,
-;     data = ~"example.net",
-;     ttl = Ttl
-; };
-; ```
+; The records of zone files reach the zone pipes already decoded, so `sample_custom_zone_pipe`
+; leaves this one as it is: its data stays the JSON above, as a binary.
