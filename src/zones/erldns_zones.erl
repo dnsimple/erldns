@@ -133,35 +133,31 @@ encode(Zone, Opts) ->
 -doc "Takes a JSON map and turns it into a zone, as `decode/2` does with no options.".
 -spec decode(json:decode_value()) -> erldns:zone().
 decode(Zone) ->
-    {Decoded, _} = decode(Zone, #{}),
-    Decoded.
+    decode(Zone, #{}).
 
 -doc """
 Takes a JSON map and turns it into a zone, through `m:erldns_zone_pipeline`.
 
 The pipes get `Opts` with the zone's name and version, and `scope` set to `zone` unless `Opts` sets
-it. Returns the zone, and the options as the pipes left them.
+it.
 """.
--spec decode(json:decode_value(), #{atom() => dynamic()}) ->
-    {erldns:zone(), erldns_zone_pipeline:opts()}.
+-spec decode(json:decode_value(), #{atom() => dynamic()}) -> erldns:zone().
 decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Opts) ->
     Sha = maps:get(~"sha", Zone, ~""),
     JsonKeys = maps:get(~"keys", Zone, []),
     Keys = erldns_zone_decoder:parse_keysets(JsonKeys),
     Scope = maps:get(scope, Opts, zone),
     CallOpts = Opts#{zone_name => Name, version => Sha, scope => Scope},
-    {Records, Opts1} = run_pipeline(JsonRecords, CallOpts),
-    Decoded = build_zone(Name, Sha, Records, Keys),
-    {Decoded, Opts1}.
+    Records = run_pipeline(JsonRecords, CallOpts),
+    build_zone(Name, Sha, Records, Keys).
 
 -doc """
 Takes records of a zone, such as those of an RRSet, through `m:erldns_zone_pipeline`.
 
 The records can be JSON or already decoded. The pipes get `Opts`, with `scope` set to `partial`
-and `version` to `<<>>` unless `Opts` sets them. Returns the records, sorted and deduplicated, and
-the options as the pipes left them.
+and `version` to `<<>>` unless `Opts` sets them. Returns the records, sorted and deduplicated.
 """.
--spec decode_records(Entries, Opts) -> {[dns:rr()], erldns_zone_pipeline:opts()} when
+-spec decode_records(Entries, Opts) -> [dns:rr()] when
     Entries :: [erldns_zone_pipeline:entry()],
     Opts :: #{zone_name := dns:dname(), atom() => dynamic()}.
 decode_records(Entries, #{zone_name := _} = Opts) ->
@@ -186,9 +182,8 @@ init(noargs) ->
     {ok, {SupFlags, Children}}.
 
 run_pipeline(Entries, CallOpts) ->
-    {Decoded, Opts} = erldns_zone_pipeline:run(Entries, CallOpts),
-    Records = erldns_zone_decoder:finalize(Decoded),
-    {Records, Opts}.
+    Decoded = erldns_zone_pipeline:run(Entries, CallOpts),
+    erldns_zone_decoder:finalize(Decoded).
 
 -spec worker(module()) -> supervisor:child_spec().
 worker(Module) ->

@@ -23,9 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `decode_record/3`. `erldns_zone_context` and `erldns_zone_standard` are the built-in pipes.
 - A zone pipe can implement `encode/1` to encode the records of a custom type back to JSON, as
   `erldns_zones:encode/1,2` and the admin API do.
-- `erldns_zones:decode/2` decodes a zone as `decode/1` does, and also returns the options the zone
-  pipeline ended with, and `erldns_zones:decode_records/2` decodes part of a zone, such as an
-  RRSet, with `scope` `partial`.
+- `erldns_zones:decode/2` decodes a zone as `decode/1` does, with options for the pipes of the zone
+  pipeline, and `erldns_zones:decode_records/2` decodes part of a zone, such as an RRSet, with
+  `scope` `partial`.
 
 ### Fixed
 

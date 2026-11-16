@@ -235,7 +235,7 @@ delete() ->
     persistent_term:erase(?MODULE).
 
 -doc false.
--spec run([entry()], opts()) -> {[entry()], opts()}.
+-spec run([entry()], opts()) -> [entry()].
 run(Entries, CallOpts) ->
     Prepared = stored(),
     run(Entries, CallOpts, Prepared).
@@ -256,12 +256,13 @@ prepare(Pipes) ->
     {lists:reverse(RecordDecoders), lists:reverse(Decoders), lists:reverse(Encoders), Opts}.
 
 -doc false.
--spec run([entry()], opts(), prepared()) -> {[entry()], opts()}.
+-spec run([entry()], opts(), prepared()) -> [entry()].
 run(Entries, #{zone_name := _, version := _, scope := _} = CallOpts, Prepared) ->
     {RecordDecoders, Decoders, _, PreparedOpts} = Prepared,
     Opts = maps:merge(PreparedOpts, CallOpts),
     Records = run_records(Entries, RecordDecoders, Opts),
-    lists:foldl(fun run_step/2, {Records, Opts}, Decoders).
+    {Decoded, _} = lists:foldl(fun run_step/2, {Records, Opts}, Decoders),
+    Decoded.
 
 %% Without a stored pipeline, as when its worker isn't running, the configured one is
 %% prepared for each call: running fewer pipes could load records that a pipe would have changed

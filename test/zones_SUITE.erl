@@ -97,7 +97,6 @@ groups() ->
             zone_pipeline_checks_deps,
             zone_pipeline_pipe_returns,
             zone_record_pipes_run_first,
-            decode_returns_pipeline_opts,
             decode_records_of_a_partial_zone,
             encode_meta_to_json,
             encode_decode_svcb,
@@ -127,7 +126,8 @@ groups() ->
             zone_pipeline_from_config,
             zone_pipeline_bad_config,
             zone_pipes_see_zone_file_records,
-            zone_pipe_encodes_its_records
+            zone_pipe_encodes_its_records,
+            zone_pipes_see_the_callers_opts
         ]},
         {cache, [], [
             cache_coverage,
@@ -1174,7 +1174,7 @@ json_record_unknown_type_reaches_custom_decoders(_) ->
         fun(Type) ->
             Json = #{~"name" => ~"example.com", ~"type" => Type, ~"ttl" => 3600, ~"data" => #{}},
             Pipes = [erldns_zone_standard, sample_custom_zone_pipe],
-            ?assertMatch({[Json], _}, run_pipes(Pipes, [Json]))
+            ?assertMatch([Json], run_pipes(Pipes, [Json]))
         end,
         [~"CUSTOM", ~"TYPE65535"]
     ).
@@ -1186,7 +1186,7 @@ json_record_without_type_name_reaches_custom_decoders(_) ->
     Untyped = #{~"name" => ~"example.com", ~"ttl" => 3600, ~"data" => #{}},
     lists:foreach(
         fun(JsonRecord) ->
-            ?assertMatch({[JsonRecord], _}, run_pipes([erldns_zone_standard], [JsonRecord])),
+            ?assertMatch([JsonRecord], run_pipes([erldns_zone_standard], [JsonRecord])),
             ?assertEqual([], decode_records([JsonRecord]))
         end,
         [Untyped, Untyped#{~"type" => ~""}, Untyped#{~"type" => ?DNS_TYPE_A}]
@@ -1209,20 +1209,17 @@ json_record_context_filtered(_) ->
     },
     try
         %% Record with empty context should be filtered out
-        ?assertMatch({[], _}, run_pipes(Pipes, [Json#{~"context" => []}])),
+        ?assertMatch([], run_pipes(Pipes, [Json#{~"context" => []}])),
         %% Record with matching context should pass
         ?assertMatch(
-            {
-                [
-                    #dns_rr{
-                        name = ~"example.com",
-                        type = ?DNS_TYPE_A,
-                        data = #dns_rrdata_a{ip = {192, 0, 2, 1}},
-                        ttl = 3600
-                    }
-                ],
-                _
-            },
+            [
+                #dns_rr{
+                    name = ~"example.com",
+                    type = ?DNS_TYPE_A,
+                    data = #dns_rrdata_a{ip = {192, 0, 2, 1}},
+                    ttl = 3600
+                }
+            ],
             run_pipes(Pipes, [Json#{~"context" => [~"production"]}])
         )
     after
@@ -1274,7 +1271,7 @@ zone_pipeline_pipe_returns(_) ->
     SeeKey = fun(Entries, #{key := value, scope := partial}) -> [b | Entries] end,
     Prepared = erldns_zone_pipeline:prepare([AddKey, SeeKey]),
     ?assertMatch(
-        {[b, a], #{key := value, scope := partial}},
+        [b, a],
         erldns_zone_pipeline:run(
             [], #{zone_name => ~"", version => ~"", scope => partial}, Prepared
         )
@@ -1303,7 +1300,7 @@ zone_record_pipes_run_first(_) ->
     Given = fun(#{~"n" := N}, Entry, #{scope := zone}) -> Entry#{~"given" => N} end,
     Entries = [#{~"n" => 1}, #{~"n" => 2, ~"drop" => true}],
     Decoded = [#{~"n" => 2, ~"given" => 1}],
-    ?assertMatch({Decoded, _}, run_pipes([Spy, Double, Drop, Given], Entries)),
+    ?assertMatch(Decoded, run_pipes([Spy, Double, Drop, Given], Entries)),
     receive
         {spied, Spied} -> ?assertEqual(Decoded, Spied)
     after 1000 -> ct:fail(spy_not_called)
@@ -1312,26 +1309,11 @@ zone_record_pipes_run_first(_) ->
     ?assertError({zone_rejected, Reject, nope}, run_pipes([Reject], Entries)),
     ?assertMatch({[Double], [Spy], [], _}, erldns_zone_pipeline:prepare([Spy, Double])).
 
-decode_returns_pipeline_opts(_) ->
-    Zone = #{~"name" => ~"example.com", ~"sha" => ~"abc", ~"records" => [json_a(~"a.example.com")]},
-    ?assertMatch(
-        {#zone{records = [_]}, #{
-            extra := 1, scope := zone, zone_name := ~"example.com", version := ~"abc"
-        }},
-        erldns_zones:decode(Zone, #{extra => 1})
-    ),
-    ?assertMatch({_, #{scope := partial}}, erldns_zones:decode(Zone, #{scope => partial})),
-    ?assertMatch(
-        {_, #{zone_name := ~"example.com", version := ~"abc"}},
-        erldns_zones:decode(Zone, #{zone_name => ~"example.net", version => ~"other"})
-    ).
-
 decode_records_of_a_partial_zone(_) ->
     Record = a_rr(~"d.example.com", {192, 0, 2, 2}),
     Entries = [Record, json_a(~"a.example.com"), Record],
-    {Records, Opts} = erldns_zones:decode_records(Entries, #{zone_name => ~"example.com"}),
-    ?assertMatch([#dns_rr{name = ~"a.example.com"}, Record], Records),
-    ?assertMatch(#{scope := partial, version := ~"", zone_name := ~"example.com"}, Opts).
+    Records = erldns_zones:decode_records(Entries, #{zone_name => ~"example.com"}),
+    ?assertMatch([#dns_rr{name = ~"a.example.com"}, Record], Records).
 
 zone_context_filters_json_records(_) ->
     Options = #{match_empty => true, allow => [~"AMS"]},
@@ -1346,9 +1328,9 @@ zone_context_filters_json_records(_) ->
         Json#{~"context" => [~"TKO", ~"AMS"]}
     ],
     Entries = Served ++ [Json#{~"context" => [~"TKO"]}],
-    ?assertMatch({Served, _}, run_pipes([erldns_zone_context], Entries)),
+    ?assertMatch(Served, run_pipes([erldns_zone_context], Entries)),
     application:set_env(erldns, zones, #{context_options => #{allow => [~"AMS"]}}),
-    ?assertMatch({[_, _, _, _], _}, run_pipes([erldns_zone_context], Entries)),
+    ?assertMatch([_, _, _, _], run_pipes([erldns_zone_context], Entries)),
     application:unset_env(erldns, zones),
     ?assertMatch({[], [], [], _}, erldns_zone_pipeline:prepare([erldns_zone_context])).
 
@@ -1427,6 +1409,29 @@ zone_pipe_encodes_its_records(_) ->
     ),
     stop_pipeline_worker(),
     gen_server:stop(erldns_zone_cache).
+
+%% The pipes get the caller's options, with the zone's own name and version over the caller's
+zone_pipes_see_the_callers_opts(_) ->
+    Self = self(),
+    Spy = fun(Entries, Opts) ->
+        Self ! {opts, Opts},
+        Entries
+    end,
+    start_pipeline_worker(#{pipeline => [Spy, erldns_zone_standard]}),
+    Json = json_a(~"a.example.com"),
+    Zone = #{~"name" => ~"example.com", ~"sha" => ~"abc", ~"records" => [Json]},
+    ?assertMatch(#zone{records = [_]}, erldns_zones:decode(Zone, #{extra => 1})),
+    ?assertMatch(
+        #{extra := 1, scope := zone, zone_name := ~"example.com", version := ~"abc"},
+        spied_opts()
+    ),
+    _ = erldns_zones:decode(Zone, #{scope => partial}),
+    ?assertMatch(#{scope := partial}, spied_opts()),
+    _ = erldns_zones:decode(Zone, #{zone_name => ~"example.net", version => ~"other"}),
+    ?assertMatch(#{zone_name := ~"example.com", version := ~"abc"}, spied_opts()),
+    ?assertMatch([_], erldns_zones:decode_records([Json], #{zone_name => ~"example.com"})),
+    ?assertMatch(#{scope := partial, version := ~"", zone_name := ~"example.com"}, spied_opts()),
+    stop_pipeline_worker().
 
 %% A decode_record/3 after decoding reads a key of the record's JSON and tags the decoded record,
 %% and a decode/2, though listed before it, runs after it and copies the record to other names
@@ -3985,8 +3990,13 @@ run_pipes(Pipes, Entries) ->
     erldns_zone_pipeline:run(Entries, #{zone_name => ~"", version => ~"", scope => zone}, Prepared).
 
 decode_records(Entries) ->
-    {Records, _} = erldns_zones:decode_records(Entries, #{zone_name => ~"example.com"}),
-    Records.
+    erldns_zones:decode_records(Entries, #{zone_name => ~"example.com"}).
+
+spied_opts() ->
+    receive
+        {opts, Opts} -> Opts
+    after 1000 -> ct:fail(spy_not_called)
+    end.
 
 json_a(Name) ->
     #{~"name" => Name, ~"type" => ~"A", ~"ttl" => 60, ~"data" => #{~"ip" => ~"192.0.2.1"}}.
