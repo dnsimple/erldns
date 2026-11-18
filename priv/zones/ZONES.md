@@ -67,8 +67,10 @@ Supported DNSSEC algorithms:
 - ECDSA P-384 (algorithm 14, ECDSAP384SHA384)
 - Ed25519 (algorithm 15)
 - Ed448 (algorithm 16)
+- ML-DSA-44 (algorithm 18, MLDSA44), following draft-westerbaan-dnssec-mldsa-04, which may still
+  change. Signing needs OTP 28.1+ built against OpenSSL 3.5+.
 
-Private keys must be provided in PEM format. For Ed25519 and Ed448, use `-----BEGIN PRIVATE KEY-----` format.
+Private keys must be provided in PEM format. For Ed25519, Ed448 and ML-DSA-44, use `-----BEGIN PRIVATE KEY-----` format. An ML-DSA-44 key may hold its seed, or its seed and expanded key as `openssl genpkey` writes it; OTP's `public_key` can't read one that holds only the expanded key.
 
 ### Example
 

@@ -22,6 +22,7 @@ all() ->
         verify_zsk_signed_alg14,
         verify_zsk_signed_alg15,
         verify_zsk_signed_alg16,
+        verify_signed_alg18,
         test_signer_selection_logic,
         test_requires_key_signing_key_function,
         find_rrsigs_deduplicates_by_name_and_type,
@@ -63,7 +64,13 @@ end_per_suite(_Config) ->
     application:unset_env(erldns, zones),
     ok.
 
--spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> ct_suite:ct_config().
+-spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) ->
+    ct_suite:ct_config() | {skip, string()}.
+init_per_testcase(verify_signed_alg18, Config) ->
+    case lists:member(mldsa44, crypto:supports(public_keys)) of
+        true -> init_per_testcase(any, Config);
+        false -> {skip, "crypto has no ML-DSA-44: OTP 28.1+ on OpenSSL 3.5+"}
+    end;
 init_per_testcase(_, Config) ->
     FileName = filename:join([code:priv_dir(erldns), "zones/example.com.json"]),
     application:set_env(erldns, zones, #{path => FileName, strict => true}),
@@ -432,6 +439,32 @@ verify_zsk_signed_alg16(_) ->
         },
         Msg1
     ).
+
+%% The zone's keys are seeds: its ZSK signs an A RRset and its KSK the CDNSKEY RRset,
+%% and both verify against its DNSKEYs
+verify_signed_alg18(_) ->
+    Name = ~"example-dnssec-18.com",
+    Labels = dns_domain:split(Name),
+    Zone = erldns_zone_cache:get_authoritative_zone(Labels),
+    DNSKeys = erldns_zone_cache:get_records_by_name_and_type(Name, ?DNS_TYPE_DNSKEY),
+    A = #dns_rr{
+        name = Name, type = ?DNS_TYPE_A, ttl = 120, data = #dns_rrdata_a{ip = {1, 2, 3, 4}}
+    },
+    CDNSKeys = erldns_zone_cache:get_records_by_name_and_type(Name, ?DNS_TYPE_CDNSKEY),
+    [
+        begin
+            Q = #dns_query{name = Name, type = QType},
+            Ad = #dns_optrr{dnssec = true},
+            Msg0 = #dns_message{qc = 1, anc = 1, questions = [Q], answers = RRs, additional = [Ad]},
+            Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, false),
+            [RRSig] = [RR || #dns_rr{type = ?DNS_TYPE_RRSIG} = RR <- Msg1#dns_message.answers],
+            ?assertMatch(#dns_rr{data = #dns_rrdata_rrsig{alg = 18, keytag = Keytag}}, RRSig),
+            ?assert(dns_sec:verify_rrsig(RRSig, RRs, DNSKeys, #{}))
+        end
+     || {QType, RRs, Keytag} <- [
+            {?DNS_TYPE_A, [A], 46639}, {?DNS_TYPE_CDNSKEY, CDNSKeys, 42929}
+        ]
+    ].
 
 %% Test the requires_key_signing_key helper function
 test_requires_key_signing_key_function(_Config) ->
