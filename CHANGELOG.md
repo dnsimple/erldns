@@ -105,6 +105,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `$INCLUDE` in a zone file reads only files at or under the zone file's directory.
 - With dns_erlang 6, a number that starts a zone file line is the record's owner (RFC 1035 §5.1),
   as in reverse zones: `1 IN PTR host.` was a PTR at the owner before it, with a TTL of 1.
+- With dns_erlang 6, a keyset whose `valid_until` is before its `inception`, or 2^31 seconds or
+  more after it (RFC 4034 §3.1.5), or whose RSA key's size the RFCs rule out, fails to store its
+  zone, where it signed RRSIGs that resolvers refuse.
 
 ### Removed
 
