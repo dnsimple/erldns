@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v13.0.0
+
+This release moves to dns_erlang 6, replaces zone codecs with zone pipes, and answers ANY, EDNS and
+DNSSEC queries closer to their RFCs, with breaking changes throughout.
+
+### Upgrading from 12.x
+
+- Replace `dnssec:` with `dns_sec:` in code that calls dns_erlang, and follow its
+  [6.0.0 migration guide](https://github.com/dnsimple/dns_erlang/blob/v6.0.0/CHANGELOG.md#migration-guide)
+  for DNSSEC keys. The zones that dns_erlang 6 refuses are listed under Changed.
+- In a custom packet pipeline, replace `erldns_edns_max_payload_size` with `erldns_edns`, first.
+  Every dependency a pipe declares is now checked, so a pipeline that started on 12.x can fail to,
+  with an `unsatisfied_dependency` error that names the pipe and what it requires.
+- Pipes that read the query's EDNS options find them in the `query_edns_options` pipeline option,
+  and add the response's with `erldns_edns:add_option/2`.
+- Move the `codecs` of the `zones` configuration to its `pipeline` key, as zone pipes after
+  `erldns_zone_standard` (see `erldns_zone_pipeline`), and call `erldns_zones` where you called
+  `erldns_zone_codec`.
+- Recompile code that matches on `#zone{}`, which has a new `opts` field.
+- Answers from signed zones no longer set AD: `{dnssec, #{authenticated_data => true}}` sets it
+  again. ANY over UDP is answered minimally: `{minimal_any, #{udp => false}}` answers it in full.
+
 ### Added
 
 - A pipe's `deps/0` can list a dependency as `{optional, Module}`: it need not be in the pipeline,
