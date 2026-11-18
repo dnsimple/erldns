@@ -192,7 +192,7 @@ fake_afsdb_records(Qname) ->
 
 fake_dnskey_records(Qname) ->
   [
-    dnssec:add_keytag_to_dnskey(#dns_rr {
+    dns_sec:add_keytag_to_dnskey(#dns_rr {
       name = Qname,
       type = 48,
       ttl = 3600,
@@ -221,7 +221,7 @@ fake_rrsig_records(Qname) ->
   ].
 
 %fake_generated_rrsig_records(RSet, SignerName, KeyTag, Alg, Key) ->
-  %dnssec:sign_rrset(RSet, SignerName, KeyTag, Alg, Key).
+  %dns_sec:sign_rrset(RSet, SignerName, KeyTag, Alg, Key).
 
 %fake_nsec_records(Qname) ->
   %[
@@ -234,4 +234,4 @@ fake_rrsig_records(Qname) ->
   %].
 
 fake_generated_nsec_records(RSet) ->
-  dnssec:gen_nsec(RSet).
+  dns_sec:gen_nsec(RSet).

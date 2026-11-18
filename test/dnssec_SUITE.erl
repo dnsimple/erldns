@@ -459,7 +459,7 @@ verify_signed_alg18(_) ->
             Msg1 = erldns_dnssec:handle(Msg0, Zone, Labels, Name, QType, none, #{}, false),
             [RRSig] = [RR || #dns_rr{type = ?DNS_TYPE_RRSIG} = RR <- Msg1#dns_message.answers],
             ?assertMatch(#dns_rr{data = #dns_rrdata_rrsig{alg = 18, keytag = Keytag}}, RRSig),
-            ?assert(dnssec:verify_rrsig(RRSig, RRs, DNSKeys, #{}))
+            ?assert(dns_sec:verify_rrsig(RRSig, RRs, DNSKeys, #{}))
         end
      || {QType, RRs, Keytag} <- [
             {?DNS_TYPE_A, [A], 46639}, {?DNS_TYPE_CDNSKEY, CDNSKeys, 42929}
