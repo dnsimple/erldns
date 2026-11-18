@@ -131,6 +131,16 @@ DNSSEC queries closer to their RFCs, with breaking changes throughout.
   more after it (RFC 4034 §3.1.5), or whose RSA key's size the RFCs rule out, fails to store its
   zone, where it signed RRSIGs that resolvers refuse.
 
+### Updated
+
+- RSA keys sign with the CRT's numbers, as bytes: an A record signs in 129 µs instead of 233 µs
+  with a 1024-bit key, and in 257 µs instead of 482 µs with a 1280-bit key, allocating half as
+  much (#408).
+- dns_erlang 6: UDP replies of up to three records that fit whole encode 1.1–1.3x faster, DNSKEY
+  answers with an RSA key encode 1.6x faster with 1.2x less memory, `dns_domain:to_lower/1`, run
+  on every query name, is 2.1–3.6x faster, and zone files parse 2.37–8.93x faster with
+  4.51–10.16x less memory on large zones.
+
 ### Removed
 
 - `erldns_zone_codec`: its `build_zone/4`, `decode/1` and `encode/1,2` move to `erldns_zones`, and
