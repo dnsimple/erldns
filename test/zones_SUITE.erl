@@ -125,6 +125,7 @@ groups() ->
             zone_pipeline_kept_by_worker,
             zone_pipeline_without_worker,
             context_options_read_when_worker_starts,
+            zone_pipeline_opts,
             zone_pipeline_from_config,
             zone_pipeline_bad_config,
             zone_pipes_see_zone_file_records,
@@ -1427,6 +1428,21 @@ context_options_read_when_worker_starts(_) ->
     Zone = sample_zone([~"AMS"]),
     ?assertMatch(#zone{records = [_, _]}, erldns_zones:decode(Zone)),
     stop_pipeline_worker().
+
+%% The options as the worker prepared them, and without the worker as the configuration gives them
+zone_pipeline_opts(_) ->
+    Pipeline = ?SAMPLE_PIPELINE,
+    start_pipeline_worker(#{pipeline => Pipeline, context_options => #{allow => [~"AMS"]}}),
+    application:set_env(erldns, zones, #{
+        pipeline => Pipeline, context_options => #{allow => [~"TKO"]}
+    }),
+    ?assertMatch(#{scope := zone}, erldns_zone_pipeline:get_opts()),
+    ?assertEqual([~"AMS"], allowed_contexts(erldns_zone_pipeline:get_opts())),
+    stop_pipeline_worker(),
+    ?assertEqual([~"TKO"], allowed_contexts(erldns_zone_pipeline:get_opts())).
+
+allowed_contexts(#{erldns_zone_context := {_, Allow}}) ->
+    sets:to_list(Allow).
 
 zone_pipes_see_zone_file_records(Config) ->
     start_pipeline_worker(#{pipeline => [spy(), erldns_zone_standard]}),

@@ -617,7 +617,7 @@ worker(Name, Module, Args) ->
 get_pipeline() ->
     persistent_term:get(?MODULE).
 
--doc "Get main pipeline".
+-doc "Get a named pipeline".
 -spec get_pipeline(term()) -> {pipeline(), opts()}.
 get_pipeline(PipelineName) ->
     persistent_term:get(PipelineName).

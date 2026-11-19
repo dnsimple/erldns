@@ -231,7 +231,7 @@ one left it.
 Prepare the pipe when the pipeline is prepared, or return `disabled` to leave the pipe out.
 
 A pipe adds the keys it uses to the options here, so that every decode starts with them and its
-callbacks can update them with `:=`.
+callbacks can update them with `:=`. `get_opts/0` returns them outside a decode.
 """.
 -callback prepare(opts()) -> disabled | opts().
 
@@ -246,8 +246,18 @@ Encode a record that this pipe decoded back to JSON, or return `not_implemented`
 
 -optional_callbacks([decode_record/3, decode/2, prepare/1, deps/0, encode/1]).
 
+-export([get_opts/0]).
 -export([store/0, delete/0, run/2, encoders/0]).
 -export([prepare/1, run/3]).
+
+-doc """
+Get the options of the zone pipeline, as its pipes' `c:prepare/1` left them, and as every decode
+starts with them.
+""".
+-spec get_opts() -> opts().
+get_opts() ->
+    {_, _, _, Opts} = stored(),
+    Opts.
 
 -doc false.
 -spec store() -> ok.
