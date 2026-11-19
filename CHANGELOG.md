@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v13.1.0
+
 ### Added
 
 - `erldns_zone_pipeline:get_opts/0` returns the zone pipeline's prepared options.
