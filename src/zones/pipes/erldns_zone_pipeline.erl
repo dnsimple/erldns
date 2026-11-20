@@ -293,11 +293,7 @@ prepare(Pipes) ->
 
 -doc false.
 -spec run([entry()], opts(), prepared()) -> [entry()].
-run(
-    Entries,
-    #{zone_name := _, version := _, scope := _} = CallOpts,
-    {RecordDecoders, Decoders, _, PreparedOpts}
-) ->
+run(Entries, CallOpts, {RecordDecoders, Decoders, _, PreparedOpts}) ->
     Opts = maps:merge(PreparedOpts, CallOpts),
     {Records, Opts1} = decode_each(Entries, RecordDecoders, Opts, []),
     {Decoded, _} = lists:foldl(fun decode_all/2, {Records, Opts1}, Decoders),
