@@ -70,13 +70,17 @@ encode_record(
         _ ->
             [
                 #{
-                    ~"name" => erlang:iolist_to_binary(io_lib:format("~s.", [Name])),
+                    ~"name" => fqdn(Name),
                     ~"type" => dns_names:type_name(Type),
                     ~"ttl" => Ttl,
                     ~"content" => Encoded
                 }
             ]
     end.
+
+%% A zone may give a record's name with its final dot or without
+fqdn(Name) ->
+    dns_domain:join(dns_domain:split(Name), fqdn).
 
 try_custom_encoders(Record, []) ->
     ?LOG_WARNING(#{what => unable_to_encode_record, record => Record}, ?LOG_METADATA),
