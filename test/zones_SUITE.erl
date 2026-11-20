@@ -99,6 +99,7 @@ groups() ->
             zone_record_pipes_run_first,
             decode_records_of_a_partial_zone,
             encode_meta_to_json,
+            encode_record_names_end_with_one_dot,
             encode_decode_svcb,
             encode_decode_https,
             encode_decode_openpgpkey,
@@ -272,6 +273,26 @@ encode_meta_to_json(_) ->
             }
         },
         Decoded
+    ).
+
+%% A record's name has one final dot, whether the zone gave it with one or without
+encode_record_names_end_with_one_dot(_) ->
+    ZoneName = ~"trailing-dot.example",
+    Names = [
+        ~"www.trailing-dot.example", ~"api.trailing-dot.example.", ~"a\\.b.trailing-dot.example"
+    ],
+    Records = [soa_rr(ZoneName) | [a_rr(Name, {192, 0, 2, 1}) || Name <- Names]],
+    Z = erldns_zones:build_zone(ZoneName, ~"", Records, []),
+    erldns_zone_cache:put_zone(Z),
+    Encoded = erldns_zones:encode(cached(Z), #{mode => zone_records_to_json}),
+    ?assertEqual(
+        [
+            ~"a\\.b.trailing-dot.example.",
+            ~"api.trailing-dot.example.",
+            ~"trailing-dot.example.",
+            ~"www.trailing-dot.example."
+        ],
+        lists:sort([Name || #{~"name" := Name} <- Encoded])
     ).
 
 encode_meta_to_json_dnssec(Config) ->

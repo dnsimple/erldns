@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `erldns_zone_cache:put_zone_rrsets/5` writes several RRSets of a name at once, moving the sync
   counter of one of them.
 
+## v13.0.1
+
+### Fixed
+
+- The JSON of a record gives its name with one final dot. A name that the zone gave with its final
+  dot had two.
+
 ## v13.0.0
 
 This release moves to dns_erlang 6, replaces zone codecs with zone pipes, and answers ANY, EDNS and
