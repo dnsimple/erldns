@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v13.0.1
+
 ### Fixed
 
 - The JSON of a record gives its name with one final dot. A name that the zone gave with its final
