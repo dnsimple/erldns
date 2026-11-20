@@ -1315,7 +1315,7 @@ zone_pipeline_pipe_returns(_) ->
     SeeKey = fun(Entries, #{key := value, scope := partial}) -> [b | Entries] end,
     Prepared = erldns_zone_pipeline:prepare([AddKey, SeeKey]),
     ?assertMatch(
-        [b, a],
+        {[b, a], #{key := value}},
         erldns_zone_pipeline:run(
             [], #{zone_name => ~"", version => ~"", scope => partial}, Prepared
         )
@@ -4093,7 +4093,9 @@ run_pipes(Pipes) ->
 
 run_pipes(Pipes, Entries) ->
     Prepared = erldns_zone_pipeline:prepare(Pipes),
-    erldns_zone_pipeline:run(Entries, #{zone_name => ~"", version => ~"", scope => zone}, Prepared).
+    CallOpts = #{zone_name => ~"", version => ~"", scope => zone},
+    {Decoded, _} = erldns_zone_pipeline:run(Entries, CallOpts, Prepared),
+    Decoded.
 
 decode_records(Entries) ->
     erldns_zones:decode_records(Entries, #{zone_name => ~"example.com"}).

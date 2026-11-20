@@ -249,8 +249,8 @@ Encode a record that this pipe decoded back to JSON, or return `not_implemented`
 -optional_callbacks([decode_record/3, decode/2, prepare/1, deps/0, encode/1]).
 
 -export([get_opts/0]).
--export([store/0, delete/0, run/2, run_with_opts/2, encoders/0]).
--export([prepare/1, run/3, run_with_opts/3]).
+-export([store/0, delete/0, run/2, encoders/0]).
+-export([prepare/1, run/3]).
 
 -doc """
 Get the options of the zone pipeline, as its pipes' `c:prepare/1` left them, and as every decode
@@ -273,16 +273,10 @@ delete() ->
     persistent_term:erase(?MODULE).
 
 -doc false.
--spec run([entry()], opts()) -> [entry()].
+-spec run([entry()], opts()) -> {[entry()], opts()}.
 run(Entries, CallOpts) ->
     Prepared = stored(),
     run(Entries, CallOpts, Prepared).
-
--doc false.
--spec run_with_opts([entry()], opts()) -> {[entry()], opts()}.
-run_with_opts(Entries, CallOpts) ->
-    Prepared = stored(),
-    run_with_opts(Entries, CallOpts, Prepared).
 
 %% The encode/1 of the pipes, in the order of the pipeline
 -doc false.
@@ -299,16 +293,10 @@ prepare(Pipes) ->
     {RecordDecoders, Decoders, Encoders, Opts} = lists:foldl(Prepare, Init, Pipes),
     {lists:reverse(RecordDecoders), lists:reverse(Decoders), lists:reverse(Encoders), Opts}.
 
--doc false.
--spec run([entry()], opts(), prepared()) -> [entry()].
-run(Entries, CallOpts, Prepared) ->
-    {Decoded, _} = run_with_opts(Entries, CallOpts, Prepared),
-    Decoded.
-
 %% The records with the options the last pipe left
 -doc false.
--spec run_with_opts([entry()], opts(), prepared()) -> {[entry()], opts()}.
-run_with_opts(Entries, CallOpts, {RecordDecoders, Decoders, _, PreparedOpts}) ->
+-spec run([entry()], opts(), prepared()) -> {[entry()], opts()}.
+run(Entries, CallOpts, {RecordDecoders, Decoders, _, PreparedOpts}) ->
     Opts = maps:merge(PreparedOpts, CallOpts),
     {Records, Opts1} = decode_each(Entries, RecordDecoders, Opts, []),
     lists:foldl(fun decode_all/2, {Records, Opts1}, Decoders).

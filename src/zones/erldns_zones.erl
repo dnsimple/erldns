@@ -207,7 +207,7 @@ them with the options the pipes leave once the decode is done.
     Opts :: #{zone_name := dns:dname(), atom() => dynamic()}.
 decode_records_with_opts(Entries, #{zone_name := _} = Opts) ->
     CallOpts = maps:merge(#{scope => partial, version => ~""}, Opts),
-    {Decoded, Opts1} = erldns_zone_pipeline:run_with_opts(Entries, CallOpts),
+    {Decoded, Opts1} = erldns_zone_pipeline:run(Entries, CallOpts),
     {finalize(Decoded), Opts1}.
 
 -doc false.
