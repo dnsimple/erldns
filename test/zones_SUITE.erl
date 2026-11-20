@@ -130,7 +130,8 @@ groups() ->
             zone_pipeline_bad_config,
             zone_pipes_see_zone_file_records,
             zone_pipe_encodes_its_records,
-            zone_pipes_see_the_callers_opts
+            zone_pipes_see_the_callers_opts,
+            zone_pipes_hand_back_their_opts
         ]},
         {cache, [], [
             cache_coverage,
@@ -1491,6 +1492,24 @@ zone_pipes_see_the_callers_opts(_) ->
     ?assertMatch(#{zone_name := ~"example.com", version := ~"abc"}, spied_opts()),
     ?assertMatch([_], decode_records([Json])),
     ?assertMatch(#{scope := partial, version := ~"", zone_name := ~"example.com"}, spied_opts()),
+    stop_pipeline_worker().
+
+%% The options as the last pipe left them, after the records are sorted and deduplicated
+zone_pipes_hand_back_their_opts(_) ->
+    Count = fun(Entries, Opts) -> {Entries, Opts#{count => length(Entries)}} end,
+    start_pipeline_worker(#{pipeline => [erldns_zone_standard, Count]}),
+    Json = json_a(~"a.example.com"),
+    Zone = #{~"name" => ~"example.com", ~"sha" => ~"abc", ~"records" => [Json, Json]},
+    ?assertMatch(
+        {#zone{records = [_]}, #{count := 2, extra := 1, scope := zone}},
+        erldns_zones:decode_with_opts(Zone, #{extra => 1})
+    ),
+    ?assertMatch(
+        {[#dns_rr{}], #{count := 1, scope := partial, zone_name := ~"example.com"}},
+        erldns_zones:decode_records_with_opts([Json], #{zone_name => ~"example.com"})
+    ),
+    ?assertError({invalid_zone, [~"name"]}, erldns_zones:decode_with_opts(#{~"name" => x}, #{})),
+    ?assertError(invalid_zone, erldns_zones:decode_with_opts(not_a_zone, #{})),
     stop_pipeline_worker().
 
 %% A decode_record/3 after decoding keeps a key of the record's JSON in the options, and a

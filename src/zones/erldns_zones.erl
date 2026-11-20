@@ -98,6 +98,7 @@ See `m:erldns_zone_loader` for more details.
 -behaviour(supervisor).
 
 -export([build_zone/4, encode/1, encode/2, decode/1, decode/2, decode_records/2]).
+-export([decode_with_opts/2, decode_records_with_opts/2]).
 
 -export([decode_zone/5, start_link/0, init/1]).
 
@@ -146,16 +147,26 @@ The pipes get `Opts` with the zone's name and version, and `scope` set to `zone`
 it.
 """.
 -spec decode(json:decode_value(), #{atom() => dynamic()}) -> erldns:zone().
-decode(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Opts) ->
+decode(Zone, Opts) ->
+    {Decoded, _} = decode_with_opts(Zone, Opts),
+    Decoded.
+
+-doc """
+Takes a JSON map and turns it into a zone, as `decode/2` does, and returns it with the options the
+pipes leave once the decode is done.
+""".
+-spec decode_with_opts(json:decode_value(), #{atom() => dynamic()}) ->
+    {erldns:zone(), erldns_zone_pipeline:opts()}.
+decode_with_opts(#{~"name" := Name, ~"records" := JsonRecords} = Zone, Opts) ->
     Sha = maps:get(~"sha", Zone, ~""),
     JsonKeys = maps:get(~"keys", Zone, []),
     Keys = erldns_zone_decoder:parse_keysets(JsonKeys),
-    decode_zone(Name, Sha, JsonRecords, Keys, Opts);
+    decode_zone_with_opts(Name, Sha, JsonRecords, Keys, Opts);
 %% Raised without the zone, so that its private keys stay out of the logs
-decode(Zone, _) when is_map(Zone) ->
+decode_with_opts(Zone, _) when is_map(Zone) ->
     Fields = maps:keys(Zone),
     erlang:error({invalid_zone, Fields});
-decode(_, _) ->
+decode_with_opts(_, _) ->
     erlang:error(invalid_zone).
 
 %% A whole zone, from JSON or from a zone file
@@ -165,10 +176,14 @@ decode(_, _) ->
     Entries :: [erldns_zone_pipeline:entry()],
     Opts :: #{atom() => dynamic()}.
 decode_zone(Name, Version, Entries, Keys, Opts) ->
+    {Zone, _} = decode_zone_with_opts(Name, Version, Entries, Keys, Opts),
+    Zone.
+
+decode_zone_with_opts(Name, Version, Entries, Keys, Opts) ->
     Scope = maps:get(scope, Opts, zone),
     CallOpts = Opts#{zone_name => Name, version => Version, scope => Scope},
-    Records = decode_records(Entries, CallOpts),
-    build_zone(Name, Version, Records, Keys).
+    {Records, Opts1} = decode_records_with_opts(Entries, CallOpts),
+    {build_zone(Name, Version, Records, Keys), Opts1}.
 
 -doc """
 Takes records of a zone, such as those of an RRSet, through `m:erldns_zone_pipeline`.
@@ -179,10 +194,21 @@ and `version` to `<<>>` unless `Opts` sets them. Returns the records, sorted and
 -spec decode_records(Entries, Opts) -> [dns:rr()] when
     Entries :: [erldns_zone_pipeline:entry()],
     Opts :: #{zone_name := dns:dname(), atom() => dynamic()}.
-decode_records(Entries, #{zone_name := _} = Opts) ->
+decode_records(Entries, Opts) ->
+    {Records, _} = decode_records_with_opts(Entries, Opts),
+    Records.
+
+-doc """
+Takes records of a zone through `m:erldns_zone_pipeline`, as `decode_records/2` does, and returns
+them with the options the pipes leave once the decode is done.
+""".
+-spec decode_records_with_opts(Entries, Opts) -> {[dns:rr()], erldns_zone_pipeline:opts()} when
+    Entries :: [erldns_zone_pipeline:entry()],
+    Opts :: #{zone_name := dns:dname(), atom() => dynamic()}.
+decode_records_with_opts(Entries, #{zone_name := _} = Opts) ->
     CallOpts = maps:merge(#{scope => partial, version => ~""}, Opts),
-    Decoded = erldns_zone_pipeline:run(Entries, CallOpts),
-    finalize(Decoded).
+    {Decoded, Opts1} = erldns_zone_pipeline:run_with_opts(Entries, CallOpts),
+    {finalize(Decoded), Opts1}.
 
 -doc false.
 -spec start_link() -> supervisor:startlink_ret().

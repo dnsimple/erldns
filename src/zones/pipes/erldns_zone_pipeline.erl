@@ -12,7 +12,9 @@ either or both of two callbacks:
 
 The records go one by one through the `c:decode_record/3` of every pipe, in the order of the
 pipeline. Then all of them go through the `c:decode/2` of every pipe, in the same order. Both
-callbacks can change the options for what comes after them. A record that is neither a JSON object
+callbacks can change the options for what comes after them, and `erldns_zones:decode_with_opts/2`
+and `erldns_zones:decode_records_with_opts/2` hand the options the last pipe left to the caller. A
+record that is neither a JSON object
 nor a `t:dns:rr/0` is logged as unsupported and dropped before the pipes. After the last pipe, the
 records that aren't a `t:dns:rr/0` are logged as unsupported and dropped too, and the records are
 sorted and deduplicated.
@@ -247,8 +249,8 @@ Encode a record that this pipe decoded back to JSON, or return `not_implemented`
 -optional_callbacks([decode_record/3, decode/2, prepare/1, deps/0, encode/1]).
 
 -export([get_opts/0]).
--export([store/0, delete/0, run/2, encoders/0]).
--export([prepare/1, run/3]).
+-export([store/0, delete/0, run/2, run_with_opts/2, encoders/0]).
+-export([prepare/1, run/3, run_with_opts/3]).
 
 -doc """
 Get the options of the zone pipeline, as its pipes' `c:prepare/1` left them, and as every decode
@@ -276,6 +278,12 @@ run(Entries, CallOpts) ->
     Prepared = stored(),
     run(Entries, CallOpts, Prepared).
 
+-doc false.
+-spec run_with_opts([entry()], opts()) -> {[entry()], opts()}.
+run_with_opts(Entries, CallOpts) ->
+    Prepared = stored(),
+    run_with_opts(Entries, CallOpts, Prepared).
+
 %% The encode/1 of the pipes, in the order of the pipeline
 -doc false.
 -spec encoders() -> [erldns_zone_encoder:encoder()].
@@ -293,11 +301,17 @@ prepare(Pipes) ->
 
 -doc false.
 -spec run([entry()], opts(), prepared()) -> [entry()].
-run(Entries, CallOpts, {RecordDecoders, Decoders, _, PreparedOpts}) ->
+run(Entries, CallOpts, Prepared) ->
+    {Decoded, _} = run_with_opts(Entries, CallOpts, Prepared),
+    Decoded.
+
+%% The records with the options the last pipe left
+-doc false.
+-spec run_with_opts([entry()], opts(), prepared()) -> {[entry()], opts()}.
+run_with_opts(Entries, CallOpts, {RecordDecoders, Decoders, _, PreparedOpts}) ->
     Opts = maps:merge(PreparedOpts, CallOpts),
     {Records, Opts1} = decode_each(Entries, RecordDecoders, Opts, []),
-    {Decoded, _} = lists:foldl(fun decode_all/2, {Records, Opts1}, Decoders),
-    Decoded.
+    lists:foldl(fun decode_all/2, {Records, Opts1}, Decoders).
 
 %% Without a stored pipeline, as when its worker isn't running, the configured one is
 %% prepared for each call: running fewer pipes could load records that a pipe would have changed
