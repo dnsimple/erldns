@@ -126,11 +126,13 @@ groups() ->
             zone_pipeline_kept_by_worker,
             zone_pipeline_without_worker,
             context_options_read_when_worker_starts,
+            zone_pipeline_opts,
             zone_pipeline_from_config,
             zone_pipeline_bad_config,
             zone_pipes_see_zone_file_records,
             zone_pipe_encodes_its_records,
-            zone_pipes_see_the_callers_opts
+            zone_pipes_see_the_callers_opts,
+            zone_pipes_hand_back_their_opts
         ]},
         {cache, [], [
             cache_coverage,
@@ -181,6 +183,8 @@ groups() ->
             staged_zone_outlives_a_hand_off_while_its_owner_lives,
             staging_that_fails_leaves_nothing_behind,
             replaced_zone_is_dropped_after_the_grace_period,
+            dropped_generations_are_reported,
+            put_zone_rrsets_writes_them_at_once,
             lookups_match_the_select_reference
         ]}
     ].
@@ -1334,7 +1338,7 @@ zone_pipeline_pipe_returns(_) ->
     SeeKey = fun(Entries, #{key := value, scope := partial}) -> [b | Entries] end,
     Prepared = erldns_zone_pipeline:prepare([AddKey, SeeKey]),
     ?assertMatch(
-        [b, a],
+        {[b, a], #{key := value}},
         erldns_zone_pipeline:run(
             [], #{zone_name => ~"", version => ~"", scope => partial}, Prepared
         )
@@ -1449,6 +1453,21 @@ context_options_read_when_worker_starts(_) ->
     ?assertMatch(#zone{records = [_, _]}, erldns_zones:decode(Zone)),
     stop_pipeline_worker().
 
+%% The options as the worker prepared them, and without the worker as the configuration gives them
+zone_pipeline_opts(_) ->
+    Pipeline = ?SAMPLE_PIPELINE,
+    start_pipeline_worker(#{pipeline => Pipeline, context_options => #{allow => [~"AMS"]}}),
+    application:set_env(erldns, zones, #{
+        pipeline => Pipeline, context_options => #{allow => [~"TKO"]}
+    }),
+    ?assertMatch(#{scope := zone}, erldns_zone_pipeline:get_opts()),
+    ?assertEqual([~"AMS"], allowed_contexts(erldns_zone_pipeline:get_opts())),
+    stop_pipeline_worker(),
+    ?assertEqual([~"TKO"], allowed_contexts(erldns_zone_pipeline:get_opts())).
+
+allowed_contexts(#{erldns_zone_context := {_, Allow}}) ->
+    sets:to_list(Allow).
+
 zone_pipes_see_zone_file_records(Config) ->
     start_pipeline_worker(#{pipeline => [spy(), erldns_zone_standard]}),
     DataDir = proplists:get_value(data_dir, Config),
@@ -1496,6 +1515,24 @@ zone_pipes_see_the_callers_opts(_) ->
     ?assertMatch(#{zone_name := ~"example.com", version := ~"abc"}, spied_opts()),
     ?assertMatch([_], decode_records([Json])),
     ?assertMatch(#{scope := partial, version := ~"", zone_name := ~"example.com"}, spied_opts()),
+    stop_pipeline_worker().
+
+%% The options as the last pipe left them, after the records are sorted and deduplicated
+zone_pipes_hand_back_their_opts(_) ->
+    Count = fun(Entries, Opts) -> {Entries, Opts#{count => length(Entries)}} end,
+    start_pipeline_worker(#{pipeline => [erldns_zone_standard, Count]}),
+    Json = json_a(~"a.example.com"),
+    Zone = #{~"name" => ~"example.com", ~"sha" => ~"abc", ~"records" => [Json, Json]},
+    ?assertMatch(
+        {#zone{records = [_]}, #{count := 2, extra := 1, scope := zone}},
+        erldns_zones:decode_with_opts(Zone, #{extra => 1})
+    ),
+    ?assertMatch(
+        {[#dns_rr{}], #{count := 1, scope := partial, zone_name := ~"example.com"}},
+        erldns_zones:decode_records_with_opts([Json], #{zone_name => ~"example.com"})
+    ),
+    ?assertError({invalid_zone, [~"name"]}, erldns_zones:decode_with_opts(#{~"name" => x}, #{})),
+    ?assertError(invalid_zone, erldns_zones:decode_with_opts(not_a_zone, #{})),
     stop_pipeline_worker().
 
 %% A decode_record/3 after decoding keeps a key of the record's JSON in the options, and a
@@ -3458,6 +3495,65 @@ replaced_zone_is_dropped_after_the_grace_period(_) ->
     ?assertEqual(zone_not_found, erldns_zone_cache:lookup_zone(ZoneName)),
     eventually(fun() -> [] =:= erldns_zone_cache:get_zone_records(Deleted) end).
 
+%% Several RRSets of a name, one of them removed, with the sync counter of one only
+put_zone_rrsets_writes_them_at_once(_) ->
+    ZoneName = unique_name(rrsets),
+    Www = <<"www.", ZoneName/binary>>,
+    Txt = #dns_rr{
+        name = Www, type = ?DNS_TYPE_TXT, ttl = 300, data = #dns_rrdata_txt{txt = [~"a"]}
+    },
+    Aaaa = #dns_rr{
+        name = Www,
+        type = ?DNS_TYPE_AAAA,
+        ttl = 300,
+        data = #dns_rrdata_aaaa{ip = {8193, 3512, 0, 0, 0, 0, 0, 1}}
+    },
+    ok = erldns_zone_cache:put_zone(
+        {ZoneName, ~"v1", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 1}), Txt]}
+    ),
+    A = a_rr(Www, {192, 0, 2, 2}),
+    RRSets = [{?DNS_TYPE_A, [A]}, {?DNS_TYPE_AAAA, [Aaaa]}, {?DNS_TYPE_TXT, []}],
+    ?assertEqual(
+        ok, erldns_zone_cache:put_zone_rrsets(ZoneName, ~"v2", Www, RRSets, {?DNS_TYPE_A, 7})
+    ),
+    ?assertEqual(lists:sort([A, Aaaa]), lists:sort(erldns_zone_cache:get_records_by_name(Www))),
+    ?assertMatch(#zone{record_count = 3, version = ~"v2"}, erldns_zone_cache:lookup_zone(ZoneName)),
+    ?assertEqual(7, erldns_zone_cache:get_rrset_sync_counter(ZoneName, Www, ?DNS_TYPE_A)),
+    ?assertEqual(0, erldns_zone_cache:get_rrset_sync_counter(ZoneName, Www, ?DNS_TYPE_AAAA)),
+    ?assertEqual(
+        zone_not_found,
+        erldns_zone_cache:put_zone_rrsets(~"missing.test", ~"v1", Www, RRSets, {?DNS_TYPE_A, 1})
+    ).
+
+%% Each generation dropped, discarded, abandoned, replaced or deleted, is reported with its zone
+dropped_generations_are_reported(_) ->
+    {ok, _} = application:ensure_all_started(telemetry),
+    application:set_env(erldns, zones, #{grace_period => 0}),
+    Self = self(),
+    Report = fun(_, _, #{zone_labels := Labels, gen := Gen}, _) ->
+        Self ! {dropped, Labels, Gen}
+    end,
+    ok = telemetry:attach(?FUNCTION_NAME, [erldns, zone, drop], Report, nil),
+    ZoneName = unique_name(dropped),
+    Zone = fun(Version) -> {ZoneName, Version, [soa_rr(ZoneName)]} end,
+    ok = erldns_zone_cache:put_zone(Zone(~"v1")),
+    #zone{gen = Replaced} = erldns_zone_cache:lookup_zone(ZoneName),
+    #zone{gen = Discarded} = Staged = erldns_zone_cache:stage_zone(Zone(~"v2")),
+    ok = erldns_zone_cache:discard_zone(Staged),
+    #zone{gen = Abandoned} = stage_elsewhere(Zone(~"v3")),
+    ok = erldns_zone_cache:put_zone(Zone(~"v4")),
+    #zone{gen = Deleted} = erldns_zone_cache:lookup_zone(ZoneName),
+    erldns_zone_cache:delete_zone(ZoneName),
+    Dropped = [Discarded, Abandoned, Replaced, Deleted],
+    lists:foreach(fun(Gen) -> assert_dropped(dns_domain:split(ZoneName), Gen) end, Dropped),
+    telemetry:detach(?FUNCTION_NAME).
+
+assert_dropped(ZoneLabels, Gen) ->
+    receive
+        {dropped, ZoneLabels, Gen} -> ok
+    after 1000 -> ct:fail({not_dropped, Gen})
+    end.
+
 %% Compares every lookup built on lookup_element/4 and next/2 with the select-based helpers it
 %% replaced, kept below as ref_*, over every name, ancestor and missing child of two zones written
 %% back to back, so that next/2 runs off the first one into the second, and off the table's end.
@@ -4079,7 +4175,9 @@ run_pipes(Pipes) ->
 
 run_pipes(Pipes, Entries) ->
     Prepared = erldns_zone_pipeline:prepare(Pipes),
-    erldns_zone_pipeline:run(Entries, #{zone_name => ~"", version => ~"", scope => zone}, Prepared).
+    CallOpts = #{zone_name => ~"", version => ~"", scope => zone},
+    {Decoded, _} = erldns_zone_pipeline:run(Entries, CallOpts, Prepared),
+    Decoded.
 
 decode_records(Entries) ->
     erldns_zones:decode_records(Entries, #{zone_name => ~"example.com"}).

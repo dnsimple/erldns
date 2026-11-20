@@ -56,6 +56,23 @@ count := 1
 zone_name := dns:dname()
 zone_labels := dns:labels()
 ```
+
+### `[erldns, zone, drop]`
+
+Emitted once the records of a generation of a zone, its `#zone.gen`, are dropped: at once for a
+staged zone discarded, or whose process exited, and once the `grace_period` has passed for a zone
+replaced or deleted.
+
+- Measurements:
+```erlang
+count := 1
+```
+- Metadata:
+```erlang
+zone_name := dns:dname()
+zone_labels := dns:labels()
+gen := non_neg_integer()
+```
 """.
 
 %% This module's gen_server holds three tables:
@@ -169,6 +186,7 @@ It can be:
     delete_zone/1,
     update_zone_records_and_digest/3,
     put_zone_rrset/4,
+    put_zone_rrsets/5,
     delete_zone_rrset/5,
     put_rrset_sync_counter/4
 ]).
@@ -669,7 +687,7 @@ commit_zone(#zone{gen = Gen} = Zone) ->
 discard_zone(#zone{gen = Gen} = Zone) ->
     _ =
         case ets:take(erldns_staged_zones, Gen) of
-            [_] -> drop_generation(Gen);
+            [_] -> drop_generation(Zone#zone.labels, Gen);
             [] -> settled(Zone)
         end,
     ok.
@@ -773,6 +791,42 @@ put_zone_rrset({ZoneName, Digest, Records} = RRSet, RRFqdn, Type, Counter) ->
                     put_zone_rrset(RRSet, RRFqdn, Type, Counter)
             end;
         % if zone is not in cache, return not found
+        zone_not_found ->
+            zone_not_found
+    end.
+
+-doc #{group => ~"API: Mutations"}.
+-doc """
+Write several RRSets of a name into a zone at once, as `put_zone_rrset/4` does one, an RRSet with no
+records being removed.
+
+The zone's header changes once, with the digest, and only the sync counter of `Type` is set to
+`Counter`, so that a later update of one of the other RRSets still applies.
+""".
+-spec put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter}) -> ok | zone_not_found when
+    ZoneName :: dns:dname(),
+    Digest :: erldns_zones:version(),
+    RRFqdn :: dns:dname(),
+    RRSets :: [{dns:type(), [dns:rr()]}],
+    Type :: dns:type(),
+    Counter :: integer().
+put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter}) ->
+    ZQLabels = dns_domain:split(dns_domain:to_lower(ZoneName)),
+    case find_zone_in_cache(ZQLabels) of
+        #zone{} = Zone ->
+            Stage = fun
+                ({RRType, []}, Acc) -> stage_zone_rrset_deletion(Acc, RRFqdn, RRType);
+                ({RRType, Records}, Acc) -> stage_zone_rrset(Acc, RRFqdn, RRType, Records)
+            end,
+            Updated = lists:foldl(Stage, Zone, RRSets),
+            case replace_zone(Zone, Updated#zone{version = Digest}) of
+                true ->
+                    RecordLabels = dns_domain:split(dns_domain:to_lower(RRFqdn)),
+                    write_rrset_sync_counter(ZQLabels, RecordLabels, Type, Counter),
+                    ok;
+                false ->
+                    put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter})
+            end;
         zone_not_found ->
             zone_not_found
     end.
@@ -887,7 +941,7 @@ publish_staged(#zone{name = Name, labels = ZoneLabels, gen = Gen} = Zone) ->
                 #{what => zone_replaced, zone => Name, records_replaced => Count},
                 ?LOG_METADATA
             ),
-            retire_generation(Replaced);
+            retire_generation(ZoneLabels, Replaced);
         _ ->
             ok
     end,
@@ -905,7 +959,7 @@ settled(#zone{labels = ZoneLabels, gen = Gen}) ->
         Gen ->
             ok;
         _ ->
-            retire_generation(Gen),
+            retire_generation(ZoneLabels, Gen),
             {error, not_staged}
     end.
 
@@ -934,7 +988,7 @@ unpublish(ZoneLabels) ->
             case
                 ets:select_delete(erldns_zones_table, [{match_zone(ZoneLabels, Gen), [], [true]}])
             of
-                1 -> retire_generation(Gen);
+                1 -> retire_generation(ZoneLabels, Gen);
                 0 -> unpublish(ZoneLabels)
             end
     end.
@@ -956,9 +1010,9 @@ match_zone(ZoneLabels, Gen) ->
 with_authority(#zone{labels = ZoneLabels} = Zone) ->
     Zone#zone{authority = get_records_by_name_and_type(Zone, ZoneLabels, ?DNS_TYPE_SOA)}.
 
--spec retire_generation(generation()) -> ok.
-retire_generation(Gen) ->
-    erlang:send_after(grace_period(), ?MODULE, {drop_generation, Gen}),
+-spec retire_generation(dns:labels(), generation()) -> ok.
+retire_generation(ZoneLabels, Gen) ->
+    erlang:send_after(grace_period(), ?MODULE, {drop_generation, ZoneLabels, Gen}),
     ok.
 
 -spec grace_period() -> non_neg_integer().
@@ -1292,14 +1346,18 @@ drop_abandoned({Gen, ZoneLabels}) ->
                 #{what => staged_zone_dropped, zone => dns_domain:join(ZoneLabels, fqdn)},
                 ?LOG_METADATA
             ),
-            drop_generation(Gen);
+            drop_generation(ZoneLabels, Gen);
         [] ->
             ok
     end.
 
-drop_generation(Gen) ->
+-spec drop_generation(dns:labels(), generation()) -> ok.
+drop_generation(ZoneLabels, Gen) ->
     Pattern = {{{Gen, '_', '_'}, '_'}, [], [true]},
-    ets:select_delete(erldns_zone_records_typed, [Pattern]).
+    _ = ets:select_delete(erldns_zone_records_typed, [Pattern]),
+    ZoneName = dns_domain:join(ZoneLabels, fqdn),
+    Metadata = #{zone_name => ZoneName, zone_labels => ZoneLabels, gen => Gen},
+    telemetry:execute([erldns, zone, drop], #{count => 1}, Metadata).
 
 delete_zone_sync_counters(ZoneLabels) ->
     Pattern = {{{ZoneLabels, '_', '_'}, '_'}, [], [true]},
@@ -1338,8 +1396,8 @@ handle_cast(Cast, State) ->
 
 -doc false.
 -spec handle_info(dynamic(), owners()) -> {noreply, owners()}.
-handle_info({drop_generation, Gen}, State) ->
-    drop_generation(Gen),
+handle_info({drop_generation, ZoneLabels, Gen}, State) ->
+    drop_generation(ZoneLabels, Gen),
     {noreply, State};
 handle_info({'DOWN', _Ref, process, Owner, _Reason}, Owners) ->
     Staged = ets:select(erldns_staged_zones, [{{'$1', '$2', Owner}, [], [{{'$1', '$2'}}]}]),
