@@ -186,6 +186,7 @@ It can be:
     delete_zone/1,
     update_zone_records_and_digest/3,
     put_zone_rrset/4,
+    put_zone_rrsets/5,
     delete_zone_rrset/5,
     put_rrset_sync_counter/4
 ]).
@@ -790,6 +791,42 @@ put_zone_rrset({ZoneName, Digest, Records} = RRSet, RRFqdn, Type, Counter) ->
                     put_zone_rrset(RRSet, RRFqdn, Type, Counter)
             end;
         % if zone is not in cache, return not found
+        zone_not_found ->
+            zone_not_found
+    end.
+
+-doc #{group => ~"API: Mutations"}.
+-doc """
+Write several RRSets of a name into a zone at once, as `put_zone_rrset/4` does one, an RRSet with no
+records being removed.
+
+The zone's header changes once, with the digest, and only the sync counter of `Type` is set to
+`Counter`, so that a later update of one of the other RRSets still applies.
+""".
+-spec put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter}) -> ok | zone_not_found when
+    ZoneName :: dns:dname(),
+    Digest :: erldns_zones:version(),
+    RRFqdn :: dns:dname(),
+    RRSets :: [{dns:type(), [dns:rr()]}],
+    Type :: dns:type(),
+    Counter :: integer().
+put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter}) ->
+    ZQLabels = dns_domain:split(dns_domain:to_lower(ZoneName)),
+    case find_zone_in_cache(ZQLabels) of
+        #zone{} = Zone ->
+            Stage = fun
+                ({RRType, []}, Acc) -> stage_zone_rrset_deletion(Acc, RRFqdn, RRType);
+                ({RRType, Records}, Acc) -> stage_zone_rrset(Acc, RRFqdn, RRType, Records)
+            end,
+            Updated = lists:foldl(Stage, Zone, RRSets),
+            case replace_zone(Zone, Updated#zone{version = Digest}) of
+                true ->
+                    RecordLabels = dns_domain:split(dns_domain:to_lower(RRFqdn)),
+                    write_rrset_sync_counter(ZQLabels, RecordLabels, Type, Counter),
+                    ok;
+                false ->
+                    put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter})
+            end;
         zone_not_found ->
             zone_not_found
     end.

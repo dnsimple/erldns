@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `erldns_zones:decode_with_opts/2` and `erldns_zones:decode_records_with_opts/2` also return the
   options the zone pipes leave, so that a pipe can hand what it finds back to the caller.
 - `[erldns, zone, drop]` telemetry event, once the records of a generation of a zone are dropped.
+- `erldns_zone_cache:put_zone_rrsets/5` writes several RRSets of a name at once, moving the sync
+  counter of one of them.
 
 ## v13.0.0
 

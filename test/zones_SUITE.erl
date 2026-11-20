@@ -183,6 +183,7 @@ groups() ->
             staging_that_fails_leaves_nothing_behind,
             replaced_zone_is_dropped_after_the_grace_period,
             dropped_generations_are_reported,
+            put_zone_rrsets_writes_them_at_once,
             lookups_match_the_select_reference
         ]}
     ].
@@ -3472,6 +3473,36 @@ replaced_zone_is_dropped_after_the_grace_period(_) ->
     erldns_zone_cache:delete_zone(ZoneName),
     ?assertEqual(zone_not_found, erldns_zone_cache:lookup_zone(ZoneName)),
     eventually(fun() -> [] =:= erldns_zone_cache:get_zone_records(Deleted) end).
+
+%% Several RRSets of a name, one of them removed, with the sync counter of one only
+put_zone_rrsets_writes_them_at_once(_) ->
+    ZoneName = unique_name(rrsets),
+    Www = <<"www.", ZoneName/binary>>,
+    Txt = #dns_rr{
+        name = Www, type = ?DNS_TYPE_TXT, ttl = 300, data = #dns_rrdata_txt{txt = [~"a"]}
+    },
+    Aaaa = #dns_rr{
+        name = Www,
+        type = ?DNS_TYPE_AAAA,
+        ttl = 300,
+        data = #dns_rrdata_aaaa{ip = {8193, 3512, 0, 0, 0, 0, 0, 1}}
+    },
+    ok = erldns_zone_cache:put_zone(
+        {ZoneName, ~"v1", [soa_rr(ZoneName), a_rr(Www, {192, 0, 2, 1}), Txt]}
+    ),
+    A = a_rr(Www, {192, 0, 2, 2}),
+    RRSets = [{?DNS_TYPE_A, [A]}, {?DNS_TYPE_AAAA, [Aaaa]}, {?DNS_TYPE_TXT, []}],
+    ?assertEqual(
+        ok, erldns_zone_cache:put_zone_rrsets(ZoneName, ~"v2", Www, RRSets, {?DNS_TYPE_A, 7})
+    ),
+    ?assertEqual(lists:sort([A, Aaaa]), lists:sort(erldns_zone_cache:get_records_by_name(Www))),
+    ?assertMatch(#zone{record_count = 3, version = ~"v2"}, erldns_zone_cache:lookup_zone(ZoneName)),
+    ?assertEqual(7, erldns_zone_cache:get_rrset_sync_counter(ZoneName, Www, ?DNS_TYPE_A)),
+    ?assertEqual(0, erldns_zone_cache:get_rrset_sync_counter(ZoneName, Www, ?DNS_TYPE_AAAA)),
+    ?assertEqual(
+        zone_not_found,
+        erldns_zone_cache:put_zone_rrsets(~"missing.test", ~"v1", Www, RRSets, {?DNS_TYPE_A, 1})
+    ).
 
 %% Each generation dropped, discarded, abandoned, replaced or deleted, is reported with its zone
 dropped_generations_are_reported(_) ->
