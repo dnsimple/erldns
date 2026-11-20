@@ -182,6 +182,7 @@ groups() ->
             staged_zone_outlives_a_hand_off_while_its_owner_lives,
             staging_that_fails_leaves_nothing_behind,
             replaced_zone_is_dropped_after_the_grace_period,
+            dropped_generations_are_reported,
             lookups_match_the_select_reference
         ]}
     ].
@@ -3471,6 +3472,35 @@ replaced_zone_is_dropped_after_the_grace_period(_) ->
     erldns_zone_cache:delete_zone(ZoneName),
     ?assertEqual(zone_not_found, erldns_zone_cache:lookup_zone(ZoneName)),
     eventually(fun() -> [] =:= erldns_zone_cache:get_zone_records(Deleted) end).
+
+%% Each generation dropped, discarded, abandoned, replaced or deleted, is reported with its zone
+dropped_generations_are_reported(_) ->
+    {ok, _} = application:ensure_all_started(telemetry),
+    application:set_env(erldns, zones, #{grace_period => 0}),
+    Self = self(),
+    Report = fun(_, _, #{zone_labels := Labels, gen := Gen}, _) ->
+        Self ! {dropped, Labels, Gen}
+    end,
+    ok = telemetry:attach(?FUNCTION_NAME, [erldns, zone, drop], Report, nil),
+    ZoneName = unique_name(dropped),
+    Zone = fun(Version) -> {ZoneName, Version, [soa_rr(ZoneName)]} end,
+    ok = erldns_zone_cache:put_zone(Zone(~"v1")),
+    #zone{gen = Replaced} = erldns_zone_cache:lookup_zone(ZoneName),
+    #zone{gen = Discarded} = Staged = erldns_zone_cache:stage_zone(Zone(~"v2")),
+    ok = erldns_zone_cache:discard_zone(Staged),
+    #zone{gen = Abandoned} = stage_elsewhere(Zone(~"v3")),
+    ok = erldns_zone_cache:put_zone(Zone(~"v4")),
+    #zone{gen = Deleted} = erldns_zone_cache:lookup_zone(ZoneName),
+    erldns_zone_cache:delete_zone(ZoneName),
+    Dropped = [Discarded, Abandoned, Replaced, Deleted],
+    lists:foreach(fun(Gen) -> assert_dropped(dns_domain:split(ZoneName), Gen) end, Dropped),
+    telemetry:detach(?FUNCTION_NAME).
+
+assert_dropped(ZoneLabels, Gen) ->
+    receive
+        {dropped, ZoneLabels, Gen} -> ok
+    after 1000 -> ct:fail({not_dropped, Gen})
+    end.
 
 %% Compares every lookup built on lookup_element/4 and next/2 with the select-based helpers it
 %% replaced, kept below as ref_*, over every name, ancestor and missing child of two zones written

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `erldns_zone_pipeline:get_opts/0` returns the zone pipeline's prepared options.
 - `erldns_zones:decode_with_opts/2` and `erldns_zones:decode_records_with_opts/2` also return the
   options the zone pipes leave, so that a pipe can hand what it finds back to the caller.
+- `[erldns, zone, drop]` telemetry event, once the records of a generation of a zone are dropped.
 
 ## v13.0.0
 
