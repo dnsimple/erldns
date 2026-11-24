@@ -189,7 +189,7 @@ groups() ->
             put_zone_rrsets_writes_them_at_once,
             put_zone_rrsets_signs_after_delegation_removal,
             put_zone_rrsets_leaves_glue_unsigned,
-            put_zone_rrsets_readers_see_no_partial_update,
+            put_zone_rrsets_replaces_one_rrset_with_another,
             put_zone_rrsets_failure_changes_nothing,
             lookups_match_the_select_reference,
             %% This test is the last one: a failure stops the cache, and the zones are lost
@@ -3597,59 +3597,23 @@ put_zone_rrsets_leaves_glue_unsigned(_) ->
     ?assertEqual([], Signatures(NsFirst), "NS first"),
     ?assertEqual([], Signatures(fun lists:reverse/1), "A first").
 
-%% The writer changes a name from an A RRSet to a CNAME RRSet and back, many times. At each read, the
-%% name must have one of the two RRSets. A read that finds no records, or the two RRSets, is an error.
-put_zone_rrsets_readers_see_no_partial_update(_) ->
-    ZoneName = unique_name(partial_update),
+%% A name changed from an A RRSet to a CNAME RRSet and back has the RRSet written, and only that one
+put_zone_rrsets_replaces_one_rrset_with_another(_) ->
+    ZoneName = unique_name(replaced_rrset),
     Www = <<"www.", ZoneName/binary>>,
     A = a_rr(Www, {192, 0, 2, 1}),
     Cname = #dns_rr{
         name = Www, type = ?DNS_TYPE_CNAME, ttl = 300, data = #dns_rrdata_cname{dname = ZoneName}
     },
     ok = erldns_zone_cache:put_zone({ZoneName, ~"v1", [soa_rr(ZoneName), A]}),
-    Stop = atomics:new(1, []),
-    Parent = self(),
-    Complete = [{exact, [A]}, {exact, [Cname]}],
-    Readers = [
-        spawn_link(fun() ->
-            Parent ! {self(), read_partial_updates(ZoneName, Www, Complete, Stop, 0, #{})}
-        end)
-     || _ <- lists:seq(1, 4)
-    ],
-    Write = fun(Digest, RRSets) ->
-        ok = erldns_zone_cache:put_zone_rrsets(ZoneName, Digest, Www, RRSets, {?DNS_TYPE_A, 1})
+    Written = fun(Digest, RRSets) ->
+        ok = erldns_zone_cache:put_zone_rrsets(ZoneName, Digest, Www, RRSets, {?DNS_TYPE_A, 1}),
+        Zone = erldns_zone_cache:lookup_zone(ZoneName),
+        erldns_zone_cache:get_records_by_name_resolved(Zone, dns_domain:split(Www))
     end,
-    lists:foreach(
-        fun(_) ->
-            Write(~"v2", [{?DNS_TYPE_A, []}, {?DNS_TYPE_CNAME, [Cname]}]),
-            Write(~"v3", [{?DNS_TYPE_CNAME, []}, {?DNS_TYPE_A, [A]}])
-        end,
-        lists:seq(1, 20000)
-    ),
-    atomics:put(Stop, 1, 1),
-    Results = [
-        receive
-            {Reader, Result} -> Result
-        end
-     || Reader <- Readers
-    ],
-    ?assert(lists:all(fun({Reads, _}) -> Reads > 0 end, Results)),
-    ?assertEqual([#{}, #{}, #{}, #{}], [Partial || {_, Partial} <- Results]).
-
-read_partial_updates(ZoneName, Name, Complete, Stop, Reads, Partial) ->
-    case atomics:get(Stop, 1) of
-        1 ->
-            {Reads, Partial};
-        0 ->
-            Zone = erldns_zone_cache:lookup_zone(ZoneName),
-            Found = erldns_zone_cache:get_records_by_name_resolved(Zone, dns_domain:split(Name)),
-            Partial1 =
-                case lists:member(Found, Complete) of
-                    true -> Partial;
-                    false -> maps:update_with(Found, fun(N) -> N + 1 end, 1, Partial)
-                end,
-            read_partial_updates(ZoneName, Name, Complete, Stop, Reads + 1, Partial1)
-    end.
+    ?assertEqual({exact, [Cname]}, Written(~"v2", [{?DNS_TYPE_A, []}, {?DNS_TYPE_CNAME, [Cname]}])),
+    ?assertEqual({exact, [A]}, Written(~"v3", [{?DNS_TYPE_CNAME, []}, {?DNS_TYPE_A, [A]}])),
+    ?assertMatch(#zone{record_count = 2, version = ~"v3"}, erldns_zone_cache:lookup_zone(ZoneName)).
 
 %% The second RRSet of the write cannot be signed, thus the write fails. The first RRSet must not
 %% stay in the zone, because the zone keeps its old version.

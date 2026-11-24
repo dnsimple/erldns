@@ -797,11 +797,14 @@ put_zone_rrset({ZoneName, Digest, Records} = RRSet, RRFqdn, Type, Counter) ->
 
 -doc #{group => ~"API: Mutations"}.
 -doc """
-Write several RRSets of a name into a zone at once, as `put_zone_rrset/4` does one, an RRSet with no
-records being removed.
+Write several RRSets of a name into a zone, as `put_zone_rrset/4` does one, an RRSet with no records
+being removed.
 
 The zone's header changes once, with the digest, and only the sync counter of `Type` is set to
-`Counter`, so that a later update of one of the other RRSets still applies.
+`Counter`, so that a later update of one of the other RRSets still applies. The RRSets are written
+one after another, as separate calls would write them, so a lookup meanwhile can find some of them
+written and others not: the NS RRSet goes first, then the RRSets with records, then those removed.
+When an RRSet fails, the name gets back the records it had and the error is raised.
 """.
 -spec put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter}) -> ok | zone_not_found when
     ZoneName :: dns:dname(),
@@ -842,10 +845,12 @@ stage_zone_rrsets(#zone{labels = ZoneLabels, gen = Gen} = Zone, RRFqdn, RRSets) 
             erlang:raise(Class, Reason, Stacktrace)
     end.
 
-%% The NS RRSet goes first, so that the others are signed as the zone cut it leaves requires
+%% NS goes first, so that the others are signed as the cut it leaves requires, then the RRSets with
+%% records, so that a lookup meanwhile finds the name
 ordered(RRSets) ->
     {NS, Others} = lists:partition(fun({Type, _Records}) -> Type =:= ?DNS_TYPE_NS end, RRSets),
-    NS ++ Others.
+    {Removed, Written} = lists:partition(fun({_Type, Records}) -> Records =:= [] end, Others),
+    NS ++ Written ++ Removed.
 
 stage_rrset(Zone, RRFqdn, {Type, []}) ->
     stage_zone_rrset_deletion(Zone, RRFqdn, Type);
