@@ -834,17 +834,19 @@ put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter}) ->
 stage_zone_rrsets(Zone, RRFqdn, [RRSet]) ->
     stage_rrset(Zone, RRFqdn, RRSet);
 %% The header is swapped only once every RRSet is written, so an RRSet that fails gives the name
-%% back the records it had
+%% back the records it had: the RRSets written and its RRSIG records, the only ones a write changes
 stage_zone_rrsets(#zone{labels = ZoneLabels, gen = Gen} = Zone, RRFqdn, RRSets) ->
     RecordLabels = dns_domain:split(dns_domain:to_lower(RRFqdn)),
-    Name = {{Gen, reduce_record_labels(ZoneLabels, RecordLabels), '_'}, '_'},
-    Before = ets:select(erldns_zone_records_typed, [{Name, [], ['$_']}]),
+    ReducedLabels = reduce_record_labels(ZoneLabels, RecordLabels),
+    Types = lists:usort([?DNS_TYPE_RRSIG | [Type || {Type, _Records} <- RRSets]]),
+    Keys = [{Gen, ReducedLabels, Type} || Type <- Types],
+    Before = lists:append([ets:lookup(erldns_zone_records_typed, Key) || Key <- Keys]),
     try
         lists:foldl(fun(RRSet, Acc) -> stage_rrset(Acc, RRFqdn, RRSet) end, Zone, ordered(RRSets))
     catch
         Class:Reason:Stacktrace ->
-            _ = ets:select_delete(erldns_zone_records_typed, [{Name, [], [true]}]),
-            true = ets:insert(erldns_zone_records_typed, Before),
+            [ets:delete(erldns_zone_records_typed, Key) || Key <- Keys],
+            ets:insert(erldns_zone_records_typed, Before),
             erlang:raise(Class, Reason, Stacktrace)
     end.
 
