@@ -61,7 +61,7 @@ zone_labels := dns:labels()
 
 Emitted once the records of a generation of a zone, its `#zone.gen`, are dropped: at once for a
 staged zone discarded, or whose process exited, and once the `grace_period` has passed for a zone
-replaced or deleted.
+replaced or deleted. It is emitted once for a generation, and not for one that has no records.
 
 - Measurements:
 ```erlang
@@ -1351,12 +1351,16 @@ drop_abandoned({Gen, ZoneLabels}) ->
             ok
     end.
 
-%% The labels come from a caller's header when it settles one, so they may not be labels at all
+%% A generation settled again after its drop, or one the cache never made, has no records left: only
+%% the drop that removes them is reported. The labels come from a caller's header when it settles
+%% one, so they may not be labels at all.
 -spec drop_generation(dns:labels() | undefined, generation()) -> ok.
 drop_generation(ZoneLabels, Gen) ->
     Pattern = {{{Gen, '_', '_'}, '_'}, [], [true]},
-    _ = ets:select_delete(erldns_zone_records_typed, [Pattern]),
-    report_drop(ZoneLabels, Gen).
+    case ets:select_delete(erldns_zone_records_typed, [Pattern]) of
+        0 -> ok;
+        _Dropped -> report_drop(ZoneLabels, Gen)
+    end.
 
 report_drop(ZoneLabels, Gen) when is_list(ZoneLabels) ->
     ZoneName = dns_domain:join(ZoneLabels, fqdn),
