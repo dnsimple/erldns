@@ -96,6 +96,7 @@ groups() ->
             zone_pipeline_leaves_out_disabled_pipes,
             zone_pipeline_checks_deps,
             zone_pipeline_pipe_returns,
+            zone_pipeline_run_requires_its_keys,
             zone_record_pipes_run_first,
             decode_records_of_a_partial_zone,
             encode_meta_to_json,
@@ -184,8 +185,15 @@ groups() ->
             staging_that_fails_leaves_nothing_behind,
             replaced_zone_is_dropped_after_the_grace_period,
             dropped_generations_are_reported,
+            drop_event_is_emitted_one_time,
             put_zone_rrsets_writes_them_at_once,
-            lookups_match_the_select_reference
+            put_zone_rrsets_signs_after_delegation_removal,
+            put_zone_rrsets_leaves_glue_unsigned,
+            put_zone_rrsets_readers_see_no_partial_update,
+            put_zone_rrsets_failure_changes_nothing,
+            lookups_match_the_select_reference,
+            %% This test is the last one: a failure stops the cache, and the zones are lost
+            header_without_labels_spares_the_cache
         ]}
     ].
 
@@ -1357,6 +1365,12 @@ zone_pipeline_pipe_returns(_) ->
     ?assertError({bad_zone_pipe_return, Bad, foo}, run_pipes([Bad])),
     Raise = fun(_, _) -> erlang:error(boom) end,
     ?assertError(boom, run_pipes([Raise])).
+
+%% The run/3 function must refuse options that do not have zone_name and version. The pipe accepts
+%% all options, thus only run/3 can raise the error.
+zone_pipeline_run_requires_its_keys(_) ->
+    Prepared = erldns_zone_pipeline:prepare([fun(Entries, _) -> Entries end]),
+    ?assertError(function_clause, erldns_zone_pipeline:run([], #{scope => zone}, Prepared)).
 
 %% Every decode_record/3 runs before any decode/2, wherever they are in the pipeline, and gets the
 %% record as it was given along with the record as the pipes before it left it. The options it
@@ -3404,6 +3418,21 @@ replaced_zone_outlives_a_late_settle(_) ->
         {exact, [#dns_rr{data = #dns_rrdata_a{ip = {192, 0, 2, 2}}}]}, resolve_a(Second, Www)
     ).
 
+%% The cache refuses a header that has no labels. This must not stop the cache, because the cache
+%% owns the tables of all zones.
+header_without_labels_spares_the_cache(_) ->
+    application:set_env(erldns, zones, #{grace_period => 0}),
+    ZoneName = unique_name(bystander),
+    ok = erldns_zone_cache:put_zone({ZoneName, ~"v1", [soa_rr(ZoneName)]}),
+    Cache = whereis(erldns_zone_cache),
+    Ref = monitor(process, Cache),
+    ?assertEqual({error, not_staged}, erldns_zone_cache:commit_zone(#zone{name = ZoneName})),
+    receive
+        {'DOWN', Ref, process, Cache, Reason} -> ct:fail({cache_stopped, Reason})
+    after 500 -> demonitor(Ref, [flush])
+    end,
+    ?assertMatch(#zone{}, erldns_zone_cache:lookup_zone(ZoneName)).
+
 %% A process that stages a zone and dies before settling it would leave its records behind, out of
 %% reach of anything keyed by zone. A commit arriving later finds nothing to publish, and takes with
 %% it whatever was written into the generation meanwhile, once the grace period has passed.
@@ -3532,6 +3561,113 @@ put_zone_rrsets_writes_them_at_once(_) ->
         erldns_zone_cache:put_zone_rrsets(~"missing.test", ~"v1", Www, RRSets, {?DNS_TYPE_A, 1})
     ).
 
+%% The write removes a delegation and adds a TXT RRSet. The zone is then authoritative for the name,
+%% thus the TXT RRSet must have an RRSIG. The order of the RRSets in the list must not change this.
+put_zone_rrsets_signs_after_delegation_removal(_) ->
+    Signatures = fun(Order) ->
+        ZoneName = unique_name(undelegated),
+        Sub = <<"sub.", ZoneName/binary>>,
+        put_signed_zone(ZoneName, [ns_rr(Sub)]),
+        RRSets = Order([{?DNS_TYPE_NS, []}, {?DNS_TYPE_TXT, [txt_rr(Sub)]}]),
+        Counter = {?DNS_TYPE_TXT, 1},
+        ok = erldns_zone_cache:put_zone_rrsets(ZoneName, ~"v2", Sub, RRSets, Counter),
+        ?assertMatch([_], erldns_zone_cache:get_records_by_name_and_type(Sub, ?DNS_TYPE_TXT)),
+        ?assertEqual([], erldns_zone_cache:get_records_by_name_and_type(Sub, ?DNS_TYPE_NS)),
+        signatures_covering(Sub, ?DNS_TYPE_TXT)
+    end,
+    NsFirst = fun(RRSets) -> RRSets end,
+    ?assertMatch([_], Signatures(NsFirst), "NS first"),
+    ?assertMatch([_], Signatures(fun lists:reverse/1), "TXT first").
+
+%% The write adds a delegation and its glue. The glue is not authoritative, thus it must not have an
+%% RRSIG. The order of the RRSets in the list must not change this.
+put_zone_rrsets_leaves_glue_unsigned(_) ->
+    Signatures = fun(Order) ->
+        ZoneName = unique_name(delegated),
+        Sub = <<"sub.", ZoneName/binary>>,
+        put_signed_zone(ZoneName, []),
+        RRSets = Order([{?DNS_TYPE_NS, [ns_rr(Sub)]}, {?DNS_TYPE_A, [a_rr(Sub, {192, 0, 2, 1})]}]),
+        Counter = {?DNS_TYPE_NS, 1},
+        ok = erldns_zone_cache:put_zone_rrsets(ZoneName, ~"v2", Sub, RRSets, Counter),
+        ?assertMatch([_], erldns_zone_cache:get_records_by_name_and_type(Sub, ?DNS_TYPE_A)),
+        ?assertMatch([_], erldns_zone_cache:get_records_by_name_and_type(Sub, ?DNS_TYPE_NS)),
+        signatures_covering(Sub, ?DNS_TYPE_A)
+    end,
+    NsFirst = fun(RRSets) -> RRSets end,
+    ?assertEqual([], Signatures(NsFirst), "NS first"),
+    ?assertEqual([], Signatures(fun lists:reverse/1), "A first").
+
+%% The writer changes a name from an A RRSet to a CNAME RRSet and back, many times. At each read, the
+%% name must have one of the two RRSets. A read that finds no records, or the two RRSets, is an error.
+put_zone_rrsets_readers_see_no_partial_update(_) ->
+    ZoneName = unique_name(partial_update),
+    Www = <<"www.", ZoneName/binary>>,
+    A = a_rr(Www, {192, 0, 2, 1}),
+    Cname = #dns_rr{
+        name = Www, type = ?DNS_TYPE_CNAME, ttl = 300, data = #dns_rrdata_cname{dname = ZoneName}
+    },
+    ok = erldns_zone_cache:put_zone({ZoneName, ~"v1", [soa_rr(ZoneName), A]}),
+    Stop = atomics:new(1, []),
+    Parent = self(),
+    Complete = [{exact, [A]}, {exact, [Cname]}],
+    Readers = [
+        spawn_link(fun() ->
+            Parent ! {self(), read_partial_updates(ZoneName, Www, Complete, Stop, 0, #{})}
+        end)
+     || _ <- lists:seq(1, 4)
+    ],
+    Write = fun(Digest, RRSets) ->
+        ok = erldns_zone_cache:put_zone_rrsets(ZoneName, Digest, Www, RRSets, {?DNS_TYPE_A, 1})
+    end,
+    lists:foreach(
+        fun(_) ->
+            Write(~"v2", [{?DNS_TYPE_A, []}, {?DNS_TYPE_CNAME, [Cname]}]),
+            Write(~"v3", [{?DNS_TYPE_CNAME, []}, {?DNS_TYPE_A, [A]}])
+        end,
+        lists:seq(1, 20000)
+    ),
+    atomics:put(Stop, 1, 1),
+    Results = [
+        receive
+            {Reader, Result} -> Result
+        end
+     || Reader <- Readers
+    ],
+    ?assert(lists:all(fun({Reads, _}) -> Reads > 0 end, Results)),
+    ?assertEqual([#{}, #{}, #{}, #{}], [Partial || {_, Partial} <- Results]).
+
+read_partial_updates(ZoneName, Name, Complete, Stop, Reads, Partial) ->
+    case atomics:get(Stop, 1) of
+        1 ->
+            {Reads, Partial};
+        0 ->
+            Zone = erldns_zone_cache:lookup_zone(ZoneName),
+            Found = erldns_zone_cache:get_records_by_name_resolved(Zone, dns_domain:split(Name)),
+            Partial1 =
+                case lists:member(Found, Complete) of
+                    true -> Partial;
+                    false -> maps:update_with(Found, fun(N) -> N + 1 end, 1, Partial)
+                end,
+            read_partial_updates(ZoneName, Name, Complete, Stop, Reads + 1, Partial1)
+    end.
+
+%% The second RRSet of the write cannot be signed, thus the write fails. The first RRSet must not
+%% stay in the zone, because the zone keeps its old version.
+put_zone_rrsets_failure_changes_nothing(_) ->
+    ZoneName = unique_name(failed_update),
+    Www = <<"www.", ZoneName/binary>>,
+    Old = a_rr(Www, {192, 0, 2, 1}),
+    put_signed_zone(ZoneName, [Old]),
+    Before = erldns_zone_cache:lookup_zone(ZoneName),
+    Unsignable = (txt_rr(Www))#dns_rr{data = #dns_rrdata_txt{txt = not_a_text}},
+    RRSets = [{?DNS_TYPE_A, [a_rr(Www, {192, 0, 2, 2})]}, {?DNS_TYPE_TXT, [Unsignable]}],
+    ?assertError(
+        _, erldns_zone_cache:put_zone_rrsets(ZoneName, ~"v2", Www, RRSets, {?DNS_TYPE_A, 7})
+    ),
+    ?assertEqual(Before, erldns_zone_cache:lookup_zone(ZoneName)),
+    ?assertEqual(0, erldns_zone_cache:get_rrset_sync_counter(ZoneName, Www, ?DNS_TYPE_A)),
+    ?assertEqual([Old], erldns_zone_cache:get_records_by_name_and_type(Www, ?DNS_TYPE_A)).
+
 %% Each generation dropped, discarded, abandoned, replaced or deleted, is reported with its zone
 dropped_generations_are_reported(_) ->
     {ok, _} = application:ensure_all_started(telemetry),
@@ -3555,10 +3691,56 @@ dropped_generations_are_reported(_) ->
     lists:foreach(fun(Gen) -> assert_dropped(dns_domain:split(ZoneName), Gen) end, Dropped),
     telemetry:detach(?FUNCTION_NAME).
 
+%% Each generation must have one drop event only, although a process settles it again after the
+%% drop. A header that the cache did not make has no generation, thus it must have no drop event.
+drop_event_is_emitted_one_time(_) ->
+    {ok, _} = application:ensure_all_started(telemetry),
+    application:set_env(erldns, zones, #{grace_period => 0}),
+    Self = self(),
+    Report = fun(_, _, #{zone_labels := Labels, gen := Gen}, _) ->
+        Self ! {dropped, Labels, Gen}
+    end,
+    ok = telemetry:attach(?FUNCTION_NAME, [erldns, zone, drop], Report, nil),
+    try
+        Zone = fun(ZoneName) -> {ZoneName, ~"v1", [soa_rr(ZoneName)]} end,
+        Discarded = erldns_zone_cache:stage_zone(Zone(unique_name(discarded))),
+        ok = erldns_zone_cache:discard_zone(Discarded),
+        ok = erldns_zone_cache:discard_zone(Discarded),
+        Abandoned = stage_elsewhere(Zone(unique_name(abandoned))),
+        assert_dropped(Abandoned#zone.labels, Abandoned#zone.gen),
+        ?assertEqual({error, not_staged}, erldns_zone_cache:commit_zone(Abandoned)),
+        ReplacedName = unique_name(replaced),
+        Replaced = erldns_zone_cache:stage_zone(Zone(ReplacedName)),
+        ok = erldns_zone_cache:commit_zone(Replaced),
+        ok = erldns_zone_cache:put_zone(Zone(ReplacedName)),
+        ?assertEqual({error, not_staged}, erldns_zone_cache:commit_zone(Replaced)),
+        HandMade = erldns_zones:build_zone(unique_name(hand_made), ~"v1", [], []),
+        ?assertEqual({error, not_staged}, erldns_zone_cache:commit_zone(HandMade)),
+        ct:sleep(200),
+        %% The test already received one event of the abandoned generation
+        Counts = #{
+            discarded => count_dropped(Discarded),
+            abandoned => 1 + count_dropped(Abandoned),
+            replaced => count_dropped(Replaced),
+            hand_made => count_dropped(HandMade)
+        },
+        ?assertEqual(
+            #{discarded => 1, abandoned => 1, replaced => 1, hand_made => 0}, Counts
+        )
+    after
+        telemetry:detach(?FUNCTION_NAME)
+    end.
+
 assert_dropped(ZoneLabels, Gen) ->
     receive
         {dropped, ZoneLabels, Gen} -> ok
     after 1000 -> ct:fail({not_dropped, Gen})
+    end.
+
+count_dropped(#zone{labels = Labels, gen = Gen} = Zone) ->
+    receive
+        {dropped, Labels, Gen} -> 1 + count_dropped(Zone)
+    after 0 -> 0
     end.
 
 %% Compares every lookup built on lookup_element/4 and next/2 with the select-based helpers it
@@ -3792,6 +3974,34 @@ soa_rr(ZoneName) ->
 
 a_rr(Name, Ip) ->
     #dns_rr{name = Name, type = ?DNS_TYPE_A, ttl = 300, data = #dns_rrdata_a{ip = Ip}}.
+
+ns_rr(Name) ->
+    Data = #dns_rrdata_ns{dname = ~"ns1.example.net"},
+    #dns_rr{name = Name, type = ?DNS_TYPE_NS, ttl = 300, data = Data}.
+
+txt_rr(Name) ->
+    #dns_rr{name = Name, type = ?DNS_TYPE_TXT, ttl = 300, data = #dns_rrdata_txt{txt = [~"a"]}}.
+
+put_signed_zone(ZoneName, Records) ->
+    Keysets = erldns_zone_decoder:parse_keysets([
+        #{
+            ~"ksk" => ksk_private_key(),
+            ~"ksk_alg" => 8,
+            ~"ksk_keytag" => 37440,
+            ~"zsk" => zsk_private_key(),
+            ~"zsk_alg" => 8,
+            ~"zsk_keytag" => 49016,
+            ~"inception" => ~"2016-11-14T11:36:58Z",
+            ~"until" => ~"2017-02-12T11:36:58Z"
+        }
+    ]),
+    ok = erldns_zone_cache:put_zone({ZoneName, ~"v1", [soa_rr(ZoneName) | Records], Keysets}).
+
+signatures_covering(Name, Type) ->
+    lists:filter(
+        erldns_records:match_type_covered(Type),
+        erldns_zone_cache:get_records_by_name_and_type(Name, ?DNS_TYPE_RRSIG)
+    ).
 
 %% A zone whose www A RRSet was last written at `Counter`.
 zone_with_counted_rrset(TestCase, Counter) ->
