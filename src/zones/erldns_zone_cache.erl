@@ -687,7 +687,7 @@ commit_zone(#zone{gen = Gen} = Zone) ->
 discard_zone(#zone{gen = Gen} = Zone) ->
     _ =
         case ets:take(erldns_staged_zones, Gen) of
-            [_] -> drop_generation(Zone#zone.labels, Gen);
+            [{Gen, ZoneLabels, _Owner}] -> drop_generation(ZoneLabels, Gen);
             [] -> settled(Zone)
         end,
     ok.
@@ -1010,7 +1010,7 @@ match_zone(ZoneLabels, Gen) ->
 with_authority(#zone{labels = ZoneLabels} = Zone) ->
     Zone#zone{authority = get_records_by_name_and_type(Zone, ZoneLabels, ?DNS_TYPE_SOA)}.
 
--spec retire_generation(dns:labels(), generation()) -> ok.
+-spec retire_generation(dns:labels() | undefined, generation()) -> ok.
 retire_generation(ZoneLabels, Gen) ->
     erlang:send_after(grace_period(), ?MODULE, {drop_generation, ZoneLabels, Gen}),
     ok.
@@ -1351,13 +1351,19 @@ drop_abandoned({Gen, ZoneLabels}) ->
             ok
     end.
 
--spec drop_generation(dns:labels(), generation()) -> ok.
+%% The labels come from a caller's header when it settles one, so they may not be labels at all
+-spec drop_generation(dns:labels() | undefined, generation()) -> ok.
 drop_generation(ZoneLabels, Gen) ->
     Pattern = {{{Gen, '_', '_'}, '_'}, [], [true]},
     _ = ets:select_delete(erldns_zone_records_typed, [Pattern]),
+    report_drop(ZoneLabels, Gen).
+
+report_drop(ZoneLabels, Gen) when is_list(ZoneLabels) ->
     ZoneName = dns_domain:join(ZoneLabels, fqdn),
     Metadata = #{zone_name => ZoneName, zone_labels => ZoneLabels, gen => Gen},
-    telemetry:execute([erldns, zone, drop], #{count => 1}, Metadata).
+    telemetry:execute([erldns, zone, drop], #{count => 1}, Metadata);
+report_drop(_ZoneLabels, _Gen) ->
+    ok.
 
 delete_zone_sync_counters(ZoneLabels) ->
     Pattern = {{{ZoneLabels, '_', '_'}, '_'}, [], [true]},
