@@ -830,6 +830,9 @@ put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter}) ->
             zone_not_found
     end.
 
+%% One RRSet is signed before any of its records is written, so a failure leaves nothing to undo
+stage_zone_rrsets(Zone, RRFqdn, [RRSet]) ->
+    stage_rrset(Zone, RRFqdn, RRSet);
 %% The header is swapped only once every RRSet is written, so an RRSet that fails gives the name
 %% back the records it had
 stage_zone_rrsets(#zone{labels = ZoneLabels, gen = Gen} = Zone, RRFqdn, RRSets) ->

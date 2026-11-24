@@ -190,6 +190,7 @@ groups() ->
             put_zone_rrsets_leaves_glue_unsigned,
             put_zone_rrsets_replaces_one_rrset_with_another,
             put_zone_rrsets_failure_changes_nothing,
+            put_zone_rrsets_failure_of_one_rrset_changes_nothing,
             lookups_match_the_select_reference,
             %% This test is the last one: a failure stops the cache, and the zones are lost
             header_without_labels_spares_the_cache
@@ -3623,6 +3624,24 @@ put_zone_rrsets_failure_changes_nothing(_) ->
     ?assertEqual(Before, erldns_zone_cache:lookup_zone(ZoneName)),
     ?assertEqual(0, erldns_zone_cache:get_rrset_sync_counter(ZoneName, Www, ?DNS_TYPE_A)),
     ?assertEqual([Old], erldns_zone_cache:get_records_by_name_and_type(Www, ?DNS_TYPE_A)).
+
+%% A single RRSet that cannot be signed fails before any of its records is written
+put_zone_rrsets_failure_of_one_rrset_changes_nothing(_) ->
+    ZoneName = unique_name(failed_rrset),
+    Www = <<"www.", ZoneName/binary>>,
+    Old = txt_rr(Www),
+    put_signed_zone(ZoneName, [Old]),
+    Before = erldns_zone_cache:lookup_zone(ZoneName),
+    Unsignable = (txt_rr(Www))#dns_rr{data = #dns_rrdata_txt{txt = not_a_text}},
+    ?assertError(
+        _,
+        erldns_zone_cache:put_zone_rrsets(
+            ZoneName, ~"v2", Www, [{?DNS_TYPE_TXT, [Unsignable]}], {?DNS_TYPE_TXT, 7}
+        )
+    ),
+    ?assertEqual(Before, erldns_zone_cache:lookup_zone(ZoneName)),
+    ?assertEqual([Old], erldns_zone_cache:get_records_by_name_and_type(Www, ?DNS_TYPE_TXT)),
+    ?assertMatch([_], signatures_covering(Www, ?DNS_TYPE_TXT)).
 
 %% Each generation dropped, discarded, abandoned, replaced or deleted, is reported with its zone
 dropped_generations_are_reported(_) ->
