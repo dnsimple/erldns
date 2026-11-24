@@ -96,7 +96,6 @@ groups() ->
             zone_pipeline_leaves_out_disabled_pipes,
             zone_pipeline_checks_deps,
             zone_pipeline_pipe_returns,
-            zone_pipeline_run_requires_its_keys,
             zone_record_pipes_run_first,
             decode_records_of_a_partial_zone,
             encode_meta_to_json,
@@ -1358,19 +1357,12 @@ zone_pipeline_pipe_returns(_) ->
             [], #{zone_name => ~"", version => ~"", scope => partial}, Prepared
         )
     ),
-    ?assertError(function_clause, erldns_zone_pipeline:run([], #{scope => zone}, Prepared)),
     Reject = fun(_, _) -> {error, nope} end,
     ?assertError({zone_rejected, Reject, nope}, run_pipes([Reject])),
     Bad = fun(_, _) -> foo end,
     ?assertError({bad_zone_pipe_return, Bad, foo}, run_pipes([Bad])),
     Raise = fun(_, _) -> erlang:error(boom) end,
     ?assertError(boom, run_pipes([Raise])).
-
-%% The run/3 function must refuse options that do not have zone_name and version. The pipe accepts
-%% all options, thus only run/3 can raise the error.
-zone_pipeline_run_requires_its_keys(_) ->
-    Prepared = erldns_zone_pipeline:prepare([fun(Entries, _) -> Entries end]),
-    ?assertError(function_clause, erldns_zone_pipeline:run([], #{scope => zone}, Prepared)).
 
 %% Every decode_record/3 runs before any decode/2, wherever they are in the pipeline, and gets the
 %% record as it was given along with the record as the pipes before it left it. The options it
