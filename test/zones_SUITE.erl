@@ -227,7 +227,13 @@ end_per_group(codec, Config) ->
 end_per_group(_, _Config) ->
     application:unset_env(erldns, zones).
 
--spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) -> ct_suite:ct_config().
+-spec init_per_testcase(ct_suite:ct_testcase(), ct_suite:ct_config()) ->
+    ct_suite:ct_config() | {skip, string()}.
+init_per_testcase(mldsa44_keys, Config) ->
+    case lists:member(mldsa44, crypto:supports(public_keys)) of
+        true -> Config;
+        false -> {skip, "crypto has no ML-DSA-44: OTP 28.1+ on OpenSSL 3.5+"}
+    end;
 init_per_testcase(_, Config) ->
     Config.
 
@@ -708,7 +714,8 @@ keys_stay_out_of_parse_errors(_) ->
     ?assertError(invalid_zone, erldns_zones:decode(not_a_zone)).
 
 %% An ML-DSA-44 key loads as its expanded key, or as its seed where the PEM holds only that;
-%% another ML-DSA parameter set fails without the key in the error or its stacktrace
+%% another ML-DSA parameter set fails without the key in the error or its stacktrace.
+%% The keys are plain tuples, because OTP 28.0 has no 'ML-DSAPrivateKey' record
 mldsa44_keys(_) ->
     Seed = binary:copy(<<16#5A>>, 32),
     ExpandedKey = binary:copy(<<16#A5>>, 2560),
@@ -716,8 +723,8 @@ mldsa44_keys(_) ->
         Entry = public_key:pem_entry_encode('PrivateKeyInfo', Key),
         public_key:pem_encode([Entry])
     end,
-    SeedOnly = Pem(#'ML-DSAPrivateKey'{algorithm = mldsa44, seed = Seed}),
-    Both = Pem(#'ML-DSAPrivateKey'{algorithm = mldsa44, seed = Seed, expandedkey = ExpandedKey}),
+    SeedOnly = Pem({'ML-DSAPrivateKey', mldsa44, Seed, ~""}),
+    Both = Pem({'ML-DSAPrivateKey', mldsa44, Seed, ExpandedKey}),
     Keyset = #{
         ~"ksk" => SeedOnly,
         ~"ksk_alg" => 18,
@@ -732,7 +739,7 @@ mldsa44_keys(_) ->
         [#keyset{key_signing_key = Seed, zone_signing_key = ExpandedKey}],
         erldns_zone_decoder:parse_keysets([Keyset])
     ),
-    MlDsa65 = Pem(#'ML-DSAPrivateKey'{algorithm = mldsa65, seed = Seed}),
+    MlDsa65 = Pem({'ML-DSAPrivateKey', mldsa65, Seed, ~""}),
     Unsupported = fun() -> erldns_zone_decoder:parse_keysets([Keyset#{~"ksk" := MlDsa65}]) end,
     ?assertEqual(
         {unsupported_key, {'ML-DSAPrivateKey', mldsa65}},
