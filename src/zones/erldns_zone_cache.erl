@@ -814,11 +814,7 @@ put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter}) ->
     ZQLabels = dns_domain:split(dns_domain:to_lower(ZoneName)),
     case find_zone_in_cache(ZQLabels) of
         #zone{} = Zone ->
-            Stage = fun
-                ({RRType, []}, Acc) -> stage_zone_rrset_deletion(Acc, RRFqdn, RRType);
-                ({RRType, Records}, Acc) -> stage_zone_rrset(Acc, RRFqdn, RRType, Records)
-            end,
-            Updated = lists:foldl(Stage, Zone, RRSets),
+            Updated = stage_zone_rrsets(Zone, RRFqdn, RRSets),
             case replace_zone(Zone, Updated#zone{version = Digest}) of
                 true ->
                     RecordLabels = dns_domain:split(dns_domain:to_lower(RRFqdn)),
@@ -830,6 +826,26 @@ put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter}) ->
         zone_not_found ->
             zone_not_found
     end.
+
+%% The header is swapped only once every RRSet is written, so an RRSet that fails gives the name
+%% back the records it had
+stage_zone_rrsets(#zone{labels = ZoneLabels, gen = Gen} = Zone, RRFqdn, RRSets) ->
+    RecordLabels = dns_domain:split(dns_domain:to_lower(RRFqdn)),
+    Name = {{Gen, reduce_record_labels(ZoneLabels, RecordLabels), '_'}, '_'},
+    Before = ets:select(erldns_zone_records_typed, [{Name, [], ['$_']}]),
+    try
+        lists:foldl(fun(RRSet, Acc) -> stage_rrset(Acc, RRFqdn, RRSet) end, Zone, RRSets)
+    catch
+        Class:Reason:Stacktrace ->
+            _ = ets:select_delete(erldns_zone_records_typed, [{Name, [], [true]}]),
+            true = ets:insert(erldns_zone_records_typed, Before),
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
+
+stage_rrset(Zone, RRFqdn, {Type, []}) ->
+    stage_zone_rrset_deletion(Zone, RRFqdn, Type);
+stage_rrset(Zone, RRFqdn, {Type, Records}) ->
+    stage_zone_rrset(Zone, RRFqdn, Type, Records).
 
 -doc #{group => ~"API: Mutations"}.
 -doc """
