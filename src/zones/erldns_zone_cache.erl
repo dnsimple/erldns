@@ -834,13 +834,18 @@ stage_zone_rrsets(#zone{labels = ZoneLabels, gen = Gen} = Zone, RRFqdn, RRSets) 
     Name = {{Gen, reduce_record_labels(ZoneLabels, RecordLabels), '_'}, '_'},
     Before = ets:select(erldns_zone_records_typed, [{Name, [], ['$_']}]),
     try
-        lists:foldl(fun(RRSet, Acc) -> stage_rrset(Acc, RRFqdn, RRSet) end, Zone, RRSets)
+        lists:foldl(fun(RRSet, Acc) -> stage_rrset(Acc, RRFqdn, RRSet) end, Zone, ordered(RRSets))
     catch
         Class:Reason:Stacktrace ->
             _ = ets:select_delete(erldns_zone_records_typed, [{Name, [], [true]}]),
             true = ets:insert(erldns_zone_records_typed, Before),
             erlang:raise(Class, Reason, Stacktrace)
     end.
+
+%% The NS RRSet goes first, so that the others are signed as the zone cut it leaves requires
+ordered(RRSets) ->
+    {NS, Others} = lists:partition(fun({Type, _Records}) -> Type =:= ?DNS_TYPE_NS end, RRSets),
+    NS ++ Others.
 
 stage_rrset(Zone, RRFqdn, {Type, []}) ->
     stage_zone_rrset_deletion(Zone, RRFqdn, Type);
