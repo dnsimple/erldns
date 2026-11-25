@@ -61,7 +61,7 @@ zone_labels := dns:labels()
 
 Emitted once the records of a generation of a zone, its `#zone.gen`, are dropped: at once for a
 staged zone discarded, or whose process exited, and once the `grace_period` has passed for a zone
-replaced or deleted. It is emitted once for a generation, and not for one that has no records.
+replaced or deleted. It is emitted once for a generation, even one that has no records.
 
 - Measurements:
 ```erlang
@@ -981,16 +981,15 @@ publish_staged(#zone{name = Name, labels = ZoneLabels, gen = Gen} = Zone) ->
     ok.
 
 %% A generation whose staging entry is gone was published, or dropped. One that no header names now
-%% was dropped, or replaced while lookups may still be reading it, so it is dropped once the grace
-%% period has passed, as a replaced one is. That also drops records written into a dropped one
-%% since: nothing can publish it any more.
+%% was dropped or replaced, and whatever did that reports its drop: what is left are records written
+%% into it since, which nothing can publish any more, dropped once the grace period has passed.
 -spec settled(erldns:zone()) -> ok | {error, not_staged}.
 settled(#zone{labels = ZoneLabels, gen = Gen}) ->
     case ets:lookup_element(erldns_zones_table, ZoneLabels, #zone.gen, none) of
         Gen ->
             ok;
         _ ->
-            retire_generation(ZoneLabels, Gen),
+            erlang:send_after(grace_period(), ?MODULE, {delete_records, Gen}),
             {error, not_staged}
     end.
 
@@ -1041,7 +1040,7 @@ match_zone(ZoneLabels, Gen) ->
 with_authority(#zone{labels = ZoneLabels} = Zone) ->
     Zone#zone{authority = get_records_by_name_and_type(Zone, ZoneLabels, ?DNS_TYPE_SOA)}.
 
--spec retire_generation(dns:labels() | undefined, generation()) -> ok.
+-spec retire_generation(dns:labels(), generation()) -> ok.
 retire_generation(ZoneLabels, Gen) ->
     erlang:send_after(grace_period(), ?MODULE, {drop_generation, ZoneLabels, Gen}),
     ok.
@@ -1382,22 +1381,19 @@ drop_abandoned({Gen, ZoneLabels}) ->
             ok
     end.
 
-%% A generation settled again after its drop, or one the cache never made, has no records left: only
-%% the drop that removes them is reported. The labels come from a caller's header when it settles
-%% one, so they may not be labels at all.
--spec drop_generation(dns:labels() | undefined, generation()) -> ok.
+%% Only what took the staging entry, swapped the header out or removed it drops a generation, so the
+%% drop is reported once, whatever a settle has deleted before.
+-spec drop_generation(dns:labels(), generation()) -> ok.
 drop_generation(ZoneLabels, Gen) ->
-    Pattern = {{{Gen, '_', '_'}, '_'}, [], [true]},
-    case ets:select_delete(erldns_zone_records_typed, [Pattern]) of
-        0 -> ok;
-        _Dropped -> report_drop(ZoneLabels, Gen)
-    end.
-
-report_drop(ZoneLabels, Gen) when is_list(ZoneLabels) ->
+    delete_records(Gen),
     ZoneName = dns_domain:join(ZoneLabels, fqdn),
     Metadata = #{zone_name => ZoneName, zone_labels => ZoneLabels, gen => Gen},
-    telemetry:execute([erldns, zone, drop], #{count => 1}, Metadata);
-report_drop(_ZoneLabels, _Gen) ->
+    telemetry:execute([erldns, zone, drop], #{count => 1}, Metadata).
+
+-spec delete_records(generation()) -> ok.
+delete_records(Gen) ->
+    Pattern = {{{Gen, '_', '_'}, '_'}, [], [true]},
+    _ = ets:select_delete(erldns_zone_records_typed, [Pattern]),
     ok.
 
 delete_zone_sync_counters(ZoneLabels) ->
@@ -1439,6 +1435,9 @@ handle_cast(Cast, State) ->
 -spec handle_info(dynamic(), owners()) -> {noreply, owners()}.
 handle_info({drop_generation, ZoneLabels, Gen}, State) ->
     drop_generation(ZoneLabels, Gen),
+    {noreply, State};
+handle_info({delete_records, Gen}, State) ->
+    delete_records(Gen),
     {noreply, State};
 handle_info({'DOWN', _Ref, process, Owner, _Reason}, Owners) ->
     Staged = ets:select(erldns_staged_zones, [{{'$1', '$2', Owner}, [], [{{'$1', '$2'}}]}]),

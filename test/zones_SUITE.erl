@@ -185,6 +185,8 @@ groups() ->
             replaced_zone_is_dropped_after_the_grace_period,
             dropped_generations_are_reported,
             drop_event_is_emitted_one_time,
+            drop_event_is_emitted_one_time_after_a_write,
+            drop_event_outlives_an_early_settle,
             put_zone_rrsets_writes_them_at_once,
             put_zone_rrsets_signs_after_delegation_removal,
             put_zone_rrsets_leaves_glue_unsigned,
@@ -3702,6 +3704,53 @@ drop_event_is_emitted_one_time(_) ->
         ?assertEqual(
             #{discarded => 1, abandoned => 1, replaced => 1, hand_made => 0}, Counts
         )
+    after
+        telemetry:detach(?FUNCTION_NAME)
+    end.
+
+%% A write into a dropped generation must not cause a second drop event for that generation.
+drop_event_is_emitted_one_time_after_a_write(_) ->
+    {ok, _} = application:ensure_all_started(telemetry),
+    application:set_env(erldns, zones, #{grace_period => 0}),
+    Self = self(),
+    Report = fun(_, _, #{zone_labels := Labels, gen := Gen}, _) ->
+        Self ! {dropped, Labels, Gen}
+    end,
+    ok = telemetry:attach(?FUNCTION_NAME, [erldns, zone, drop], Report, nil),
+    try
+        ZoneName = unique_name(written_after_drop),
+        Www = <<"www.", ZoneName/binary>>,
+        Staged = erldns_zone_cache:stage_zone({ZoneName, ~"v1", [soa_rr(ZoneName)]}),
+        ok = erldns_zone_cache:discard_zone(Staged),
+        A = a_rr(Www, {192, 0, 2, 1}),
+        Written = erldns_zone_cache:stage_zone_rrset(Staged, Www, ?DNS_TYPE_A, [A]),
+        ?assertEqual({error, not_staged}, erldns_zone_cache:commit_zone(Written)),
+        ct:sleep(200),
+        ?assertEqual(1, count_dropped(Staged))
+    after
+        telemetry:detach(?FUNCTION_NAME)
+    end.
+
+%% A late commit of a replaced zone can drop its records before the replacement does. The drop that
+%% the replacement scheduled must still report the generation.
+drop_event_outlives_an_early_settle(_) ->
+    {ok, _} = application:ensure_all_started(telemetry),
+    Self = self(),
+    Report = fun(_, _, #{zone_labels := Labels, gen := Gen}, _) ->
+        Self ! {dropped, Labels, Gen}
+    end,
+    ok = telemetry:attach(?FUNCTION_NAME, [erldns, zone, drop], Report, nil),
+    try
+        ZoneName = unique_name(settled_early),
+        Zone = fun(Version) -> {ZoneName, Version, [soa_rr(ZoneName)]} end,
+        application:set_env(erldns, zones, #{grace_period => 300}),
+        ok = erldns_zone_cache:put_zone(Zone(~"v1")),
+        Replaced = erldns_zone_cache:lookup_zone(ZoneName),
+        ok = erldns_zone_cache:put_zone(Zone(~"v2")),
+        application:set_env(erldns, zones, #{grace_period => 0}),
+        ?assertEqual({error, not_staged}, erldns_zone_cache:commit_zone(Replaced)),
+        ct:sleep(600),
+        ?assertEqual(1, count_dropped(Replaced))
     after
         telemetry:detach(?FUNCTION_NAME)
     end.
