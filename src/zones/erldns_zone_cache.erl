@@ -56,6 +56,23 @@ count := 1
 zone_name := dns:dname()
 zone_labels := dns:labels()
 ```
+
+### `[erldns, zone, drop]`
+
+Emitted once the records of a generation of a zone, its `#zone.gen`, are dropped: at once for a
+staged zone discarded, or whose process exited, and once the `grace_period` has passed for a zone
+replaced or deleted. It is emitted once for a generation, even one that has no records.
+
+- Measurements:
+```erlang
+count := 1
+```
+- Metadata:
+```erlang
+zone_name := dns:dname()
+zone_labels := dns:labels()
+gen := non_neg_integer()
+```
 """.
 
 %% This module's gen_server holds three tables:
@@ -169,6 +186,7 @@ It can be:
     delete_zone/1,
     update_zone_records_and_digest/3,
     put_zone_rrset/4,
+    put_zone_rrsets/5,
     delete_zone_rrset/5,
     put_rrset_sync_counter/4
 ]).
@@ -669,7 +687,7 @@ commit_zone(#zone{gen = Gen} = Zone) ->
 discard_zone(#zone{gen = Gen} = Zone) ->
     _ =
         case ets:take(erldns_staged_zones, Gen) of
-            [_] -> drop_generation(Gen);
+            [{Gen, ZoneLabels, _Owner}] -> drop_generation(ZoneLabels, Gen);
             [] -> settled(Zone)
         end,
     ok.
@@ -776,6 +794,73 @@ put_zone_rrset({ZoneName, Digest, Records} = RRSet, RRFqdn, Type, Counter) ->
         zone_not_found ->
             zone_not_found
     end.
+
+-doc #{group => ~"API: Mutations"}.
+-doc """
+Write several RRSets of a name into a zone, as `put_zone_rrset/4` does one, an RRSet with no records
+being removed.
+
+The zone's header changes once, with the digest, and only the sync counter of `Type` is set to
+`Counter`, so that a later update of one of the other RRSets still applies. The RRSets are written
+one after another, as separate calls would write them, so a lookup meanwhile can find some of them
+written and others not: the NS RRSet goes first, then the RRSets with records, then those removed.
+When an RRSet fails, the name gets back the records it had and the error is raised.
+""".
+-spec put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter}) -> ok | zone_not_found when
+    ZoneName :: dns:dname(),
+    Digest :: erldns_zones:version(),
+    RRFqdn :: dns:dname(),
+    RRSets :: [{dns:type(), [dns:rr()]}],
+    Type :: dns:type(),
+    Counter :: integer().
+put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter}) ->
+    ZQLabels = dns_domain:split(dns_domain:to_lower(ZoneName)),
+    case find_zone_in_cache(ZQLabels) of
+        #zone{} = Zone ->
+            Updated = stage_zone_rrsets(Zone, RRFqdn, RRSets),
+            case replace_zone(Zone, Updated#zone{version = Digest}) of
+                true ->
+                    RecordLabels = dns_domain:split(dns_domain:to_lower(RRFqdn)),
+                    write_rrset_sync_counter(ZQLabels, RecordLabels, Type, Counter),
+                    ok;
+                false ->
+                    put_zone_rrsets(ZoneName, Digest, RRFqdn, RRSets, {Type, Counter})
+            end;
+        zone_not_found ->
+            zone_not_found
+    end.
+
+%% One RRSet is signed before any of its records is written, so a failure leaves nothing to undo
+stage_zone_rrsets(Zone, RRFqdn, [RRSet]) ->
+    stage_rrset(Zone, RRFqdn, RRSet);
+%% The header is swapped only once every RRSet is written, so an RRSet that fails gives the name
+%% back the records it had: the RRSets written and its RRSIG records, the only ones a write changes
+stage_zone_rrsets(#zone{labels = ZoneLabels, gen = Gen} = Zone, RRFqdn, RRSets) ->
+    RecordLabels = dns_domain:split(dns_domain:to_lower(RRFqdn)),
+    ReducedLabels = reduce_record_labels(ZoneLabels, RecordLabels),
+    Types = lists:usort([?DNS_TYPE_RRSIG | [Type || {Type, _Records} <- RRSets]]),
+    Keys = [{Gen, ReducedLabels, Type} || Type <- Types],
+    Before = lists:append([ets:lookup(erldns_zone_records_typed, Key) || Key <- Keys]),
+    try
+        lists:foldl(fun(RRSet, Acc) -> stage_rrset(Acc, RRFqdn, RRSet) end, Zone, ordered(RRSets))
+    catch
+        Class:Reason:Stacktrace ->
+            [ets:delete(erldns_zone_records_typed, Key) || Key <- Keys],
+            ets:insert(erldns_zone_records_typed, Before),
+            erlang:raise(Class, Reason, Stacktrace)
+    end.
+
+%% NS goes first, so that the others are signed as the cut it leaves requires, then the RRSets with
+%% records, so that a lookup meanwhile finds the name
+ordered(RRSets) ->
+    {NS, Others} = lists:partition(fun({Type, _Records}) -> Type =:= ?DNS_TYPE_NS end, RRSets),
+    {Removed, Written} = lists:partition(fun({_Type, Records}) -> Records =:= [] end, Others),
+    NS ++ Written ++ Removed.
+
+stage_rrset(Zone, RRFqdn, {Type, []}) ->
+    stage_zone_rrset_deletion(Zone, RRFqdn, Type);
+stage_rrset(Zone, RRFqdn, {Type, Records}) ->
+    stage_zone_rrset(Zone, RRFqdn, Type, Records).
 
 -doc #{group => ~"API: Mutations"}.
 -doc """
@@ -887,7 +972,7 @@ publish_staged(#zone{name = Name, labels = ZoneLabels, gen = Gen} = Zone) ->
                 #{what => zone_replaced, zone => Name, records_replaced => Count},
                 ?LOG_METADATA
             ),
-            retire_generation(Replaced);
+            retire_generation(ZoneLabels, Replaced);
         _ ->
             ok
     end,
@@ -896,16 +981,15 @@ publish_staged(#zone{name = Name, labels = ZoneLabels, gen = Gen} = Zone) ->
     ok.
 
 %% A generation whose staging entry is gone was published, or dropped. One that no header names now
-%% was dropped, or replaced while lookups may still be reading it, so it is dropped once the grace
-%% period has passed, as a replaced one is. That also drops records written into a dropped one
-%% since: nothing can publish it any more.
+%% was dropped or replaced, and whatever did that reports its drop: what is left are records written
+%% into it since, which nothing can publish any more, dropped once the grace period has passed.
 -spec settled(erldns:zone()) -> ok | {error, not_staged}.
 settled(#zone{labels = ZoneLabels, gen = Gen}) ->
     case ets:lookup_element(erldns_zones_table, ZoneLabels, #zone.gen, none) of
         Gen ->
             ok;
         _ ->
-            retire_generation(Gen),
+            erlang:send_after(grace_period(), ?MODULE, {delete_records, Gen}),
             {error, not_staged}
     end.
 
@@ -934,7 +1018,7 @@ unpublish(ZoneLabels) ->
             case
                 ets:select_delete(erldns_zones_table, [{match_zone(ZoneLabels, Gen), [], [true]}])
             of
-                1 -> retire_generation(Gen);
+                1 -> retire_generation(ZoneLabels, Gen);
                 0 -> unpublish(ZoneLabels)
             end
     end.
@@ -956,9 +1040,9 @@ match_zone(ZoneLabels, Gen) ->
 with_authority(#zone{labels = ZoneLabels} = Zone) ->
     Zone#zone{authority = get_records_by_name_and_type(Zone, ZoneLabels, ?DNS_TYPE_SOA)}.
 
--spec retire_generation(generation()) -> ok.
-retire_generation(Gen) ->
-    erlang:send_after(grace_period(), ?MODULE, {drop_generation, Gen}),
+-spec retire_generation(dns:labels(), generation()) -> ok.
+retire_generation(ZoneLabels, Gen) ->
+    erlang:send_after(grace_period(), ?MODULE, {drop_generation, ZoneLabels, Gen}),
     ok.
 
 -spec grace_period() -> non_neg_integer().
@@ -1292,14 +1376,25 @@ drop_abandoned({Gen, ZoneLabels}) ->
                 #{what => staged_zone_dropped, zone => dns_domain:join(ZoneLabels, fqdn)},
                 ?LOG_METADATA
             ),
-            drop_generation(Gen);
+            drop_generation(ZoneLabels, Gen);
         [] ->
             ok
     end.
 
-drop_generation(Gen) ->
+%% Only what took the staging entry, swapped the header out or removed it drops a generation, so the
+%% drop is reported once, whatever a settle has deleted before.
+-spec drop_generation(dns:labels(), generation()) -> ok.
+drop_generation(ZoneLabels, Gen) ->
+    delete_records(Gen),
+    ZoneName = dns_domain:join(ZoneLabels, fqdn),
+    Metadata = #{zone_name => ZoneName, zone_labels => ZoneLabels, gen => Gen},
+    telemetry:execute([erldns, zone, drop], #{count => 1}, Metadata).
+
+-spec delete_records(generation()) -> ok.
+delete_records(Gen) ->
     Pattern = {{{Gen, '_', '_'}, '_'}, [], [true]},
-    ets:select_delete(erldns_zone_records_typed, [Pattern]).
+    _ = ets:select_delete(erldns_zone_records_typed, [Pattern]),
+    ok.
 
 delete_zone_sync_counters(ZoneLabels) ->
     Pattern = {{{ZoneLabels, '_', '_'}, '_'}, [], [true]},
@@ -1338,8 +1433,11 @@ handle_cast(Cast, State) ->
 
 -doc false.
 -spec handle_info(dynamic(), owners()) -> {noreply, owners()}.
-handle_info({drop_generation, Gen}, State) ->
-    drop_generation(Gen),
+handle_info({drop_generation, ZoneLabels, Gen}, State) ->
+    drop_generation(ZoneLabels, Gen),
+    {noreply, State};
+handle_info({delete_records, Gen}, State) ->
+    delete_records(Gen),
     {noreply, State};
 handle_info({'DOWN', _Ref, process, Owner, _Reason}, Owners) ->
     Staged = ets:select(erldns_staged_zones, [{{'$1', '$2', Owner}, [], [{{'$1', '$2'}}]}]),
