@@ -6,9 +6,11 @@
 -define(MAX_PACKET_SIZE, 1232).
 -define(WIRE_ZONE, ~"wire.example").
 -define(WIRE_NAME, ~"www.wire.example").
+-define(SIGNED_ZONE, ~"signed.example").
 
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("dns_erlang/include/dns.hrl").
+-include_lib("erldns/include/erldns.hrl").
 
 -spec all() -> [ct_suite:ct_test_def()].
 all() ->
@@ -24,7 +26,8 @@ groups() ->
             {group, payload_size},
             {group, query_options},
             {group, ede_tests},
-            dnssec_extraction
+            dnssec_extraction,
+            compact_answers_extraction
         ]},
         {query_options, [parallel], [
             prepare_sets_no_query_options,
@@ -32,6 +35,7 @@ groups() ->
             query_options_keep_first_of_each_code,
             query_without_optrr_is_untouched,
             optrr_without_options_is_untouched,
+            co_bit_is_kept,
             query_records_are_dropped,
             unsupported_version_gets_badvers,
             add_option_to_optrr_anywhere,
@@ -82,7 +86,8 @@ wire_tests() ->
         wire_refused_carries_only_ede,
         wire_query_without_edns_gets_no_optrr,
         wire_query_without_question_gets_no_options,
-        wire_unsupported_version_gets_badvers
+        wire_unsupported_version_gets_badvers,
+        wire_compact_answers_restore_nxdomain
     ].
 
 wire_pipeline() ->
@@ -104,7 +109,7 @@ wire_pipeline() ->
 -spec init_per_group(ct_suite:ct_groupname(), ct_suite:ct_config()) -> ct_suite:ct_config().
 init_per_group(wire, Config) ->
     Env = [{use_root_hints, false}, {packet_pipeline, wire_pipeline()}],
-    app_helper:start_listening(Config, Env, [wire_zone()]);
+    app_helper:start_listening(Config, Env, [wire_zone(), signed_zone()]);
 init_per_group(Transport, Config) when Transport =:= udp; Transport =:= tcp ->
     [{transport, Transport} | Config];
 init_per_group(_, Config) ->
@@ -194,6 +199,15 @@ dnssec_extraction(_Config) ->
     ?assertNot(erldns_edns:dnssec_ok(NoDo)),
     ?assertNot(erldns_edns:dnssec_ok(NoOpt)).
 
+compact_answers_extraction(_Config) ->
+    Glue = #dns_rr{name = ~"ns1.example.com", type = ?DNS_TYPE_A},
+    Co = #dns_message{additional = [Glue, #dns_optrr{compact_answers = true}]},
+    NoCo = #dns_message{additional = [Glue, #dns_optrr{dnssec = true}]},
+    NoOpt = #dns_message{additional = [Glue]},
+    ?assert(erldns_edns:compact_answers(Co)),
+    ?assertNot(erldns_edns:compact_answers(NoCo)),
+    ?assertNot(erldns_edns:compact_answers(NoOpt)).
+
 %%% Query options
 
 prepare_sets_no_query_options(_) ->
@@ -231,6 +245,21 @@ query_without_optrr_is_untouched(_) ->
 optrr_without_options_is_untouched(_) ->
     Msg = query([#dns_optrr{udp_payload_size = 1232, dnssec = true}]),
     ?assertEqual(Msg, erldns_edns:call(Msg, edns_opts(udp))).
+
+%% RFC 9824 §5.1: the response to a query that sets CO sets it too.
+co_bit_is_kept(_) ->
+    OptRR = #dns_optrr{
+        udp_payload_size = 4096,
+        dnssec = true,
+        compact_answers = true,
+        data = [#dns_opt_cookie{client = <<1:64>>}]
+    },
+    ?assertMatch(
+        #dns_message{
+            additional = [#dns_optrr{udp_payload_size = 1232, compact_answers = true, data = []}]
+        },
+        element(1, erldns_edns:call(query([OptRR]), edns_opts(udp)))
+    ).
 
 %% The response's additional records are its own: only the OPT RR stays, and the header count with
 %% it, which pipes that stop the pipeline early rely on.
@@ -566,6 +595,46 @@ wire_unsupported_version_gets_badvers(Config) ->
         app_helper:exchange(Config, <<Prefix/binary, 1, Flags/binary, 0:16>>)
     ).
 
+%% RFC 9824 §5.1, end to end: DO and CO for a name a signed zone lacks get NXDOMAIN and CO, the
+%% NXNAME NSEC still proving it. The same query without CO keeps NOERROR, before or after the other
+%% is cached. Each transport asks its own name, so that neither is answered from the other's cache.
+wire_compact_answers_restore_nxdomain(Config) ->
+    Transport = atom_to_binary(proplists:get_value(transport, Config)),
+    Name = <<"missing-", Transport/binary, ".", ?SIGNED_ZONE/binary>>,
+    NxName = [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME],
+    Query = fun(CO) ->
+        OptRR = #dns_optrr{udp_payload_size = 1232, dnssec = true, compact_answers = CO},
+        #dns_message{
+            id = dns:random_id(),
+            qc = 1,
+            adc = 1,
+            questions = [#dns_query{name = Name, type = ?DNS_TYPE_A}],
+            additional = [OptRR]
+        }
+    end,
+    Cases = [
+        {false, ?DNS_RCODE_NOERROR},
+        {true, ?DNS_RCODE_NXDOMAIN},
+        {false, ?DNS_RCODE_NOERROR},
+        {true, ?DNS_RCODE_NXDOMAIN}
+    ],
+    [
+        ?assertMatch(
+            #dns_message{
+                rc = Rcode,
+                answers = [],
+                additional = [#dns_optrr{dnssec = true, compact_answers = CO}]
+            },
+            app_helper:exchange(Config, Query(CO))
+        )
+     || {CO, Rcode} <- Cases
+    ],
+    #dns_message{authority = Authority} = app_helper:exchange(Config, Query(true)),
+    ?assertMatch(
+        [#dns_rr{name = Name, data = #dns_rrdata_nsec{types = NxName}}],
+        [RR || #dns_rr{type = ?DNS_TYPE_NSEC} = RR <- Authority]
+    ).
+
 wire_query(Name, Options, DnssecOk) ->
     #dns_message{
         id = dns:random_id(),
@@ -576,24 +645,42 @@ wire_query(Name, Options, DnssecOk) ->
     }.
 
 wire_zone() ->
-    Soa = #dns_rr{
-        name = ?WIRE_ZONE,
+    A = #dns_rr{
+        name = ?WIRE_NAME, type = ?DNS_TYPE_A, ttl = 60, data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
+    },
+    erldns_zones:build_zone(?WIRE_ZONE, ~"digest", [soa(?WIRE_ZONE), A], []).
+
+%% Signed with a throwaway P-256 key: the tests read its denials, they don't validate them.
+signed_zone() ->
+    {_, Key} = crypto:generate_key(ecdh, secp256r1),
+    Now = erlang:system_time(second),
+    Keyset = #keyset{
+        key_signing_key = Key,
+        key_signing_key_tag = 1,
+        key_signing_alg = ?DNS_ALG_ECDSAP256SHA256,
+        zone_signing_key = Key,
+        zone_signing_key_tag = 1,
+        zone_signing_alg = ?DNS_ALG_ECDSAP256SHA256,
+        inception = Now - 3600,
+        valid_until = Now + 86400
+    },
+    erldns_zones:build_zone(?SIGNED_ZONE, ~"digest", [soa(?SIGNED_ZONE)], [Keyset]).
+
+soa(Zone) ->
+    #dns_rr{
+        name = Zone,
         type = ?DNS_TYPE_SOA,
         ttl = 3600,
         data = #dns_rrdata_soa{
-            mname = <<"ns1.", ?WIRE_ZONE/binary>>,
-            rname = <<"admin.", ?WIRE_ZONE/binary>>,
+            mname = <<"ns1.", Zone/binary>>,
+            rname = <<"admin.", Zone/binary>>,
             serial = 1,
             refresh = 3600,
             retry = 600,
             expire = 86400,
             minimum = 300
         }
-    },
-    A = #dns_rr{
-        name = ?WIRE_NAME, type = ?DNS_TYPE_A, ttl = 60, data = #dns_rrdata_a{ip = {192, 0, 2, 1}}
-    },
-    erldns_zones:build_zone(?WIRE_ZONE, ~"digest", [Soa, A], []).
+    }.
 
 def_opts() ->
     erldns_pipeline:def_opts().

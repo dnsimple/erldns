@@ -14,6 +14,9 @@ what the response would send back. This pipe makes it the response's:
   would claim support for it. A response only carries the options pipes add with `add_option/2`.
 - The extended RCODE is reset to 0.
 - The DO bit is kept, as it must be copied to the response (RFC 3225 §3).
+- The CO bit is kept: a server that implements compact denial and its signal sets it in the
+  response (RFC 9824 §5.1). With it, `m:erldns_dnssec` answers a DO query for a name that a signed
+  zone lacks with NXDOMAIN, not NOERROR.
 - A query with an EDNS version above 0 gets BADVERS, with no answer and no options, and the
   pipeline stops there (RFC 6891 §6.1.3).
 - Over UDP, the payload size is capped, see below.
@@ -49,7 +52,7 @@ limit at which the response is truncated.
 -define(MAX_PACKET_SIZE, 1232).
 
 -export([deps/0, prepare/1, call/2]).
--export([update_options/2, add_option/2, dnssec_ok/1]).
+-export([update_options/2, add_option/2, dnssec_ok/1, compact_answers/1]).
 -export([get_opts/1, get_ede_errors/1]).
 
 -doc """
@@ -111,6 +114,14 @@ add_option(Msg, Option) ->
 dnssec_ok(#dns_message{additional = Additional}) ->
     case lists:keyfind(dns_optrr, 1, Additional) of
         #dns_optrr{dnssec = DnssecOk} -> DnssecOk;
+        false -> false
+    end.
+
+-doc "Whether the message's OPT RR sets the CO bit (RFC 9824 §5.1).".
+-spec compact_answers(dns:message()) -> boolean().
+compact_answers(#dns_message{additional = Additional}) ->
+    case lists:keyfind(dns_optrr, 1, Additional) of
+        #dns_optrr{compact_answers = CompactAnswers} -> CompactAnswers;
         false -> false
     end.
 
