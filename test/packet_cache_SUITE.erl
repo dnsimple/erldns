@@ -18,6 +18,7 @@ all() ->
         answers_with_additional_records_are_hit,
         names_are_case_insensitive,
         query_options_do_not_split_entries,
+        compact_answers_split_entries,
         any_is_cached_per_transport
     ].
 
@@ -99,6 +100,23 @@ query_options_do_not_split_entries(_) ->
     {Hit, #{resolved := true}} = erldns_packet_cache:call(Msg1, opts(Msg1)),
     ?assertMatch(#dns_message{additional = [#dns_optrr{data = []}]}, Hit).
 
+%% RFC 9824 §5.1: the NXDOMAIN a query with CO gets is not served to one without it.
+compact_answers_split_entries(_) ->
+    start_cache(),
+    [Co, NoCo] = [
+        with_optrr(query(~"missing.example.com", ?DNS_TYPE_A), #dns_optrr{
+            dnssec = true, compact_answers = CO
+        })
+     || CO <- [true, false]
+    ],
+    {Msg1, Opts1} = erldns_packet_cache:call(Co, opts(Co)),
+    Answer = Msg1#dns_message{aa = true, rc = ?DNS_RCODE_NXDOMAIN},
+    {_, #{erldns_packet_cache := cached}} = erldns_packet_cache:call(Answer, Opts1),
+    ?assertMatch(
+        {_, #{erldns_packet_cache := {miss, _}}}, erldns_packet_cache:call(NoCo, opts(NoCo))
+    ),
+    ?assertMatch({Answer, #{resolved := true}}, erldns_packet_cache:call(Co, opts(Co))).
+
 %% A full answer to ANY over TCP is not served to UDP, where ANY is answered minimally.
 any_is_cached_per_transport(_) ->
     start_cache(),
@@ -112,9 +130,14 @@ any_is_cached_per_transport(_) ->
     ?assertMatch({Answer, #{resolved := true}}, erldns_packet_cache:call(Msg0, Tcp)).
 
 with_cookie(Msg, Client) ->
-    OptRR = #dns_optrr{data = [#dns_opt_cookie{client = <<Client:64>>}]},
-    {Msg1, _} = erldns_edns:call(Msg#dns_message{additional = [OptRR]}, def_opts()),
-    Msg1.
+    with_optrr(Msg, #dns_optrr{data = [#dns_opt_cookie{client = <<Client:64>>}]}).
+
+%% The query as erldns_edns leaves it for the pipes after it.
+with_optrr(Msg, OptRR) ->
+    case erldns_edns:call(Msg#dns_message{additional = [OptRR]}, def_opts()) of
+        {Msg1, _} -> Msg1;
+        Msg1 -> Msg1
+    end.
 
 test_calls() ->
     Msg0 = query(~"example.com", ?DNS_TYPE_A),

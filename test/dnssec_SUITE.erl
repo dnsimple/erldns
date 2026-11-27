@@ -48,6 +48,7 @@ all() ->
         delegation_proof_is_owned_by_the_lowercased_name,
         sections_of_the_request_are_dropped,
         error_from_the_resolver_is_left_alone,
+        compact_answers_restore_nxdomain,
         delegation_nsec_ttl_follows_the_soa,
         zone_signing_skips_delegation_ns_glue_and_occluded_records,
         rrset_signing_skips_delegation_ns_and_signs_ds,
@@ -1069,6 +1070,44 @@ error_from_the_resolver_is_left_alone(_Config) ->
         Msg, erldns_dnssec:handle(Msg, Zone, QLabels, QName, ?DNS_TYPE_A, none, #{}, false)
     ).
 
+%% RFC 9824 §5.1: with CO, a name that does not exist is NXDOMAIN, the NXNAME NSEC still proving it.
+%% NODATA, an empty non-terminal and a referral stay NOERROR, and so does every denial without CO,
+%% even at a name whose only record is of type NXNAME. Without DO the pipe does nothing, and the
+%% resolver's NXDOMAIN stays.
+compact_answers_restore_nxdomain(_Config) ->
+    Host = #dns_rr{
+        name = in_zone(~"host.deep"),
+        type = ?DNS_TYPE_A,
+        ttl = 3600,
+        data = #dns_rrdata_a{ip = {192, 0, 2, 20}}
+    },
+    NxNameRecord = #dns_rr{
+        name = in_zone(~"odd"), type = ?DNS_TYPE_NXNAME, ttl = 3600, data = <<>>
+    },
+    put_delegation_zone([Host, NxNameRecord]),
+    DoCo = #dns_optrr{dnssec = true, compact_answers = true},
+    Missing = in_zone(~"missing"),
+    NxName = [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME],
+    #dns_message{rc = ?DNS_RCODE_NXDOMAIN, aa = true, answers = [], authority = Authority} =
+        resolve(Missing, ?DNS_TYPE_A, [], DoCo),
+    ?assertMatch(
+        [#dns_rr{name = Missing, data = #dns_rrdata_nsec{types = NxName}}],
+        [RR || #dns_rr{type = ?DNS_TYPE_NSEC} = RR <- Authority]
+    ),
+    ?assertMatch(#dns_message{rc = ?DNS_RCODE_NOERROR}, resolve(Missing, ?DNS_TYPE_A)),
+    [
+        ?assertMatch(
+            #dns_message{rc = ?DNS_RCODE_NOERROR, answers = []},
+            resolve(in_zone(Name), ?DNS_TYPE_AAAA, [], DoCo),
+            Name
+        )
+     || Name <- [~"target", ~"deep", ~"www.insecure", ~"odd"]
+    ],
+    ?assertMatch(
+        #dns_message{rc = ?DNS_RCODE_NXDOMAIN, authority = [#dns_rr{type = ?DNS_TYPE_SOA}]},
+        resolve(Missing, ?DNS_TYPE_A, [], #dns_optrr{compact_answers = true})
+    ).
+
 %% RFC 4035 §2.2: an RRSIG carries the TTL of the RRset it covers. The NSEC of a delegation takes
 %% the zone's negative TTL and is signed when served, so an SOA update reaches both at once.
 delegation_nsec_ttl_follows_the_soa(_Config) ->
@@ -1107,7 +1146,7 @@ hinfo_answering_any_is_signed(_Config) ->
     ).
 
 zone_signing_skips_delegation_ns_glue_and_occluded_records(_Config) ->
-    Zone = delegation_zone(),
+    Zone = delegation_zone([]),
     ZskTag = zsk_tag(Zone),
     #{zone_rrsig_rrs := ZoneSigs, key_rrsig_rrs := KeySigs} = erldns_dnssec:get_signed_records(
         Zone
@@ -1166,12 +1205,16 @@ resolve(QName, QType) ->
 
 %% The same, with records the request carries in its authority section.
 resolve(QName, QType, RequestAuthority) ->
+    resolve(QName, QType, RequestAuthority, #dns_optrr{dnssec = true}).
+
+%% The same, with the query's OPT RR.
+resolve(QName, QType, RequestAuthority, OptRR) ->
     QLabels = dns_domain:split(QName),
     Msg0 = #dns_message{
         qc = 1,
         questions = [#dns_query{name = QName, type = QType}],
         authority = RequestAuthority,
-        additional = [#dns_optrr{dnssec = true}]
+        additional = [OptRR]
     },
     Opts0 = erldns_dnssec:prepare(
         erldns_resolver:prepare(#{
@@ -1187,7 +1230,11 @@ resolve(QName, QType, RequestAuthority) ->
     Msg2.
 
 put_delegation_zone() ->
-    #zone{records = Records} = Zone = delegation_zone(),
+    put_delegation_zone([]).
+
+%% The same, with more records.
+put_delegation_zone(Extra) ->
+    #zone{records = Records} = Zone = delegation_zone(Extra),
     ok = erldns_zone_cache:put_zone(Zone),
     %% Lookups go through the generation of a header read from the cache, not of one built by hand.
     (erldns_zone_cache:lookup_zone(?DELEGATION_ZONE))#zone{records = Records}.
@@ -1196,7 +1243,7 @@ put_delegation_zone() ->
 %% cut itself, hiding a CNAME and a further cut below it; an insecure one, served the same way,
 %% with glue at and below its cut; and an insecure one stored with a capital letter. Signed with
 %% the keys of example-dnssec0.com from the suite's zone file.
-delegation_zone() ->
+delegation_zone(Extra) ->
     #zone{keysets = Keysets} =
         erldns_zone_cache:get_authoritative_zone(dns_domain:split(~"example-dnssec0.com")),
     RR = fun(Name, Type, Data) -> #dns_rr{name = Name, type = Type, ttl = 3600, data = Data} end,
@@ -1233,7 +1280,7 @@ delegation_zone() ->
         RR(in_zone(~"ns1.insecure"), ?DNS_TYPE_A, #dns_rrdata_a{ip = {192, 0, 2, 100}}),
         RR(in_zone(~"Mixed"), ?DNS_TYPE_NS, #dns_rrdata_ns{dname = ~"ns1.other.example"})
     ],
-    erldns_zones:build_zone(?DELEGATION_ZONE, ~"1", Records, Keysets).
+    erldns_zones:build_zone(?DELEGATION_ZONE, ~"1", Records ++ Extra, Keysets).
 
 in_zone(Prefix) ->
     <<Prefix/binary, ".", ?DELEGATION_ZONE/binary>>.

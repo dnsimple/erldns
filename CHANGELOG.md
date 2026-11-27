@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+### Added
+
+- `erldns_edns` keeps the query's CO bit in the response, as it keeps DO.
+- `erldns_edns:compact_answers/1` tells whether a message's OPT RR sets CO.
+
+### Changed
+
+- `erldns_dnssec` answers a query that sets DO and CO (RFC 9824 §5.1) for a name a signed zone
+  lacks with NXDOMAIN, where it answered NOERROR. The NSEC with NXNAME in its bitmap still proves
+  it. Without CO, the answer stays NOERROR.
+- Requires dns_erlang 6.1, whose `#dns_optrr{}` carries the CO bit. Answers to queries with and
+  without CO are cached apart, as the bit is part of the packet cache key.
+
 ## v13.1.0
 
 ### Added

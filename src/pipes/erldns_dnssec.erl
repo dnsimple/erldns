@@ -88,6 +88,8 @@ the custom type should be advertised as. The mapper is registered into the pipel
 %% The zone cuts of a zone, by the labels of the delegation name.
 -type cuts() :: #{dns:labels() => true}.
 -type position() :: none | at | below.
+%% Whether a denial is of the name or of the type at it.
+-type denial() :: nxdomain | nodata.
 
 -define(NEXT_DNAME_PART, <<"\000">>).
 -define(LOG_METADATA, #{domain => [erldns, pipeline, dnssec]}).
@@ -404,9 +406,9 @@ handle_authoritative(#dns_message{answers = []} = Msg, Zone, QLabels, QName, QTy
     #zone{labels = ZLabels} = Zone,
     ApexRRSigRRs = erldns_zone_cache:get_records_by_name_and_type(Zone, ZLabels, ?DNS_TYPE_RRSIG),
     SoaRRSigRecords = maybe_get_soa_rrsig_records(ApexRRSigRRs, MsgAuths),
-    [NsecRecord | NsecRRSigRecords] = nsec_at_name(Zone, QLabels, QName, QType, Mappers),
+    {Denial, [NsecRecord | NsecRRSigRecords]} = nsec_at_name(Zone, QLabels, QName, QType, Mappers),
     Auth = lists:append([MsgAuths, [NsecRecord], SoaRRSigRecords, NsecRRSigRecords]),
-    Msg1 = Msg#dns_message{ad = AD, rc = ?DNS_RCODE_NOERROR, authority = Auth},
+    Msg1 = Msg#dns_message{ad = AD, rc = denial_rcode(Msg, Denial), authority = Auth},
     Msg2 = sign_unsigned(Msg1, Zone),
     erldns_records:rewrite_soa_ttl(Msg2);
 %% Answers ready and need signing
@@ -421,6 +423,16 @@ handle_authoritative(Msg, Zone, _, _, _, _, AD) ->
     },
     Msg2 = sign_unsigned(Msg1, Zone),
     erldns_records:rewrite_soa_ttl(Msg2).
+
+%% RFC 9824 §5.1: NXDOMAIN for a name that does not exist, if the query sets CO.
+-spec denial_rcode(dns:message(), denial()) -> dns:rcode().
+denial_rcode(Msg, nxdomain) ->
+    case erldns_edns:compact_answers(Msg) of
+        true -> ?DNS_RCODE_NXDOMAIN;
+        false -> ?DNS_RCODE_NOERROR
+    end;
+denial_rcode(_, nodata) ->
+    ?DNS_RCODE_NOERROR.
 
 % Find RRSIG record in Apex RRSIG records covering SOA record,
 % but only if SOA is in the Authority Section to begin with
@@ -478,21 +490,22 @@ find_unsigned_records(Records) ->
 %% there. The literal lists are in ascending type-code order (RRSIG=46 < NSEC=47 < NXNAME=128), as
 %% the bitmap requires.
 -spec nsec_at_name(erldns:zone(), dns:labels(), dns:dname(), dns:type(), nsec_type_mappers()) ->
-    [dns:rr(), ...].
+    {denial(), [dns:rr(), ...]}.
 nsec_at_name(Zone, QLabels, QName, QType, Mappers) ->
     case erldns_zone_cache:get_records_by_name_resolved(Zone, QLabels) of
         ent ->
-            sign_nsec(Zone, QName, QLabels, [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC]);
+            {nodata, sign_nsec(Zone, QName, QLabels, [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC])};
         nxdomain ->
-            sign_nsec(Zone, QName, QLabels, [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME]);
+            Types = [?DNS_TYPE_RRSIG, ?DNS_TYPE_NSEC, ?DNS_TYPE_NXNAME],
+            {nxdomain, sign_nsec(Zone, QName, QLabels, Types)};
         {_, Records} ->
             case is_delegation_point(Zone, QLabels, Records) of
                 true ->
                     Secure = lists:any(erldns_records:match_type(?DNS_TYPE_DS), Records),
-                    nsec_at_delegation(Zone, QLabels, delegation_types(Secure));
+                    {nodata, nsec_at_delegation(Zone, QLabels, delegation_types(Secure))};
                 false ->
                     Types = map_nsec_rr_types(QType, types_covered_from_records(Records), Mappers),
-                    sign_nsec(Zone, QName, QLabels, Types)
+                    {nodata, sign_nsec(Zone, QName, QLabels, Types)}
             end
     end.
 
