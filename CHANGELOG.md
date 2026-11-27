@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## main
 
+## v13.2.0
+
 ### Added
 
 - `erldns_edns` keeps the query's CO bit in the response, as it keeps DO.
